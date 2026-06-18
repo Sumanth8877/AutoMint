@@ -11,80 +11,89 @@ const features = [
     title: 'Wallet Management',
     description:
       'Connect and manage multiple wallets with real-time balance tracking across all your networks.',
-    gradient: 'from-blue-500/20 to-blue-600/10',
   },
   {
     icon: Layers,
     title: 'Collection Tracking',
     description:
       'Track NFT collections, mint schedules, floor prices, and important metrics in real time.',
-    gradient: 'from-purple-500/20 to-purple-600/10',
   },
   {
     icon: Zap,
     title: 'Mint Automation',
     description:
       'Automate public mint workflows with configurable strategies and live status updates.',
-    gradient: 'from-cyan-500/20 to-cyan-600/10',
   },
 ];
 
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#050816] relative overflow-hidden">
-      {/* Premium Background Glows */}
-      <div
-        className="absolute top-[-300px] right-[-200px] w-[800px] h-[800px] rounded-full pointer-events-none animate-pulse"
-        style={{
-          background: 'radial-gradient(circle, rgba(59,130,246,0.12) 0%, transparent 70%)',
-          filter: 'blur(100px)',
-        }}
-      />
-      <div
-        className="absolute top-1/2 left-[-300px] w-[600px] h-[600px] rounded-full pointer-events-none"
-        style={{
-          background: 'radial-gradient(circle, rgba(124,58,237,0.08) 0%, transparent 70%)',
-          filter: 'blur(120px)',
-        }}
-      />
-      <div
-        className="absolute bottom-[-200px] right-[10%] w-[500px] h-[500px] rounded-full pointer-events-none"
-        style={{
-          background: 'radial-gradient(circle, rgba(59,130,246,0.06) 0%, transparent 70%)',
-          filter: 'blur(100px)',
-        }}
-      />
+      {/* Subtle atmospheric background */}
+      <div className="absolute inset-0 pointer-events-none">
+        {/* Top-left soft blue glow */}
+        <div
+          className="absolute top-[-100px] left-[-100px] w-[400px] h-[400px] rounded-full"
+          style={{
+            background: 'radial-gradient(circle, rgba(59,130,246,0.08) 0%, transparent 70%)',
+            filter: 'blur(80px)',
+          }}
+        />
+        {/* Bottom-right soft purple glow */}
+        <div
+          className="absolute bottom-[-100px] right-[-100px] w-[400px] h-[400px] rounded-full"
+          style={{
+            background: 'radial-gradient(circle, rgba(124,58,237,0.06) 0%, transparent 70%)',
+            filter: 'blur(80px)',
+          }}
+        />
+        {/* Subtle center ambient glow */}
+        <div
+          className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[600px] h-[300px]"
+          style={{
+            background: 'radial-gradient(ellipse, rgba(59,130,246,0.03) 0%, transparent 70%)',
+            filter: 'blur(60px)',
+          }}
+        />
+        {/* Grid texture overlay */}
+        <div
+          className="absolute inset-0 opacity-[0.02]"
+          style={{
+            backgroundImage: `
+              linear-gradient(rgba(59,130,246,0.3) 1px, transparent 1px),
+              linear-gradient(90deg, rgba(59,130,246,0.3) 1px, transparent 1px)
+            `,
+            backgroundSize: '60px 60px',
+          }}
+        />
+      </div>
 
       <Navbar />
 
       {/* Hero */}
-      <main className="relative z-10 pt-36 pb-24">
+      <main className="relative z-10">
         <div className="max-w-6xl mx-auto px-6 lg:px-8">
-          <div className="text-center max-w-5xl mx-auto">
-            {/* Premium Badge */}
-            <div className="inline-flex items-center gap-2.5 px-5 py-2 rounded-full mb-10">
-              <div
-                className="absolute inset-0 rounded-full"
-                style={{
-                  background: 'linear-gradient(135deg, rgba(59,130,246,0.08), rgba(124,58,237,0.08))',
-                  border: '1px solid rgba(59,130,246,0.15)',
-                }}
+          {/* Spacing: 100px below navbar */}
+          <div className="pt-28" />
+
+          {/* Hero Content */}
+          <div className="text-center max-w-4xl mx-auto">
+            {/* Badge — Space below: 32px */}
+            <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full mb-8"
+              style={{
+                background: 'rgba(59,130,246,0.06)',
+                border: '1px solid rgba(59,130,246,0.12)',
+              }}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-[#3B82F6]"
+                style={{ boxShadow: '0 0 6px rgba(59,130,246,0.6)' }}
               />
-              <span
-                className="relative w-2 h-2 rounded-full"
-                style={{
-                  background: '#3B82F6',
-                  boxShadow: '0 0 8px rgba(59,130,246,0.6)',
-                }}
-              />
-              <span className="relative text-sm font-medium" style={{ color: '#94A3B8' }}>
-                Premium NFT Dashboard
-              </span>
+              <span className="text-sm font-medium text-slate-400">Premium NFT Dashboard</span>
             </div>
 
-            {/* Hero Title */}
+            {/* Title — Space below: 24px */}
             <h1
-              className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-bold text-white leading-[1.05] mb-8 tracking-tight"
+              className="text-5xl sm:text-6xl lg:text-7xl font-bold text-white leading-[1.1] mb-6 tracking-tight"
               style={{ fontFamily: 'Space Grotesk, sans-serif' }}
             >
               Mint NFTs Faster.
@@ -92,67 +101,63 @@ export default function LandingPage() {
               <span
                 className="bg-clip-text text-transparent"
                 style={{
-                  backgroundImage: 'linear-gradient(135deg, #FFFFFF 30%, #3B82F6 70%, #60A5FA 100%)',
+                  backgroundImage: 'linear-gradient(135deg, #FFFFFF 0%, #3B82F6 60%, #60A5FA 100%)',
                 }}
               >
-                Public Mints.
-                <br />
-                Real-Time Tracking.
+                Public Mints. Real-Time Tracking.
               </span>
             </h1>
 
-            {/* Subtitle */}
-            <p
-              className="text-lg sm:text-xl md:text-2xl mx-auto mb-12 leading-relaxed max-w-2xl"
-              style={{ color: '#94A3B8' }}
-            >
+            {/* Subtitle — Space below: 40px */}
+            <p className="text-lg sm:text-xl text-slate-400 max-w-xl mx-auto mb-10 leading-relaxed">
               Automate public NFT mint tracking, manage wallets, and monitor
               collections from one premium dashboard.
             </p>
 
-            {/* CTA Buttons */}
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            {/* Buttons — Space below: 60px */}
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
               <Link href="/sign-up">
                 <button
-                  className="group relative inline-flex items-center gap-2.5 px-8 py-3.5 text-base font-semibold text-white rounded-2xl transition-all duration-300 hover:-translate-y-0.5 active:translate-y-0"
+                  className="group inline-flex items-center gap-2.5 px-7 py-3 text-sm font-semibold text-white rounded-2xl transition-all duration-300 hover:-translate-y-0.5"
                   style={{
                     background: 'linear-gradient(135deg, #2563EB, #3B82F6)',
-                    boxShadow: '0 8px 32px rgba(59,130,246,0.35)',
+                    boxShadow: '0 8px 30px rgba(59,130,246,0.3)',
                   }}
                 >
-                  <span>Get Started</span>
+                  Get Started
                   <ArrowUpRight
-                    size={18}
+                    size={16}
                     className="transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
                   />
                 </button>
               </Link>
               <Link href="/dashboard">
                 <button
-                  className="group inline-flex items-center gap-2.5 px-8 py-3.5 text-base font-semibold rounded-2xl transition-all duration-300 hover:-translate-y-0.5"
+                  className="group inline-flex items-center gap-2.5 px-7 py-3 text-sm font-semibold rounded-2xl transition-all duration-300 hover:-translate-y-0.5"
                   style={{
-                    background: 'rgba(17,24,39,0.8)',
-                    border: '1px solid rgba(59,130,246,0.2)',
+                    background: 'rgba(17,24,39,0.6)',
+                    border: '1px solid rgba(59,130,246,0.15)',
                     color: '#FFFFFF',
                   }}
                 >
-                  View Dashboard
-                  <ArrowUpRight size={18} className="text-slate-400 group-hover:text-white transition-colors" />
+                  Launch App
+                  <ArrowUpRight size={16} className="text-slate-500 group-hover:text-slate-300 transition-colors" />
                 </button>
               </Link>
             </div>
           </div>
 
-          {/* Stats Bar */}
+          {/* Stats Bar — Space below: 120px */}
           <div
-            className="mt-24 max-w-3xl mx-auto rounded-2xl p-6"
+            className="max-w-2xl mx-auto rounded-2xl p-5 mb-32"
             style={{
-              background: 'rgba(17,24,39,0.4)',
-              backdropFilter: 'blur(20px)',
-              border: '1px solid rgba(59,130,246,0.08)',
+              background: 'rgba(17,24,39,0.3)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              border: '1px solid rgba(59,130,246,0.06)',
             }}
           >
-            <div className="grid grid-cols-3 gap-4 sm:gap-8">
+            <div className="grid grid-cols-3 gap-6">
               {[
                 { value: '10K+', label: 'Active Mints' },
                 { value: '50K+', label: 'Wallets Tracked' },
@@ -160,7 +165,7 @@ export default function LandingPage() {
               ].map((stat, i) => (
                 <div key={i} className="text-center">
                   <div
-                    className="text-2xl sm:text-3xl font-bold mb-1"
+                    className="text-xl sm:text-2xl font-bold mb-0.5"
                     style={{
                       fontFamily: 'Space Grotesk, sans-serif',
                       background: 'linear-gradient(135deg, #3B82F6, #60A5FA)',
@@ -170,7 +175,7 @@ export default function LandingPage() {
                   >
                     {stat.value}
                   </div>
-                  <div className="text-xs sm:text-sm" style={{ color: '#94A3B8' }}>
+                  <div className="text-xs sm:text-sm text-slate-500">
                     {stat.label}
                   </div>
                 </div>
@@ -178,86 +183,69 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Feature Cards */}
-          <div className="mt-32">
+          {/* Feature Section */}
+          <div className="pb-32">
+            {/* Section Heading */}
             <div className="text-center mb-16">
               <h2
-                className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-4"
+                className="text-3xl sm:text-4xl font-bold text-white mb-3"
                 style={{ fontFamily: 'Space Grotesk, sans-serif' }}
               >
                 Everything you need to{' '}
-                <span className="text-[#3B82F6]">mint smarter</span>
+                <span style={{ color: '#3B82F6' }}>mint smarter</span>
               </h2>
-              <p className="text-lg" style={{ color: '#94A3B8' }}>
+              <p className="text-base sm:text-lg text-slate-500 max-w-lg mx-auto">
                 Powerful tools for serious collectors and minters
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
+            {/* Feature Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {features.map((feature, i) => {
                 const Icon = feature.icon;
                 return (
                   <div
                     key={i}
-                    className="group relative overflow-hidden transition-all duration-500 hover:-translate-y-1"
+                    className="group transition-all duration-500 hover:-translate-y-0.5"
                     style={{
-                      background: 'rgba(17,24,39,0.5)',
-                      backdropFilter: 'blur(24px)',
-                      WebkitBackdropFilter: 'blur(24px)',
-                      border: '1px solid rgba(59,130,246,0.08)',
-                      borderRadius: '28px',
-                      padding: '36px',
+                      background: 'rgba(17,24,39,0.4)',
+                      backdropFilter: 'blur(16px)',
+                      WebkitBackdropFilter: 'blur(16px)',
+                      border: '1px solid rgba(59,130,246,0.06)',
+                      borderRadius: '24px',
+                      padding: '32px',
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = 'rgba(59,130,246,0.25)';
-                      e.currentTarget.style.boxShadow =
-                        '0 0 40px rgba(59,130,246,0.08), 0 0 80px rgba(59,130,246,0.04)';
+                      e.currentTarget.style.borderColor = 'rgba(59,130,246,0.2)';
+                      e.currentTarget.style.boxShadow = '0 0 30px rgba(59,130,246,0.06), 0 0 60px rgba(59,130,246,0.03)';
+                      e.currentTarget.style.background = 'rgba(17,24,39,0.5)';
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = 'rgba(59,130,246,0.08)';
+                      e.currentTarget.style.borderColor = 'rgba(59,130,246,0.06)';
                       e.currentTarget.style.boxShadow = 'none';
+                      e.currentTarget.style.background = 'rgba(17,24,39,0.4)';
                     }}
                   >
-                    {/* Inner glow */}
-                    <div
-                      className="absolute -top-20 -right-20 w-40 h-40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
-                      style={{
-                        background: `radial-gradient(circle, ${feature.gradient.includes('blue') ? 'rgba(59,130,246,0.08)' : feature.gradient.includes('purple') ? 'rgba(124,58,237,0.08)' : 'rgba(6,182,212,0.08)'} 0%, transparent 70%)`,
-                        filter: 'blur(30px)',
-                      }}
-                    />
-
                     {/* Icon */}
                     <div
-                      className="w-14 h-14 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-105 transition-transform duration-300"
+                      className="w-12 h-12 rounded-2xl flex items-center justify-center mb-5 transition-transform duration-300 group-hover:scale-105"
                       style={{
                         background: 'rgba(59,130,246,0.08)',
-                        border: '1px solid rgba(59,130,246,0.12)',
+                        border: '1px solid rgba(59,130,246,0.1)',
                       }}
                     >
-                      <Icon
-                        size={26}
-                        style={{ color: '#3B82F6' }}
-                        className="group-hover:scale-110 transition-transform duration-300"
-                      />
+                      <Icon size={24} style={{ color: '#3B82F6' }} />
                     </div>
 
-                    {/* Content */}
                     <h3
-                      className="text-xl font-semibold text-white mb-3"
+                      className="text-lg font-semibold text-white mb-2"
                       style={{ fontFamily: 'Space Grotesk, sans-serif' }}
                     >
                       {feature.title}
                     </h3>
-                    <p style={{ color: '#94A3B8' }} className="text-base leading-relaxed">
+                    <p className="text-sm text-slate-400 leading-relaxed">
                       {feature.description}
                     </p>
-
-                    {/* Hover indicator */}
-                    <div className="mt-6 flex items-center gap-1.5 text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-300" style={{ color: '#3B82F6' }}>
-                      <span>Learn more</span>
-                      <ArrowUpRight size={14} />
-                    </div>
                   </div>
                 );
               })}
@@ -265,36 +253,29 @@ export default function LandingPage() {
           </div>
 
           {/* Bottom CTA */}
-          <div className="mt-32 text-center">
+          <div className="pb-32">
             <div
-              className="max-w-2xl mx-auto rounded-3xl p-12 relative overflow-hidden"
+              className="max-w-xl mx-auto text-center rounded-2xl p-10 relative overflow-hidden"
               style={{
-                background: 'linear-gradient(135deg, rgba(59,130,246,0.06), rgba(124,58,237,0.06))',
-                border: '1px solid rgba(59,130,246,0.12)',
+                background: 'linear-gradient(135deg, rgba(59,130,246,0.04), rgba(124,58,237,0.04))',
+                border: '1px solid rgba(59,130,246,0.08)',
               }}
             >
-              <div
-                className="absolute -top-40 -right-40 w-80 h-80 rounded-full pointer-events-none"
-                style={{
-                  background: 'radial-gradient(circle, rgba(59,130,246,0.08) 0%, transparent 70%)',
-                  filter: 'blur(60px)',
-                }}
-              />
               <h2
-                className="text-3xl sm:text-4xl font-bold text-white mb-4 relative"
+                className="text-2xl sm:text-3xl font-bold text-white mb-3"
                 style={{ fontFamily: 'Space Grotesk, sans-serif' }}
               >
                 Ready to start minting?
               </h2>
-              <p className="text-lg mb-8 relative" style={{ color: '#94A3B8' }}>
+              <p className="text-sm sm:text-base text-slate-400 mb-6">
                 Join thousands of collectors using AutoMint to stay ahead.
               </p>
-              <Link href="/sign-up" className="relative inline-block">
+              <Link href="/sign-up">
                 <button
-                  className="px-10 py-4 text-base font-semibold text-white rounded-2xl transition-all duration-300 hover:-translate-y-0.5"
+                  className="px-8 py-3 text-sm font-semibold text-white rounded-2xl transition-all duration-300 hover:-translate-y-0.5"
                   style={{
                     background: 'linear-gradient(135deg, #2563EB, #3B82F6)',
-                    boxShadow: '0 8px 32px rgba(59,130,246,0.35)',
+                    boxShadow: '0 8px 30px rgba(59,130,246,0.3)',
                   }}
                 >
                   Get Started Free
@@ -304,7 +285,7 @@ export default function LandingPage() {
           </div>
 
           {/* Footer */}
-          <div className="mt-16 pb-8 text-center text-sm" style={{ color: '#64748B' }}>
+          <div className="pb-8 text-center text-sm text-slate-600">
             <p>© 2026 AutoMint. All rights reserved.</p>
           </div>
         </div>
