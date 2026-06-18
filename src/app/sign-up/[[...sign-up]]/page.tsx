@@ -20,20 +20,6 @@ export default function SignUpPage() {
       />
 
       <div className="w-full max-w-[420px] relative z-10">
-        {/* Heading */}
-        <div className="text-center mb-10">
-          <h1
-            className="text-5xl font-bold text-white mb-3"
-            style={{ fontFamily: 'Space Grotesk, sans-serif' }}
-          >
-            Create Account
-          </h1>
-          <p className="text-lg text-slate-400">
-            Join AutoMint and start minting
-          </p>
-        </div>
-
-        {/* Clerk Sign Up */}
         <SignUp
           appearance={{
             variables: {
@@ -156,9 +142,6 @@ export default function SignUpPage() {
                 color: '#EF4444',
               },
               badge: {
-                display: 'none',
-              },
-              headerSubtitle__signUp: {
                 display: 'none',
               },
             },

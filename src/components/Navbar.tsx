@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { SignInButton, UserButton, useUser } from '@clerk/nextjs';
+import { UserButton, useUser } from '@clerk/nextjs';
 import { Menu, X, Hexagon, ArrowUpRight } from 'lucide-react';
 
 const navLinks = [
@@ -127,7 +127,7 @@ export default function Navbar() {
             ) : (
               <div className="flex items-center gap-3">
                 <Link
-                  href="/dashboard"
+                  href="/sign-in"
                   className="hidden sm:inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white rounded-xl transition-all duration-300 hover:opacity-90"
                   style={{
                     background: 'linear-gradient(135deg, #2563EB, #3B82F6)',
@@ -137,11 +137,12 @@ export default function Navbar() {
                   Launch App
                   <ArrowUpRight size={16} />
                 </Link>
-                <SignInButton mode="modal">
-                  <button className="px-5 py-2 text-sm font-medium text-slate-300 hover:text-white rounded-xl transition-all duration-200 hover:bg-white/5">
-                    Sign In
-                  </button>
-                </SignInButton>
+                <Link
+                  href="/sign-in"
+                  className="px-5 py-2 text-sm font-medium text-slate-300 hover:text-white rounded-xl transition-all duration-200 hover:bg-white/5"
+                >
+                  Sign In
+                </Link>
               </div>
             )}
 
@@ -181,36 +182,26 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
-            <div className="pt-3 border-t border-white/5 mt-3">
-              {isSignedIn ? (
+            <div className="pt-3 border-t border-white/5 mt-3 space-y-2">
+              <Link
+                href={isSignedIn ? '/dashboard' : '/sign-in'}
+                onClick={() => setMobileOpen(false)}
+                className="flex items-center justify-center gap-2 px-5 py-3 text-sm font-semibold text-white rounded-xl"
+                style={{
+                  background: 'linear-gradient(135deg, #2563EB, #3B82F6)',
+                }}
+              >
+                {isSignedIn ? 'Launch App' : 'Get Started'}
+                <ArrowUpRight size={16} />
+              </Link>
+              {!isSignedIn && (
                 <Link
-                  href="/dashboard"
+                  href="/sign-in"
                   onClick={() => setMobileOpen(false)}
-                  className="flex items-center justify-center gap-2 px-5 py-3 text-sm font-semibold text-white rounded-xl"
-                  style={{
-                    background: 'linear-gradient(135deg, #2563EB, #3B82F6)',
-                  }}
+                  className="block w-full text-center px-5 py-3 text-sm font-medium text-slate-300 rounded-xl border border-white/10 hover:bg-white/5"
                 >
-                  Launch App <ArrowUpRight size={16} />
+                  Sign In
                 </Link>
-              ) : (
-                <div className="space-y-2">
-                  <Link
-                    href="/dashboard"
-                    onClick={() => setMobileOpen(false)}
-                    className="flex items-center justify-center gap-2 px-5 py-3 text-sm font-semibold text-white rounded-xl"
-                    style={{
-                      background: 'linear-gradient(135deg, #2563EB, #3B82F6)',
-                    }}
-                  >
-                    Launch App <ArrowUpRight size={16} />
-                  </Link>
-                  <SignInButton mode="modal">
-                    <button className="w-full px-5 py-3 text-sm font-medium text-slate-300 rounded-xl border border-white/10 hover:bg-white/5">
-                      Sign In
-                    </button>
-                  </SignInButton>
-                </div>
               )}
             </div>
           </div>

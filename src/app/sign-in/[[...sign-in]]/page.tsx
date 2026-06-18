@@ -20,20 +20,6 @@ export default function SignInPage() {
       />
 
       <div className="w-full max-w-[420px] relative z-10">
-        {/* Heading */}
-        <div className="text-center mb-10">
-          <h1
-            className="text-5xl font-bold text-white mb-3"
-            style={{ fontFamily: 'Space Grotesk, sans-serif' }}
-          >
-            Welcome Back
-          </h1>
-          <p className="text-lg text-slate-400">
-            Sign in to your AutoMint dashboard
-          </p>
-        </div>
-
-        {/* Clerk Sign In */}
         <SignIn
           appearance={{
             variables: {
@@ -155,11 +141,7 @@ export default function SignInPage() {
                 borderRadius: '14px',
                 color: '#EF4444',
               },
-              // Hide Clerk branding / dev badge
               badge: {
-                display: 'none',
-              },
-              headerSubtitle__signIn: {
                 display: 'none',
               },
             },
