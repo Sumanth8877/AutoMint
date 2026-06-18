@@ -3,112 +3,176 @@
 import React from 'react';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
-import Button from '@/components/ui/Button';
+import { Wallet, Layers, Zap } from 'lucide-react';
+
+const features = [
+  {
+    icon: Wallet,
+    title: 'Wallet Management',
+    description:
+      'Connect and manage multiple wallets with real-time balance tracking.',
+  },
+  {
+    icon: Layers,
+    title: 'Collection Tracking',
+    description:
+      'Track NFT collections, mint schedules, and important metrics.',
+  },
+  {
+    icon: Zap,
+    title: 'Mint Automation',
+    description:
+      'Automate public mint workflows with real-time updates.',
+  },
+];
 
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#050816] relative overflow-hidden">
-      {/* Background glow effects */}
-      <div className="absolute top-[-200px] left-[-200px] w-[600px] h-[600px] rounded-full bg-blue-500/10 blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[-300px] right-[-200px] w-[700px] h-[700px] rounded-full bg-blue-600/10 blur-[150px] pointer-events-none" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full bg-blue-400/5 blur-[200px] pointer-events-none" />
+      {/* Background Glow Effects */}
+      <div
+        className="absolute top-[-200px] left-[-200px] w-[600px] h-[600px] rounded-full pointer-events-none"
+        style={{
+          background: 'rgba(59,130,246,0.15)',
+          filter: 'blur(120px)',
+        }}
+      />
+      <div
+        className="absolute bottom-[-300px] right-[-200px] w-[700px] h-[700px] rounded-full pointer-events-none"
+        style={{
+          background: 'rgba(124,58,237,0.12)',
+          filter: 'blur(150px)',
+        }}
+      />
 
-      {/* Navbar */}
       <Navbar />
 
       {/* Hero Section */}
-      <main className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-32">
-        <div className="text-center max-w-4xl mx-auto">
+      <main className="relative z-10">
+        <div className="max-w-6xl mx-auto pt-32 pb-24 px-6 text-center">
           {/* Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 mb-8">
-            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-            <span className="text-sm text-muted">Premium NFT Dashboard</span>
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full mb-8"
+            style={{
+              background: 'rgba(59,130,246,0.08)',
+              border: '1px solid rgba(59,130,246,0.2)',
+            }}
+          >
+            <span className="w-2 h-2 rounded-full bg-[#3B82F6] animate-pulse" />
+            <span className="text-sm" style={{ color: '#94A3B8' }}>
+              Premium NFT Dashboard
+            </span>
           </div>
 
-          {/* Main Heading */}
+          {/* Title */}
           <h1
-            className="text-5xl sm:text-6xl lg:text-7xl font-bold text-white leading-tight mb-6"
+            className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-tight mb-6"
             style={{ fontFamily: 'Space Grotesk, sans-serif' }}
           >
-            Mint NFTs Faster.{' '}
-            <span className="gradient-text">Public Mints. Real-Time Tracking.</span>
+            Mint NFTs Faster.
+            <br />
+            <span
+              className="bg-clip-text text-transparent"
+              style={{
+                backgroundImage:
+                  'linear-gradient(135deg, #FFFFFF 0%, #3B82F6 100%)',
+              }}
+            >
+              Public Mints. Real-Time Tracking.
+            </span>
           </h1>
 
           {/* Subtitle */}
-          <p className="text-lg sm:text-xl text-muted max-w-2xl mx-auto mb-10 leading-relaxed">
-            Automate public NFT mint tracking, manage wallets, and monitor collections
-            from one premium dashboard.
+          <p
+            className="text-xl mx-auto mb-10 leading-relaxed max-w-[700px]"
+            style={{ color: '#94A3B8' }}
+          >
+            Automate public NFT mint tracking, manage wallets, and monitor
+            collections from one premium dashboard.
           </p>
 
-          {/* CTA Buttons */}
+          {/* Buttons */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link href="/dashboard">
-              <Button variant="primary" size="lg" className="text-base px-10 py-3.5">
+              <button
+                className="px-8 py-3 text-base font-semibold text-white rounded-xl transition-all duration-300 hover:-translate-y-0.5"
+                style={{
+                  background: 'linear-gradient(90deg, #2563EB, #3B82F6)',
+                  boxShadow: '0 4px 20px rgba(59,130,246,0.35)',
+                }}
+              >
                 Get Started
-              </Button>
+              </button>
             </Link>
             <Link href="/dashboard">
-              <Button variant="secondary" size="lg" className="text-base px-10 py-3.5">
+              <button
+                className="px-8 py-3 text-base font-semibold rounded-xl transition-all duration-300 hover:-translate-y-0.5"
+                style={{
+                  background: 'rgba(17,24,39,0.8)',
+                  border: '1px solid rgba(59,130,246,0.2)',
+                  color: '#FFFFFF',
+                }}
+              >
                 View Dashboard
-              </Button>
+              </button>
             </Link>
           </div>
         </div>
 
-        {/* Feature Preview Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-24">
-          {[
-            {
-              title: 'Wallet Management',
-              desc: 'Connect and manage multiple wallets in one place with real-time balance tracking.',
-              icon: (
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="2" y="4" width="20" height="16" rx="2" />
-                  <path d="M16 12h4v4h-4" />
-                </svg>
-              ),
-            },
-            {
-              title: 'Collection Tracking',
-              desc: 'Monitor NFT collections, floor prices, and mint progress from your dashboard.',
-              icon: (
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M4 20h16" />
-                  <path d="M4 4v16" />
-                  <path d="M8 16V8" />
-                  <path d="M12 16V4" />
-                  <path d="M16 16v-4" />
-                </svg>
-              ),
-            },
-            {
-              title: 'Mint Automation',
-              desc: 'Automate public mint processes with configurable strategies and real-time alerts.',
-              icon: (
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
-                  <line x1="8" y1="2" x2="8" y2="18" />
-                  <line x1="16" y1="6" x2="16" y2="22" />
-                </svg>
-              ),
-            },
-          ].map((feature, i) => (
-            <div
-              key={i}
-              className="card p-8 hover:border-blue-400/30 transition-all duration-500 group"
-            >
-              <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 inline-block mb-5 text-blue-500 group-hover:scale-110 transition-transform duration-300">
-                {feature.icon}
-              </div>
-              <h3
-                className="text-xl font-semibold text-white mb-3"
-                style={{ fontFamily: 'Space Grotesk, sans-serif' }}
-              >
-                {feature.title}
-              </h3>
-              <p className="text-muted leading-relaxed">{feature.desc}</p>
-            </div>
-          ))}
+        {/* Feature Cards */}
+        <div className="max-w-6xl mx-auto px-6 pb-32">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {features.map((feature, i) => {
+              const Icon = feature.icon;
+              return (
+                <div
+                  key={i}
+                  className="group transition-all duration-300 hover:-translate-y-1"
+                  style={{
+                    height: '220px',
+                    background: 'rgba(17,24,39,0.6)',
+                    backdropFilter: 'blur(24px)',
+                    WebkitBackdropFilter: 'blur(24px)',
+                    border: '1px solid rgba(59,130,246,0.1)',
+                    borderRadius: '24px',
+                    padding: '32px',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor =
+                      'rgba(59,130,246,0.3)';
+                    e.currentTarget.style.boxShadow =
+                      '0 0 20px rgba(59,130,246,0.1), 0 0 40px rgba(59,130,246,0.05)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor =
+                      'rgba(59,130,246,0.1)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
+                  <div
+                    className="w-12 h-12 rounded-xl flex items-center justify-center mb-5"
+                    style={{
+                      background: 'rgba(59,130,246,0.1)',
+                      border: '1px solid rgba(59,130,246,0.15)',
+                    }}
+                  >
+                    <Icon
+                      size={22}
+                      className="text-[#3B82F6] group-hover:scale-110 transition-transform duration-300"
+                    />
+                  </div>
+                  <h3
+                    className="text-lg font-semibold text-white mb-2"
+                    style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+                  >
+                    {feature.title}
+                  </h3>
+                  <p style={{ color: '#94A3B8' }} className="text-sm leading-relaxed">
+                    {feature.description}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </main>
     </div>
