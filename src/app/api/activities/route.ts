@@ -1,18 +1,15 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { getDb } from '@/lib/db';
 import { activities } from '@/drizzle/schema';
 import { eq, desc } from 'drizzle-orm';
-import { getInternalUserId } from '@/lib/auth/current-user';
+import { requireApiUser } from '@/lib/auth/require-auth';
 
 export async function GET() {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const userId = await getInternalUserId(clerkId);
+  const authResult = await requireApiUser();
+  if ('error' in authResult) return authResult.error;
 
   const result = await getDb().select().from(activities)
-    .where(eq(activities.userId, userId))
+    .where(eq(activities.userId, authResult.userId))
     .orderBy(desc(activities.createdAt))
     .limit(50);
 

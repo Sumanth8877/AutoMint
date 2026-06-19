@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { requireApiSession } from '@/lib/auth/require-auth';
 import { getCollectionMetadata } from '@/lib/blockchain/collections';
 import { discoverContractABI, discoverMintFunction } from '@/lib/services/mint-abi-discovery.service';
 import { fetchMintRequirements } from '@/lib/services/mint-requirements.service';
@@ -11,8 +11,8 @@ function getErrorMessage(error: unknown) {
 }
 
 export async function POST(req: Request) {
-  const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const authResult = await requireApiSession();
+  if ('error' in authResult) return authResult.error;
 
   const body = await req.json() as { input?: string };
   const input = body.input?.trim();

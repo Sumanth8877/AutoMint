@@ -1,19 +1,16 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { getDb } from '@/lib/db';
-import { mintTasks } from '@/drizzle/schema';
+import { collections, mintTasks, wallets } from '@/drizzle/schema';
 import { eq, desc, and } from 'drizzle-orm';
-import { getInternalUserId } from '@/lib/auth/current-user';
+import { requireApiUser } from '@/lib/auth/require-auth';
 
 // GET /api/mints
 export async function GET() {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const userId = await getInternalUserId(clerkId);
+  const authResult = await requireApiUser();
+  if ('error' in authResult) return authResult.error;
 
   const tasks = await getDb().select().from(mintTasks)
-    .where(eq(mintTasks.userId, userId))
+    .where(eq(mintTasks.userId, authResult.userId))
     .orderBy(desc(mintTasks.createdAt));
   
   return NextResponse.json({ tasks });
@@ -21,8 +18,8 @@ export async function GET() {
 
 // POST /api/mints
 export async function POST(req: Request) {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const authResult = await requireApiUser();
+  if ('error' in authResult) return authResult.error;
 
   const body = await req.json();
   const { walletId, collectionId, quantity } = body;
@@ -31,7 +28,26 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Wallet ID and Collection ID are required' }, { status: 400 });
   }
 
-  const userId = await getInternalUserId(clerkId);
+  const userId = authResult.userId;
+  const [wallet] = await getDb()
+    .select({ id: wallets.id })
+    .from(wallets)
+    .where(and(eq(wallets.id, walletId), eq(wallets.userId, userId)))
+    .limit(1);
+
+  if (!wallet) {
+    return NextResponse.json({ error: 'Wallet not found' }, { status: 404 });
+  }
+
+  const [collection] = await getDb()
+    .select({ id: collections.id })
+    .from(collections)
+    .where(and(eq(collections.id, collectionId), eq(collections.userId, userId)))
+    .limit(1);
+
+  if (!collection) {
+    return NextResponse.json({ error: 'Collection not found' }, { status: 404 });
+  }
 
   const qty = Math.max(1, parseInt(quantity as string) || 1);
   const [task] = await getDb().insert(mintTasks).values({
@@ -47,16 +63,14 @@ export async function POST(req: Request) {
 
 // DELETE /api/mints
 export async function DELETE(req: Request) {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const authResult = await requireApiUser();
+  if ('error' in authResult) return authResult.error;
 
   const body = await req.json();
   const { id } = body;
 
   if (!id) return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
 
-  const userId = await getInternalUserId(clerkId);
-
-  await getDb().delete(mintTasks).where(and(eq(mintTasks.id, id), eq(mintTasks.userId, userId)));
+  await getDb().delete(mintTasks).where(and(eq(mintTasks.id, id), eq(mintTasks.userId, authResult.userId)));
   return NextResponse.json({ success: true });
 }

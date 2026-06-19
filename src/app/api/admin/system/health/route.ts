@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { getDb } from '@/lib/db';
+import { requireAdminApiSession } from '@/lib/auth/require-auth';
 import { checkRedisHealth } from '@/lib/redis';
 import { getClient } from '@/lib/blockchain/client';
 import { getTaskCounts } from '@/lib/services/task.service';
@@ -11,10 +11,8 @@ function getErrorMessage(error: unknown) {
 }
 
 export async function GET() {
-  const { userId } = await auth();
-  if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authResult = await requireAdminApiSession();
+  if ('error' in authResult) return authResult.error;
 
   // ─── Database Health ────────────────────────────
   let database: { status: string; error?: string } = { status: 'healthy' };

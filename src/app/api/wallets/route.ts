@@ -1,28 +1,25 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { getDb } from '@/lib/db';
 import { wallets } from '@/drizzle/schema';
 import { eq, and } from 'drizzle-orm';
-import { getInternalUserId } from '@/lib/auth/current-user';
+import { requireApiUser } from '@/lib/auth/require-auth';
 import { isValidEthereumAddress } from '@/lib/blockchain/wallet';
 
 const SUPPORTED_CHAINS = ['ethereum', 'base', 'polygon'];
 
 // GET /api/wallets
 export async function GET() {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const authResult = await requireApiUser();
+  if ('error' in authResult) return authResult.error;
 
-  const userId = await getInternalUserId(clerkId);
-
-  const userWallets = await getDb().select().from(wallets).where(eq(wallets.userId, userId)).orderBy(wallets.createdAt);
+  const userWallets = await getDb().select().from(wallets).where(eq(wallets.userId, authResult.userId)).orderBy(wallets.createdAt);
   return NextResponse.json({ wallets: userWallets });
 }
 
 // POST /api/wallets
 export async function POST(req: Request) {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const authResult = await requireApiUser();
+  if ('error' in authResult) return authResult.error;
 
   const body = await req.json();
   const { address, nickname, chain } = body;
@@ -39,12 +36,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `Unsupported chain. Supported: ${SUPPORTED_CHAINS.join(', ')}` }, { status: 400 });
   }
 
-  const userId = await getInternalUserId(clerkId);
-
   // Check for duplicate
   const existing = await getDb().select()
     .from(wallets)
-    .where(and(eq(wallets.userId, userId), eq(wallets.address, address.toLowerCase())))
+    .where(and(eq(wallets.userId, authResult.userId), eq(wallets.address, address.toLowerCase())))
     .limit(1);
 
   if (existing.length > 0) {
@@ -52,7 +47,7 @@ export async function POST(req: Request) {
   }
 
   const [wallet] = await getDb().insert(wallets).values({
-    userId,
+    userId: authResult.userId,
     address: address.toLowerCase(),
     nickname: nickname || null,
     chain,
@@ -63,16 +58,14 @@ export async function POST(req: Request) {
 
 // DELETE /api/wallets
 export async function DELETE(req: Request) {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const authResult = await requireApiUser();
+  if ('error' in authResult) return authResult.error;
 
   const body = await req.json();
   const { id } = body;
 
   if (!id) return NextResponse.json({ error: 'Wallet ID is required' }, { status: 400 });
 
-  const userId = await getInternalUserId(clerkId);
-
-  await getDb().delete(wallets).where(and(eq(wallets.id, id), eq(wallets.userId, userId)));
+  await getDb().delete(wallets).where(and(eq(wallets.id, id), eq(wallets.userId, authResult.userId)));
   return NextResponse.json({ success: true });
 }

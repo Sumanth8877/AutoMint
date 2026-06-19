@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { Show, SignInButton, SignUpButton, UserButton } from '@clerk/nextjs';
 import { motion } from 'framer-motion';
 import {
   ArrowRight,
@@ -78,11 +79,28 @@ export default function HomePage() {
             <Link href="/analytics" className="hover:text-text">Analytics</Link>
           </nav>
           <div className="flex items-center gap-2">
-            <Link href="/sign-in" className="hidden text-sm text-muted hover:text-text sm:inline-flex">Sign in</Link>
-            <Link href="/dashboard" className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-white shadow-lg shadow-primary/20">
-              View Dashboard
-              <ArrowRight className="h-4 w-4" aria-hidden="true" />
-            </Link>
+            <Show when="signed-out">
+              <SignInButton mode="redirect">
+                <button type="button" className="hidden h-10 items-center px-3 text-sm text-muted hover:text-text sm:inline-flex">
+                  Sign in
+                </button>
+              </SignInButton>
+              <SignUpButton mode="redirect">
+                <button type="button" className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-white shadow-lg shadow-primary/20 transition hover:bg-primary-hover">
+                  Sign up
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </SignUpButton>
+            </Show>
+            <Show when="signed-in">
+              <Link href="/dashboard" className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-white shadow-lg shadow-primary/20 transition hover:bg-primary-hover">
+                Dashboard
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
+              <div className="flex h-10 items-center rounded-lg border border-border bg-white/5 px-2">
+                <UserButton />
+              </div>
+            </Show>
           </div>
         </header>
 

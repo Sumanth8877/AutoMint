@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { requireApiSession } from '@/lib/auth/require-auth';
 import { getWalletBalance } from '@/lib/blockchain/wallet';
 
 export async function GET(req: Request) {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const authResult = await requireApiSession();
+  if ('error' in authResult) return authResult.error;
 
   const { searchParams } = new URL(req.url);
   const address = searchParams.get('address');

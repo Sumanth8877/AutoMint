@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server';
 import { getDb } from '@/lib/db';
 import { users } from '@/drizzle/schema';
 import { eq } from 'drizzle-orm';
+import { syncUser } from '@/lib/auth/sync-user';
 
 export async function getCurrentUser() {
   const { userId: clerkId } = await auth();
@@ -19,6 +20,10 @@ export async function getCurrentUser() {
  */
 export async function getInternalUserId(clerkId: string): Promise<string> {
   const [user] = await getDb().select().from(users).where(eq(users.clerkId, clerkId)).limit(1);
-  if (!user) throw new Error('User not found');
-  return user.id;
+  if (user) return user.id;
+
+  const syncedUser = await syncUser(clerkId);
+  if (!syncedUser) throw new Error('User not found');
+
+  return syncedUser.id;
 }

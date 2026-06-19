@@ -1,16 +1,13 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { getDb } from '@/lib/db';
 import { monitoringEvents, monitoredWebsites } from '@/drizzle/schema/monitoring';
 import { eq, desc } from 'drizzle-orm';
-import { getInternalUserId } from '@/lib/auth/current-user';
+import { requireApiUser } from '@/lib/auth/require-auth';
 
 export async function GET(request: Request) {
   try {
-    const { userId: clerkId } = await auth();
-    if (!clerkId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const userId = await getInternalUserId(clerkId);
+    const authResult = await requireApiUser();
+    if ('error' in authResult) return authResult.error;
 
     const { searchParams } = new URL(request.url);
     const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100);
@@ -21,7 +18,7 @@ export async function GET(request: Request) {
       website: monitoredWebsites,
     }).from(monitoringEvents)
       .innerJoin(monitoredWebsites, eq(monitoringEvents.websiteId, monitoredWebsites.id))
-      .where(eq(monitoredWebsites.userId, userId))
+      .where(eq(monitoredWebsites.userId, authResult.userId))
       .orderBy(desc(monitoringEvents.createdAt))
       .limit(limit);
 

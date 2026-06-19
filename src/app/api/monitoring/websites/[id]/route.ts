@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { getDb } from '@/lib/db';
 import { monitoredWebsites } from '@/drizzle/schema/monitoring';
 import { eq, and } from 'drizzle-orm';
-import { getInternalUserId } from '@/lib/auth/current-user';
+import { requireApiUser } from '@/lib/auth/require-auth';
 
 // DELETE /api/monitoring/websites/:id
 export async function DELETE(
@@ -11,16 +10,14 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { userId: clerkId } = await auth();
-    if (!clerkId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const userId = await getInternalUserId(clerkId);
+    const authResult = await requireApiUser();
+    if ('error' in authResult) return authResult.error;
 
     const { id: websiteId } = await params;
 
     const [deleted] = await getDb()
       .delete(monitoredWebsites)
-      .where(and(eq(monitoredWebsites.id, websiteId), eq(monitoredWebsites.userId, userId)))
+      .where(and(eq(monitoredWebsites.id, websiteId), eq(monitoredWebsites.userId, authResult.userId)))
       .returning();
 
     if (!deleted) return NextResponse.json({ error: 'Website not found' }, { status: 404 });

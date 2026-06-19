@@ -1,7 +1,22 @@
-import { clerkMiddleware } from '@clerk/nextjs/server';
+import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { syncUser } from '@/lib/auth/sync-user';
 
-export default clerkMiddleware(async (auth) => {
+const isProtectedPage = createRouteMatcher([
+  '/dashboard(.*)',
+  '/history(.*)',
+  '/analytics(.*)',
+  '/mints(.*)',
+  '/wallets(.*)',
+  '/settings(.*)',
+  '/collections(.*)',
+  '/analyzer(.*)',
+]);
+
+export default clerkMiddleware(async (auth, request) => {
+  if (isProtectedPage(request)) {
+    await auth.protect();
+  }
+
   const { userId } = await auth();
   if (!userId) return;
 
