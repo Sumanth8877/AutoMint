@@ -1,13 +1,14 @@
 'use client';
-import React, { useState } from 'react';
-import Link from 'next/link';
-import { Search, Bell, Settings, User, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, Bell, Settings, User, Sparkles, Zap, Shield, Target, ArrowRight, Copy, CheckCircle2, AlertCircle, Clock, TrendingUp } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 export default function HomePage() {
   const [url, setUrl] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const handleAnalyze = async () => {
     if (!url) return;
@@ -19,13 +20,18 @@ export default function HomePage() {
       setAnalysis({
         status: 'live',
         collection: 'Bored Ape Yacht Club',
-        chain: 'Ethereum',
-        address: '0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D',
-        price: '0.05',
+        launchpad: 'Magic Eden',
+        mintPrice: '0.05',
         supply: '9,950 / 10,000',
-        riskScore: 'Low',
-        gasEstimate: '0.008',
-        verified: true
+        mintDate: '2024-03-15',
+        whitelist: true,
+        contractRisk: 'Low',
+        liquidityRisk: 'Medium',
+        botCompetition: 'High',
+        recommendedWallets: 3,
+        priorityFee: '0.002',
+        expectedDemand: 'Very High',
+        suggestedActions: ['Prepare 3 wallets', 'Set priority fee to 0.002 ETH', 'Monitor launchpad 30min before']
       });
     } catch (err) {
       setError('Failed to analyze collection. Please try again.');
@@ -34,137 +40,326 @@ export default function HomePage() {
     }
   };
 
+  const handlePaste = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      setUrl(text);
+    } catch (err) {
+      setError('Failed to paste from clipboard');
+    }
+  };
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      setError('Failed to copy to clipboard');
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === 'Enter') {
+        handleAnalyze();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [url]);
+
   return (
-    <div className="min-h-screen bg-[#05070A]">
+    <div className="min-h-screen bg-[#050816]">
       {/* Navigation */}
-      <nav className="border-b border-[rgba(255,255,255,0.06)] bg-[#05070A]">
+      <nav className="sticky top-0 z-50 glass border-b border-white/8">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-8">
-            <Link href="/" className="text-white font-semibold text-lg">
-              AutoMint
-            </Link>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#4F46E5] to-[#06B6D4] flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-white" />
+              </div>
+              <span className="text-white font-semibold text-lg">AutoMint</span>
+            </div>
+            <div className="hidden md:flex items-center gap-6">
+              <a href="#" className="text-white/70 hover:text-white text-sm transition-colors">Dashboard</a>
+              <a href="#" className="text-white font-medium text-sm">Mint Analyzer</a>
+              <a href="#" className="text-white/70 hover:text-white text-sm transition-colors">Strategies</a>
+              <a href="#" className="text-white/70 hover:text-white text-sm transition-colors">History</a>
+            </div>
           </div>
           
-          <div className="flex-1 max-w-xl mx-8">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+          <div className="flex items-center gap-4">
+            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/8">
+              <Search className="w-4 h-4 text-white/40" />
               <input
                 type="text"
                 placeholder="Search..."
-                className="w-full bg-[#0B0F14] border border-[rgba(255,255,255,0.06)] rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-[#4F8CFF] transition-colors"
+                className="bg-transparent text-sm text-white placeholder:text-white/40 focus:outline-none w-32"
               />
             </div>
-          </div>
-
-          <div className="flex items-center gap-4">
             <button className="p-2 text-white/60 hover:text-white transition-colors">
               <Bell className="w-5 h-5" />
             </button>
-            <Link href="/settings" className="p-2 text-white/60 hover:text-white transition-colors">
+            <button className="p-2 text-white/60 hover:text-white transition-colors">
               <Settings className="w-5 h-5" />
-            </Link>
-            <Link href="/dashboard" className="p-2 text-white/60 hover:text-white transition-colors">
-              <User className="w-5 h-5" />
-            </Link>
+            </button>
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#4F46E5] to-[#06B6D4] flex items-center justify-center cursor-pointer">
+              <User className="w-4 h-4 text-white" />
+            </div>
           </div>
         </div>
       </nav>
 
       {/* Main Content */}
-      <main className="max-w-4xl mx-auto px-6 py-20">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-semibold text-white mb-4">
-            Execution Terminal
-          </h1>
-          <p className="text-white/60 text-lg">
-            Paste NFT mint URL to begin analysis
-          </p>
-        </div>
-
-        {/* URL Input */}
-        <div className="mb-8">
-          <div className="flex gap-4">
-            <input
-              type="url"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://magiceden.io/launchpad/collection"
-              className="flex-1 bg-[#0B0F14] border border-[rgba(255,255,255,0.06)] rounded-lg px-4 py-3 text-white placeholder:text-white/40 focus:outline-none focus:border-[#4F8CFF] transition-colors"
-            />
-            <button
-              onClick={handleAnalyze}
-              disabled={!url || analyzing}
-              className="px-6 py-3 bg-[#4F8CFF] text-white rounded-lg font-medium hover:bg-[#3D7AE8] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {analyzing ? 'Analyzing...' : 'Analyze'}
-            </button>
+      <main className="max-w-7xl mx-auto px-6 py-16">
+        {/* Hero Section */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="text-center mb-12"
+        >
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <span className="px-3 py-1 rounded-full bg-[#4F46E5]/10 border border-[#4F46E5]/20 text-[#4F46E5] text-xs font-medium">
+              Real-time Analysis
+            </span>
+            <span className="px-3 py-1 rounded-full bg-[#06B6D4]/10 border border-[#06B6D4]/20 text-[#06B6D4] text-xs font-medium">
+              Solana Launchpads
+            </span>
           </div>
-        </div>
+          <h1 className="text-4xl md:text-5xl font-semibold text-white mb-4 tracking-tight">
+            NFT Mint Intelligence
+          </h1>
+          <p className="text-white/60 text-lg max-w-2xl mx-auto">
+            Analyze launchpad collections, detect contracts, estimate mint risks, and prepare automated mint strategies.
+          </p>
+        </motion.div>
+
+        {/* Analysis Card */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+          className="max-w-3xl mx-auto mb-12"
+        >
+          <div className="glass-card rounded-2xl p-8">
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-white/80 mb-2">NFT Mint URL</label>
+              <div className="relative">
+                <input
+                  type="url"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAnalyze()}
+                  placeholder="https://magiceden.io/launchpad/collection"
+                  className="w-full bg-[#050816] border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/40 focus:outline-none focus:border-[#4F46E5] focus:ring-1 focus:ring-[#4F46E5] transition-all"
+                />
+                <button
+                  onClick={handleCopy}
+                  className="absolute right-12 top-1/2 -translate-y-1/2 p-2 text-white/40 hover:text-white transition-colors"
+                >
+                  {copied ? <CheckCircle2 className="w-4 h-4 text-[#10B981]" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
+              <p className="text-xs text-white/40 mt-2">Example: magiceden.io/launchpad/collection-name</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={handlePaste}
+                className="flex-1 px-6 py-3 bg-white/5 border border-white/10 rounded-xl text-white font-medium hover:bg-white/10 transition-all"
+              >
+                Paste
+              </button>
+              <button
+                onClick={handleAnalyze}
+                disabled={!url || analyzing}
+                className="flex-1 px-6 py-3 bg-gradient-to-r from-[#4F46E5] to-[#4338CA] text-white rounded-xl font-medium hover:from-[#4338CA] hover:to-[#3730A3] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+              >
+                {analyzing ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Analyzing...
+                  </>
+                ) : (
+                  <>
+                    Analyze Collection
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </motion.div>
 
         {/* Error State */}
         {error && (
-          <div className="mb-8 bg-[#F31260]/10 border border-[#F31260]/20 rounded-lg p-4 flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-[#F31260]" />
-            <span className="text-white/60 text-sm">{error}</span>
-          </div>
-        )}
-
-        {/* Analysis Panel */}
-        {analyzing && (
-          <div className="bg-[#0B0F14] border border-[rgba(255,255,255,0.06)] rounded-lg p-6">
-            <div className="flex items-center gap-3">
-              <div className="w-4 h-4 border-2 border-[#4F8CFF] border-t-transparent rounded-full animate-spin" />
-              <span className="text-white/60">Analyzing collection...</span>
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="max-w-3xl mx-auto mb-8"
+          >
+            <div className="bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-xl p-4 flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-[#EF4444]" />
+              <span className="text-white/80 text-sm">{error}</span>
             </div>
-          </div>
+          </motion.div>
         )}
 
+        {/* Quick Stats */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+          className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12"
+        >
+          {[
+            { label: 'Collections', value: '245', icon: Sparkles, color: '#4F46E5' },
+            { label: 'Success %', value: '83%', icon: TrendingUp, color: '#10B981' },
+            { label: 'Avg ROI', value: '2.4x', icon: Zap, color: '#06B6D4' },
+            { label: 'Monitored', value: '1.2k', icon: Target, color: '#F59E0B' },
+          ].map((stat, i) => (
+            <div key={i} className="glass-card rounded-xl p-5">
+              <div className="flex items-center gap-2 mb-2">
+                <stat.icon className="w-4 h-4" style={{ color: stat.color }} />
+                <p className="text-white/60 text-xs uppercase tracking-wide">{stat.label}</p>
+              </div>
+              <p className="text-2xl font-semibold text-white">{stat.value}</p>
+            </div>
+          ))}
+        </motion.div>
+
+        {/* Analysis Results */}
         {analysis && !analyzing && (
-          <div className="bg-[#0B0F14] border border-[rgba(255,255,255,0.06)] rounded-lg p-6 animate-slideUp">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-xl font-semibold text-white">{analysis.collection}</h2>
-                <p className="text-white/60 text-sm mt-1">
-                  {analysis.address.slice(0, 10)}...{analysis.address.slice(-8)} · {analysis.chain}
-                </p>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="space-y-6"
+          >
+            {/* Collection Overview */}
+            <div className="glass-card rounded-2xl p-6">
+              <div className="flex items-center gap-2 mb-6">
+                <Sparkles className="w-5 h-5 text-[#4F46E5]" />
+                <h3 className="text-lg font-semibold text-white">Collection Overview</h3>
               </div>
-              <span className="px-3 py-1 bg-[#18C964]/10 text-[#18C964] text-xs font-medium rounded-full">
-                {analysis.status}
-              </span>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                <div>
+                  <p className="text-white/60 text-sm mb-1">Project Name</p>
+                  <p className="text-white font-medium">{analysis.collection}</p>
+                </div>
+                <div>
+                  <p className="text-white/60 text-sm mb-1">Launchpad</p>
+                  <p className="text-white font-medium">{analysis.launchpad}</p>
+                </div>
+                <div>
+                  <p className="text-white/60 text-sm mb-1">Mint Price</p>
+                  <p className="text-white font-medium">{analysis.mintPrice} ETH</p>
+                </div>
+                <div>
+                  <p className="text-white/60 text-sm mb-1">Supply</p>
+                  <p className="text-white font-medium">{analysis.supply}</p>
+                </div>
+                <div>
+                  <p className="text-white/60 text-sm mb-1">Mint Date</p>
+                  <p className="text-white font-medium">{analysis.mintDate}</p>
+                </div>
+                <div>
+                  <p className="text-white/60 text-sm mb-1">Whitelist</p>
+                  <p className="text-white font-medium">{analysis.whitelist ? 'Yes' : 'No'}</p>
+                </div>
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <div>
-                <p className="text-white/40 text-xs uppercase tracking-wide mb-1">Price</p>
-                <p className="text-white font-medium">{analysis.price} ETH</p>
+            {/* Risk Analysis */}
+            <div className="glass-card rounded-2xl p-6">
+              <div className="flex items-center gap-2 mb-6">
+                <Shield className="w-5 h-5 text-[#F59E0B]" />
+                <h3 className="text-lg font-semibold text-white">Risk Analysis</h3>
               </div>
-              <div>
-                <p className="text-white/40 text-xs uppercase tracking-wide mb-1">Supply</p>
-                <p className="text-white font-medium">{analysis.supply}</p>
-              </div>
-              <div>
-                <p className="text-white/40 text-xs uppercase tracking-wide mb-1">Risk Score</p>
-                <p className="text-[#18C964] font-medium">{analysis.riskScore}</p>
-              </div>
-              <div>
-                <p className="text-white/40 text-xs uppercase tracking-wide mb-1">Gas Est.</p>
-                <p className="text-white font-medium">{analysis.gasEstimate} ETH</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4 mb-6">
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${analysis.verified ? 'bg-[#18C964]' : 'bg-[#F31260]'}`} />
-                <span className="text-white/60 text-sm">
-                  {analysis.verified ? 'Contract Verified' : 'Contract Unverified'}
-                </span>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {[
+                  { label: 'Contract Risk', value: analysis.contractRisk, color: analysis.contractRisk === 'Low' ? '#10B981' : analysis.contractRisk === 'Medium' ? '#F59E0B' : '#EF4444' },
+                  { label: 'Liquidity Risk', value: analysis.liquidityRisk, color: analysis.liquidityRisk === 'Low' ? '#10B981' : analysis.liquidityRisk === 'Medium' ? '#F59E0B' : '#EF4444' },
+                  { label: 'Bot Competition', value: analysis.botCompetition, color: analysis.botCompetition === 'Low' ? '#10B981' : analysis.botCompetition === 'Medium' ? '#F59E0B' : '#EF4444' },
+                ].map((risk, i) => (
+                  <div key={i} className="bg-[#050816] rounded-xl p-4 border border-white/8">
+                    <p className="text-white/60 text-sm mb-2">{risk.label}</p>
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full" style={{ background: risk.color }} />
+                      <p className="text-white font-medium" style={{ color: risk.color }}>{risk.value}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
-            <button className="w-full py-4 bg-[#4F8CFF] text-white rounded-lg font-medium hover:bg-[#3D7AE8] transition-colors">
-              MINT NOW
-            </button>
-          </div>
+            {/* Mint Strategy */}
+            <div className="glass-card rounded-2xl p-6">
+              <div className="flex items-center gap-2 mb-6">
+                <Target className="w-5 h-5 text-[#06B6D4]" />
+                <h3 className="text-lg font-semibold text-white">Mint Strategy</h3>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div>
+                  <p className="text-white/60 text-sm mb-1">Recommended Wallets</p>
+                  <p className="text-white font-medium">{analysis.recommendedWallets}</p>
+                </div>
+                <div>
+                  <p className="text-white/60 text-sm mb-1">Priority Fee</p>
+                  <p className="text-white font-medium">{analysis.priorityFee} ETH</p>
+                </div>
+                <div>
+                  <p className="text-white/60 text-sm mb-1">Expected Demand</p>
+                  <p className="text-white font-medium">{analysis.expectedDemand}</p>
+                </div>
+                <div>
+                  <p className="text-white/60 text-sm mb-1">Status</p>
+                  <p className="text-[#10B981] font-medium">Ready</p>
+                </div>
+              </div>
+              <div className="bg-[#050816] rounded-xl p-4 border border-white/8">
+                <p className="text-white/60 text-sm mb-3">Suggested Actions</p>
+                <ul className="space-y-2">
+                  {analysis.suggestedActions.map((action: string, i: number) => (
+                    <li key={i} className="flex items-center gap-2 text-sm text-white/80">
+                      <CheckCircle2 className="w-4 h-4 text-[#10B981]" />
+                      {action}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Empty State */}
+        {!analysis && !analyzing && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+            className="max-w-2xl mx-auto text-center"
+          >
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#4F46E5]/10 to-[#06B6D4]/10 border border-white/8 flex items-center justify-center mx-auto mb-6">
+              <Search className="w-10 h-10 text-white/40" />
+            </div>
+            <h3 className="text-xl font-semibold text-white mb-2">Paste a launchpad URL to begin analysis</h3>
+            <p className="text-white/60 mb-8">Get instant insights on contract security, mint risks, and optimal strategies.</p>
+            <div className="grid grid-cols-2 gap-4">
+              {[
+                { icon: Shield, text: 'Contract Detection' },
+                { icon: TrendingUp, text: 'Risk Scoring' },
+                { icon: Clock, text: 'Mint Forecast' },
+                { icon: Zap, text: 'AutoMint Preparation' },
+              ].map((feature, i) => (
+                <div key={i} className="flex items-center gap-3 p-4 rounded-xl bg-white/5 border border-white/8">
+                  <feature.icon className="w-5 h-5 text-[#4F46E5]" />
+                  <span className="text-sm text-white/80">{feature.text}</span>
+                </div>
+              ))}
+            </div>
+          </motion.div>
         )}
       </main>
     </div>
