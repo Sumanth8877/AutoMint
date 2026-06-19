@@ -1,30 +1,48 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Wallet as WalletIcon, Plus, Copy, Trash2, RefreshCw, ExternalLink } from 'lucide-react';
+import { Wallet as WalletIcon, Plus, Copy, Trash2, RefreshCw, ExternalLink, AlertCircle } from 'lucide-react';
 
 export default function WalletsPage() {
   const [wallets, setWallets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchWallets = async () => {
     try {
       const res = await fetch('/api/wallets');
+      if (!res.ok) throw new Error('Failed to fetch wallets');
       const data = await res.json();
       if (data.wallets) setWallets(data.wallets);
-    } catch {} finally { setLoading(false); }
+    } catch (err) {
+      setError('Failed to load wallets. Please try again.');
+    } finally { setLoading(false); }
   };
   useEffect(() => { fetchWallets(); }, []);
 
   const handleCopy = async (address: string) => {
-    await navigator.clipboard.writeText(address);
+    try {
+      await navigator.clipboard.writeText(address);
+    } catch (err) {
+      setError('Failed to copy address');
+    }
   };
   const handleRemove = async (id: string) => {
-    await fetch('/api/wallets', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
-    fetchWallets();
+    try {
+      const res = await fetch('/api/wallets', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+      if (!res.ok) throw new Error('Failed to remove wallet');
+      fetchWallets();
+    } catch (err) {
+      setError('Failed to remove wallet. Please try again.');
+    }
   };
   const handleRefresh = async (id: string) => {
-    await fetch(`/api/wallets/${id}/balance`, { method: 'POST' });
-    fetchWallets();
+    try {
+      const res = await fetch(`/api/wallets/${id}/balance`, { method: 'POST' });
+      if (!res.ok) throw new Error('Failed to refresh balance');
+      fetchWallets();
+    } catch (err) {
+      setError('Failed to refresh balance. Please try again.');
+    }
   };
 
   return (
@@ -39,6 +57,13 @@ export default function WalletsPage() {
           Add Wallet
         </button>
       </div>
+
+      {error && (
+        <div className="mb-6 bg-[#F31260]/10 border border-[#F31260]/20 rounded-lg p-4 flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-[#F31260]" />
+          <span className="text-white/60 text-sm">{error}</span>
+        </div>
+      )}
 
       {loading ? (
         <div className="bg-[#0B0F14] border border-[rgba(255,255,255,0.06)] rounded-lg p-8">

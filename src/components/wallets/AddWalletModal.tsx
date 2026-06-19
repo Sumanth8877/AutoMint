@@ -22,10 +22,10 @@ export default function AddWalletModal({ onClose, onSubmit }: AddWalletModalProp
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
-      <div className="w-full max-w-md rounded-2xl p-6" style={{ background: 'rgba(17,24,39,0.98)', border: '1px solid rgba(59,130,246,0.15)' }}>
+      <div className="w-full max-w-md rounded-lg p-6 bg-[#0B0F14] border border-[rgba(255,255,255,0.06)]">
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-white" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Add Wallet</h3>
-          <button onClick={onClose} className="text-slate-500 hover:text-white p-1">
+          <h3 className="text-lg font-semibold text-white">Add Wallet</h3>
+          <button onClick={onClose} className="text-white/60 hover:text-white p-1">
             <X size={20} />
           </button>
         </div>
@@ -34,11 +34,11 @@ export default function AddWalletModal({ onClose, onSubmit }: AddWalletModalProp
           <Input label="Wallet Address" placeholder="0x..." value={address} onChange={(e) => setAddress(e.target.value)} required />
           <Input label="Nickname (optional)" placeholder="My Wallet" value={nickname} onChange={(e) => setNickname(e.target.value)} />
           <div>
-            <label className="block text-sm font-medium text-slate-400 mb-2">Chain</label>
+            <label className="block text-sm font-medium text-white/60 mb-2">Chain</label>
             <select
               value={chain}
               onChange={(e) => setChain(e.target.value)}
-              className="w-full bg-[#0B1120] border border-[rgba(59,130,246,0.15)] rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-blue-500/50"
+              className="w-full bg-[#05070A] border border-[rgba(255,255,255,0.06)] rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#4F8CFF]"
             >
               <option value="ethereum">Ethereum</option>
               <option value="base">Base</option>

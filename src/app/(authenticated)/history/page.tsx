@@ -1,20 +1,24 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { History as HistoryIcon, CheckCircle2, XCircle, Clock, Play } from 'lucide-react';
+import { History as HistoryIcon, CheckCircle2, XCircle, Clock, Play, AlertCircle } from 'lucide-react';
 
 export default function HistoryPage() {
   const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         const res = await fetch('/api/activities');
+        if (!res.ok) throw new Error('Failed to fetch activities');
         const data = await res.json();
         if (data.activities) {
           setEvents(data.activities);
         }
-      } catch {} finally { setLoading(false); }
+      } catch (err) {
+        setError('Failed to load activity. Please try again.');
+      } finally { setLoading(false); }
     };
     fetchData();
   }, []);
@@ -48,6 +52,13 @@ export default function HistoryPage() {
         <h1 className="text-2xl font-semibold text-white mb-2">Activity</h1>
         <p className="text-white/60 text-sm">Track your execution timeline</p>
       </div>
+
+      {error && (
+        <div className="mb-6 bg-[#F31260]/10 border border-[#F31260]/20 rounded-lg p-4 flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-[#F31260]" />
+          <span className="text-white/60 text-sm">{error}</span>
+        </div>
+      )}
 
       {loading ? (
         <div className="bg-[#0B0F14] border border-[rgba(255,255,255,0.06)] rounded-lg p-8">

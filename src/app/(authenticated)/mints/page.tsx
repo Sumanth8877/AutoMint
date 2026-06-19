@@ -1,28 +1,42 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Zap, Plus, RefreshCw, XCircle, CheckCircle2, Clock, Play } from 'lucide-react';
+import { Zap, Plus, RefreshCw, XCircle, CheckCircle2, Clock, Play, AlertCircle } from 'lucide-react';
 
 export default function MintsPage() {
   const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('active');
+  const [error, setError] = useState<string | null>(null);
 
   const fetchTasks = async () => {
     try {
       const res = await fetch('/api/mints');
+      if (!res.ok) throw new Error('Failed to fetch mints');
       const data = await res.json();
       if (data.tasks) setTasks(data.tasks);
-    } catch {} finally { setLoading(false); }
+    } catch (err) {
+      setError('Failed to load mints. Please try again.');
+    } finally { setLoading(false); }
   };
   useEffect(() => { fetchTasks(); }, []);
 
   const handleDelete = async (id: string) => {
-    await fetch('/api/mints', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
-    fetchTasks();
+    try {
+      const res = await fetch('/api/mints', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+      if (!res.ok) throw new Error('Failed to delete mint');
+      fetchTasks();
+    } catch (err) {
+      setError('Failed to delete mint. Please try again.');
+    }
   };
   const handleRetry = async (id: string) => {
-    await fetch('/api/mints/retry', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
-    fetchTasks();
+    try {
+      const res = await fetch('/api/mints/retry', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+      if (!res.ok) throw new Error('Failed to retry mint');
+      fetchTasks();
+    } catch (err) {
+      setError('Failed to retry mint. Please try again.');
+    }
   };
 
   const active = tasks.filter(t => t.status === 'running' || t.status === 'active' || t.status === 'pending');
@@ -51,6 +65,13 @@ export default function MintsPage() {
           New Mint
         </button>
       </div>
+
+      {error && (
+        <div className="mb-6 bg-[#F31260]/10 border border-[#F31260]/20 rounded-lg p-4 flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-[#F31260]" />
+          <span className="text-white/60 text-sm">{error}</span>
+        </div>
+      )}
 
       {loading ? (
         <div className="bg-[#0B0F14] border border-[rgba(255,255,255,0.06)] rounded-lg p-8">

@@ -20,10 +20,10 @@ const iconMap = {
 };
 
 const colorMap = {
-  completed: '#22C55E',
-  pending: '#94A3B8',
-  active: '#3B82F6',
-  failed: '#EF4444',
+  completed: '#18C964',
+  pending: 'rgba(255,255,255,0.40)',
+  active: '#4F8CFF',
+  failed: '#F31260',
 };
 
 export default function ActivityTimeline({ events }: { events: ActivityEvent[] }) {
@@ -40,7 +40,7 @@ export default function ActivityTimeline({ events }: { events: ActivityEvent[] }
     <div className="space-y-8">
       {keys.map(day => (
         <div key={day}>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted mb-4">{day}</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-white/40 mb-4">{day}</h3>
           <div className="space-y-0">
             {(grouped[day] || []).map((ev, i) => {
               const Icon = iconMap[ev.status] || Circle;
@@ -49,7 +49,7 @@ export default function ActivityTimeline({ events }: { events: ActivityEvent[] }
               return (
                 <div key={ev.id} className="relative flex gap-4 pb-6">
                   {!isLast && (
-                    <div className="absolute left-[11px] top-6 bottom-0 w-px bg-blue-500/10" />
+                    <div className="absolute left-[11px] top-6 bottom-0 w-px bg-[rgba(255,255,255,0.06)]" />
                   )}
                   <div
                     className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
@@ -60,11 +60,11 @@ export default function ActivityTimeline({ events }: { events: ActivityEvent[] }
                   <div className="flex-1">
                     <div className="flex items-center justify-between">
                       <p className="text-sm font-medium text-white">{ev.title}</p>
-                      <span className="text-xs text-muted">
+                      <span className="text-xs text-white/40">
                         {new Date(ev.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                       </span>
                     </div>
-                    {ev.description && <p className="text-xs text-slate-500 mt-0.5">{ev.description}</p>}
+                    {ev.description && <p className="text-xs text-white/40 mt-0.5">{ev.description}</p>}
                   </div>
                 </div>
               );

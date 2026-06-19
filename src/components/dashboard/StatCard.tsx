@@ -13,16 +13,16 @@ interface StatCardProps {
 
 export default function StatCard({ title, value, icon, trend, trendValue }: StatCardProps) {
   const trendColors = {
-    up: 'text-success',
-    down: 'text-danger',
-    neutral: 'text-muted',
+    up: 'text-[#18C964]',
+    down: 'text-[#F31260]',
+    neutral: 'text-white/60',
   };
 
   return (
-    <Card glow className="p-6 hover:border-blue-400/30 transition-all duration-300">
+    <Card className="p-6 hover:border-[rgba(255,255,255,0.12)] transition-all duration-200">
       <div className="flex items-start justify-between mb-4">
-        <div className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20">
-          <div className="text-blue-500">{icon}</div>
+        <div className="p-2.5 rounded-lg bg-[#4F8CFF]/10 border border-[#4F8CFF]/20">
+          <div className="text-[#4F8CFF]">{icon}</div>
         </div>
         {trend && trendValue && (
           <span className={`text-xs font-medium ${trendColors[trend]}`}>
@@ -30,10 +30,10 @@ export default function StatCard({ title, value, icon, trend, trendValue }: Stat
           </span>
         )}
       </div>
-      <h3 className="text-2xl font-bold text-white mb-1" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+      <h3 className="text-2xl font-semibold text-white mb-1">
         {value}
       </h3>
-      <p className="text-sm text-muted">{title}</p>
+      <p className="text-sm text-white/60">{title}</p>
     </Card>
   );
 }

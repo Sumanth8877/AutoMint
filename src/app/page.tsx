@@ -1,30 +1,37 @@
 'use client';
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { Search, Bell, Settings, User } from 'lucide-react';
+import { Search, Bell, Settings, User, AlertCircle } from 'lucide-react';
 
 export default function HomePage() {
   const [url, setUrl] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const handleAnalyze = async () => {
     if (!url) return;
     setAnalyzing(true);
     setAnalysis(null);
-    await new Promise(r => setTimeout(r, 2000));
-    setAnalysis({
-      status: 'live',
-      collection: 'Bored Ape Yacht Club',
-      chain: 'Ethereum',
-      address: '0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D',
-      price: '0.05',
-      supply: '9,950 / 10,000',
-      riskScore: 'Low',
-      gasEstimate: '0.008',
-      verified: true
-    });
-    setAnalyzing(false);
+    setError(null);
+    try {
+      await new Promise(r => setTimeout(r, 2000));
+      setAnalysis({
+        status: 'live',
+        collection: 'Bored Ape Yacht Club',
+        chain: 'Ethereum',
+        address: '0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D',
+        price: '0.05',
+        supply: '9,950 / 10,000',
+        riskScore: 'Low',
+        gasEstimate: '0.008',
+        verified: true
+      });
+    } catch (err) {
+      setError('Failed to analyze collection. Please try again.');
+    } finally {
+      setAnalyzing(false);
+    }
   };
 
   return (
@@ -93,6 +100,14 @@ export default function HomePage() {
             </button>
           </div>
         </div>
+
+        {/* Error State */}
+        {error && (
+          <div className="mb-8 bg-[#F31260]/10 border border-[#F31260]/20 rounded-lg p-4 flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-[#F31260]" />
+            <span className="text-white/60 text-sm">{error}</span>
+          </div>
+        )}
 
         {/* Analysis Panel */}
         {analyzing && (
