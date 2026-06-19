@@ -38,8 +38,60 @@ function getRetryDelay(attempt: number): Date {
   return new Date(Date.now() + minutes * 60 * 1000);
 }
 
+// ─── Idempotency key generation ─────────────────────
+/**
+ * Build a deterministic idempotency key for critical task types.
+ *
+ * This is the PRIMARY idempotency enforcement layer.
+ * The DB unique index on idempotency_key is secondary safety only.
+ *
+ * Rules:
+ * - mint_execution: key = `mint:${walletId}:${collectionId}`
+ * - All other automated/cron tasks MUST generate a key, never pass null
+ */
+export function buildIdempotencyKey(params: CreateTaskParams): string | null {
+  // Critical: mint_execution uses wallet+collection as its idempotency key
+  if (params.taskType === 'mint_execution') {
+    const walletId = (params.payload as Record<string, any> | undefined)?.walletId;
+    const collectionId = (params.payload as Record<string, any> | undefined)?.collectionId;
+    if (walletId && collectionId) {
+      return `mint:${walletId}:${collectionId}`;
+    }
+  }
+
+  // For all other automated tasks, use the provided key or generate one from payload
+  if (params.idempotencyKey) {
+    return params.idempotencyKey;
+  }
+
+  // If there's a payload but no explicit key, generate a deterministic hash
+  if (params.payload) {
+    const stable = JSON.stringify(params.payload, Object.keys(params.payload).sort());
+    return `${params.taskType}:${stable}`;
+  }
+
+  return null;
+}
+
 // ─── Create ────────────────────────────────────────
 export async function createTask(params: CreateTaskParams) {
+  // 1. Resolve or generate idempotency key (application-level enforcement)
+  const idempotencyKey = buildIdempotencyKey(params);
+
+  // 2. Check for existing task with the same idempotency key
+  if (idempotencyKey) {
+    const [existing] = await getDb()
+      .select()
+      .from(tasks)
+      .where(eq(tasks.idempotencyKey, idempotencyKey))
+      .limit(1);
+
+    if (existing) {
+      return existing;
+    }
+  }
+
+  // 3. Insert new task
   const [record] = await getDb().insert(tasks).values({
     userId: params.userId || null,
     taskType: params.taskType as any,
@@ -49,7 +101,7 @@ export async function createTask(params: CreateTaskParams) {
     maxAttempts: params.maxAttempts ?? 5,
     payload: params.payload ? JSON.parse(JSON.stringify(params.payload)) : null,
     scheduledFor: params.scheduledFor || new Date(),
-    idempotencyKey: params.idempotencyKey || null,
+    idempotencyKey,
   }).returning();
   return record;
 }
@@ -168,15 +220,20 @@ export async function claimPendingTasks(taskType: TaskType, limit = 5) {
 
 /**
  * Non-locking fallback: get pending tasks for a type.
+ *
+ * NULL scheduledFor = run immediately (eligible).
+ * Past scheduledFor = eligible.
+ * Future scheduledFor = excluded.
+ *
+ * Uses SQL-level IS NULL OR condition — never TS ?? coalescing inside query builders.
  */
 export async function getPendingTasksByType(taskType: TaskType, limit = 10) {
-  const now = new Date();
   return getDb().select().from(tasks)
     .where(
       and(
         eq(tasks.taskType, taskType as any),
         eq(tasks.status, 'pending'),
-        lt(tasks.scheduledFor ?? sql`NOW()`, sql`NOW()`),
+        sql`(${tasks.scheduledFor} IS NULL OR ${tasks.scheduledFor} <= NOW())`,
       ),
     )
     .orderBy(asc(tasks.priority), desc(tasks.createdAt))
@@ -185,14 +242,15 @@ export async function getPendingTasksByType(taskType: TaskType, limit = 10) {
 
 /**
  * Get retrying tasks that are due for retry.
+ *
+ * Uses SQL-level IS NULL OR condition — never TS ?? coalescing inside query builders.
  */
 export async function getDueRetryTasks(limit = 10) {
-  const now = new Date();
   return getDb().select().from(tasks)
     .where(
       and(
         eq(tasks.status, 'retrying'),
-        lt(tasks.scheduledFor ?? sql`NOW()`, sql`NOW()`),
+        sql`(${tasks.scheduledFor} IS NULL OR ${tasks.scheduledFor} <= NOW())`,
       ),
     )
     .orderBy(asc(tasks.scheduledFor))

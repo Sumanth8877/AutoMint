@@ -1,7 +1,7 @@
 import { createPublicClient, http } from 'viem';
 import { mainnet, base, polygon } from 'viem/chains';
 
-const ALCHEMY_API_KEY = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY || '';
+const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY || '';
 
 const alchemyUrl = (chainId: number) => {
   const baseUrl = `https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`;
