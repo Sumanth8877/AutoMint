@@ -1,8 +1,8 @@
 import { getDb } from '@/lib/db';
 import { mintTasks } from '@/drizzle/schema';
-import { eq, and } from 'drizzle-orm';
-import { fetchMintRequirements } from './mint-requirements.service';
-import { getMintState } from './mint-state.service';
+import { eq } from 'drizzle-orm';
+import type { MintRequirements } from './mint-requirements.service';
+import type { MintState } from './mint-state.service';
 
 export interface PreArmConfig {
   userId: string;
@@ -10,17 +10,15 @@ export interface PreArmConfig {
   contractAddress: string;
   chain: string;
   quantity: number;
-  requirements: any;
-  mintState: any;
+  requirements: MintRequirements;
+  mintState: MintState;
 }
 
 export async function preArmMint(config: PreArmConfig) {
-  const { userId, walletId, contractAddress, chain, quantity, requirements, mintState } = config;
-  const idempotencyKey = 'prearm:' + walletId + ':' + contractAddress;
+  const { userId, walletId, contractAddress, quantity, requirements } = config;
   const [existing] = await getDb().select().from(mintTasks).where(eq(mintTasks.contractAddress, contractAddress)).limit(1);
   if (existing) return existing;
 
-  const executeAt = mintState.startTime || new Date(Date.now() + 60000);
   const [task] = await getDb().insert(mintTasks).values({
     userId,
     walletId,
@@ -29,8 +27,6 @@ export async function preArmMint(config: PreArmConfig) {
     contractAddress,
     mintFunction: requirements.mintFunction,
     mintPrice: requirements.mintPrice,
-    
-    
   }).returning();
   return task;
 }

@@ -12,6 +12,7 @@
  */
 
 import { getClient } from '@/lib/blockchain/client';
+import type { Hex } from 'viem';
 
 // ─── Types ─────────────────────────────────────────
 
@@ -36,18 +37,20 @@ const STATE_ABI = [
   'function paused() view returns (bool)',
 ] as const;
 
+type StateFunction = 'publicMintActive' | 'maxSupply' | 'totalSupply' | 'mintStart' | 'mintEnd' | 'paused';
+
 // ─── Helpers ──────────────────────────────────────
 
 async function callView(
   client: ReturnType<typeof getClient>,
   address: string,
-  functionName: string,
+  functionName: StateFunction,
 ): Promise<bigint | boolean | undefined> {
   try {
     return await client.readContract({
-      address: address as `0x${string}`,
+      address: address as Hex,
       abi: STATE_ABI,
-      functionName: functionName as any,
+      functionName,
     }) as bigint | boolean | undefined;
   } catch {
     return undefined;

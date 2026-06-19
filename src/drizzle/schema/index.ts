@@ -115,7 +115,7 @@ export const activities = pgTable('activities', {
   userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
   type: activityTypeEnum('type').notNull(),
   title: text('title').notNull(),
-  metadata: json('metadata').$type<Record<string, any>>(),
+  metadata: json('metadata').$type<Record<string, unknown>>(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 

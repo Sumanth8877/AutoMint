@@ -1,5 +1,6 @@
 import { getClient } from './client';
 import { getCache, setCache, CACHE_KEYS, CACHE_TTL } from '@/lib/redis';
+import { parseAbiItem, type Hex } from 'viem';
 
 export interface NftTransfer {
   tokenId: string;
@@ -13,6 +14,7 @@ export interface NftTransfer {
 }
 
 const ERC721_TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+const ERC721_TRANSFER_EVENT = parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)');
 
 export async function getNftTransfers(params: {
   chain: string;
@@ -24,23 +26,21 @@ export async function getNftTransfers(params: {
   const client = getClient(params.chain);
 
   const latestBlock = await client.getBlockNumber();
-  const fromBlock = params.fromBlock ?? Number(latestBlock - BigInt(5000));
-  const toBlock = params.toBlock ?? Number(latestBlock);
+  const fromBlock = BigInt(params.fromBlock ?? Number(latestBlock - BigInt(5000)));
+  const toBlock = BigInt(params.toBlock ?? Number(latestBlock));
 
-  const logs = await (client as any).getLogs({
-    address: params.contract,
-    topics: [ERC721_TRANSFER_TOPIC],
+  const logs = await client.getLogs({
+    address: params.contract as Hex,
+    event: ERC721_TRANSFER_EVENT,
     fromBlock,
     toBlock,
-    limit: params.limit || 100,
   });
 
-  return logs.map((log: any) => {
-    const [fromTopic, toTopic] = log.topics.slice(1, 3);
+  return logs.slice(0, params.limit || 100).map((log) => {
     return {
-      tokenId: log.topics[3] || '0',
-      from: `0x${fromTopic.slice(26)}`,
-      to: `0x${toTopic.slice(26)}`,
+      tokenId: log.args.tokenId?.toString() ?? '0',
+      from: log.args.from ?? '',
+      to: log.args.to ?? '',
       contract: params.contract,
       chain: params.chain,
       blockNumber: Number(log.blockNumber),

@@ -1,8 +1,7 @@
 import { createWalletClient, http, parseAbi, parseEther, Hex, encodeFunctionData } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { mainnet, base, polygon } from 'viem/chains';
+import { mainnet, base, polygon, type Chain } from 'viem/chains';
 import { getClient } from './client';
-import { logActivity } from '@/lib/monitoring';
 
 // ─── MINT_MODE Configuration ─────────────────────
 
@@ -33,7 +32,7 @@ function getRpcUrl(chain: string): string {
   return v;
 }
 
-const CHAIN_OBJECTS: Record<string, any> = {
+const CHAIN_OBJECTS: Record<string, Chain> = {
   ethereum: mainnet,
   base: base,
   polygon: polygon,
@@ -65,10 +64,14 @@ export interface MintEligibility {
 
 // ─── Helpers ──────────────────────────────────────
 
-function getChain(chain: string) {
+function getChain(chain: string): Chain {
   const c = CHAIN_OBJECTS[chain];
   if (!c) throw new Error(`Unsupported chain: ${chain}`);
-  return c as any;
+  return c;
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : 'Unknown mint error';
 }
 
 function buildMintData(params: MintParams): Hex {
@@ -103,10 +106,10 @@ export async function simulateMint(
     });
 
     return { success: true };
-  } catch (error: any) {
+  } catch (error) {
     return {
       success: false,
-      error: error?.message || 'Simulation failed',
+      error: getErrorMessage(error) || 'Simulation failed',
     };
   }
 }
@@ -130,10 +133,10 @@ export async function estimateMintGas(
     });
 
     return { gasLimit: estimate };
-  } catch (error: any) {
+  } catch (error) {
       return {
         gasLimit: BigInt(200000),
-        error: error?.message || 'Gas estimation failed',
+        error: getErrorMessage(error) || 'Gas estimation failed',
       };
   }
 }
@@ -173,8 +176,8 @@ export async function checkMintEligibility(
     }
 
     return { eligible: true, publicMintActive: true };
-  } catch (error: any) {
-    return { eligible: false, reason: error?.message || 'Eligibility check failed' };
+  } catch (error) {
+    return { eligible: false, reason: getErrorMessage(error) || 'Eligibility check failed' };
   }
 }
 
@@ -252,10 +255,10 @@ export async function executeMint(
       gasUsed: receipt.gasUsed?.toString(),
       blockNumber: receipt.blockNumber,
     };
-  } catch (error: any) {
+  } catch (error) {
     return {
       success: false,
-      error: error?.message || 'Mint execution failed',
+      error: getErrorMessage(error) || 'Mint execution failed',
     };
   }
 }

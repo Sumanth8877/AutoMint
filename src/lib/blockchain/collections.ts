@@ -46,9 +46,7 @@ export async function getCollectionMetadata(contractAddress: string, chain: stri
     } catch {
       // Try ERC1155
       try {
-        const [uri] = await Promise.all([
-          client.readContract({ address, abi: ERC1155_ABI, functionName: 'uri' }),
-        ]);
+        await client.readContract({ address, abi: ERC1155_ABI, functionName: 'uri' });
 
         return {
           name: CHAIN_NAMES[chain as keyof typeof CHAIN_NAMES] || 'Unknown',

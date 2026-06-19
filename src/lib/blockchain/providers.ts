@@ -28,7 +28,8 @@ export async function getClient(chain: ChainKey) {
   }
 }
 
-export function isRpcHealthy(_chain: ChainKey): boolean {
+export function isRpcHealthy(chain: ChainKey): boolean {
+  void chain;
   try {
     return true;
   } catch {

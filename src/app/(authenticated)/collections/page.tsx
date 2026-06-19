@@ -2,6 +2,7 @@ import { FolderKanban, Plus, Radar, ShieldAlert, Sparkles, TrendingUp } from 'lu
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
+import { EmptyState } from '@/components/ui/empty-state';
 import { MetricCard } from '@/components/ui/metric-card';
 import { PageHeader } from '@/components/ui/page-header';
 
@@ -33,36 +34,42 @@ export default function CollectionsPage() {
         <MetricCard label="Blocked" value="7" detail="Risk gate active" icon={ShieldAlert} tone="danger" />
       </div>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {collections.map((collection) => (
-          <Card key={collection.name} tone="interactive" className="p-5">
-            <div className="mb-5 flex items-start justify-between gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
-                <Sparkles className="h-5 w-5" aria-hidden="true" />
+      {collections.length > 0 ? (
+        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {collections.map((collection) => (
+            <Card key={collection.name} tone="interactive" className="p-5">
+              <div className="mb-5 flex items-start justify-between gap-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
+                  <Sparkles className="h-5 w-5" aria-hidden="true" />
+                </div>
+                <Badge variant={collection.risk === 'Low' ? 'success' : collection.risk === 'Medium' ? 'warning' : 'danger'}>
+                  {collection.risk}
+                </Badge>
               </div>
-              <Badge variant={collection.risk === 'Low' ? 'success' : collection.risk === 'Medium' ? 'warning' : 'danger'}>
-                {collection.risk}
-              </Badge>
-            </div>
-            <h2 className="font-semibold text-text">{collection.name}</h2>
-            <p className="mt-1 text-sm text-muted">{collection.chain}</p>
-            <div className="mt-5 flex items-center justify-between">
-              <span className="text-sm text-muted">{collection.status}</span>
-              <span className="font-mono text-xl text-text">{collection.score}</span>
-            </div>
-          </Card>
-        ))}
-      </div>
-
-      <Card className="mt-6 p-5">
-        <div className="flex items-center gap-3">
-          <Radar className="h-5 w-5 text-accent" aria-hidden="true" />
-          <div>
-            <h2 className="font-semibold text-text">Empty State Ready</h2>
-            <p className="mt-1 text-sm text-muted">When no collections exist, this screen should guide users to paste a launchpad URL or import a watchlist.</p>
-          </div>
+              <h2 className="font-semibold text-text">{collection.name}</h2>
+              <p className="mt-1 text-sm text-muted">{collection.chain}</p>
+              <div className="mt-5 flex items-center justify-between">
+                <span className="text-sm text-muted">{collection.status}</span>
+                <span className="font-mono text-xl text-text">{collection.score}</span>
+              </div>
+            </Card>
+          ))}
         </div>
-      </Card>
+      ) : (
+        <div className="mt-6">
+          <EmptyState
+            icon={Radar}
+            title="No collections tracked"
+            description="Paste a launchpad URL or import a watchlist to start scoring collection risk, demand, and execution readiness."
+            action={
+              <Button>
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                Add Collection
+              </Button>
+            }
+          />
+        </div>
+      )}
     </div>
   );
 }

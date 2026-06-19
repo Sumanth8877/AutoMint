@@ -17,7 +17,7 @@ export default function Loader({ size = 'md', className = '' }: LoaderProps) {
   return (
     <div className={`flex items-center justify-center ${className}`}>
       <div
-        className={`${sizes[size]} border-2 border-blue-500/20 border-t-blue-500 rounded-full animate-spin`}
+        className={`${sizes[size]} rounded-full border-2 border-primary/20 border-t-accent animate-spin`}
       />
     </div>
   );

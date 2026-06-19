@@ -1,7 +1,7 @@
 import { getDb } from '@/lib/db';
-import { monitoredWebsites, monitoringEvents, browserSessions } from '@/drizzle/schema/monitoring';
+import { monitoredWebsites, monitoringEvents } from '@/drizzle/schema/monitoring';
 import { eq } from 'drizzle-orm';
-import { getCache, setCache, CACHE_KEYS } from '@/lib/redis';
+import { setCache } from '@/lib/redis';
 import {
   createBrowserSession,
   openPage,
@@ -49,7 +49,7 @@ export async function createSnapshot(url: string): Promise<WebsiteSnapshot> {
       contentHash,
       checkedAt: timestamp,
     };
-  } catch (error) {
+  } catch {
     return {
       url,
       title: '',
@@ -121,8 +121,8 @@ export async function createMonitoringEvent(params: {
     websiteId: params.websiteId,
     eventType: params.eventType,
     severity: params.severity || 'info',
-    oldSnapshot: params.oldSnapshot ? (params.oldSnapshot as any) : null,
-    newSnapshot: params.newSnapshot as any,
+    oldSnapshot: params.oldSnapshot ?? null,
+    newSnapshot: params.newSnapshot,
     metadata: params.metadata || {},
   }).returning();
   return event;
@@ -203,7 +203,7 @@ export async function checkWebsite(websiteId: string): Promise<{
 
     await getDb()
       .update(monitoredWebsites)
-      .set({ lastStatus: 'error', lastCheckedAt: new Date(), lastSnapshot: errorSnapshot as any, lastSnapshotHash: snapshotHash })
+      .set({ lastStatus: 'error', lastCheckedAt: new Date(), lastSnapshot: errorSnapshot, lastSnapshotHash: snapshotHash })
       .where(eq(monitoredWebsites.id, websiteId));
 
     return { success: true, changed: true, eventCreated: true, snapshotHash, eventType: 'SITE_OFFLINE', reason: 'error' };
@@ -222,7 +222,7 @@ export async function checkWebsite(websiteId: string): Promise<{
       websiteId,
       eventType,
       severity: 'info',
-      oldSnapshot: prevSnapshot as any,
+      oldSnapshot: prevSnapshot,
       newSnapshot: snapshot,
       metadata: { reason },
     });
@@ -230,13 +230,13 @@ export async function checkWebsite(websiteId: string): Promise<{
   }
 
   // 6. Update website record
-  const newStatus = changed ? 'changed' : 'no_change';
+  const newStatus: 'changed' | 'no_change' = changed ? 'changed' : 'no_change';
   await getDb()
     .update(monitoredWebsites)
     .set({
-      lastStatus: newStatus as any,
+      lastStatus: newStatus,
       lastCheckedAt: new Date(),
-      lastSnapshot: snapshot as any,
+      lastSnapshot: snapshot,
       lastSnapshotHash: snapshotHash,
       lastChangeAt: changed ? new Date() : website.lastChangeAt,
     })

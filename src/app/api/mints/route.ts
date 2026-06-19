@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { getDb } from '@/lib/db';
 import { mintTasks } from '@/drizzle/schema';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and } from 'drizzle-orm';
 import { getInternalUserId } from '@/lib/auth/current-user';
 
 // GET /api/mints
@@ -57,6 +57,6 @@ export async function DELETE(req: Request) {
 
   const userId = await getInternalUserId(clerkId);
 
-  await getDb().delete(mintTasks).where(eq(mintTasks.id, id));
+  await getDb().delete(mintTasks).where(and(eq(mintTasks.id, id), eq(mintTasks.userId, userId)));
   return NextResponse.json({ success: true });
 }

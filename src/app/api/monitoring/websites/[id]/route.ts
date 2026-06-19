@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { getDb } from '@/lib/db';
-import { monitoredWebsites, monitoringEvents } from '@/drizzle/schema/monitoring';
+import { monitoredWebsites } from '@/drizzle/schema/monitoring';
 import { eq, and } from 'drizzle-orm';
 import { getInternalUserId } from '@/lib/auth/current-user';
 

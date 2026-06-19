@@ -6,6 +6,10 @@ import { getClient } from '@/lib/blockchain/client';
 import { getTaskCounts } from '@/lib/services/task.service';
 import { sql } from 'drizzle-orm';
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : 'Unknown error';
+}
+
 export async function GET() {
   const { userId } = await auth();
   if (!userId) {
@@ -16,8 +20,8 @@ export async function GET() {
   let database: { status: string; error?: string } = { status: 'healthy' };
   try {
     await getDb().execute(sql`SELECT 1`);
-  } catch (err: any) {
-    database = { status: 'unhealthy', error: err.message };
+  } catch (error) {
+    database = { status: 'unhealthy', error: getErrorMessage(error) };
   }
 
   // ─── Redis Health ───────────────────────────────
@@ -31,15 +35,15 @@ export async function GET() {
     if (blockNumber === BigInt(0)) {
       alchemy = { status: 'warning', error: 'Block number is 0' };
     }
-  } catch (err: any) {
-    alchemy = { status: 'unhealthy', error: err.message };
+  } catch (error) {
+    alchemy = { status: 'unhealthy', error: getErrorMessage(error) };
   }
 
   // ─── Task Counts ───────────────────────────────
   let tasks: Record<string, number> = { pending: 0, running: 0, completed: 0, failed: 0, total: 0 };
   try {
     tasks = await getTaskCounts();
-  } catch (err: any) {
+  } catch {
     tasks = { pending: 0, running: 0, completed: 0, failed: 0, total: 0 };
   }
 

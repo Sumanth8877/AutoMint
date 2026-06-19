@@ -21,10 +21,10 @@ import { eq } from 'drizzle-orm';
 import { getMintMode } from '@/lib/blockchain/mint';
 import { estimateMintGas, type MintParams } from '@/lib/blockchain/mint';
 import { getDecryptedPrivateKey } from './wallet.service';
-import { buildIdempotencyKey } from './task.service';
 import { logActivity } from '@/lib/monitoring';
 import { getMintState } from './mint-state.service';
 import type { MintIntent } from '@/lib/resolve-mint-intent';
+import type { Hex } from 'viem';
 
 // ─── Types ─────────────────────────────────────────
 
@@ -46,10 +46,14 @@ export interface FastMintResult {
 
 function buildMintParams(intent: MintIntent): MintParams {
   return {
-    contractAddress: intent.contractAddress as any,
+    contractAddress: intent.contractAddress as Hex,
     mintFunction: 'mint',
     quantity: 1,
   };
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : 'Fast mint execution failed';
 }
 
 function buildIdempotencyKeyForIntent(intent: MintIntent, wallet: FastMintWallet): string {
@@ -121,7 +125,7 @@ export async function executeMintFast(
     // ── 3. Decrypt wallet + prepare ───────────────
     const privateKey = await getDecryptedPrivateKey(wallet.id, wallet.userId);
     const { createWalletClient, http, parseAbi, encodeFunctionData } = await import('viem');
-    const { getChain, SUPPORTED_CHAINS } = await import('@/lib/blockchain/chains');
+    const { SUPPORTED_CHAINS } = await import('@/lib/blockchain/chains');
     const { parseEther } = await import('viem');
     const { privateKeyToAccount } = await import('viem/accounts');
 
@@ -210,11 +214,11 @@ export async function executeMintFast(
       success: true,
       txHash,
     };
-  } catch (error: any) {
+  } catch (error) {
     // Fast-path failure: nothing was written to mint_history yet, so no partial state
     return {
       success: false,
-      error: error?.message || 'Fast mint execution failed',
+      error: getErrorMessage(error) || 'Fast mint execution failed',
     };
   }
 }

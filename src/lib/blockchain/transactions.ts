@@ -1,4 +1,5 @@
 import { getClient } from './client';
+import type { Hex } from 'viem';
 
 export type TxStatus = 'pending' | 'confirmed' | 'failed';
 
@@ -18,7 +19,7 @@ export interface TransactionInfo {
 export async function getTransactionStatus(chain: string, txHash: string): Promise<TransactionInfo> {
   try {
     const client = getClient(chain);
-    const tx = await client.getTransaction({ hash: txHash as any });
+    const tx = await client.getTransaction({ hash: txHash as Hex });
 
     if (!tx) {
       return { hash: txHash, status: 'pending' };

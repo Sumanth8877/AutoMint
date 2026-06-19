@@ -1,9 +1,5 @@
-import { getDb } from '@/lib/db';
-import { mintTasks } from '@/drizzle/schema';
-import { eq, and } from 'drizzle-orm';
 import { executeMintFast, type FastMintWallet } from './mint-fast.service';
 import { getMintState } from './mint-state.service';
-import { fetchMintRequirements } from './mint-requirements.service';
 
 export interface RaceResult {
   success: boolean;
@@ -18,7 +14,7 @@ const BASE_DELAY_MS = 200;
 async function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
 export async function startMintRace(wallet: FastMintWallet, contractAddress: string, chain: string, quantity: number, userId: string): Promise<RaceResult> {
-  const requirements = await fetchMintRequirements(contractAddress, chain);
+  void quantity;
   let retries = 0;
 
   while (retries < MAX_RETRIES) {

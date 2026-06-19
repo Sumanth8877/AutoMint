@@ -1,6 +1,6 @@
 import { getDb } from '@/lib/db';
 import { tasks } from '@/drizzle/schema/tasks';
-import { sql, eq, and, desc, lt, asc } from 'drizzle-orm';
+import { sql, eq, and, desc, asc } from 'drizzle-orm';
 
 export type TaskType = 'wallet_monitoring' | 'nft_tracking' | 'collection_sync' | 'metadata_refresh' | 'mint_execution' | 'website_monitoring' | 'browser_automation';
 export type TaskStatus = 'pending' | 'running' | 'retrying' | 'completed' | 'failed' | 'dead_letter';
@@ -52,8 +52,8 @@ function getRetryDelay(attempt: number): Date {
 export function buildIdempotencyKey(params: CreateTaskParams): string | null {
   // Critical: mint_execution uses wallet+collection as its idempotency key
   if (params.taskType === 'mint_execution') {
-    const walletId = (params.payload as Record<string, any> | undefined)?.walletId;
-    const collectionId = (params.payload as Record<string, any> | undefined)?.collectionId;
+    const walletId = typeof params.payload?.walletId === 'string' ? params.payload.walletId : undefined;
+    const collectionId = typeof params.payload?.collectionId === 'string' ? params.payload.collectionId : undefined;
     if (walletId && collectionId) {
       return `mint:${walletId}:${collectionId}`;
     }
@@ -94,7 +94,7 @@ export async function createTask(params: CreateTaskParams) {
   // 3. Insert new task
   const [record] = await getDb().insert(tasks).values({
     userId: params.userId || null,
-    taskType: params.taskType as any,
+    taskType: params.taskType,
     status: 'pending',
     priority: params.priority ?? 0,
     attempts: 0,
@@ -108,7 +108,7 @@ export async function createTask(params: CreateTaskParams) {
 
 // ─── Update ────────────────────────────────────────
 export async function updateTask(id: string, params: UpdateTaskParams) {
-  const updateData: Record<string, any> = { updatedAt: new Date() };
+  const updateData: Partial<typeof tasks.$inferInsert> = { updatedAt: new Date() };
   if (params.status) updateData.status = params.status;
   if (params.result) updateData.result = JSON.parse(JSON.stringify(params.result));
   if (params.error) updateData.error = JSON.parse(JSON.stringify(params.error));
@@ -193,8 +193,6 @@ export async function getUserTasks(userId: string, limit = 50) {
  * Only tasks that are pending and whose scheduledFor time has passed are claimed.
  */
 export async function claimPendingTasks(taskType: TaskType, limit = 5) {
-  const now = new Date();
-
   // Raw SQL for FOR UPDATE SKIP LOCKED (Drizzle doesn't support this directly)
   const claimed = await getDb().execute(sql`
     UPDATE tasks
@@ -231,7 +229,7 @@ export async function getPendingTasksByType(taskType: TaskType, limit = 10) {
   return getDb().select().from(tasks)
     .where(
       and(
-        eq(tasks.taskType, taskType as any),
+        eq(tasks.taskType, taskType),
         eq(tasks.status, 'pending'),
         sql`(${tasks.scheduledFor} IS NULL OR ${tasks.scheduledFor} <= NOW())`,
       ),

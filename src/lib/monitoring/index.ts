@@ -17,7 +17,7 @@ export type ActivityType =
   | 'floor_price_changed' 
   | 'mint_status_changed';
 
-export async function logActivity(userId: string, type: ActivityType, title: string, metadata?: Record<string, any>) {
+export async function logActivity(userId: string, type: ActivityType, title: string, metadata?: Record<string, unknown>) {
   try {
     await getDb().insert(activities).values({
       userId,

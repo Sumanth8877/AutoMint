@@ -1,8 +1,9 @@
 import { getDb } from '@/lib/db';
-import { mintTasks, users, wallets, collections, mintHistory } from '@/drizzle/schema';
+import { mintTasks, wallets, collections, mintHistory } from '@/drizzle/schema';
 import { eq, and } from 'drizzle-orm';
 import { simulateMint, estimateMintGas, executeMint, getMintMode, type MintParams } from '@/lib/blockchain/mint';
 import { logActivity } from '@/lib/monitoring';
+import type { Hex } from 'viem';
 
 export async function getUserMintTasks(userId: string) {
   const result = await getDb().select().from(mintTasks).where(eq(mintTasks.userId, userId)).orderBy(mintTasks.createdAt);
@@ -67,7 +68,7 @@ export async function executeMintTask(taskId: string): Promise<{ success: boolea
 
   const chain = wallet.chain;
   const params: MintParams = {
-    contractAddress: claimed.contractAddress as any,
+    contractAddress: claimed.contractAddress as Hex,
     mintFunction: claimed.mintFunction || undefined,
     mintPrice: claimed.mintPrice || undefined,
     gasLimit: claimed.gasLimit || undefined,
@@ -75,9 +76,13 @@ export async function executeMintTask(taskId: string): Promise<{ success: boolea
   };
 
   // Always simulate first to catch obvious failures
-  const gas = await estimateMintGas(wallet.address as any, chain, params);
+  const gas = await estimateMintGas(wallet.address as Hex, chain, params);
+  if (gas.error) {
+    await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
+    return { success: false, error: gas.error };
+  }
 
-  const sim = await simulateMint(wallet.address as any, chain, params);
+  const sim = await simulateMint(wallet.address as Hex, chain, params);
   if (!sim.success) {
     await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
     return { success: false, error: sim.error };
@@ -96,7 +101,7 @@ export async function executeMintTask(taskId: string): Promise<{ success: boolea
     };
   } else {
     // ── LIVE: execute real transaction ──────────────
-    result = await executeMint(wallet.address as any, chain, params);
+    result = await executeMint(wallet.address as Hex, chain, params);
 
     if (!result.success) {
       await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));

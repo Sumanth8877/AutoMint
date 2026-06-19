@@ -1,19 +1,24 @@
 import { getClient } from '@/lib/blockchain/client';
+import type { Abi, AbiFunction, Hex } from 'viem';
 
 export type AbiSource = 'etherscan' | 'cached' | 'selector_inspection' | 'fallback';
 
 export interface DiscoveredABI {
-  abi: readonly any[];
+  abi: Abi;
   source: AbiSource;
   confidence: number;
 }
 
 const MINT_FUNCTIONS = ['mint','publicMint','purchase','mintTo','mintWithComment','claim','buy','mintNFT','mintPublic','saleMint'] as const;
 
-export function discoverMintFunction(abi: readonly any[]): { functionName: string; selector: string; confidence: number } {
-  const payable = abi.filter((f: any) => f.type === 'function' && f.stateMutability === 'payable');
+function isPayableFunction(fragment: Abi[number]): fragment is AbiFunction {
+  return fragment.type === 'function' && fragment.stateMutability === 'payable';
+}
+
+export function discoverMintFunction(abi: Abi): { functionName: string; selector: string; confidence: number } {
+  const payable = abi.filter(isPayableFunction);
   for (const fn of MINT_FUNCTIONS) {
-    const match = payable.find((f: any) => f.name === fn);
+    const match = payable.find((f) => f.name === fn);
     if (match) return { functionName: fn, selector: fn + '(', confidence: 0.9 };
   }
   if (payable.length > 0) return { functionName: payable[0].name, selector: payable[0].name + '(', confidence: 0.5 };
@@ -25,7 +30,7 @@ export async function discoverContractABI(contractAddress: string, chain: string
   const selectors = ['0x1249c58b','0x84bb1e10','0xefef39a1'];
   for (const sel of selectors) {
     try {
-      const r = await client.call({ to: contractAddress as any, data: sel as any });
+      const r = await client.call({ to: contractAddress as Hex, data: sel as Hex });
       if (r && String(r) !== '0x') return { abi: [], source: 'selector_inspection', confidence: 0.6 };
     } catch {}
   }

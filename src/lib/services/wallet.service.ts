@@ -19,13 +19,6 @@ function isValidAddress(address: string): boolean {
   return /^0x[0-9a-fA-F]{40}$/.test(address);
 }
 
-function getChecksumAddress(address: string): string {
-  // Simple checksum: hex with mixed case based on keccak256.
-  // For production, use `viem` `toChecksumAddress`. This is a conservative fallback.
-  if (!isValidAddress(address)) return address;
-  return address;
-}
-
 export async function createWallet(userId: string, data: { address: string; nickname?: string | null; chain: string }) {
   const address = data.address.toLowerCase();
   if (!isValidAddress(address)) {
