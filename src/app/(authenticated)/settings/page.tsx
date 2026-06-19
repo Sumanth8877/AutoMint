@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Palette, Bell, User, Shield } from 'lucide-react';
+import { Palette, User, Shield } from 'lucide-react';
 import Card from '@/components/ui/Card';
 
 const settingsSections = [
@@ -10,12 +10,6 @@ const settingsSections = [
     description: 'Customize your dashboard appearance and layout preferences',
     icon: Palette,
     color: 'bg-purple-500/10 text-purple-500 border-purple-500/20',
-  },
-  {
-    title: 'Notifications',
-    description: 'Configure email and in-app notification preferences',
-    icon: Bell,
-    color: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
   },
   {
     title: 'Profile',

@@ -1,12 +1,10 @@
-import { pgTable, text, timestamp, uuid, integer, pgEnum, boolean, json } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, uuid, integer, pgEnum, json } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
 // ─── Enums ───────────────────────────────────────────
 export const chainEnum = pgEnum('chain', ['ethereum', 'base', 'polygon']);
 export const mintStatusEnum = pgEnum('mint_status', ['pending', 'monitoring', 'ready', 'completed', 'failed', 'cancelled']);
 export const mintHistoryStatusEnum = pgEnum('mint_history_status', ['pending', 'confirmed', 'failed']);
-export const notificationChannelEnum = pgEnum('notification_channel', ['email', 'in_app', 'discord', 'telegram']);
-export const notificationStatusEnum = pgEnum('notification_status', ['pending', 'sent', 'failed']);
 export const activityTypeEnum = pgEnum('activity_type', [
   'wallet_added',
   'collection_added',
@@ -84,18 +82,6 @@ export const mintHistory = pgTable('mint_history', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
-// ─── Notifications ───────────────────────────────────
-export const notifications = pgTable('notifications', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
-  title: text('title').notNull(),
-  message: text('message').notNull(),
-  channel: notificationChannelEnum('channel').default('in_app').notNull(),
-  status: notificationStatusEnum('status').default('pending').notNull(),
-  read: boolean('read').default(false).notNull(),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-});
-
 // ─── Activities ──────────────────────────────────────
 export const activities = pgTable('activities', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -131,7 +117,6 @@ export const usersRelations = relations(users, ({ many }) => ({
   collections: many(collections),
   mintTasks: many(mintTasks),
   mintHistory: many(mintHistory),
-  notifications: many(notifications),
   activities: many(activities),
 }));
 
@@ -154,10 +139,6 @@ export const mintHistoryRelations = relations(mintHistory, ({ one }) => ({
   user: one(users, { fields: [mintHistory.userId], references: [users.id] }),
   wallet: one(wallets, { fields: [mintHistory.walletId], references: [wallets.id] }),
   collection: one(collections, { fields: [mintHistory.collectionId], references: [collections.id] }),
-}));
-
-export const notificationsRelations = relations(notifications, ({ one }) => ({
-  user: one(users, { fields: [notifications.userId], references: [users.id] }),
 }));
 
 export const activitiesRelations = relations(activities, ({ one }) => ({

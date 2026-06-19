@@ -9,7 +9,6 @@ interface SystemHealth {
   api: 'healthy' | 'warning' | 'offline';
   database: 'healthy' | 'warning' | 'offline';
   rpc: 'healthy' | 'warning' | 'offline';
-  notifications: 'healthy' | 'warning' | 'offline';
   lastError: string | null;
   avgResponseTime: number;
 }
@@ -21,7 +20,7 @@ interface PageView {
 
 interface ErrorLog {
   id: string;
-  type: 'frontend' | 'api' | 'blockchain' | 'notifications';
+  type: 'frontend' | 'api' | 'blockchain';
   message: string;
   page: string;
   timestamp: string;
@@ -34,7 +33,6 @@ export default function AnalyticsPage() {
     api: 'healthy',
     database: 'healthy',
     rpc: 'healthy',
-    notifications: 'healthy',
     lastError: null,
     avgResponseTime: 120,
   });
@@ -52,7 +50,6 @@ export default function AnalyticsPage() {
     { label: 'API Status', value: health.api, icon: Zap, color: health.api === 'healthy' ? '#3B82F6' : health.api === 'warning' ? '#F59E0B' : '#EF4444' },
     { label: 'Database', value: health.database, icon: Activity, color: health.database === 'healthy' ? '#3B82F6' : health.database === 'warning' ? '#F59E0B' : '#EF4444' },
     { label: 'RPC Status', value: health.rpc, icon: Shield, color: health.rpc === 'healthy' ? '#3B82F6' : health.rpc === 'warning' ? '#F59E0B' : '#EF4444' },
-    { label: 'Notifications', value: health.notifications, icon: Activity, color: health.notifications === 'healthy' ? '#3B82F6' : health.notifications === 'warning' ? '#F59E0B' : '#EF4444' },
   ];
 
   const getStatusColor = (status: string) => {
