@@ -91,7 +91,7 @@ export async function executeMintTask(taskId: string): Promise<{ success: boolea
   }
 
   if (task.userId) {
-    await logActivity(task.userId, 'task_completed', 'Mint executed', {
+    await logActivity(task.userId, 'task_completed', result.txHash ? 'Mint executed' : 'Mint simulated', {
       taskId,
       walletId: task.walletId,
       collectionId: task.collectionId,

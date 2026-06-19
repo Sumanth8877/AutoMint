@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, integer, pgEnum, json } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, uuid, integer, pgEnum, json, boolean, index } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
 // ─── Enums ───────────────────────────────────────────
@@ -35,6 +35,8 @@ export const wallets = pgTable('wallets', {
   address: text('address').notNull(),
   nickname: text('nickname'),
   chain: chainEnum('chain').notNull().default('ethereum'),
+  encryptedPrivateKey: text('encrypted_private_key'),
+  encryptionVersion: integer('encryption_version').default(1),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -58,6 +60,19 @@ export const collections = pgTable('collections', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
+
+// ─── Wallet Permissions ──────────────────────────────
+export const walletPermissions = pgTable('wallet_permissions', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  walletId: uuid('wallet_id').references(() => wallets.id, { onDelete: 'cascade' }).notNull(),
+  canMint: boolean('can_mint').default(false).notNull(),
+  canMonitor: boolean('can_monitor').default(true).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index('idx_wallet_permissions_user_id').on(table.userId),
+  walletIdIdx: index('idx_wallet_permissions_wallet_id').on(table.walletId),
+}));
 
 // ─── Mint Tasks ──────────────────────────────────────
 export const mintTasks = pgTable('mint_tasks', {

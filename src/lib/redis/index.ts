@@ -38,6 +38,8 @@ export const CACHE_KEYS = {
   dashboardStats: (userId: string) => `dashboard:${userId}`,
   floorPrice: (address: string, chain: string) => `floor:${chain}:${address.toLowerCase()}`,
   rateLimit: (identifier: string) => `ratelimit:${identifier}`,
+  collectionStats: (address: string, chain: string) => `stats:${chain}:${address.toLowerCase()}`,
+  owners: (address: string, chain: string, tokenId?: string) => `owners:${chain}:${address.toLowerCase()}:${tokenId || 'latest'}`,
 } as const;
 
 export const CACHE_TTL = {
@@ -47,6 +49,8 @@ export const CACHE_TTL = {
   dashboardStats: 300,      // 5 minutes
   floorPrice: 600,          // 10 minutes
   rateLimit: 60,            // 1 minute
+  collectionStats: 900,     // 15 minutes
+  owners: 1800,             // 30 minutes
 } as const;
 
 // ─── Cache Utilities ────────────────────────────────
