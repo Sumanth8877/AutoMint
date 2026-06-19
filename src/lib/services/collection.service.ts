@@ -1,5 +1,5 @@
 import { getDb } from '@/lib/db';
-import { collections, users } from '@/drizzle/schema';
+import { collections } from '@/drizzle/schema';
 import { eq, and } from 'drizzle-orm';
 import { getCollectionMetadata } from '@/lib/blockchain/collections';
 
@@ -9,11 +9,8 @@ export async function getUserCollections(userId: string) {
 }
 
 export async function addCollection(userId: string, data: { name: string; contractAddress: string; chain: string }) {
-  const user = await getDb().select().from(users).where(eq(users.clerkId, userId)).limit(1);
-  if (user.length === 0) throw new Error('User not found');
-
   const [collection] = await getDb().insert(collections).values({
-    userId: user[0].id,
+    userId,
     name: data.name,
     contractAddress: data.contractAddress.toLowerCase(),
     chain: data.chain as 'ethereum' | 'base' | 'polygon',

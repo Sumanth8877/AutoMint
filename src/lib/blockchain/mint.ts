@@ -1,7 +1,21 @@
-import { createWalletClient, http, parseAbi, parseAbiParameters, Hex, encodeFunctionData } from 'viem';
+import { createWalletClient, http, parseAbi, parseEther, Hex, encodeFunctionData } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 import { mainnet, base, polygon } from 'viem/chains';
 import { getClient } from './client';
 import { logActivity } from '@/lib/monitoring';
+
+// ─── MINT_MODE Configuration ─────────────────────
+
+export type MintMode = 'simulation' | 'live';
+
+export function getMintMode(): MintMode {
+  // Force known values; anything else resolves to the default
+  const raw = process.env.MINT_MODE?.trim().toLowerCase();
+  if (raw === 'live') return 'live';
+  // In production, default to live; in dev, default to simulation
+  if (process.env.NODE_ENV === 'production') return 'live';
+  return 'simulation';
+}
 
 // ─── Config ───────────────────────────────────────
 
@@ -71,7 +85,7 @@ function buildMintData(params: MintParams): Hex {
 // ─── Core blockchain functions ────────────────────
 
 /**
- * Simulate a mint call using `eth_call`.
+ * Simulate a mint call using `eth_call` (read-only, no state change).
  */
 export async function simulateMint(
   address: Hex,
@@ -85,7 +99,7 @@ export async function simulateMint(
     await client.call({
       to: params.contractAddress,
       data: mintData,
-      value: params.mintPrice ? BigInt(Math.round(parseFloat(params.mintPrice) * 1e18)) : BigInt(0),
+      value: params.mintPrice ? parseEther(params.mintPrice) : BigInt(0),
     });
 
     return { success: true };
@@ -112,7 +126,7 @@ export async function estimateMintGas(
     const estimate = await client.estimateGas({
       to: params.contractAddress,
       data: mintData,
-      value: params.mintPrice ? BigInt(Math.round(parseFloat(params.mintPrice) * 1e18)) : BigInt(0),
+      value: params.mintPrice ? parseEther(params.mintPrice) : BigInt(0),
     });
 
     return { gasLimit: estimate };
@@ -165,48 +179,78 @@ export async function checkMintEligibility(
 }
 
 /**
- * Execute the mint transaction.
- * Note: Requires private key management in production.
- * Currently returns simulation-only. Real execution requires
- * wallet signing infrastructure (Phase 5 security layer).
+ * Execute the mint transaction on chain.
+ *
+ * Enforces MINT_MODE:
+ * - If MINT_MODE !== 'live' → throws, telling the caller to use simulateMint() instead
+ * - If MINT_MODE === 'live'  → broadcasts a real transaction
+ *
+ * Requires PRIVATE_KEY to be set when MINT_MODE=live.
  */
 export async function executeMint(
-  _address: Hex,
+  address: Hex,
   chain: string,
   params: MintParams,
-  _simulateOnly = true,
 ): Promise<MintResult> {
+  // ── Guard: must be in 'live' mode ──────────────────
+  const mode = getMintMode();
+  if (mode !== 'live') {
+    return {
+      success: false,
+      error:
+        'MINT_MODE is not set to "live". Use simulateMint() for simulation-only mode, ' +
+        'or set MINT_MODE=live to execute real transactions.',
+    };
+  }
+
   try {
-    // Simulate first
-    const sim = await simulateMint(_address, chain, params);
+    // Simulate first to catch obvious failures
+    const sim = await simulateMint(address, chain, params);
     if (!sim.success) {
       return { success: false, error: sim.error };
     }
 
-    if (_simulateOnly) {
-      // In production, this would sign and broadcast with a private key
-      // For now, we return the simulation result as a placeholder
+    // ── Build and broadcast real transaction ─────────
+    const chainObj = getChain(chain);
+    const mintData = buildMintData(params);
+
+    const privateKey = process.env.PRIVATE_KEY as Hex | undefined;
+    if (!privateKey) {
       return {
-        success: true,
-        txHash: undefined,
-        gasUsed: undefined,
-        blockNumber: undefined,
+        success: false,
+        error:
+          'PRIVATE_KEY environment variable is required when MINT_MODE=live. ' +
+          'Set PRIVATE_KEY to the wallet private key that will sign transactions.',
       };
     }
 
-    // Real execution path (requires Phase 5 wallet security)
-    const client = getClient(chain);
-    const mintData = buildMintData(params);
+    const account = privateKeyToAccount(privateKey);
 
-    // This would use a wallet client with private key in production
-    // const walletClient = createWalletClient({ chain, transport: http(getRpcUrl(chain)) });
-    // const hash = await walletClient.sendTransaction({ ... });
+    const walletClient = createWalletClient({
+      account,
+      chain: chainObj,
+      transport: http(getRpcUrl(chain)),
+    });
+
+    const value = params.mintPrice ? parseEther(params.mintPrice) : BigInt(0);
+
+    const hash = await walletClient.sendTransaction({
+      chain: chainObj,
+      to: params.contractAddress,
+      data: mintData,
+      value,
+      gas: params.gasLimit ? BigInt(params.gasLimit) : undefined,
+    });
+
+    // Wait for 1 confirmation
+    const client = getClient(chain);
+    const receipt = await client.waitForTransactionReceipt({ hash });
 
     return {
-      success: true,
-      txHash: undefined,
-      gasUsed: undefined,
-      blockNumber: undefined,
+      success: receipt.status === 'success',
+      txHash: hash,
+      gasUsed: receipt.gasUsed?.toString(),
+      blockNumber: receipt.blockNumber,
     };
   } catch (error: any) {
     return {

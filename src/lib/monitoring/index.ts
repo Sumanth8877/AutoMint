@@ -1,10 +1,12 @@
 import { getDb } from '@/lib/db';
 import { activities } from '@/drizzle/schema';
-import { eq } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import { getCollectionMetadata } from '@/lib/blockchain/collections';
 
 export type ActivityType = 
   | 'wallet_added' 
+  | 'wallet_removed'
+  | 'wallet_imported'
   | 'wallet_balance_changed'
   | 'collection_added' 
   | 'task_created' 
@@ -31,7 +33,7 @@ export async function logActivity(userId: string, type: ActivityType, title: str
 export async function getRecentActivities(userId: string, limit = 20) {
   const result = await getDb().select().from(activities)
     .where(eq(activities.userId, userId))
-    .orderBy(activities.createdAt)
+    .orderBy(desc(activities.createdAt))
     .limit(limit);
   return result;
 }

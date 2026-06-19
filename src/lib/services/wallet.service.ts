@@ -1,5 +1,5 @@
 import { getDb } from '@/lib/db';
-import { wallets, users, walletPermissions } from '@/drizzle/schema';
+import { wallets, walletPermissions } from '@/drizzle/schema';
 import { eq, and } from 'drizzle-orm';
 import { getWalletBalance } from '@/lib/blockchain/wallet';
 import { encryptPrivateKey, decryptPrivateKey } from '@/lib/security/encryption';
@@ -32,18 +32,15 @@ export async function createWallet(userId: string, data: { address: string; nick
     throw new Error('Invalid wallet address format');
   }
 
-  const user = await getDb().select().from(users).where(eq(users.clerkId, userId)).limit(1);
-  if (user.length === 0) throw new Error('User not found');
-
   const [wallet] = await getDb().insert(wallets).values({
-    userId: user[0].id,
+    userId,
     address,
     nickname: data.nickname || null,
     chain: data.chain as 'ethereum' | 'base' | 'polygon',
   }).returning();
 
   await getDb().insert(walletPermissions).values({
-    userId: user[0].id,
+    userId,
     walletId: wallet.id,
     canMint: false,
     canMonitor: true,
@@ -64,13 +61,10 @@ export async function importWallet(userId: string, data: { address: string; priv
     throw new Error('Invalid wallet address format');
   }
 
-  const user = await getDb().select().from(users).where(eq(users.clerkId, userId)).limit(1);
-  if (user.length === 0) throw new Error('User not found');
-
   const encrypted = encryptPrivateKey(data.privateKey);
 
   const [wallet] = await getDb().insert(wallets).values({
-    userId: user[0].id,
+    userId,
     address,
     nickname: data.nickname || null,
     chain: data.chain as 'ethereum' | 'base' | 'polygon',
@@ -79,17 +73,16 @@ export async function importWallet(userId: string, data: { address: string; priv
   }).returning();
 
   await getDb().insert(walletPermissions).values({
-    userId: user[0].id,
+    userId,
     walletId: wallet.id,
     canMint: false,
     canMonitor: true,
   });
 
-  await logActivity(userId, 'wallet_added', 'Wallet imported', {
+  await logActivity(userId, 'wallet_imported', 'Wallet imported', {
     walletId: wallet.id,
     address: wallet.address,
     chain: wallet.chain,
-    import: true,
   });
 
   return wallet;
@@ -115,7 +108,7 @@ export async function removeWallet(id: string, userId: string) {
 
   await getDb().delete(wallets).where(and(eq(wallets.id, id), eq(wallets.userId, userId)));
 
-  await logActivity(userId, 'wallet_added', 'Wallet removed', {
+  await logActivity(userId, 'wallet_removed', 'Wallet removed', {
     walletId: id,
     address: existing.address,
     chain: existing.chain,

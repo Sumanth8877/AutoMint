@@ -10,3 +10,15 @@ export async function getCurrentUser() {
   const result = await getDb().select().from(users).where(eq(users.clerkId, clerkId)).limit(1);
   return result[0] || null;
 }
+
+/**
+ * Resolve a Clerk ID to the internal users.id (UUID).
+ *
+ * This is the ONLY place where users.clerkId is queried.
+ * All DB relations and comparisons MUST use the internal UUID.
+ */
+export async function getInternalUserId(clerkId: string): Promise<string> {
+  const [user] = await getDb().select().from(users).where(eq(users.clerkId, clerkId)).limit(1);
+  if (!user) throw new Error('User not found');
+  return user.id;
+}

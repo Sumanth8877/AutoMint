@@ -226,31 +226,43 @@ export async function retryDeadLetterTask(id: string) {
 
 /**
  * Get task counts for dashboard.
+ * Uses SQL GROUP BY instead of loading entire table into memory.
  */
 export async function getTaskCounts() {
-  const all = await getDb().select().from(tasks);
+  const rows = await getDb().execute<{ status: string; count: number }>(sql`
+    SELECT status, COUNT(*)::int AS count
+    FROM tasks
+    GROUP BY status
+  `);
+
+  const counts: Record<string, number> = {};
+  for (const row of rows.rows || []) {
+    counts[row.status] = row.count;
+  }
+
   return {
-    pending: all.filter((t) => t.status === 'pending').length,
-    running: all.filter((t) => t.status === 'running').length,
-    retrying: all.filter((t) => t.status === 'retrying').length,
-    completed: all.filter((t) => t.status === 'completed').length,
-    failed: all.filter((t) => t.status === 'failed').length,
-    dead_letter: all.filter((t) => t.status === 'dead_letter').length,
-    total: all.length,
+    pending: counts['pending'] ?? 0,
+    running: counts['running'] ?? 0,
+    retrying: counts['retrying'] ?? 0,
+    completed: counts['completed'] ?? 0,
+    failed: counts['failed'] ?? 0,
+    dead_letter: counts['dead_letter'] ?? 0,
+    total: Object.values(counts).reduce((sum, n) => sum + n, 0),
   };
 }
 
 /**
  * Clean old completed tasks (keep last 500).
+ * Uses a single bulk DELETE with subquery instead of loop.
  */
 export async function cleanOldTasks() {
-  const all = await getDb().select({ id: tasks.id }).from(tasks)
-    .where(eq(tasks.status, 'completed'))
-    .orderBy(desc(tasks.createdAt));
-  if (all.length > 500) {
-    const idsToDelete = all.slice(500).map((t) => t.id);
-    for (const id of idsToDelete) {
-      await getDb().delete(tasks).where(eq(tasks.id, id));
-    }
-  }
+  await getDb().execute(sql`
+    DELETE FROM tasks
+    WHERE id IN (
+      SELECT id FROM tasks
+      WHERE status = 'completed'::task_status
+      ORDER BY created_at DESC
+      OFFSET 500
+    )
+  `);
 }

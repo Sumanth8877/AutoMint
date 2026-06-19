@@ -1,7 +1,7 @@
 import { getDb } from '@/lib/db';
 import { mintTasks, users, wallets, collections, mintHistory } from '@/drizzle/schema';
 import { eq, and } from 'drizzle-orm';
-import { simulateMint, estimateMintGas, executeMint, type MintParams } from '@/lib/blockchain/mint';
+import { simulateMint, estimateMintGas, executeMint, getMintMode, type MintParams } from '@/lib/blockchain/mint';
 import { logActivity } from '@/lib/monitoring';
 
 export async function getUserMintTasks(userId: string) {
@@ -10,17 +10,14 @@ export async function getUserMintTasks(userId: string) {
 }
 
 export async function addMintTask(userId: string, data: { walletId: string; collectionId: string; quantity: number; chain?: string }) {
-  const user = await getDb().select().from(users).where(eq(users.clerkId, userId)).limit(1);
-  if (user.length === 0) throw new Error('User not found');
-
-  const [wallet] = await getDb().select().from(wallets).where(and(eq(wallets.id, data.walletId), eq(wallets.userId, user[0].id))).limit(1);
+  const [wallet] = await getDb().select().from(wallets).where(and(eq(wallets.id, data.walletId), eq(wallets.userId, userId))).limit(1);
   if (!wallet) throw new Error('Wallet not found');
 
-  const [collection] = await getDb().select().from(collections).where(and(eq(collections.id, data.collectionId), eq(collections.userId, user[0].id))).limit(1);
+  const [collection] = await getDb().select().from(collections).where(and(eq(collections.id, data.collectionId), eq(collections.userId, userId))).limit(1);
   if (!collection) throw new Error('Collection not found');
 
   const [task] = await getDb().insert(mintTasks).values({
-    userId: user[0].id,
+    userId,
     walletId: data.walletId,
     collectionId: data.collectionId,
     quantity: data.quantity,
@@ -34,29 +31,50 @@ export async function addMintTask(userId: string, data: { walletId: string; coll
 }
 
 export async function executeMintTask(taskId: string): Promise<{ success: boolean; txHash?: string; error?: string }> {
-  const [task] = await getDb().select().from(mintTasks).where(eq(mintTasks.id, taskId)).limit(1);
-  if (!task) throw new Error(`Mint task not found: ${taskId}`);
+  // ── Atomic claim: only a 'pending' task can be claimed ─────────
+  const [claimed] = await getDb()
+    .update(mintTasks)
+    .set({
+      status: 'running',
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(mintTasks.id, taskId),
+        eq(mintTasks.status, 'pending'),
+      ),
+    )
+    .returning();
 
-  if (task.txHash) {
-    return { success: true, txHash: task.txHash };
+  if (!claimed) {
+    return { success: false, error: 'Task not found or already claimed' };
   }
 
-  if (!task.walletId || !task.contractAddress) {
-    throw new Error('Mint task missing wallet or contract');
+  if (claimed.txHash) {
+    return { success: true, txHash: claimed.txHash };
   }
 
-  const [wallet] = await getDb().select().from(wallets).where(eq(wallets.id, task.walletId)).limit(1);
-  if (!wallet) throw new Error('Wallet not found for mint task');
+  if (!claimed.walletId || !claimed.contractAddress) {
+    await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
+    return { success: false, error: 'Mint task missing wallet or contract' };
+  }
+
+  const [wallet] = await getDb().select().from(wallets).where(eq(wallets.id, claimed.walletId)).limit(1);
+  if (!wallet) {
+    await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
+    return { success: false, error: 'Wallet not found for mint task' };
+  }
 
   const chain = wallet.chain;
   const params: MintParams = {
-    contractAddress: task.contractAddress as any,
-    mintFunction: task.mintFunction || undefined,
-    mintPrice: task.mintPrice || undefined,
-    gasLimit: task.gasLimit || undefined,
-    quantity: task.quantity,
+    contractAddress: claimed.contractAddress as any,
+    mintFunction: claimed.mintFunction || undefined,
+    mintPrice: claimed.mintPrice || undefined,
+    gasLimit: claimed.gasLimit || undefined,
+    quantity: claimed.quantity,
   };
 
+  // Always simulate first to catch obvious failures
   const gas = await estimateMintGas(wallet.address as any, chain, params);
 
   const sim = await simulateMint(wallet.address as any, chain, params);
@@ -65,11 +83,25 @@ export async function executeMintTask(taskId: string): Promise<{ success: boolea
     return { success: false, error: sim.error };
   }
 
-  const result = await executeMint(wallet.address as any, chain, params, true);
+  const mode = getMintMode();
+  let result;
 
-  if (!result.success) {
-    await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
-    return { success: false, error: result.error };
+  if (mode !== 'live') {
+    // ── SIMULATION ONLY ─────────────────────────────
+    result = {
+      success: true,
+      txHash: undefined as string | undefined,
+      gasUsed: undefined,
+      blockNumber: undefined,
+    };
+  } else {
+    // ── LIVE: execute real transaction ──────────────
+    result = await executeMint(wallet.address as any, chain, params);
+
+    if (!result.success) {
+      await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
+      return { success: false, error: result.error };
+    }
   }
 
   const now = new Date();
@@ -79,9 +111,9 @@ export async function executeMintTask(taskId: string): Promise<{ success: boolea
 
   if (result.txHash) {
     await getDb().insert(mintHistory).values({
-      userId: task.userId,
-      walletId: task.walletId,
-      collectionId: task.collectionId,
+      userId: claimed.userId,
+      walletId: claimed.walletId,
+      collectionId: claimed.collectionId,
       status: 'pending',
       transactionHash: result.txHash,
       gasUsed: result.gasUsed || undefined,
@@ -90,13 +122,14 @@ export async function executeMintTask(taskId: string): Promise<{ success: boolea
     });
   }
 
-  if (task.userId) {
-    await logActivity(task.userId, 'task_completed', result.txHash ? 'Mint executed' : 'Mint simulated', {
+  if (claimed.userId) {
+    await logActivity(claimed.userId, 'task_completed', result.txHash ? 'Mint executed' : 'Mint simulated', {
       taskId,
-      walletId: task.walletId,
-      collectionId: task.collectionId,
+      walletId: claimed.walletId,
+      collectionId: claimed.collectionId,
       txHash: result.txHash,
       chain,
+      mode,
     });
   }
 
@@ -104,8 +137,8 @@ export async function executeMintTask(taskId: string): Promise<{ success: boolea
 }
 
 export async function removeMintTask(id: string, userId: string) {
-  const existing = await getDb().select().from(mintTasks).where(and(eq(mintTasks.id, id), eq(mintTasks.userId, userId))).limit(1);
-  if (existing.length === 0) throw new Error('Task not found');
+  const [existing] = await getDb().select().from(mintTasks).where(and(eq(mintTasks.id, id), eq(mintTasks.userId, userId))).limit(1);
+  if (!existing) throw new Error('Task not found');
 
   await getDb().delete(mintTasks).where(and(eq(mintTasks.id, id), eq(mintTasks.userId, userId)));
   return { success: true };

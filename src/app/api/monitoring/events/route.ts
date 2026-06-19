@@ -1,18 +1,16 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { getDb } from '@/lib/db';
-import { users } from '@/drizzle/schema';
 import { monitoringEvents, monitoredWebsites } from '@/drizzle/schema/monitoring';
 import { eq, desc } from 'drizzle-orm';
+import { getInternalUserId } from '@/lib/auth/current-user';
 
 export async function GET(request: Request) {
   try {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { userId: clerkId } = await auth();
+    if (!clerkId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const dbUser = await getDb().select().from(users)
-      .where(eq(users.clerkId, userId)).limit(1);
-    if (dbUser.length === 0) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    const userId = await getInternalUserId(clerkId);
 
     const { searchParams } = new URL(request.url);
     const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100);
@@ -23,7 +21,7 @@ export async function GET(request: Request) {
       website: monitoredWebsites,
     }).from(monitoringEvents)
       .innerJoin(monitoredWebsites, eq(monitoringEvents.websiteId, monitoredWebsites.id))
-      .where(eq(monitoredWebsites.userId, dbUser[0].id))
+      .where(eq(monitoredWebsites.userId, userId))
       .orderBy(desc(monitoringEvents.createdAt))
       .limit(limit);
 

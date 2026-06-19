@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { getDb } from '@/lib/db';
-import { users, collections } from '@/drizzle/schema';
+import { collections } from '@/drizzle/schema';
 import { eq, and } from 'drizzle-orm';
+import { getInternalUserId } from '@/lib/auth/current-user';
 import { getCollectionMetadata } from '@/lib/blockchain/collections';
 
 const SUPPORTED_CHAINS = ['ethereum', 'base', 'polygon'];
@@ -12,10 +13,9 @@ export async function GET() {
   const { userId: clerkId } = await auth();
   if (!clerkId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const user = await getDb().select().from(users).where(eq(users.clerkId, clerkId)).limit(1);
-  if (user.length === 0) return NextResponse.json({ collections: [] });
+  const userId = await getInternalUserId(clerkId);
 
-  const userCollections = await getDb().select().from(collections).where(eq(collections.userId, user[0].id)).orderBy(collections.createdAt);
+  const userCollections = await getDb().select().from(collections).where(eq(collections.userId, userId)).orderBy(collections.createdAt);
   return NextResponse.json({ collections: userCollections });
 }
 
@@ -39,13 +39,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `Unsupported chain. Supported: ${SUPPORTED_CHAINS.join(', ')}` }, { status: 400 });
   }
 
-  const user = await getDb().select().from(users).where(eq(users.clerkId, clerkId)).limit(1);
-  if (user.length === 0) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+  const userId = await getInternalUserId(clerkId);
 
   // Check duplicate
   const existing = await getDb().select()
     .from(collections)
-    .where(and(eq(collections.userId, user[0].id), eq(collections.contractAddress, contractAddress.toLowerCase())))
+    .where(and(eq(collections.userId, userId), eq(collections.contractAddress, contractAddress.toLowerCase())))
     .limit(1);
 
   if (existing.length > 0) {
@@ -53,7 +52,7 @@ export async function POST(req: Request) {
   }
 
   const [collection] = await getDb().insert(collections).values({
-    userId: user[0].id,
+    userId,
     name,
     contractAddress: contractAddress.toLowerCase(),
     chain,
@@ -88,9 +87,8 @@ export async function DELETE(req: Request) {
 
   if (!id) return NextResponse.json({ error: 'Collection ID is required' }, { status: 400 });
 
-  const user = await getDb().select().from(users).where(eq(users.clerkId, clerkId)).limit(1);
-  if (user.length === 0) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+  const userId = await getInternalUserId(clerkId);
 
-  await getDb().delete(collections).where(and(eq(collections.id, id), eq(collections.userId, user[0].id)));
+  await getDb().delete(collections).where(and(eq(collections.id, id), eq(collections.userId, userId)));
   return NextResponse.json({ success: true });
 }

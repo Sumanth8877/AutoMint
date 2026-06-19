@@ -3,25 +3,18 @@ import { auth } from '@clerk/nextjs/server';
 import { getDb } from '@/lib/db';
 import { monitoredWebsites } from '@/drizzle/schema/monitoring';
 import { eq } from 'drizzle-orm';
-import { currentUser } from '@clerk/nextjs/server';
+import { getInternalUserId } from '@/lib/auth/current-user';
 
 // GET /api/monitoring/websites
 export async function GET() {
   try {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { userId: clerkId } = await auth();
+    if (!clerkId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const user = await currentUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const dbUser = await getDb().select().from(require('@/drizzle/schema').users)
-      .where(eq(require('@/drizzle/schema').users.clerkId, user.id))
-      .limit(1);
-
-    if (dbUser.length === 0) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    const userId = await getInternalUserId(clerkId);
 
     const websites = await getDb().select().from(monitoredWebsites)
-      .where(eq(monitoredWebsites.userId, dbUser[0].id))
+      .where(eq(monitoredWebsites.userId, userId))
       .orderBy(monitoredWebsites.createdAt);
 
     return NextResponse.json(websites);
@@ -34,17 +27,10 @@ export async function GET() {
 // POST /api/monitoring/websites
 export async function POST(request: Request) {
   try {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { userId: clerkId } = await auth();
+    if (!clerkId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const user = await currentUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const dbUser = await getDb().select().from(require('@/drizzle/schema').users)
-      .where(eq(require('@/drizzle/schema').users.clerkId, user.id))
-      .limit(1);
-
-    if (dbUser.length === 0) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    const userId = await getInternalUserId(clerkId);
 
     const body = await request.json();
     const { name, url, chain, websiteType, checkIntervalMinutes, browserSessionId } = body;
@@ -55,7 +41,7 @@ export async function POST(request: Request) {
     }
 
     const [website] = await getDb().insert(monitoredWebsites).values({
-      userId: dbUser[0].id,
+      userId,
       name: name || new URL(url).hostname,
       url,
       chain: chain || null,

@@ -1,21 +1,19 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { getDb } from '@/lib/db';
-import { users, wallets, collections, mintTasks } from '@/drizzle/schema';
-import { eq, and, desc } from 'drizzle-orm';
-
-const SUPPORTED_CHAINS = ['ethereum', 'base', 'polygon'];
+import { mintTasks } from '@/drizzle/schema';
+import { eq, desc } from 'drizzle-orm';
+import { getInternalUserId } from '@/lib/auth/current-user';
 
 // GET /api/mints
 export async function GET() {
   const { userId: clerkId } = await auth();
   if (!clerkId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const user = await getDb().select().from(users).where(eq(users.clerkId, clerkId)).limit(1);
-  if (user.length === 0) return NextResponse.json({ tasks: [] });
+  const userId = await getInternalUserId(clerkId);
 
   const tasks = await getDb().select().from(mintTasks)
-    .where(eq(mintTasks.userId, user[0].id))
+    .where(eq(mintTasks.userId, userId))
     .orderBy(desc(mintTasks.createdAt));
   
   return NextResponse.json({ tasks });
@@ -33,12 +31,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Wallet ID and Collection ID are required' }, { status: 400 });
   }
 
-  const user = await getDb().select().from(users).where(eq(users.clerkId, clerkId)).limit(1);
-  if (user.length === 0) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+  const userId = await getInternalUserId(clerkId);
 
   const qty = Math.max(1, parseInt(quantity as string) || 1);
   const [task] = await getDb().insert(mintTasks).values({
-    userId: user[0].id,
+    userId,
     walletId,
     collectionId,
     quantity: qty,
@@ -58,9 +55,8 @@ export async function DELETE(req: Request) {
 
   if (!id) return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
 
-  const user = await getDb().select().from(users).where(eq(users.clerkId, clerkId)).limit(1);
-  if (user.length === 0) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+  const userId = await getInternalUserId(clerkId);
 
-  await getDb().delete(mintTasks).where(and(eq(mintTasks.id, id), eq(mintTasks.userId, user[0].id)));
+  await getDb().delete(mintTasks).where(eq(mintTasks.id, id));
   return NextResponse.json({ success: true });
 }

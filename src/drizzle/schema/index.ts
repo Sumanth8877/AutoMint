@@ -3,10 +3,12 @@ import { relations } from 'drizzle-orm';
 
 // ─── Enums ───────────────────────────────────────────
 export const chainEnum = pgEnum('chain', ['ethereum', 'base', 'polygon']);
-export const mintStatusEnum = pgEnum('mint_status', ['pending', 'monitoring', 'ready', 'completed', 'failed', 'cancelled']);
+export const mintStatusEnum = pgEnum('mint_status', ['pending', 'monitoring', 'ready', 'running', 'completed', 'failed', 'cancelled']);
 export const mintHistoryStatusEnum = pgEnum('mint_history_status', ['pending', 'confirmed', 'failed']);
 export const activityTypeEnum = pgEnum('activity_type', [
   'wallet_added',
+  'wallet_removed',
+  'wallet_imported',
   'wallet_balance_changed',
   'collection_added',
   'task_created',

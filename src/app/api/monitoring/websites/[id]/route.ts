@@ -3,7 +3,7 @@ import { auth } from '@clerk/nextjs/server';
 import { getDb } from '@/lib/db';
 import { monitoredWebsites, monitoringEvents } from '@/drizzle/schema/monitoring';
 import { eq, and } from 'drizzle-orm';
-import { currentUser } from '@clerk/nextjs/server';
+import { getInternalUserId } from '@/lib/auth/current-user';
 
 // DELETE /api/monitoring/websites/:id
 export async function DELETE(
@@ -11,23 +11,16 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { userId: clerkId } = await auth();
+    if (!clerkId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const user = await currentUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const dbUser = await getDb().select().from(require('@/drizzle/schema').users)
-      .where(eq(require('@/drizzle/schema').users.clerkId, user.id))
-      .limit(1);
-
-    if (dbUser.length === 0) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    const userId = await getInternalUserId(clerkId);
 
     const { id: websiteId } = await params;
 
     const [deleted] = await getDb()
       .delete(monitoredWebsites)
-      .where(and(eq(monitoredWebsites.id, websiteId), eq(monitoredWebsites.userId, dbUser[0].id)))
+      .where(and(eq(monitoredWebsites.id, websiteId), eq(monitoredWebsites.userId, userId)))
       .returning();
 
     if (!deleted) return NextResponse.json({ error: 'Website not found' }, { status: 404 });
