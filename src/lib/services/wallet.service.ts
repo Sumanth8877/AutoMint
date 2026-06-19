@@ -35,7 +35,7 @@ export async function createWallet(userId: string, data: { address: string; nick
   const [existing] = await getDb()
     .select({ id: wallets.id })
     .from(wallets)
-    .where(and(eq(wallets.userId, userId), eq(wallets.address, address)))
+    .where(and(eq(wallets.userId, userId), eq(wallets.address, address), eq(wallets.chain, data.chain as SupportedChain)))
     .limit(1);
 
   if (existing) {

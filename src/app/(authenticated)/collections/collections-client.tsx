@@ -47,20 +47,6 @@ export default function CollectionsClient() {
   const syncedCount = useMemo(() => collections.filter((collection) => collection.tokenStandard || collection.totalSupply).length, [collections]);
   const unknownCount = trackedCount - syncedCount;
 
-  const loadCollections = async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const payload = await apiRequest<{ collections: CollectionRecord[] }>('/api/collections');
-      setCollections(payload.collections);
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Failed to load collections.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
     let active = true;
 

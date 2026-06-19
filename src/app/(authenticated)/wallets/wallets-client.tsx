@@ -50,20 +50,6 @@ export default function WalletsClient() {
 
   const readyCount = useMemo(() => wallets.length, [wallets.length]);
 
-  const loadWallets = async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const payload = await apiRequest<{ wallets: WalletRecord[] }>('/api/wallets');
-      setWallets(payload.wallets);
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Failed to load wallets.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
     let active = true;
 

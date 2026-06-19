@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import AutoMintUserButton from '@/components/auth/automint-user-button';
+import { apiRequest } from '@/lib/api/client';
 import {
   Activity,
   BarChart3,
@@ -121,15 +122,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       setSearchError(null);
 
       try {
-        const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`, { signal: controller.signal });
-        const payload = await response.json() as { results?: SearchResult[]; error?: string };
-
-        if (!response.ok) {
-          setSearchResults([]);
-          setSearchError(payload.error ?? 'Search failed.');
-          return;
-        }
-
+        const payload = await apiRequest<{ results: SearchResult[] }>(`/api/search?q=${encodeURIComponent(query)}`, { signal: controller.signal });
         setSearchResults(payload.results ?? []);
       } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') return;
@@ -155,14 +148,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
     setActivitiesError(null);
 
     try {
-      const response = await fetch('/api/activities');
-      const payload = await response.json() as { activities?: ActivityItem[]; error?: string };
-
-      if (!response.ok) {
-        setActivitiesError(payload.error ?? 'Failed to load notifications.');
-        return;
-      }
-
+      const payload = await apiRequest<{ activities: ActivityItem[] }>('/api/activities');
       setActivities(payload.activities ?? []);
     } catch (error) {
       setActivitiesError(error instanceof Error ? error.message : 'Failed to load notifications.');

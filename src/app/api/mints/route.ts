@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getErrorMessage, parseJsonBody } from '@/lib/api/errors';
-import { addMintTask, getUserMintTasks, removeMintTask, updateMintTaskStatus } from '@/lib/services/mint.service';
+import { addMintTask, executeMintTask, getMintTaskById, getUserMintTasks, removeMintTask, updateMintTaskStatus } from '@/lib/services/mint.service';
 
 // GET /api/mints
 export async function GET() {
@@ -56,13 +56,19 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: 'Action must be start or cancel' }, { status: 400 });
     }
 
-    const task = await updateMintTaskStatus(
-      body.id,
-      authResult.userId,
-      body.action === 'start' ? 'running' : 'cancelled',
-    );
+    if (body.action === 'cancel') {
+      const task = await updateMintTaskStatus(body.id, authResult.userId, 'cancelled');
+      return NextResponse.json({ task });
+    }
 
-    return NextResponse.json({ task });
+    const result = await executeMintTask(body.id, authResult.userId);
+    const task = await getMintTaskById(body.id, authResult.userId);
+
+    if (!task) {
+      return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ task, result });
   } catch (error) {
     const message = getErrorMessage(error, 'Failed to update mint task');
     const status = message.includes('not found') ? 404 : message === 'Invalid JSON request body' ? 400 : 500;

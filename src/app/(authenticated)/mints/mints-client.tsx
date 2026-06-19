@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarClock, MoreHorizontal, Play, Plus, RotateCcw, ShieldCheck, Trash2, Zap } from 'lucide-react';
+import { CalendarClock, MoreHorizontal, Play, Plus, RotateCcw, ShieldCheck, Trash2, XCircle, Zap } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -38,6 +38,15 @@ type CollectionRecord = {
   chain: string;
 };
 
+type MintActionResponse = {
+  task: MintTask;
+  result?: {
+    success: boolean;
+    txHash?: string;
+    error?: string;
+  };
+};
+
 function shortAddress(address: string) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
@@ -69,26 +78,6 @@ export default function MintsClient() {
   const queuedCount = tasks.filter((task) => task.status === 'pending' || task.status === 'monitoring').length;
   const readyCount = tasks.filter((task) => task.status === 'ready').length;
   const retryCount = tasks.filter((task) => task.status === 'failed').length;
-
-  const loadData = async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const [mintsPayload, walletsPayload, collectionsPayload] = await Promise.all([
-        apiRequest<{ tasks: MintTask[] }>('/api/mints'),
-        apiRequest<{ wallets: WalletRecord[] }>('/api/wallets'),
-        apiRequest<{ collections: CollectionRecord[] }>('/api/collections'),
-      ]);
-      setTasks(mintsPayload.tasks);
-      setWallets(walletsPayload.wallets);
-      setCollections(collectionsPayload.collections);
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Failed to load mint data.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   useEffect(() => {
     let active = true;
@@ -149,10 +138,27 @@ export default function MintsClient() {
     setError(null);
 
     try {
-      const payload = await apiRequest<{ task: MintTask }>('/api/mints', { method: 'PATCH', body: { id: task.id, action: 'start' } });
+      const payload = await apiRequest<MintActionResponse>('/api/mints', { method: 'PATCH', body: { id: task.id, action: 'start' } });
       setTasks((current) => current.map((item) => (item.id === task.id ? payload.task : item)));
+      if (payload.result && !payload.result.success) {
+        setError(payload.result.error ?? 'Mint execution failed.');
+      }
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to start task.');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const cancelTask = async (task: MintTask) => {
+    setUpdatingId(task.id);
+    setError(null);
+
+    try {
+      const payload = await apiRequest<MintActionResponse>('/api/mints', { method: 'PATCH', body: { id: task.id, action: 'cancel' } });
+      setTasks((current) => current.map((item) => (item.id === task.id ? payload.task : item)));
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Failed to cancel task.');
     } finally {
       setUpdatingId(null);
     }
@@ -232,8 +238,11 @@ export default function MintsClient() {
                   <p className="col-span-2 hidden font-mono text-sm text-muted lg:block">{wallet ? shortAddress(wallet.address) : 'Unassigned'}</p>
                   <p className="col-span-2 hidden font-mono text-sm text-text sm:block">{task.quantity}</p>
                   <div className="col-span-7 flex justify-end gap-1 sm:col-span-1">
-                    <button type="button" onClick={() => startTask(task)} disabled={updatingId === task.id || task.status === 'running' || task.status === 'completed'} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-white/5 hover:text-text disabled:opacity-50" aria-label={`Start ${title}`}>
+                    <button type="button" onClick={() => startTask(task)} disabled={updatingId === task.id || task.status === 'running' || task.status === 'completed'} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-white/5 hover:text-text disabled:opacity-50" aria-label={`${task.status === 'failed' || task.status === 'cancelled' ? 'Retry' : 'Start'} ${title}`}>
                       <Play className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                    <button type="button" onClick={() => cancelTask(task)} disabled={updatingId === task.id || task.status === 'completed' || task.status === 'cancelled'} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-white/5 hover:text-warning disabled:opacity-50" aria-label={`Cancel ${title}`}>
+                      <XCircle className="h-4 w-4" aria-hidden="true" />
                     </button>
                     <button type="button" onClick={() => deleteTask(task)} disabled={deletingId === task.id} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-white/5 hover:text-danger disabled:opacity-50" aria-label={`Delete ${title}`}>
                       <Trash2 className="h-4 w-4" aria-hidden="true" />

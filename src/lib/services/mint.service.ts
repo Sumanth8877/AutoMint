@@ -1,6 +1,6 @@
 import { getDb } from '@/lib/db';
 import { mintTasks, wallets, collections, mintHistory } from '@/drizzle/schema';
-import { desc, eq, and } from 'drizzle-orm';
+import { desc, eq, and, inArray } from 'drizzle-orm';
 import { simulateMint, estimateMintGas, executeMint, getMintMode, type MintParams } from '@/lib/blockchain/mint';
 import { logActivity } from '@/lib/monitoring';
 import type { Hex } from 'viem';
@@ -28,10 +28,27 @@ export async function addMintTask(userId: string, data: { walletId: string; coll
     gasLimit: undefined,
   }).returning();
 
+  await logActivity(userId, 'task_created', 'Mint task created', {
+    taskId: task.id,
+    walletId: task.walletId,
+    collectionId: task.collectionId,
+    contractAddress: task.contractAddress,
+  });
+
   return task;
 }
 
-export async function executeMintTask(taskId: string): Promise<{ success: boolean; txHash?: string; error?: string }> {
+export async function executeMintTask(taskId: string, userId?: string): Promise<{ success: boolean; txHash?: string; error?: string }> {
+  const claimWhere = userId
+    ? and(
+        eq(mintTasks.id, taskId),
+        eq(mintTasks.userId, userId),
+        inArray(mintTasks.status, ['pending', 'monitoring', 'ready', 'failed', 'cancelled']),
+      )
+    : and(
+        eq(mintTasks.id, taskId),
+        inArray(mintTasks.status, ['pending', 'monitoring', 'ready', 'failed', 'cancelled']),
+      );
   // ── Atomic claim: only a 'pending' task can be claimed ─────────
   const [claimed] = await getDb()
     .update(mintTasks)
@@ -39,17 +56,14 @@ export async function executeMintTask(taskId: string): Promise<{ success: boolea
       status: 'running',
       updatedAt: new Date(),
     })
-    .where(
-      and(
-        eq(mintTasks.id, taskId),
-        eq(mintTasks.status, 'pending'),
-      ),
-    )
+    .where(claimWhere)
     .returning();
 
   if (!claimed) {
-    return { success: false, error: 'Task not found or already claimed' };
+    return { success: false, error: 'Task not found, already running, or completed' };
   }
+
+  await logActivity(claimed.userId, 'mint_status_changed', 'Mint task started', { taskId, status: 'running' });
 
   if (claimed.txHash) {
     return { success: true, txHash: claimed.txHash };
@@ -147,6 +161,16 @@ export async function removeMintTask(id: string, userId: string) {
 
   await getDb().delete(mintTasks).where(and(eq(mintTasks.id, id), eq(mintTasks.userId, userId)));
   return { success: true };
+}
+
+export async function getMintTaskById(id: string, userId: string) {
+  const [task] = await getDb()
+    .select()
+    .from(mintTasks)
+    .where(and(eq(mintTasks.id, id), eq(mintTasks.userId, userId)))
+    .limit(1);
+
+  return task ?? null;
 }
 
 export async function updateMintTaskStatus(

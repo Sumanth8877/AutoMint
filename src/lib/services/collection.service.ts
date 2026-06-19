@@ -2,6 +2,7 @@ import { getDb } from '@/lib/db';
 import { collections } from '@/drizzle/schema';
 import { eq, and } from 'drizzle-orm';
 import { getCollectionMetadata } from '@/lib/blockchain/collections';
+import { logActivity } from '@/lib/monitoring';
 
 const SUPPORTED_CHAINS = ['ethereum', 'base', 'polygon'] as const;
 type SupportedChain = (typeof SUPPORTED_CHAINS)[number];
@@ -29,14 +30,14 @@ export async function addCollection(userId: string, data: { name: string; contra
   const [existing] = await getDb()
     .select({ id: collections.id })
     .from(collections)
-    .where(and(eq(collections.userId, userId), eq(collections.contractAddress, contractAddress)))
+    .where(and(eq(collections.userId, userId), eq(collections.contractAddress, contractAddress), eq(collections.chain, data.chain as SupportedChain)))
     .limit(1);
 
   if (existing) {
     throw new Error('Collection already added');
   }
 
-  const [collection] = await getDb().insert(collections).values({
+  let [collection] = await getDb().insert(collections).values({
     userId,
     name: data.name,
     contractAddress,
@@ -46,7 +47,7 @@ export async function addCollection(userId: string, data: { name: string; contra
   // Best-effort metadata sync
   try {
     const metadata = await getCollectionMetadata(data.contractAddress, data.chain);
-    await getDb().update(collections)
+    const [syncedCollection] = await getDb().update(collections)
       .set({
         name: metadata.name,
         tokenStandard: metadata.tokenStandard,
@@ -54,10 +55,19 @@ export async function addCollection(userId: string, data: { name: string; contra
         totalSupply: metadata.totalSupply.toString(),
         lastSyncedAt: new Date(),
       })
-      .where(eq(collections.id, collection.id));
+      .where(eq(collections.id, collection.id))
+      .returning();
+
+    if (syncedCollection) collection = syncedCollection;
   } catch (error) {
     console.error('Background metadata sync failed:', error);
   }
+
+  await logActivity(userId, 'collection_added', 'Collection added', {
+    collectionId: collection.id,
+    contractAddress: collection.contractAddress,
+    chain: collection.chain,
+  });
 
   return collection;
 }

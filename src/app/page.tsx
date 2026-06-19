@@ -1,7 +1,9 @@
 'use client';
 
+import type { FormEvent } from 'react';
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Show, SignInButton, SignUpButton } from '@clerk/nextjs';
 import { motion } from 'framer-motion';
 import {
@@ -48,19 +50,38 @@ const recent = [
 ];
 
 export default function HomePage() {
+  const router = useRouter();
   const [url, setUrl] = useState('');
   const [copied, setCopied] = useState(false);
+  const [inputError, setInputError] = useState<string | null>(null);
+
+  const analyzerHref = url.trim() ? `/analyzer?input=${encodeURIComponent(url.trim())}` : '/analyzer';
 
   const pasteUrl = async () => {
-    const text = await navigator.clipboard.readText();
-    setUrl(text);
+    try {
+      const text = await navigator.clipboard.readText();
+      setUrl(text);
+      setInputError(null);
+    } catch {
+      setInputError('Clipboard access is unavailable in this browser.');
+    }
   };
 
   const copyUrl = async () => {
     if (!url) return;
-    await navigator.clipboard.writeText(url);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setInputError(null);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setInputError('Clipboard access is unavailable in this browser.');
+    }
+  };
+
+  const submitAnalysis = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    router.push(analyzerHref);
   };
 
   return (
@@ -153,15 +174,20 @@ export default function HomePage() {
                 <span className="rounded-lg border border-success/20 bg-success/10 px-3 py-1 text-xs text-success">Live</span>
               </div>
 
-              <label htmlFor="mint-url" className="mb-2 block text-sm font-medium text-muted">Launchpad or contract URL</label>
-              <div className="flex flex-col gap-2 sm:flex-row">
+              <form onSubmit={submitAnalysis}>
+                <label htmlFor="mint-url" className="mb-2 block text-sm font-medium text-muted">Launchpad or contract URL</label>
+                <div className="flex flex-col gap-2 sm:flex-row">
                 <div className="relative flex-1">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
                   <input
                     id="mint-url"
                     value={url}
-                    onChange={(event) => setUrl(event.target.value)}
+                    onChange={(event) => {
+                      setUrl(event.target.value);
+                      setInputError(null);
+                    }}
                     placeholder="https://magiceden.io/launchpad/collection"
+                    aria-invalid={Boolean(inputError)}
                     className="h-12 w-full rounded-lg border border-border bg-background/70 pl-10 pr-3 text-sm text-text outline-none transition placeholder:text-muted/60 focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
@@ -169,21 +195,23 @@ export default function HomePage() {
                   <Clipboard className="h-4 w-4" aria-hidden="true" />
                   Paste
                 </Button>
-              </div>
+                </div>
+                {inputError ? <div className="mt-3 rounded-lg border border-danger/20 bg-danger/10 p-3 text-sm text-danger" role="alert">{inputError}</div> : null}
 
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <Button type="button" size="lg" onClick={copyUrl} disabled={!url}>
                   {copied ? <CheckCircle2 className="h-4 w-4" aria-hidden="true" /> : <Layers3 className="h-4 w-4" aria-hidden="true" />}
                   {copied ? 'Copied' : 'Stage Analysis'}
                 </Button>
                 <Link
-                  href="/analyzer"
+                  href={analyzerHref}
                   className="inline-flex h-12 w-full shrink-0 items-center justify-center gap-2.5 rounded-lg bg-success px-5 text-sm font-medium text-white transition hover:bg-success/90"
                 >
                   Analyze
                   <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </Link>
-              </div>
+                </div>
+              </form>
 
               <div className="mt-6 grid gap-3 sm:grid-cols-3">
                 {[
