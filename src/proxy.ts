@@ -1,7 +1,7 @@
 import { clerkMiddleware } from '@clerk/nextjs/server';
 import { syncUser } from '@/lib/auth/sync-user';
 
-export default clerkMiddleware(async (auth, request) => {
+export default clerkMiddleware(async (auth) => {
   const { userId } = await auth();
   if (!userId) return;
 

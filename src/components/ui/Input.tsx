@@ -1,5 +1,3 @@
-'use client';
-
 import React from 'react';
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
@@ -18,7 +16,7 @@ export default function Input({
   return (
     <div className="w-full">
       {label && (
-        <label className="block text-sm font-medium text-white/60 mb-2">
+        <label className="mb-2 block text-sm font-medium text-muted">
           {label}
         </label>
       )}
@@ -29,14 +27,14 @@ export default function Input({
           </div>
         )}
         <input
-          className={`w-full bg-[#05070A] border border-[rgba(255,255,255,0.06)] rounded-lg px-4 py-2.5 text-white placeholder:text-white/40 focus:outline-none focus:border-[#4F8CFF] focus:ring-1 focus:ring-[#4F8CFF] transition-all duration-200 ${
+          className={`h-11 w-full rounded-lg border border-border bg-background/70 px-4 text-sm text-text placeholder:text-muted/60 transition-all duration-200 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 ${
             icon ? 'pl-10' : ''
-          } ${error ? 'border-[#F31260] focus:border-[#F31260] focus:ring-[#F31260]' : ''} ${className}`}
+          } ${error ? 'border-danger focus:border-danger focus:ring-danger/20' : ''} ${className}`}
           {...props}
         />
       </div>
       {error && (
-        <p className="mt-1.5 text-sm text-[#F31260]">{error}</p>
+        <p className="mt-1.5 text-sm text-danger">{error}</p>
       )}
     </div>
   );

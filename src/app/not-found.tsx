@@ -1,31 +1,27 @@
-'use client';
-
-import React from 'react';
 import Link from 'next/link';
-import Button from '@/components/ui/Button';
+import { ArrowLeft, SearchX } from 'lucide-react';
+import Card from '@/components/ui/Card';
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen bg-[#050816] flex items-center justify-center p-4">
-      <div className="text-center">
-        <div className="w-20 h-20 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mx-auto mb-6">
-          <span className="text-4xl font-bold text-blue-500">404</span>
+    <main className="automint-shell flex min-h-screen items-center justify-center p-4">
+      <Card tone="elevated" className="w-full max-w-lg p-8 text-center">
+        <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-lg border border-accent/20 bg-accent/10 text-accent">
+          <SearchX className="h-7 w-7" aria-hidden="true" />
         </div>
-        <h1
-          className="text-3xl font-bold text-white mb-3"
-          style={{ fontFamily: 'Space Grotesk, sans-serif' }}
-        >
-          Page not found
-        </h1>
-        <p className="text-muted mb-8 max-w-md">
-          The page you're looking for doesn't exist or has been moved.
+        <p className="mb-2 font-mono text-sm text-muted">404</p>
+        <h1 className="text-3xl font-semibold text-text">Page not found</h1>
+        <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-muted">
+          The page you are looking for does not exist or has been moved.
         </p>
-        <Link href="/">
-          <Button variant="primary" size="lg">
-            Back to Home
-          </Button>
+        <Link
+          href="/"
+          className="mt-8 inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-white shadow-lg shadow-primary/20 transition hover:bg-primary-hover"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          Back to Home
         </Link>
-      </div>
-    </div>
+      </Card>
+    </main>
   );
 }

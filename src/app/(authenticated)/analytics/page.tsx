@@ -1,151 +1,97 @@
-'use client';
-import React, { useState, useEffect } from 'react';
-import { Activity, Gauge, Wifi, RefreshCcw, Zap } from 'lucide-react';
+import { Activity, BarChart3, Gauge, Radio, RefreshCcw, TrendingUp, Wifi } from 'lucide-react';
+import Badge from '@/components/ui/Badge';
 import Card from '@/components/ui/Card';
-import MetricCard from '@/components/telemetry/MetricCard';
-import { CHAIN_NAMES } from '@/lib/blockchain/chains';
+import { MetricCard } from '@/components/ui/metric-card';
+import { PageHeader } from '@/components/ui/page-header';
 
-type Health = 'FAST' | 'NORMAL' | 'SLOW';
+const logs = [
+  ['08:32:05', 'Broadcasted', 'Eclipse Foundry to 0x71...c82a', '340ms'],
+  ['08:32:01', 'Requirements fetched', 'Mint price 0.08 ETH', '890ms'],
+  ['08:31:58', 'Intent resolved', 'Contract 0xBC4C... selector valid', '1.2s'],
+  ['08:31:45', 'Execution prepared', 'Calldata, gas, and risk gates staged', '230ms'],
+];
 
 export default function AnalyticsPage() {
-  const [loading, setLoading] = useState(true);
-  const [metrics, setMetrics] = useState<any>(null);
-  const [provider, setProvider] = useState({ name: 'Alchemy', latency: 42, healthy: true, failovers: 0 });
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const res = await fetch('/api/admin/system/health');
-        const data = await res.json();
-        setMetrics(data);
-      } catch {} finally { setLoading(false); }
-    };
-    fetchData();
-    const id = setInterval(fetchData, 5000);
-    return () => clearInterval(id);
-  }, []);
-
-  const successRate = metrics?.successRate ?? 99.4;
-  const avgExecution = metrics?.avgExecutionMs ?? 1240;
-  const avgBroadcast = metrics?.avgBroadcastMs ?? 320;
-  const totalMints = metrics?.totalMints ?? 1247;
-  const successful = metrics?.successful ?? 1239;
-
-  const getHealth = (ms: number): Health => {
-    if (ms < 1500) return 'FAST';
-    if (ms < 3000) return 'NORMAL';
-    return 'SLOW';
-  };
-
-  const health = getHealth(avgExecution);
-  const healthColor = health === 'FAST' ? '#18C964' : health === 'NORMAL' ? '#F5A524' : '#F31260';
-
   return (
-    <div className="max-w-5xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-2xl sm:text-3xl font-semibold text-white">Analytics</h1>
-        <p className="text-white/60 mt-1 text-sm">Execution telemetry and performance health</p>
+    <div>
+      <PageHeader
+        eyebrow="Telemetry"
+        title="Analytics"
+        description="Execution telemetry, system performance, provider health, and conversion signals across mint operations."
+      />
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label="Success Rate" value="93.8%" detail="1,239 / 1,321 mints" icon={TrendingUp} tone="success" />
+        <MetricCard label="Avg Execution" value="1.24s" detail="End to end" icon={Gauge} tone="accent" />
+        <MetricCard label="Avg Broadcast" value="320ms" detail="RPC submit" icon={Radio} tone="primary" />
+        <MetricCard label="Failovers" value="3" detail="Last 24 hours" icon={RefreshCcw} tone="warning" />
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-8">
-        <MetricCard title="Success Rate" value={successRate.toFixed(1)} unit="%" trend="up" color="#18C964" loading={loading} subtitle={`${successful} / ${totalMints} mints`} />
-        <MetricCard title="Avg Execution" value={(avgExecution / 1000).toFixed(2)} unit="s" color="#4F8CFF" loading={loading} subtitle="End-to-end" />
-        <MetricCard title="Avg Broadcast" value={(avgBroadcast / 1000).toFixed(2)} unit="s" color="#3D7AE8" loading={loading} subtitle="Network submit" />
-        <MetricCard title="Total Mints" value={totalMints} color="rgba(255,255,255,0.40)" loading={loading} subtitle="All time" />
-        <MetricCard title="Retries" value={metrics?.retries ?? 12} color="#F5A524" loading={loading} subtitle="Auto-recovered" />
-        <MetricCard title="Failovers" value={metrics?.failovers ?? 3} color="#F31260" loading={loading} subtitle="Provider switches" />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
-        <Card className="p-5 lg:col-span-2">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Gauge size={18} className="text-[#4F8CFF]" />
-              <h3 className="text-sm font-semibold text-white">Performance Health</h3>
+      <div className="mt-6 grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
+        <Card tone="elevated" className="p-5">
+          <div className="mb-5 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <BarChart3 className="h-5 w-5 text-accent" aria-hidden="true" />
+              <h2 className="font-semibold text-text">Performance Health</h2>
             </div>
-            <span className="px-3 py-1 rounded-full text-xs font-medium" style={{ background: `${healthColor}15`, color: healthColor, border: `1px solid ${healthColor}30` }}>
-              {health}
-            </span>
+            <Badge variant="success">Fast</Badge>
           </div>
-          <div className="space-y-3">
-            <div>
-              <div className="flex items-center justify-between text-xs mb-1">
-                <span className="text-white/40">Execution Speed</span>
-                <span className="text-white/60">{avgExecution}ms</span>
+          <div className="space-y-5">
+            {[
+              ['Execution Speed', 82, '1,240ms'],
+              ['Broadcast Speed', 91, '320ms'],
+              ['Success Rate', 94, '93.8%'],
+              ['Analyzer Confidence', 86, '86.4%'],
+            ].map(([label, width, value]) => (
+              <div key={label as string}>
+                <div className="mb-2 flex items-center justify-between text-sm">
+                  <span className="text-muted">{label}</span>
+                  <span className="font-mono text-text">{value}</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-white/5">
+                  <div className="h-full rounded-full bg-accent" style={{ width: `${width}%` }} />
+                </div>
               </div>
-              <div className="h-2 rounded-full bg-[#4F8CFF]/10 overflow-hidden">
-                <div className="h-full rounded-full" style={{ width: `${Math.min(100, (avgExecution / 3000) * 100)}%`, background: healthColor }} />
-              </div>
-            </div>
-            <div>
-              <div className="flex items-center justify-between text-xs mb-1">
-                <span className="text-white/40">Broadcast Speed</span>
-                <span className="text-white/60">{avgBroadcast}ms</span>
-              </div>
-              <div className="h-2 rounded-full bg-[#4F8CFF]/10 overflow-hidden">
-                <div className="h-full rounded-full bg-[#18C964]" style={{ width: `${Math.min(100, (avgBroadcast / 3000) * 100)}%` }} />
-              </div>
-            </div>
-            <div>
-              <div className="flex items-center justify-between text-xs mb-1">
-                <span className="text-white/40">Success Rate</span>
-                <span className="text-white/60">{successRate.toFixed(1)}%</span>
-              </div>
-              <div className="h-2 rounded-full bg-[#4F8CFF]/10 overflow-hidden">
-                <div className="h-full rounded-full bg-[#4F8CFF]" style={{ width: `${successRate}%` }} />
-              </div>
-            </div>
+            ))}
           </div>
         </Card>
 
         <Card className="p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <Wifi size={18} className="text-[#4F8CFF]" />
-            <h3 className="text-sm font-semibold text-white">RPC Provider</h3>
+          <div className="mb-5 flex items-center gap-3">
+            <Wifi className="h-5 w-5 text-accent" aria-hidden="true" />
+            <h2 className="font-semibold text-text">RPC Provider</h2>
           </div>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-white/40">Provider</span>
-              <span className="text-sm font-medium text-white">{provider.name}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-white/40">Latency</span>
-              <span className="text-sm font-medium text-white">{provider.latency}ms</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-white/40">Status</span>
-              <span className="text-xs px-2 py-1 rounded-full bg-[#18C964]/10 text-[#18C964] border border-[#18C964]/20">Healthy</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-white/40">Failovers</span>
-              <span className="text-sm font-medium text-white">{provider.failovers}</span>
-            </div>
+          <div className="space-y-4">
+            {[
+              ['Provider', 'Alchemy'],
+              ['Latency', '42ms'],
+              ['Status', 'Healthy'],
+              ['Failovers', '3'],
+              ['Regions', 'iad1, sfo1'],
+            ].map(([label, value]) => (
+              <div key={label} className="flex items-center justify-between gap-4">
+                <span className="text-sm text-muted">{label}</span>
+                <span className="text-sm font-medium text-text">{value}</span>
+              </div>
+            ))}
           </div>
         </Card>
       </div>
 
-      <Card className="p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <Activity size={18} className="text-[#4F8CFF]" />
-          <h3 className="text-sm font-semibold text-white">Recent Execution Log</h3>
+      <Card className="mt-6 overflow-hidden">
+        <div className="border-b border-border p-5">
+          <div className="flex items-center gap-3">
+            <Activity className="h-5 w-5 text-accent" aria-hidden="true" />
+            <h2 className="font-semibold text-text">Recent Execution Log</h2>
+          </div>
         </div>
-        <div className="space-y-3">
-          {[
-            { time: '08:32:05', action: 'Broadcasted', detail: 'BAYC Mint → 0x7a...3f', status: 'success', ms: 340 },
-            { time: '08:32:01', action: 'Requirements Fetched', detail: 'Price: 0.05 ETH', status: 'success', ms: 890 },
-            { time: '08:31:58', action: 'Intent Resolved', detail: 'Contract: 0xBC4C...', status: 'success', ms: 1200 },
-            { time: '08:31:45', action: 'Execution Prepared', detail: 'Calldata + gas', status: 'success', ms: 230 },
-          ].map((log, i) => (
-            <div key={i} className="flex items-center justify-between py-2 border-b border-[rgba(255,255,255,0.06)] last:border-0">
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-white/40 font-mono">{log.time}</span>
-                <span className="text-sm text-white">{log.action}</span>
-                <span className="text-xs text-white/40">{log.detail}</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-white/40">{log.ms}ms</span>
-                <span className={`w-2 h-2 rounded-full ${log.status === 'success' ? 'bg-[#18C964]' : 'bg-[#F31260]'}`} />
-              </div>
+        <div className="divide-y divide-border">
+          {logs.map(([time, action, detail, ms]) => (
+            <div key={`${time}-${action}`} className="grid gap-3 p-4 md:grid-cols-[90px_180px_1fr_80px] md:items-center">
+              <span className="font-mono text-xs text-muted">{time}</span>
+              <span className="text-sm font-medium text-text">{action}</span>
+              <span className="text-sm text-muted">{detail}</span>
+              <span className="font-mono text-sm text-text">{ms}</span>
             </div>
           ))}
         </div>

@@ -1,5 +1,3 @@
-'use client';
-
 import React from 'react';
 
 interface BadgeProps {
@@ -10,11 +8,11 @@ interface BadgeProps {
 
 export default function Badge({ children, variant = 'default', className = '' }: BadgeProps) {
   const variants = {
-    default: 'bg-white/5 text-white/60 border-[rgba(255,255,255,0.06)]',
-    success: 'bg-[#18C964]/10 text-[#18C964] border-[#18C964]/20',
-    warning: 'bg-[#F5A524]/10 text-[#F5A524] border-[#F5A524]/20',
-    danger: 'bg-[#F31260]/10 text-[#F31260] border-[#F31260]/20',
-    info: 'bg-[#4F8CFF]/10 text-[#4F8CFF] border-[#4F8CFF]/20',
+    default: 'bg-white/5 text-muted border-border',
+    success: 'bg-success/10 text-success border-success/20',
+    warning: 'bg-warning/10 text-warning border-warning/20',
+    danger: 'bg-danger/10 text-danger border-danger/20',
+    info: 'bg-accent/10 text-accent border-accent/20',
   };
 
   return (

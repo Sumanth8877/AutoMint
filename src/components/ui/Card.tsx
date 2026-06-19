@@ -1,20 +1,21 @@
-'use client';
-
 import React from 'react';
 
-interface CardProps {
+interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
-  className?: string;
-  onClick?: () => void;
+  tone?: 'default' | 'elevated' | 'interactive';
 }
 
-export default function Card({ children, className = '', onClick }: CardProps) {
+export default function Card({ children, className = '', tone = 'default', ...props }: CardProps) {
+  const tones = {
+    default: 'bg-surface/80 border-border',
+    elevated: 'premium-card',
+    interactive: 'bg-surface/80 border-border hover:border-white/16 hover:bg-elevated/90 transition-colors',
+  };
+
   return (
     <div
-      onClick={onClick}
-      className={`bg-[#0B0F14] border border-[rgba(255,255,255,0.06)] rounded-lg p-6 ${
-        onClick ? 'cursor-pointer hover:border-[rgba(255,255,255,0.12)] transition-all duration-200' : ''
-      } ${className}`}
+      className={`rounded-lg border ${tones[tone]} ${className}`}
+      {...props}
     >
       {children}
     </div>

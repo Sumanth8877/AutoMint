@@ -1,150 +1,84 @@
-'use client';
-import React, { useState, useEffect } from 'react';
-import { Zap, Plus, RefreshCw, XCircle, CheckCircle2, Clock, Play, AlertCircle } from 'lucide-react';
+import { CalendarClock, MoreHorizontal, Play, Plus, RotateCcw, ShieldCheck, Trash2, Zap } from 'lucide-react';
+import Badge from '@/components/ui/Badge';
+import Button from '@/components/ui/Button';
+import Card from '@/components/ui/Card';
+import { MetricCard } from '@/components/ui/metric-card';
+import { PageHeader } from '@/components/ui/page-header';
+
+const tasks = [
+  { collection: 'Eclipse Foundry', phase: 'Public', status: 'Executing', wallet: '0x71...c82a', fee: 'p82', eta: '02:14', risk: 'Low' },
+  { collection: 'Tensorian Seeds', phase: 'Allowlist', status: 'Queued', wallet: '0xb9...118e', fee: 'p75', eta: '09:32', risk: 'Medium' },
+  { collection: 'Night Market Pass', phase: 'Monitor', status: 'Blocked', wallet: '0x42...78fd', fee: 'Hold', eta: '31:00', risk: 'High' },
+  { collection: 'Base Arcade', phase: 'Public', status: 'Ready', wallet: '0x6d...a0f4', fee: 'p68', eta: '1h 12m', risk: 'Low' },
+];
 
 export default function MintsPage() {
-  const [tasks, setTasks] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('active');
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchTasks = async () => {
-    try {
-      const res = await fetch('/api/mints');
-      if (!res.ok) throw new Error('Failed to fetch mints');
-      const data = await res.json();
-      if (data.tasks) setTasks(data.tasks);
-    } catch (err) {
-      setError('Failed to load mints. Please try again.');
-    } finally { setLoading(false); }
-  };
-  useEffect(() => { fetchTasks(); }, []);
-
-  const handleDelete = async (id: string) => {
-    try {
-      const res = await fetch('/api/mints', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
-      if (!res.ok) throw new Error('Failed to delete mint');
-      fetchTasks();
-    } catch (err) {
-      setError('Failed to delete mint. Please try again.');
-    }
-  };
-  const handleRetry = async (id: string) => {
-    try {
-      const res = await fetch('/api/mints/retry', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
-      if (!res.ok) throw new Error('Failed to retry mint');
-      fetchTasks();
-    } catch (err) {
-      setError('Failed to retry mint. Please try again.');
-    }
-  };
-
-  const active = tasks.filter(t => t.status === 'running' || t.status === 'active' || t.status === 'pending');
-  const upcoming = tasks.filter(t => t.status === 'monitoring' || t.status === 'scheduled');
-  const completed = tasks.filter(t => t.status === 'completed');
-  const failed = tasks.filter(t => t.status === 'failed' || t.status === 'dead_letter');
-
-  const tabs = [
-    { key: 'active', label: 'Active', count: active.length },
-    { key: 'upcoming', label: 'Queued', count: upcoming.length },
-    { key: 'completed', label: 'Completed', count: completed.length },
-    { key: 'failed', label: 'Failed', count: failed.length },
-  ];
-
-  const currentTasks = activeTab === 'active' ? active : activeTab === 'upcoming' ? upcoming : activeTab === 'completed' ? completed : failed;
-
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-semibold text-white mb-2">Mints</h1>
-          <p className="text-white/60 text-sm">Track and manage mint executions</p>
-        </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-[#4F8CFF] text-white rounded-lg text-sm font-medium hover:bg-[#3D7AE8] transition-colors">
-          <Plus className="w-4 h-4" />
-          New Mint
-        </button>
+      <PageHeader
+        eyebrow="Execution"
+        title="Mints"
+        description="Plan, monitor, pause, and retry mint execution tasks with clear risk state and wallet assignment."
+        actions={
+          <Button>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            New Mint
+          </Button>
+        }
+      />
+
+      <div className="grid gap-4 md:grid-cols-4">
+        <MetricCard label="Executing" value="4" detail="Across 3 chains" icon={Zap} tone="primary" />
+        <MetricCard label="Queued" value="8" detail="Next hour" icon={CalendarClock} tone="accent" />
+        <MetricCard label="Ready" value="19" detail="Strategy approved" icon={ShieldCheck} tone="success" />
+        <MetricCard label="Retries" value="2" detail="Awaiting operator" icon={RotateCcw} tone="warning" />
       </div>
 
-      {error && (
-        <div className="mb-6 bg-[#F31260]/10 border border-[#F31260]/20 rounded-lg p-4 flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 text-[#F31260]" />
-          <span className="text-white/60 text-sm">{error}</span>
+      <Card className="mt-6 overflow-hidden" tone="elevated">
+        <div className="grid grid-cols-12 gap-4 border-b border-border px-5 py-3 text-xs font-medium uppercase text-muted">
+          <span className="col-span-5">Collection</span>
+          <span className="col-span-2 hidden md:block">Status</span>
+          <span className="col-span-2 hidden lg:block">Wallet</span>
+          <span className="col-span-2 hidden sm:block">ETA</span>
+          <span className="col-span-7 text-right sm:col-span-1">Actions</span>
         </div>
-      )}
-
-      {loading ? (
-        <div className="bg-[#0B0F14] border border-[rgba(255,255,255,0.06)] rounded-lg p-8">
-          <div className="flex justify-center py-12">
-            <div className="w-6 h-6 rounded-full border-2 border-[#4F8CFF]/30 border-t-[#4F8CFF] animate-spin" />
-          </div>
-        </div>
-      ) : tasks.length === 0 ? (
-        <div className="bg-[#0B0F14] border border-[rgba(255,255,255,0.06)] rounded-lg p-12">
-          <div className="flex flex-col items-center justify-center py-16">
-            <div className="w-16 h-16 rounded-xl bg-[#4F8CFF]/10 border border-[#4F8CFF]/20 flex items-center justify-center mb-4">
-              <Zap className="w-8 h-8 text-[#4F8CFF]" />
-            </div>
-            <h3 className="text-lg font-semibold text-white mb-2">No mint tasks yet</h3>
-            <p className="text-white/40 text-sm mb-6 max-w-sm text-center">Create your first mint execution from the dashboard</p>
-          </div>
-        </div>
-      ) : (
-        <>
-          <div className="flex gap-1 mb-6 border-b border-[rgba(255,255,255,0.06)]">
-            {tabs.map(tab => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px ${
-                  activeTab === tab.key
-                    ? 'text-[#4F8CFF] border-[#4F8CFF]'
-                    : 'text-white/40 border-transparent hover:text-white/60'
-                }`}
-              >
-                {tab.label} <span className="text-white/40">({tab.count})</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="bg-[#0B0F14] border border-[rgba(255,255,255,0.06)] rounded-lg overflow-hidden">
-            {currentTasks.length === 0 ? (
-              <div className="p-12 text-center text-white/40">No {activeTab} mints</div>
-            ) : (
-              <div className="divide-y divide-[rgba(255,255,255,0.06)]">
-                {currentTasks.map(t => (
-                  <div key={t.id} className="px-4 py-3 hover:bg-white/5 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-1">
-                          <p className="text-white font-medium text-sm">{t.collection?.name || 'Unknown'}</p>
-                          <span className={`text-xs font-medium ${
-                            t.status === 'completed' ? 'text-[#18C964]' : 
-                            t.status === 'failed' ? 'text-[#F31260]' : 
-                            t.status === 'running' ? 'text-[#4F8CFF]' : 
-                            'text-white/40'
-                          }`}>{t.status}</span>
-                        </div>
-                        <p className="text-white/40 text-xs">{t.wallet?.address ? `${t.wallet.address.slice(0,6)}...${t.wallet.address.slice(-4)}` : '—'}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {activeTab === 'failed' && (
-                          <button onClick={() => handleRetry(t.id)} className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
-                            <Play className="w-4 h-4" />
-                          </button>
-                        )}
-                        <button onClick={() => handleDelete(t.id)} className="p-2 text-white/40 hover:text-[#F31260] hover:bg-[#F31260]/10 rounded-lg transition-colors">
-                          <XCircle className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+        <div className="divide-y divide-border">
+          {tasks.map((task) => (
+            <div key={task.collection} className="grid grid-cols-12 gap-4 px-5 py-4">
+              <div className="col-span-5 min-w-0">
+                <p className="truncate font-medium text-text">{task.collection}</p>
+                <p className="mt-1 text-xs text-muted">{task.phase} phase / fee {task.fee}</p>
               </div>
-            )}
+              <div className="col-span-2 hidden md:block">
+                <Badge variant={task.risk === 'Low' ? 'success' : task.risk === 'Medium' ? 'warning' : 'danger'}>{task.status}</Badge>
+              </div>
+              <p className="col-span-2 hidden font-mono text-sm text-muted lg:block">{task.wallet}</p>
+              <p className="col-span-2 hidden font-mono text-sm text-text sm:block">{task.eta}</p>
+              <div className="col-span-7 flex justify-end gap-1 sm:col-span-1">
+                <button className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-white/5 hover:text-text" aria-label={`Start ${task.collection}`}>
+                  <Play className="h-4 w-4" aria-hidden="true" />
+                </button>
+                <button className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-white/5 hover:text-danger" aria-label={`Delete ${task.collection}`}>
+                  <Trash2 className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card className="mt-6 p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-semibold text-text">Execution Queue</h2>
+            <p className="mt-1 text-sm text-muted">No unassigned tasks. New analyses can be staged directly from Analyzer.</p>
           </div>
-        </>
-      )}
+          <Button variant="secondary">
+            <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+            Queue Settings
+          </Button>
+        </div>
+      </Card>
     </div>
   );
 }

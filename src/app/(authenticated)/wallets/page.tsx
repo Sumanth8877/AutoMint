@@ -1,117 +1,64 @@
-'use client';
-import React, { useState, useEffect } from 'react';
-import { Wallet as WalletIcon, Plus, Copy, Trash2, RefreshCw, ExternalLink, AlertCircle } from 'lucide-react';
+import { Copy, ExternalLink, Plus, RefreshCw, ShieldCheck, Wallet } from 'lucide-react';
+import Badge from '@/components/ui/Badge';
+import Button from '@/components/ui/Button';
+import Card from '@/components/ui/Card';
+import { MetricCard } from '@/components/ui/metric-card';
+import { PageHeader } from '@/components/ui/page-header';
+
+const wallets = [
+  { name: 'Primary Mint', address: '0x71c4a1d8e8d7312a9f40c82a', chain: 'Ethereum', balance: '3.42 ETH', health: 'Ready' },
+  { name: 'Base Fast Lane', address: '0xb9f0b0823ac99055118e', chain: 'Base', balance: '1.18 ETH', health: 'Ready' },
+  { name: 'Guarded Reserve', address: '0x42ac8945ef7d001c78fd', chain: 'Ethereum', balance: '0.62 ETH', health: 'Review' },
+];
 
 export default function WalletsPage() {
-  const [wallets, setWallets] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchWallets = async () => {
-    try {
-      const res = await fetch('/api/wallets');
-      if (!res.ok) throw new Error('Failed to fetch wallets');
-      const data = await res.json();
-      if (data.wallets) setWallets(data.wallets);
-    } catch (err) {
-      setError('Failed to load wallets. Please try again.');
-    } finally { setLoading(false); }
-  };
-  useEffect(() => { fetchWallets(); }, []);
-
-  const handleCopy = async (address: string) => {
-    try {
-      await navigator.clipboard.writeText(address);
-    } catch (err) {
-      setError('Failed to copy address');
-    }
-  };
-  const handleRemove = async (id: string) => {
-    try {
-      const res = await fetch('/api/wallets', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
-      if (!res.ok) throw new Error('Failed to remove wallet');
-      fetchWallets();
-    } catch (err) {
-      setError('Failed to remove wallet. Please try again.');
-    }
-  };
-  const handleRefresh = async (id: string) => {
-    try {
-      const res = await fetch(`/api/wallets/${id}/balance`, { method: 'POST' });
-      if (!res.ok) throw new Error('Failed to refresh balance');
-      fetchWallets();
-    } catch (err) {
-      setError('Failed to refresh balance. Please try again.');
-    }
-  };
-
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-semibold text-white mb-2">Wallets</h1>
-          <p className="text-white/60 text-sm">Manage your connected wallets</p>
-        </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-[#4F8CFF] text-white rounded-lg text-sm font-medium hover:bg-[#3D7AE8] transition-colors">
-          <Plus className="w-4 h-4" />
-          Add Wallet
-        </button>
+      <PageHeader
+        eyebrow="Capital"
+        title="Wallets"
+        description="Track wallet funding, network coverage, exposure caps, nonce health, and readiness for automated minting."
+        actions={
+          <Button>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Add Wallet
+          </Button>
+        }
+      />
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <MetricCard label="Total Balance" value="5.22 ETH" detail="Available for active strategies" icon={Wallet} tone="success" />
+        <MetricCard label="Ready Wallets" value="12" detail="2 need review" icon={ShieldCheck} tone="accent" />
+        <MetricCard label="Exposure Used" value="68%" detail="Per-wallet caps enforced" icon={RefreshCw} tone="warning" />
       </div>
 
-      {error && (
-        <div className="mb-6 bg-[#F31260]/10 border border-[#F31260]/20 rounded-lg p-4 flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 text-[#F31260]" />
-          <span className="text-white/60 text-sm">{error}</span>
-        </div>
-      )}
-
-      {loading ? (
-        <div className="bg-[#0B0F14] border border-[rgba(255,255,255,0.06)] rounded-lg p-8">
-          <div className="flex justify-center py-12">
-            <div className="w-6 h-6 rounded-full border-2 border-[#4F8CFF]/30 border-t-[#4F8CFF] animate-spin" />
-          </div>
-        </div>
-      ) : wallets.length === 0 ? (
-        <div className="bg-[#0B0F14] border border-[rgba(255,255,255,0.06)] rounded-lg p-12">
-          <div className="flex flex-col items-center justify-center py-16">
-            <div className="w-16 h-16 rounded-xl bg-[#4F8CFF]/10 border border-[#4F8CFF]/20 flex items-center justify-center mb-4">
-              <WalletIcon className="w-8 h-8 text-[#4F8CFF]" />
-            </div>
-            <h3 className="text-lg font-semibold text-white mb-2">No wallets yet</h3>
-            <p className="text-white/40 text-sm mb-6 max-w-sm text-center">Add your first wallet to get started with automated minting.</p>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {wallets.map(w => (
-            <div key={w.id} className="bg-[#0B0F14] border border-[rgba(255,255,255,0.06)] rounded-lg p-4 hover:border-[rgba(255,255,255,0.12)] transition-colors">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <p className="text-white font-medium">{w.nickname || 'Unnamed Wallet'}</p>
-                    <span className="px-2 py-0.5 bg-white/5 text-white/60 text-xs rounded capitalize">{w.chain}</span>
-                  </div>
-                  <p className="text-white/40 text-sm font-mono">{w.address}</p>
+      <div className="mt-6 grid gap-4">
+        {wallets.map((wallet) => (
+          <Card key={wallet.address} tone="interactive" className="p-5">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center">
+              <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-accent/20 bg-accent/10 text-accent">
+                <Wallet className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="font-semibold text-text">{wallet.name}</h2>
+                  <Badge variant={wallet.health === 'Ready' ? 'success' : 'warning'}>{wallet.health}</Badge>
+                  <Badge>{wallet.chain}</Badge>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => handleCopy(w.address)} className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
-                    <Copy className="w-4 h-4" />
+                <p className="mt-1 truncate font-mono text-sm text-muted">{wallet.address}</p>
+              </div>
+              <p className="font-mono text-lg text-text">{wallet.balance}</p>
+              <div className="flex gap-1">
+                {[Copy, RefreshCw, ExternalLink].map((Icon, index) => (
+                  <button key={index} className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-white/5 hover:text-text" aria-label="Wallet action">
+                    <Icon className="h-4 w-4" aria-hidden="true" />
                   </button>
-                  <button onClick={() => handleRefresh(w.id)} className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
-                    <RefreshCw className="w-4 h-4" />
-                  </button>
-                  <button className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
-                    <ExternalLink className="w-4 h-4" />
-                  </button>
-                  <button onClick={() => handleRemove(w.id)} className="p-2 text-white/40 hover:text-[#F31260] hover:bg-[#F31260]/10 rounded-lg transition-colors">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+                ))}
               </div>
             </div>
-          ))}
-        </div>
-      )}
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }

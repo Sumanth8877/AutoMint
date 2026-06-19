@@ -1,9 +1,7 @@
-'use client';
-
 import React from 'react';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'success';
   size?: 'sm' | 'md' | 'lg';
   loading?: boolean;
   children: React.ReactNode;
@@ -19,23 +17,25 @@ export default function Button({
   ...props
 }: ButtonProps) {
   const baseStyles =
-    'inline-flex items-center justify-center font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4F8CFF]/50';
+    'inline-flex shrink-0 items-center justify-center font-medium rounded-lg transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60';
 
   const variants = {
     primary:
-      'bg-[#4F8CFF] text-white hover:bg-[#3D7AE8] active:bg-[#2B6AD6]',
+      'bg-primary text-white hover:bg-primary-hover shadow-lg shadow-primary/20',
     secondary:
-      'bg-[#0B0F14] text-white border border-[rgba(255,255,255,0.06)] hover:border-[rgba(255,255,255,0.12)]',
+      'bg-white/5 text-text border border-border hover:bg-white/10 hover:border-white/15',
     ghost:
-      'bg-transparent text-white/60 hover:text-white hover:bg-white/5',
+      'bg-transparent text-muted hover:text-text hover:bg-white/5',
     danger:
-      'bg-[#F31260] text-white hover:bg-[#D10E52] active:bg-[#AF0A44]',
+      'bg-danger text-white hover:bg-danger/90',
+    success:
+      'bg-success text-white hover:bg-success/90',
   };
 
   const sizes = {
-    sm: 'px-3 py-1.5 text-sm gap-1.5',
-    md: 'px-4 py-2 text-sm gap-2',
-    lg: 'px-6 py-3 text-base gap-2',
+    sm: 'h-8 px-3 text-xs gap-1.5',
+    md: 'h-10 px-4 text-sm gap-2',
+    lg: 'h-12 px-5 text-sm gap-2.5',
   };
 
   return (

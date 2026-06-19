@@ -1,90 +1,64 @@
-'use client';
+import { Bell, ChevronRight, KeyRound, Lock, Palette, Radio, Settings, ShieldCheck, SlidersHorizontal, User, Wallet } from 'lucide-react';
+import Badge from '@/components/ui/Badge';
+import Card from '@/components/ui/Card';
+import { PageHeader } from '@/components/ui/page-header';
 
-import React from 'react';
-import { ChevronRight } from 'lucide-react';
-
-const settingsCategories = [
-  {
-    title: 'General',
-    items: [
-      { label: 'Profile', description: 'Manage your account information' },
-      { label: 'Appearance', description: 'Theme and display preferences' },
-      { label: 'Language', description: 'Select your preferred language' },
-    ],
-  },
-  {
-    title: 'Wallets',
-    items: [
-      { label: 'Connected Wallets', description: 'Manage your wallet connections' },
-      { label: 'Default Wallet', description: 'Set your primary wallet' },
-      { label: 'Network Preferences', description: 'Configure chain settings' },
-    ],
-  },
-  {
-    title: 'RPC Providers',
-    items: [
-      { label: 'Provider Settings', description: 'Configure RPC endpoints' },
-      { label: 'Gas Optimization', description: 'Gas price strategies' },
-      { label: 'Timeout Settings', description: 'Request timeout configuration' },
-    ],
-  },
-  {
-    title: 'Execution',
-    items: [
-      { label: 'Mint Settings', description: 'Default mint parameters' },
-      { label: 'Retry Logic', description: 'Failure retry configuration' },
-      { label: 'Gas Limits', description: 'Custom gas limit settings' },
-    ],
-  },
-  {
-    title: 'Notifications',
-    items: [
-      { label: 'Alert Preferences', description: 'Configure notification types' },
-      { label: 'Email Notifications', description: 'Manage email alerts' },
-      { label: 'Push Notifications', description: 'Browser notification settings' },
-    ],
-  },
-  {
-    title: 'Security',
-    items: [
-      { label: 'Two-Factor Auth', description: 'Enable 2FA for added security' },
-      { label: 'Session Management', description: 'Manage active sessions' },
-      { label: 'API Keys', description: 'Manage your API access keys' },
-    ],
-  },
+const groups = [
+  { title: 'General', icon: User, items: ['Profile', 'Appearance', 'Language'] },
+  { title: 'Wallets', icon: Wallet, items: ['Connected Wallets', 'Default Wallet', 'Network Preferences'] },
+  { title: 'RPC Providers', icon: Radio, items: ['Provider Settings', 'Gas Optimization', 'Timeout Settings'] },
+  { title: 'Execution', icon: SlidersHorizontal, items: ['Mint Defaults', 'Retry Logic', 'Risk Gates'] },
+  { title: 'Notifications', icon: Bell, items: ['Alert Preferences', 'Email Notifications', 'Push Notifications'] },
+  { title: 'Security', icon: Lock, items: ['Two-Factor Auth', 'Session Management', 'API Keys'] },
 ];
+
+const icons = [Palette, Wallet, Radio, ShieldCheck, Bell, KeyRound];
 
 export default function SettingsPage() {
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-white mb-2">Settings</h1>
-        <p className="text-white/60 text-sm">Configure your AutoMint preferences</p>
+      <PageHeader
+        eyebrow="Workspace"
+        title="Settings"
+        description="Configure preferences, risk controls, notification routing, wallet behavior, and API access."
+      />
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        {groups.map((group, index) => {
+          const GroupIcon = group.icon;
+          const ItemIcon = icons[index];
+
+          return (
+            <Card key={group.title} tone="interactive" className="overflow-hidden">
+              <div className="flex items-center justify-between border-b border-border p-5">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-accent/20 bg-accent/10 text-accent">
+                    <GroupIcon className="h-5 w-5" aria-hidden="true" />
+                  </div>
+                  <h2 className="font-semibold text-text">{group.title}</h2>
+                </div>
+                <Badge>{group.items.length} items</Badge>
+              </div>
+              <div className="divide-y divide-border">
+                {group.items.map((item) => (
+                  <button key={item} className="flex w-full items-center gap-3 px-5 py-4 text-left hover:bg-white/5">
+                    <ItemIcon className="h-4 w-4 text-muted" aria-hidden="true" />
+                    <span className="text-sm font-medium text-text">{item}</span>
+                    <ChevronRight className="ml-auto h-4 w-4 text-muted" aria-hidden="true" />
+                  </button>
+                ))}
+              </div>
+            </Card>
+          );
+        })}
       </div>
 
-      <div className="space-y-8">
-        {settingsCategories.map((category, categoryIndex) => (
-          <div key={categoryIndex}>
-            <h2 className="text-white/40 text-xs font-semibold uppercase tracking-wide mb-4">
-              {category.title}
-            </h2>
-            <div className="bg-[#0B0F14] border border-[rgba(255,255,255,0.06)] rounded-lg overflow-hidden">
-              {category.items.map((item, itemIndex) => (
-                <button
-                  key={itemIndex}
-                  className="w-full flex items-center justify-between px-4 py-4 hover:bg-white/5 transition-colors border-b border-[rgba(255,255,255,0.06)] last:border-0 group"
-                >
-                  <div className="text-left">
-                    <p className="text-white text-sm font-medium">{item.label}</p>
-                    <p className="text-white/40 text-xs mt-0.5">{item.description}</p>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-white/20 group-hover:text-white/40 transition-colors" />
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
+      <Card className="mt-6 p-5">
+        <div className="flex items-center gap-3">
+          <Settings className="h-5 w-5 text-accent" aria-hidden="true" />
+          <p className="text-sm text-muted">Security-sensitive settings should be backed by server-side authorization checks, not navigation visibility alone.</p>
+        </div>
+      </Card>
     </div>
   );
 }
