@@ -1,12 +1,14 @@
 import 'server-only';
 
 import { createPublicClient, http } from 'viem';
-import type { PublicClient } from 'viem';
+import type { HttpTransport, PublicClient } from 'viem';
 import { mainnet, base, polygon } from 'viem/chains';
 
 type SupportedChain = 'ethereum' | 'base' | 'polygon';
+type SupportedViemChain = typeof mainnet | typeof base | typeof polygon;
+type ChainClient = PublicClient<HttpTransport, SupportedViemChain>;
 
-const clients: Partial<Record<SupportedChain, PublicClient>> = {};
+const clients: Partial<Record<SupportedChain, ChainClient>> = {};
 
 const alchemyUrl = (chainId: number) => {
   const apiKey = process.env.ALCHEMY_API_KEY;
@@ -27,7 +29,7 @@ const clientConfig = {
   polygon: { chain: polygon, chainId: 137 },
 };
 
-export function getClient(chain: string): PublicClient {
+export function getClient(chain: string): ChainClient {
   if (!isSupportedChain(chain)) throw new Error(`Unsupported chain: ${chain}`);
 
   const existing = clients[chain];
