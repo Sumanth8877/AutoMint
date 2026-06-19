@@ -13,7 +13,7 @@ export default function HomePage() {
     setLoading(true);
     setAnalysis(null);
     await new Promise(r => setTimeout(r, 1800));
-    setAnalysis({ status: 'live', collection: 'Bored Ape Yacht Club', chain: 'Ethereum', address: '0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D', price: '0.05', supply: '9,950 / 10,000' });
+    setAnalysis({ status: 'live', collection: 'Bored Ape Yacht Club', chain: 'Ethereum', address: '0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D', price: '0.05', supply: '9,950 / 10,000', start: '2025-01-15T16:00:00Z', end: '2025-01-15T17:00:00Z', confidence: 98 });
     setLoading(false);
   };
 
@@ -28,19 +28,12 @@ export default function HomePage() {
                 Mint NFTs Before Everyone Else
               </h1>
               <p className="mt-6 text-lg sm:text-xl text-slate-400 max-w-[700px] mx-auto leading-relaxed break-words">
-                Paste a mint URL. AutoMint detects requirements, checks mint status, and executes instantly when eligible.
+                Paste any mint URL. AutoMint discovers requirements, prepares execution, and mints instantly when eligible.
               </p>
             </div>
 
-            <div className="mt-10 max-w-[800px] mx-auto">
+            <div className="mt-10 max-w-[900px] mx-auto">
               <MintUrlInput onAnalyze={handleAnalyze} loading={loading} />
-            </div>
-
-            <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-8 mt-7 text-sm text-slate-400">
-              <span className="flex items-center gap-2"><CheckCircle2 size={16} className="text-green-500" /> Auto Detect Collection</span>
-              <span className="flex items-center gap-2"><CheckCircle2 size={16} className="text-green-500" /> Verify Requirements</span>
-              <span className="flex items-center gap-2"><CheckCircle2 size={16} className="text-green-500" /> Mint Instantly If Live</span>
-              <span className="flex items-center gap-2"><CheckCircle2 size={16} className="text-green-500" /> Schedule If Upcoming</span>
             </div>
 
             {loading && (
@@ -58,17 +51,14 @@ export default function HomePage() {
             )}
 
             {analysis && !loading && (
-              <div className="max-w-[640px] mx-auto mt-14 rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl p-5 sm:p-6">
+              <div className="max-w-[640px] mx-auto mt-14 rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl p-5 sm:p-6 animate-fadeIn">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div>
                     <p className="text-lg font-bold text-white">{analysis.collection}</p>
-                    <p className="text-sm text-slate-400 mt-0.5 break-all">
-                      {analysis.address.slice(0,10)}...{analysis.address.slice(-8)} · {analysis.chain}
-                    </p>
+                    <p className="text-sm text-slate-400 mt-0.5 break-all">{analysis.address.slice(0,10)}...{analysis.address.slice(-8)} · {analysis.chain}</p>
                   </div>
                   <span className="inline-flex w-fit items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-semibold uppercase tracking-wide bg-green-500/10 text-green-500 border border-green-500/20">
-                    <span className="w-[6px] h-[6px] rounded-full bg-green-500 animate-pulse" />
-                    Live
+                    <span className="w-[6px] h-[6px] rounded-full bg-green-500 animate-pulse" /> Live
                   </span>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5">
@@ -81,16 +71,16 @@ export default function HomePage() {
                     <p className="text-sm font-semibold text-white mt-0.5">{analysis.supply}</p>
                   </div>
                   <div className="rounded-xl bg-white/5 border border-white/10 p-3">
-                    <p className="text-[11px] text-slate-500 uppercase tracking-wide">Chain</p>
-                    <p className="text-sm font-semibold text-white mt-0.5">{analysis.chain}</p>
+                    <p className="text-[11px] text-slate-500 uppercase tracking-wide">Confidence</p>
+                    <p className="text-sm font-semibold text-white mt-0.5">{analysis.confidence}%</p>
                   </div>
                   <div className="rounded-xl bg-white/5 border border-white/10 p-3">
                     <p className="text-[11px] text-slate-500 uppercase tracking-wide">Status</p>
-                    <p className="text-sm font-semibold text-green-500 mt-0.5">Live</p>
+                    <p className="text-sm font-semibold text-green-500 mt-0.5">LIVE</p>
                   </div>
                 </div>
                 <button className="mt-6 w-full py-5 rounded-2xl text-base font-bold transition-all duration-300 hover:-translate-y-0.5" style={{background:'linear-gradient(135deg, #22C55E, #16A34A)', color:'#FFFFFF', boxShadow:'0 10px 30px rgba(34,197,94,0.35)'}}>
-                  <span className="inline-flex items-center justify-center gap-2">⚡ MINT NOW</span>
+                  ⚡ MINT NOW
                 </button>
               </div>
             )}
