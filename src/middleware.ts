@@ -6,7 +6,7 @@ export default clerkMiddleware(async (auth, request) => {
   if (!userId) return;
 
   try {
-    await syncUser();
+    await syncUser(userId);
   } catch (error) {
     console.error('User sync failed:', error);
   }

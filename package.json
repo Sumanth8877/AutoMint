@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^7.5.5",
-    "@neondatabase/serverless": "^1.1.0",
+    "@neondatabase/serverless": "^0.10.0",
     "@sentry/nextjs": "^10.58.0",
     "@upstash/redis": "^1.38.0",
     "drizzle-orm": "^0.38.4",
