@@ -63,8 +63,8 @@ export default function CollectionsPage() {
     <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Collections</h1>
-          <p className="text-muted mt-1">Manage your NFT collections</p>
+          <h1 className="text-2xl sm:text-3xl font-semibold text-white">Collections</h1>
+          <p className="text-white/60 mt-1">Manage your NFT collections</p>
         </div>
         <Button variant="primary" size="md" onClick={() => setShowModal(true)}>
           <Plus size={16} /> Add Collection
@@ -76,31 +76,31 @@ export default function CollectionsPage() {
       ) : collections.length === 0 ? (
         <Card className="p-12">
           <div className="flex flex-col items-center justify-center py-16">
-            <div className="w-16 h-16 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-4">
-              <Folders size={28} className="text-muted" />
+            <div className="w-16 h-16 rounded-lg bg-[#4F8CFF]/10 border border-[#4F8CFF]/20 flex items-center justify-center mb-4">
+              <Folders size={28} className="text-white/40" />
             </div>
             <h3 className="text-lg font-semibold text-white mb-2">No collections added</h3>
-            <p className="text-muted text-sm mb-6 text-center max-w-sm">Add your first collection to start tracking.</p>
+            <p className="text-white/40 text-sm mb-6 text-center max-w-sm">Add your first collection to start tracking.</p>
             <Button variant="primary" size="md" onClick={() => setShowModal(true)}><Plus size={16} /> Add Collection</Button>
           </div>
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {collections.map((c) => (
-            <Card key={c.id} className="p-5 hover:border-blue-500/25 transition-all duration-300">
+            <Card key={c.id} className="p-5 hover:border-[rgba(255,255,255,0.12)] transition-all duration-200">
               <div className="flex items-start justify-between mb-4">
-                <div className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20">
-                  <Folders size={18} className="text-blue-500" />
+                <div className="p-2.5 rounded-lg bg-[#4F8CFF]/10 border border-[#4F8CFF]/20">
+                  <Folders size={18} className="text-[#4F8CFF]" />
                 </div>
-                <button onClick={() => handleDelete(c.id)} className="p-2 rounded-lg text-slate-500 hover:text-danger hover:bg-red-500/10 transition-all">
+                <button onClick={() => handleDelete(c.id)} className="p-2 rounded-lg text-white/40 hover:text-[#F31260] hover:bg-[#F31260]/10 transition-all">
                   <Trash2 size={16} />
                 </button>
               </div>
               <h3 className="text-sm font-semibold text-white mb-1 truncate">{c.name}</h3>
-              <p className="text-xs text-slate-400 font-mono mb-3">{c.contractAddress.slice(0, 10)}...{c.contractAddress.slice(-6)}</p>
+              <p className="text-xs text-white/40 font-mono mb-3">{c.contractAddress.slice(0, 10)}...{c.contractAddress.slice(-6)}</p>
               <div className="flex items-center justify-between">
                 <Badge variant="info">{CHAIN_NAMES[c.chain as keyof typeof CHAIN_NAMES] || c.chain}</Badge>
-                <span className="text-xs text-slate-500">{c.mintStatus}</span>
+                <span className="text-xs text-white/40">{c.mintStatus}</span>
               </div>
             </Card>
           ))}
@@ -109,17 +109,17 @@ export default function CollectionsPage() {
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
-          <div className="w-full max-w-md rounded-2xl p-6" style={{ background: 'rgba(17,24,39,0.98)', border: '1px solid rgba(59,130,246,0.15)' }}>
+          <div className="w-full max-w-md rounded-lg p-6 bg-[#0B0F14] border border-[rgba(255,255,255,0.06)]">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-white" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Add Collection</h3>
-              <button onClick={() => setShowModal(false)} className="text-slate-500 hover:text-white p-1"><X size={20} /></button>
+              <h3 className="text-lg font-semibold text-white">Add Collection</h3>
+              <button onClick={() => setShowModal(false)} className="text-white/60 hover:text-white p-1"><X size={20} /></button>
             </div>
             <form onSubmit={handleAdd} className="space-y-4">
               <Input label="Collection Name" name="name" placeholder="Bored Ape Yacht Club" required />
               <Input label="Contract Address" name="contractAddress" placeholder="0x..." required />
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Chain</label>
-                <select name="chain" className="w-full bg-[#0B1120] border border-[rgba(59,130,246,0.15)] rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-blue-500/50">
+                <label className="block text-sm font-medium text-white/60 mb-2">Chain</label>
+                <select name="chain" className="w-full bg-[#05070A] border border-[rgba(255,255,255,0.06)] rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#4F8CFF]">
                   <option value="ethereum">Ethereum</option>
                   <option value="base">Base</option>
                   <option value="polygon">Polygon</option>
