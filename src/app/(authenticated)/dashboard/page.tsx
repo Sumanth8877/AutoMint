@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Zap, Clock, CheckCircle2, XCircle, Activity } from 'lucide-react';
+import { Activity, Zap, Clock, CheckCircle2, XCircle, TrendingUp } from 'lucide-react';
 import Card from '@/components/ui/Card';
 import MintUrlInput from '@/components/mint/MintUrlInput';
 
@@ -65,34 +65,22 @@ export default function DashboardPage() {
         )}
       </Card>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-muted uppercase tracking-wider">Active Mints</p>
-            <Zap size={16} className="text-green-500" />
-          </div>
-          <p className="text-xl font-bold text-white mt-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{active.length}</p>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <Card className="p-5">
+          <p className="text-[11px] font-medium text-muted uppercase tracking-wider">Active Mints</p>
+          <p className="text-2xl font-bold text-white mt-2">{active.length}</p>
         </Card>
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-muted uppercase tracking-wider">Upcoming</p>
-            <Clock size={16} className="text-blue-500" />
-          </div>
-          <p className="text-xl font-bold text-white mt-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{upcoming.length}</p>
+        <Card className="p-5">
+          <p className="text-[11px] font-medium text-muted uppercase tracking-wider">Upcoming</p>
+          <p className="text-2xl font-bold text-white mt-2">{upcoming.length}</p>
         </Card>
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-muted uppercase tracking-wider">Completed</p>
-            <CheckCircle2 size={16} className="text-green-500" />
-          </div>
-          <p className="text-xl font-bold text-white mt-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{completed.length}</p>
+        <Card className="p-5">
+          <p className="text-[11px] font-medium text-muted uppercase tracking-wider">Completed</p>
+          <p className="text-2xl font-bold text-white mt-2">{completed.length}</p>
         </Card>
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-muted uppercase tracking-wider">Failed</p>
-            <XCircle size={16} className="text-red-500" />
-          </div>
-          <p className="text-xl font-bold text-white mt-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{failed.length}</p>
+        <Card className="p-5">
+          <p className="text-[11px] font-medium text-muted uppercase tracking-wider">Failed</p>
+          <p className="text-2xl font-bold text-white mt-2">{failed.length}</p>
         </Card>
       </div>
 
