@@ -12,6 +12,7 @@
   --color-warning: #F59E0B;
   --color-danger: #EF4444;
   --color-text: #F8FAFC;
+  --color-secondary: #CBD5E1;
   --color-muted: #94A3B8;
   --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
@@ -82,6 +83,128 @@ a {
   background: linear-gradient(180deg, rgba(17, 24, 39, 0.96), rgba(15, 23, 42, 0.92));
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+}
+
+.clerk-automint,
+.cl-card,
+.cl-modalContent,
+.cl-userButtonPopoverCard {
+  color-scheme: dark;
+  --clerk-color-primary: #4F46E5;
+  --clerk-color-primary-foreground: #F8FAFC;
+  --clerk-color-background: #111827;
+  --clerk-color-foreground: #F8FAFC;
+  --clerk-color-input: #050816;
+  --clerk-color-input-foreground: #F8FAFC;
+  --clerk-color-muted: #0F172A;
+  --clerk-color-muted-foreground: #CBD5E1;
+  --clerk-color-neutral: #94A3B8;
+  --clerk-color-border: rgba(255, 255, 255, 0.08);
+  --clerk-color-ring: #06B6D4;
+  --clerk-color-modal-backdrop: rgba(5, 8, 22, 0.72);
+  --clerk-color-input-background: #050816;
+  --clerk-color-input-text: #F8FAFC;
+  --clerk-color-text: #F8FAFC;
+  --clerk-color-text-secondary: #CBD5E1;
+}
+
+.cl-card,
+.cl-modalContent,
+.cl-userButtonPopoverCard {
+  background: #111827;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #F8FAFC;
+}
+
+.cl-userButtonPopoverCard {
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.58);
+}
+
+.cl-modalContent {
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.56);
+}
+
+.cl-card :where(
+  .cl-headerTitle,
+  .cl-formHeaderTitle,
+  .cl-pageTitle,
+  .cl-profileSectionTitle,
+  .cl-userPreviewMainIdentifier,
+  .cl-accordionTriggerButton,
+  .cl-socialButtonsBlockButtonText,
+  .cl-alternativeMethodsBlockButtonText
+),
+.cl-modalContent :where(
+  .cl-headerTitle,
+  .cl-formHeaderTitle,
+  .cl-pageTitle,
+  .cl-profileSectionTitle,
+  .cl-userPreviewMainIdentifier,
+  .cl-accordionTriggerButton,
+  .cl-socialButtonsBlockButtonText,
+  .cl-alternativeMethodsBlockButtonText
+),
+.cl-userButtonPopoverCard :where(
+  .cl-userPreviewMainIdentifier,
+  .cl-userButtonPopoverActionButtonText
+) {
+  color: #F8FAFC;
+}
+
+.cl-card :where(
+  .cl-headerSubtitle,
+  .cl-formFieldLabel,
+  .cl-footerActionText,
+  .cl-dividerText,
+  .cl-profileSectionContent,
+  .cl-pageDescription,
+  .cl-accordionContent,
+  .cl-identityPreviewText,
+  .cl-table,
+  .cl-tableCell
+),
+.cl-modalContent :where(
+  .cl-headerSubtitle,
+  .cl-formFieldLabel,
+  .cl-footerActionText,
+  .cl-dividerText,
+  .cl-profileSectionContent,
+  .cl-pageDescription,
+  .cl-accordionContent,
+  .cl-identityPreviewText,
+  .cl-table,
+  .cl-tableCell
+),
+.cl-userButtonPopoverCard :where(
+  .cl-userPreviewSecondaryIdentifier,
+  .cl-userButtonPopoverActionButton,
+  .cl-userButtonPopoverCustomItemButton
+) {
+  color: #CBD5E1;
+}
+
+.cl-card :where(.cl-formFieldHintText, .cl-tableHead, .cl-navbarButtonIcon),
+.cl-modalContent :where(.cl-formFieldHintText, .cl-tableHead, .cl-navbarButtonIcon) {
+  color: #94A3B8;
+}
+
+.cl-card :where(input, textarea, select, .cl-formFieldInput),
+.cl-modalContent :where(input, textarea, select, .cl-formFieldInput) {
+  background: #050816;
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #F8FAFC;
+}
+
+.cl-card :where(input, textarea, select, .cl-formFieldInput)::placeholder,
+.cl-modalContent :where(input, textarea, select, .cl-formFieldInput)::placeholder {
+  color: #94A3B8;
+  opacity: 1;
+}
+
+.cl-card :where(button, a),
+.cl-modalContent :where(button, a),
+.cl-userButtonPopoverCard :where(button, a) {
+  outline-color: #06B6D4;
 }
 
 .text-balance {
