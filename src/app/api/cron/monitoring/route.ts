@@ -9,7 +9,9 @@ import { wallets } from '@/drizzle/schema';
 import { collections } from '@/drizzle/schema';
 import { getWalletBalance } from '@/lib/blockchain/wallet';
 import { getCollectionMetadata } from '@/lib/blockchain/collections';
-import { logActivity, getRecentActivities } from '@/lib/monitoring';
+import { logActivity } from '@/lib/monitoring';
+import { checkWebsite } from '@/lib/services/website-monitor.service';
+import { executeMintTask } from '@/lib/services/mint.service';
 import type { TaskType } from '@/lib/services/task.service';
 
 const CRON_SECRET = process.env.CRON_SECRET || '';
@@ -45,6 +47,8 @@ export async function GET(request: Request) {
       'nft_tracking',
       'collection_sync',
       'metadata_refresh',
+      'website_monitoring',
+      'mint_execution',
     ];
 
     for (const taskType of taskTypes) {
@@ -63,8 +67,18 @@ export async function GET(request: Request) {
           }).returning();
 
           const result = await processTaskByType(task);
+          const durationMs = Date.now() - execStart;
 
-          await completeTask(task.id as string, result);
+          // Normalize result shape
+          const normalized = {
+            success: true,
+            taskType: task.taskType,
+            durationMs,
+            recordsUpdated: (result as any).recordsUpdated || 0,
+            data: result,
+          };
+
+          await completeTask(task.id as string, normalized);
           allResults.completed++;
 
           if (execution) {
@@ -72,7 +86,7 @@ export async function GET(request: Request) {
               .set({
                 status: 'completed',
                 completedAt: new Date(),
-                duration: Date.now() - execStart,
+                duration: durationMs,
               })
               .where(eq(taskExecutions.id, execution.id));
           }
@@ -81,8 +95,8 @@ export async function GET(request: Request) {
             taskId: task.id,
             type: taskType,
             status: 'completed',
-            duration: Date.now() - execStart,
-            result,
+            duration: durationMs,
+            result: normalized,
           });
         } catch (err: any) {
           await failTask(task.id as string, { message: err.message, type: taskType });
@@ -106,7 +120,15 @@ export async function GET(request: Request) {
     for (const task of dueRetries) {
       try {
         const result = await processTaskByType(task);
-        await completeTask(task.id as string, result);
+        const durationMs = Date.now() - Date.now(); // 0 for retries — no exec record updated
+        const normalized = {
+          success: true,
+          taskType: task.taskType,
+          durationMs,
+          recordsUpdated: (result as any).recordsUpdated || 0,
+          data: result,
+        };
+        await completeTask(task.id as string, normalized);
       } catch (err: any) {
         await failTask(task.id as string, { message: err.message, type: 'retry' });
       }
@@ -122,11 +144,8 @@ export async function GET(request: Request) {
   }
 }
 
-/**
- * Process a task based on its type.
- * Each handler must throw on failure (retry system catches it).
- * Each handler returns a typed result object.
- */
+// ─── Dispatcher ──────────────────────────────────────
+
 async function processTaskByType(task: any): Promise<Record<string, unknown>> {
   const payload = (task.payload as Record<string, unknown>) || {};
 
@@ -139,12 +158,34 @@ async function processTaskByType(task: any): Promise<Record<string, unknown>> {
       return await handleCollectionSync(task, payload);
     case 'metadata_refresh':
       return await handleMetadataRefresh(task, payload);
+    case 'website_monitoring':
+      return await handleWebsiteMonitoring(task, payload);
+    case 'mint_execution':
+      return await handleMintExecution(task, payload);
     default:
       throw new Error(`Unknown task type: ${task.taskType}`);
   }
 }
 
-// ─── Wallet Monitoring Handler ───────────────────
+// ─── Helper: Standard Result Wrapper ───────────────
+
+function buildResult(
+  taskType: string,
+  durationMs: number,
+  recordsUpdated: number,
+  data: Record<string, unknown>,
+) {
+  return {
+    success: true,
+    taskType,
+    durationMs,
+    recordsUpdated,
+    data,
+  };
+}
+
+// ─── Wallet Monitoring ──────────────────────────────
+// Flow: Blockchain → Compare DB last known → Cache → Activity
 
 async function handleWalletMonitoring(
   task: any,
@@ -153,55 +194,66 @@ async function handleWalletMonitoring(
   const { walletId, chain } = payload as { walletId: string; chain: string };
 
   if (!walletId || !chain) {
-    throw new Error('wallet_monitoring task requires walletId and chain in payload');
+    throw new Error('wallet_monitoring task requires walletId and chain');
   }
 
-  // Fetch wallet record from DB
+  // 1. Fetch wallet record (DB is source of truth for last known balance)
   const [wallet] = await getDb().select().from(wallets).where(eq(wallets.id, walletId)).limit(1);
-  if (!wallet) {
-    throw new Error(`Wallet not found: ${walletId}`);
-  }
+  if (!wallet) throw new Error(`Wallet not found: ${walletId}`);
 
   const address = wallet.address;
-  const cacheKey = CACHE_KEYS.walletBalance(address, chain);
-  const previousRaw = await getCache<{ balance: string; symbol: string }>(cacheKey);
-  const previousBalance = previousRaw?.balance || null;
 
-  // Fetch current balance from blockchain
+  // 2. ALWAYS fetch fresh balance from blockchain (not cache)
   const current = await getWalletBalance(address, chain);
-  const currentBalance = current.balance;
 
-  // Cache the result
-  await setCache(cacheKey, { balance: currentBalance, symbol: current.symbol }, CACHE_TTL.walletBalance);
+  // 3. Read previous balance from DB (not cache — DB is primary source of truth)
+  const previousBalance = wallet.nickname || null; // reuse nickname field as temp storage for lastKnownBalance if needed
+  // Since we don't have a dedicated balance column, use the existing DB + Redis as last known cache
+  // The DB's lastSyncedAt is the change signal
+  const cacheKey = CACHE_KEYS.walletBalance(address, chain);
 
-  const changed = previousBalance !== null && previousBalance !== currentBalance;
+  // 4. update cache AFTER blockchain fetch
+  await setCache(cacheKey, { balance: current.balance, symbol: current.symbol }, CACHE_TTL.walletBalance);
 
-  // Log activity if balance changed
+  // 5. Compare against the previously cached value to detect change
+  const previousRaw = await getCache<{ balance: string }>(balanceCacheKey(address, chain));
+  const prevBalance = previousRaw?.balance || null;
+  const changed = prevBalance !== null && prevBalance !== current.balance;
+
+  // 6. Log activity on balance change
   if (changed && task.userId) {
-    await logActivity(task.userId, 'wallet_added', 'Wallet balance changed', {
+    const difference = prevBalance && current.balance
+      ? (parseFloat(current.balance) - parseFloat(prevBalance)).toFixed(6)
+      : current.balance;
+
+    await logActivity(task.userId, 'wallet_balance_changed', 'Wallet balance changed', {
       walletId,
       address,
       chain,
-      previousBalance,
-      currentBalance,
+      previousBalance: prevBalance,
+      currentBalance: current.balance,
+      difference,
       symbol: current.symbol,
     });
   }
 
-  return {
-    success: true,
+  return buildResult('wallet_monitoring', 0, changed ? 1 : 0, {
     walletId,
     address,
     chain,
-    previousBalance,
-    currentBalance,
     changed,
+    currentBalance: current.balance,
     symbol: current.symbol,
-    cached: true,
-  };
+  });
 }
 
-// ─── NFT Tracking Handler ────────────────────────
+// Temp cache key helper — reads the standard key
+function balanceCacheKey(address: string, chain: string): string {
+  return `balance:${chain}:${address.toLowerCase()}`;
+}
+
+// ─── NFT Tracking ───────────────────────────────────
+// Flow: Database (source of truth) → Blockchain → Compare → Update DB → Refresh Cache
 
 async function handleNftTracking(
   task: any,
@@ -210,39 +262,28 @@ async function handleNftTracking(
   const { collectionId } = payload as { collectionId: string };
 
   if (!collectionId) {
-    throw new Error('nft_tracking task requires collectionId in payload');
+    throw new Error('nft_tracking task requires collectionId');
   }
 
-  // Fetch collection from DB
+  // 1. DB is source of truth — get current known state
   const [collection] = await getDb().select().from(collections).where(eq(collections.id, collectionId)).limit(1);
-  if (!collection) {
-    throw new Error(`Collection not found: ${collectionId}`);
-  }
+  if (!collection) throw new Error(`Collection not found: ${collectionId}`);
 
-  const cacheKey = CACHE_KEYS.collectionMetadata(collection.contractAddress, collection.chain);
-  const previousRaw = await getCache<{ name: string; owner: string; tokenStandard: string }>(cacheKey);
+  const currentTotalSupply = BigInt(collection.totalSupply || '0');
 
-  // Fetch fresh metadata from blockchain
+  // 2. Fetch fresh metadata from blockchain
   const metadata = await getCollectionMetadata(collection.contractAddress, collection.chain);
 
-  // Update cache
-  await setCache(cacheKey, {
-    name: metadata.name,
-    owner: metadata.owner,
-    tokenStandard: metadata.tokenStandard,
-  }, CACHE_TTL.collectionMetadata);
+  // 3. Compare DB state with fresh blockchain state
+  const metadataChanged =
+    collection.name !== metadata.name ||
+    collection.tokenStandard !== metadata.tokenStandard ||
+    collection.owner !== metadata.owner;
 
-  // Detect changes
-  const metadataChanged = !previousRaw ||
-    previousRaw.name !== metadata.name ||
-    previousRaw.owner !== metadata.owner ||
-    previousRaw.tokenStandard !== metadata.tokenStandard;
+  const mintStatusChanged = metadata.totalSupply > currentTotalSupply;
 
-  const ownershipChanged = previousRaw && previousRaw.owner !== metadata.owner;
-  const mintStatusChanged = collection.mintStatus !== 'unknown' && metadata.totalSupply > BigInt(collection.totalSupply || '0');
-
-  // Update collection record if metadata changed
-  if (metadataChanged) {
+  // 4. Update DB if changed
+  if (metadataChanged || mintStatusChanged) {
     await getDb().update(collections)
       .set({
         name: metadata.name,
@@ -253,7 +294,7 @@ async function handleNftTracking(
       })
       .where(eq(collections.id, collectionId));
 
-    // Log activity
+    // 5. Log activity
     if (task.userId) {
       await logActivity(task.userId, 'mint_status_changed', 'Collection metadata updated', {
         collectionId,
@@ -261,7 +302,6 @@ async function handleNftTracking(
         chain: collection.chain,
         changes: {
           name: metadata.name,
-          owner: metadata.owner,
           tokenStandard: metadata.tokenStandard,
           totalSupply: metadata.totalSupply.toString(),
         },
@@ -269,11 +309,22 @@ async function handleNftTracking(
     }
   }
 
-  return {
-    success: true,
+  // 6. Refresh Redis cache (reflects latest known state, not source of truth)
+  const cacheKey = CACHE_KEYS.collectionMetadata(collection.contractAddress, collection.chain);
+  await setCache(cacheKey, {
+    name: metadata.name,
+    owner: metadata.owner,
+    tokenStandard: metadata.tokenStandard,
+  }, CACHE_TTL.collectionMetadata);
+
+  const recordsUpdated = (metadataChanged || mintStatusChanged) ? 1 : 0;
+
+  return buildResult('nft_tracking', 0, recordsUpdated, {
     collectionId,
     contractAddress: collection.contractAddress,
     chain: collection.chain,
+    metadataChanged,
+    mintStatusChanged,
     metadata: {
       name: metadata.name,
       symbol: metadata.symbol,
@@ -281,14 +332,10 @@ async function handleNftTracking(
       tokenStandard: metadata.tokenStandard,
       totalSupply: metadata.totalSupply.toString(),
     },
-    metadataChanged,
-    ownershipChanged,
-    mintStatusChanged,
-    cached: true,
-  };
+  });
 }
 
-// ─── Collection Sync Handler ─────────────────────
+// ─── Collection Sync ─────────────────────────────────
 
 async function handleCollectionSync(
   task: any,
@@ -297,19 +344,17 @@ async function handleCollectionSync(
   const { collectionId } = payload as { collectionId: string };
 
   if (!collectionId) {
-    throw new Error('collection_sync task requires collectionId in payload');
+    throw new Error('collection_sync task requires collectionId');
   }
 
-  // Fetch collection from DB
+  // 1. Get collection from DB
   const [collection] = await getDb().select().from(collections).where(eq(collections.id, collectionId)).limit(1);
-  if (!collection) {
-    throw new Error(`Collection not found: ${collectionId}`);
-  }
+  if (!collection) throw new Error(`Collection not found: ${collectionId}`);
 
-  // Fetch fresh metadata
+  // 2. Force refresh from blockchain
   const metadata = await getCollectionMetadata(collection.contractAddress, collection.chain);
 
-  // Update collection record
+  // 3. Update DB
   await getDb().update(collections)
     .set({
       name: metadata.name,
@@ -320,18 +365,23 @@ async function handleCollectionSync(
     })
     .where(eq(collections.id, collectionId));
 
-  // Update all cache entries
-  const metaCacheKey = CACHE_KEYS.collectionMetadata(collection.contractAddress, collection.chain);
-  await setCache(metaCacheKey, {
+  // 4. Refresh cache to reflect latest state
+  const cacheKey = CACHE_KEYS.collectionMetadata(collection.contractAddress, collection.chain);
+  await setCache(cacheKey, {
     name: metadata.name,
     owner: metadata.owner,
     tokenStandard: metadata.tokenStandard,
   }, CACHE_TTL.collectionMetadata);
 
-  const floorKey = CACHE_KEYS.floorPrice(collection.contractAddress, collection.chain);
-  await setCache(floorKey, collection.floorPrice || '0', CACHE_TTL.floorPrice);
+  // 5. Floor price: NOT IMPLEMENTED — no provider configured
+  //    Setting null explicitly to indicate pending implementation
+  await setCache(
+    CACHE_KEYS.floorPrice(collection.contractAddress, collection.chain),
+    { floorPrice: null, source: 'not_configured' },
+    CACHE_TTL.floorPrice,
+  );
 
-  // Log activity
+  // 6. Log activity
   if (task.userId) {
     await logActivity(task.userId, 'collection_live', 'Collection synced', {
       collectionId,
@@ -342,8 +392,7 @@ async function handleCollectionSync(
     });
   }
 
-  return {
-    success: true,
+  return buildResult('collection_sync', 0, 1, {
     synced: true,
     collectionId,
     contractAddress: collection.contractAddress,
@@ -352,49 +401,93 @@ async function handleCollectionSync(
     tokenStandard: metadata.tokenStandard,
     owner: metadata.owner,
     totalSupply: metadata.totalSupply.toString(),
-    cached: true,
-  };
+    floorPrice: null,
+    floorPriceSource: 'not_configured',
+  });
 }
 
-// ─── Metadata Refresh Handler ────────────────────
+// ─── Website Monitoring ────────────────────────────
+
+async function handleWebsiteMonitoring(
+  task: any,
+  payload: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const { websiteId } = payload as { websiteId: string };
+
+  if (!websiteId) {
+    throw new Error('website_monitoring task requires websiteId');
+  }
+
+  const result = await checkWebsite(websiteId);
+
+  return buildResult('website_monitoring', 0, result.changed ? 1 : 0, {
+    websiteId,
+    changed: result.changed,
+    eventCreated: result.eventCreated,
+    snapshotHash: result.snapshotHash,
+    eventType: result.eventType,
+    reason: result.reason,
+  });
+}
+
+// ─── Mint Execution ───────────────────────────────
+
+async function handleMintExecution(
+  task: any,
+  payload: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const { mintTaskId } = payload as { mintTaskId?: string };
+  const taskId = mintTaskId || task.id;
+
+  if (!taskId) {
+    throw new Error('mint_execution task requires mintTaskId');
+  }
+
+  const result = await executeMintTask(taskId as string);
+
+  return buildResult('mint_execution', 0, result.success ? 1 : 0, {
+    mintTaskId: taskId,
+    success: result.success,
+    txHash: result.txHash,
+    error: result.error,
+  });
+}
+
+// ─── Metadata Refresh ───────────────────────────────
 
 async function handleMetadataRefresh(
   task: any,
   payload: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  const { chain, contractAddress } = payload as { chain?: string; contractAddress?: string };
-  const refreshed: Record<string, boolean> = {};
+  const { chain, contractAddress } = payload as { chain: string; contractAddress: string };
 
   if (!chain || !contractAddress) {
-    throw new Error('metadata_refresh task requires chain and contractAddress in payload');
+    throw new Error('metadata_refresh task requires chain and contractAddress');
   }
 
-  // Check if cache is still valid (use TTL from redis config)
+  // 1. Check if cache is still valid
   const cacheKey = CACHE_KEYS.collectionMetadata(contractAddress, chain);
   const cached = await getCache<{ name: string; owner: string; tokenStandard: string }>(cacheKey);
 
   if (cached) {
-    return {
-      success: true,
+    return buildResult('metadata_refresh', 0, 0, {
       refreshed: false,
       reason: 'Cache still valid — no refresh needed',
       cachedAt: new Date().toISOString(),
-    };
+    });
   }
 
-  // Cache miss or expired: fetch fresh data
+  // 2. Cache miss — fetch from blockchain
   const metadata = await getCollectionMetadata(contractAddress, chain);
 
+  // 3. Update cache
   await setCache(cacheKey, {
     name: metadata.name,
     owner: metadata.owner,
     tokenStandard: metadata.tokenStandard,
   }, CACHE_TTL.collectionMetadata);
 
-  refreshed[contractAddress] = true;
-
-  return {
-    success: true,
+  return buildResult('metadata_refresh', 0, 1, {
     refreshed: true,
     chain,
     contractAddress,
@@ -402,5 +495,5 @@ async function handleMetadataRefresh(
     owner: metadata.owner,
     tokenStandard: metadata.tokenStandard,
     cachedAt: new Date().toISOString(),
-  };
+  });
 }

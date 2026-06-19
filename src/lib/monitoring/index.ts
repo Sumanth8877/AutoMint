@@ -3,7 +3,17 @@ import { activities } from '@/drizzle/schema';
 import { eq } from 'drizzle-orm';
 import { getCollectionMetadata } from '@/lib/blockchain/collections';
 
-export type ActivityType = 'wallet_added' | 'collection_added' | 'task_created' | 'task_cancelled' | 'task_completed' | 'collection_live' | 'mint_ending_soon' | 'floor_price_changed' | 'mint_status_changed';
+export type ActivityType = 
+  | 'wallet_added' 
+  | 'wallet_balance_changed'
+  | 'collection_added' 
+  | 'task_created' 
+  | 'task_cancelled' 
+  | 'task_completed' 
+  | 'collection_live' 
+  | 'mint_ending_soon' 
+  | 'floor_price_changed' 
+  | 'mint_status_changed';
 
 export async function logActivity(userId: string, type: ActivityType, title: string, metadata?: Record<string, any>) {
   try {

@@ -7,6 +7,7 @@ export const mintStatusEnum = pgEnum('mint_status', ['pending', 'monitoring', 'r
 export const mintHistoryStatusEnum = pgEnum('mint_history_status', ['pending', 'confirmed', 'failed']);
 export const activityTypeEnum = pgEnum('activity_type', [
   'wallet_added',
+  'wallet_balance_changed',
   'collection_added',
   'task_created',
   'task_cancelled',
@@ -67,6 +68,12 @@ export const mintTasks = pgTable('mint_tasks', {
   quantity: integer('quantity').default(1).notNull(),
   priority: integer('priority').default(0),
   status: mintStatusEnum('status').default('pending').notNull(),
+  contractAddress: text('contract_address'),
+  mintFunction: text('mint_function').default('mint'),
+  mintPrice: text('mint_price'),
+  gasLimit: text('gas_limit'),
+  txHash: text('tx_hash'),
+  confirmedAt: timestamp('confirmed_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -79,6 +86,9 @@ export const mintHistory = pgTable('mint_history', {
   collectionId: uuid('collection_id').references(() => collections.id, { onDelete: 'set null' }),
   status: mintHistoryStatusEnum('status').default('pending').notNull(),
   transactionHash: text('transaction_hash'),
+  gasUsed: text('gas_used'),
+  blockNumber: text('block_number'),
+  confirmedAt: timestamp('confirmed_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
