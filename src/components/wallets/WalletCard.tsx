@@ -1,65 +1,58 @@
 'use client';
-
 import React from 'react';
-import { Wallet, Trash2, ExternalLink } from 'lucide-react';
 import Card from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
-import { CHAIN_NAMES } from '@/lib/blockchain/chains';
+import { Wallet as WalletIcon, Copy, ExternalLink, Trash2, RefreshCw, Shield, Clock } from 'lucide-react';
 
-interface WalletCardProps {
+export interface WalletData {
   id: string;
+  name: string;
   address: string;
-  nickname: string | null;
   chain: string;
-  balance?: { balance: string; symbol: string };
+  balance: string;
   createdAt: string;
-  onDelete: () => void;
+  lastUsed?: string;
 }
 
-export default function WalletCard({ id, address, nickname, chain, balance, createdAt, onDelete }: WalletCardProps) {
-  const shortAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
-
+export default function WalletCard({ wallet, onCopy, onRemove, onRefresh }: { wallet: WalletData; onCopy: (address: string) => void; onRemove: (id: string) => void; onRefresh: (id: string) => void }) {
   return (
-    <Card glow className="p-5 hover:border-blue-500/25 transition-all duration-300">
-      <div className="flex items-start justify-between mb-4">
-        <div className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20">
-          <Wallet size={18} className="text-blue-500" />
+    <Card className="p-5 hover:border-blue-500/25 transition-all duration-300">
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center">
+            <WalletIcon size={22} className="text-purple-500" />
+          </div>
+          <div>
+            <h3 className="text-base font-semibold text-white">{wallet.name}</h3>
+            <p className="text-sm text-slate-500 mt-0.5">
+              {wallet.address.slice(0, 8)}...{wallet.address.slice(-6)}
+            </p>
+            <div className="flex items-center gap-3 mt-2">
+              <Badge variant="info" className="text-xs">{wallet.chain}</Badge>
+              <span className="text-xs text-slate-500">Balance: {wallet.balance}</span>
+            </div>
+          </div>
         </div>
-        <button
-          onClick={onDelete}
-          className="p-2 rounded-lg text-slate-500 hover:text-danger hover:bg-red-500/10 transition-all"
-        >
-          <Trash2 size={16} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button onClick={() => onCopy(wallet.address)} className="p-2 rounded-lg text-slate-500 hover:text-white hover:bg-white/5 transition-all" aria-label="Copy address">
+            <Copy size={14} />
+          </button>
+          <button onClick={() => onRefresh(wallet.id)} className="p-2 rounded-lg text-slate-500 hover:text-white hover:bg-white/5 transition-all" aria-label="Refresh balance">
+            <RefreshCw size={14} />
+          </button>
+          <button onClick={() => onRemove(wallet.id)} className="p-2 rounded-lg text-slate-500 hover:text-danger hover:bg-red-500/10 transition-all" aria-label="Remove wallet">
+            <Trash2 size={14} />
+          </button>
+        </div>
       </div>
 
-      <div className="mb-3">
-        <h3 className="text-sm font-semibold text-white mb-1 truncate">
-          {nickname || 'Unnamed Wallet'}
-        </h3>
-        <p className="text-xs text-slate-400 font-mono">{shortAddress}</p>
-      </div>
-
-      <div className="flex items-center justify-between">
-        <Badge variant="info">{CHAIN_NAMES[chain as keyof typeof CHAIN_NAMES] || chain}</Badge>
-        {balance && (
-          <span className="text-xs text-slate-400">
-            {parseFloat(balance.balance).toFixed(4)} {balance.symbol}
-          </span>
-        )}
-      </div>
-
-      <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between">
-        <span className="text-xs text-slate-600">
-          Added {new Date(createdAt).toLocaleDateString()}
-        </span>
-        <a
-          href={`https://etherscan.io/address/${address}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-blue-500 hover:text-blue-400 flex items-center gap-1"
-        >
-          <ExternalLink size={12} />
+      <div className="mt-4 pt-4 border-t border-blue-500/10 flex items-center justify-between">
+        <div className="flex items-center gap-4 text-xs text-slate-500">
+          <span className="flex items-center gap-1.5"><Shield size={12} className="text-green-500" /> Encrypted</span>
+          {wallet.lastUsed && <span className="flex items-center gap-1.5"><Clock size={12} /> {new Date(wallet.lastUsed).toLocaleDateString()}</span>}
+        </div>
+        <a href={`https://etherscan.io/address/${wallet.address}`} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:text-blue-400 flex items-center gap-1">
+          Explorer <ExternalLink size={10} />
         </a>
       </div>
     </Card>

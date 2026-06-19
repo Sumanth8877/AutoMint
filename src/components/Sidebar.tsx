@@ -1,37 +1,31 @@
 'use client';
-
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import {
   LayoutDashboard,
-  Folders,
   Wallet,
   History,
   Settings,
-  LogOut,
-  Activity,
+  Zap,
 } from 'lucide-react';
 
 const sidebarLinks = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/collections', label: 'Collections', icon: Folders },
+  { href: '/mints', label: 'Mints', icon: Zap },
   { href: '/wallets', label: 'Wallets', icon: Wallet },
-  { href: '/history', label: 'History', icon: History },
+  { href: '/history', label: 'Activity', icon: History },
   { href: '/settings', label: 'Settings', icon: Settings },
-  { href: '/analytics', label: 'Analytics', icon: Activity },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
   const { user } = useUser();
-
   const isActive = (href: string) => pathname === href;
 
   return (
     <aside className="hidden lg:flex flex-col w-64 h-[calc(100vh-4rem)] sticky top-16 border-r border-blue-500/10 bg-[#0B1120]/50 backdrop-blur-xl">
-      {/* Navigation */}
       <nav className="flex-1 px-3 py-6 space-y-1">
         {sidebarLinks.map((link) => {
           const Icon = link.icon;
@@ -51,8 +45,6 @@ export default function Sidebar() {
           );
         })}
       </nav>
-
-      {/* User Profile Card */}
       <div className="p-4 border-t border-blue-500/10">
         <div className="card p-3">
           <div className="flex items-center gap-3">
@@ -60,12 +52,8 @@ export default function Sidebar() {
               {user?.firstName?.[0] || user?.emailAddresses?.[0]?.emailAddress?.[0]?.toUpperCase() || '?'}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white truncate">
-                {user?.fullName || 'User'}
-              </p>
-              <p className="text-xs text-muted truncate">
-                {user?.primaryEmailAddress?.emailAddress || 'guest@automint.io'}
-              </p>
+              <p className="text-sm font-medium text-white truncate">{user?.fullName || 'User'}</p>
+              <p className="text-xs text-muted truncate">{user?.primaryEmailAddress?.emailAddress || 'guest@automint.io'}</p>
             </div>
           </div>
         </div>

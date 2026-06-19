@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { syncUser } from '@/lib/auth/sync-user';
 import Navbar from '@/components/Navbar';
 import Sidebar from '@/components/Sidebar';
+import MobileNav from '@/components/mobile/MobileNav';
 
 export default async function AuthenticatedLayout({
   children,
@@ -15,7 +16,6 @@ export default async function AuthenticatedLayout({
     redirect('/sign-in');
   }
 
-  // Sync user to database on every authenticated page visit
   await syncUser();
 
   return (
@@ -27,6 +27,7 @@ export default async function AuthenticatedLayout({
           {children}
         </main>
       </div>
+      <MobileNav />
     </div>
   );
 }
