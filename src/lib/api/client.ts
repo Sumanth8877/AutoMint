@@ -1,0 +1,32 @@
+export class ApiClientError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = 'ApiClientError';
+  }
+}
+
+type RequestOptions = Omit<RequestInit, 'body'> & {
+  body?: BodyInit | Record<string, unknown> | null;
+};
+
+export async function apiRequest<T>(url: string, options: RequestOptions = {}): Promise<T> {
+  const headers = new Headers(options.headers);
+  let body = options.body;
+
+  if (body && typeof body === 'object' && !(body instanceof FormData) && !(body instanceof URLSearchParams) && !(body instanceof Blob)) {
+    headers.set('Content-Type', 'application/json');
+    body = JSON.stringify(body);
+  }
+
+  const response = await fetch(url, { ...options, headers, body: body as BodyInit | null | undefined });
+  const payload = await response.json().catch(() => null) as { error?: string } | T | null;
+
+  if (!response.ok) {
+    const message = payload && typeof payload === 'object' && 'error' in payload && payload.error
+      ? payload.error
+      : 'Request failed';
+    throw new ApiClientError(message, response.status);
+  }
+
+  return payload as T;
+}

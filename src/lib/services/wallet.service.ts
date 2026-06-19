@@ -5,6 +5,9 @@ import { getWalletBalance } from '@/lib/blockchain/wallet';
 import { encryptPrivateKey, decryptPrivateKey } from '@/lib/security/encryption';
 import { logActivity } from '@/lib/monitoring';
 
+const SUPPORTED_CHAINS = ['ethereum', 'base', 'polygon'] as const;
+type SupportedChain = (typeof SUPPORTED_CHAINS)[number];
+
 export async function getUserWallets(userId: string) {
   const result = await getDb().select().from(wallets).where(eq(wallets.userId, userId)).orderBy(wallets.createdAt);
   return result;
@@ -25,11 +28,25 @@ export async function createWallet(userId: string, data: { address: string; nick
     throw new Error('Invalid wallet address format');
   }
 
+  if (!SUPPORTED_CHAINS.includes(data.chain as SupportedChain)) {
+    throw new Error(`Unsupported chain. Supported: ${SUPPORTED_CHAINS.join(', ')}`);
+  }
+
+  const [existing] = await getDb()
+    .select({ id: wallets.id })
+    .from(wallets)
+    .where(and(eq(wallets.userId, userId), eq(wallets.address, address)))
+    .limit(1);
+
+  if (existing) {
+    throw new Error('Wallet already added');
+  }
+
   const [wallet] = await getDb().insert(wallets).values({
     userId,
     address,
     nickname: data.nickname || null,
-    chain: data.chain as 'ethereum' | 'base' | 'polygon',
+    chain: data.chain as SupportedChain,
   }).returning();
 
   await getDb().insert(walletPermissions).values({

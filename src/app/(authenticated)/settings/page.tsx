@@ -1,6 +1,11 @@
+'use client';
+
+import { useState } from 'react';
 import { Bell, ChevronRight, KeyRound, Lock, Palette, Radio, Settings, ShieldCheck, SlidersHorizontal, User, Wallet } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
+import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
+import { Modal } from '@/components/ui/modal';
 import { PageHeader } from '@/components/ui/page-header';
 
 const groups = [
@@ -15,6 +20,8 @@ const groups = [
 const icons = [Palette, Wallet, Radio, ShieldCheck, Bell, KeyRound];
 
 export default function SettingsPage() {
+  const [activeSetting, setActiveSetting] = useState<string | null>(null);
+
   return (
     <div>
       <PageHeader
@@ -41,7 +48,12 @@ export default function SettingsPage() {
               </div>
               <div className="divide-y divide-border">
                 {group.items.map((item) => (
-                  <button key={item} className="flex w-full items-center gap-3 px-5 py-4 text-left hover:bg-white/5">
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setActiveSetting(`${group.title}: ${item}`)}
+                    className="flex w-full items-center gap-3 px-5 py-4 text-left hover:bg-white/5"
+                  >
                     <ItemIcon className="h-4 w-4 text-muted" aria-hidden="true" />
                     <span className="text-sm font-medium text-text">{item}</span>
                     <ChevronRight className="ml-auto h-4 w-4 text-muted" aria-hidden="true" />
@@ -59,6 +71,17 @@ export default function SettingsPage() {
           <p className="text-sm text-muted">Security-sensitive settings should be backed by server-side authorization checks, not navigation visibility alone.</p>
         </div>
       </Card>
+
+      <Modal open={Boolean(activeSetting)} title={activeSetting ?? 'Settings'} onClose={() => setActiveSetting(null)}>
+        <div className="space-y-4">
+          <p className="text-sm leading-6 text-muted">
+            This settings area is not backed by a persistence endpoint yet. The action now opens intentionally instead of acting like a silent mutation.
+          </p>
+          <div className="flex justify-end">
+            <Button type="button" variant="secondary" onClick={() => setActiveSetting(null)}>Close</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

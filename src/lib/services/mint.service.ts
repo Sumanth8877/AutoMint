@@ -1,12 +1,12 @@
 import { getDb } from '@/lib/db';
 import { mintTasks, wallets, collections, mintHistory } from '@/drizzle/schema';
-import { eq, and } from 'drizzle-orm';
+import { desc, eq, and } from 'drizzle-orm';
 import { simulateMint, estimateMintGas, executeMint, getMintMode, type MintParams } from '@/lib/blockchain/mint';
 import { logActivity } from '@/lib/monitoring';
 import type { Hex } from 'viem';
 
 export async function getUserMintTasks(userId: string) {
-  const result = await getDb().select().from(mintTasks).where(eq(mintTasks.userId, userId)).orderBy(mintTasks.createdAt);
+  const result = await getDb().select().from(mintTasks).where(eq(mintTasks.userId, userId)).orderBy(desc(mintTasks.createdAt));
   return result;
 }
 
@@ -147,4 +147,28 @@ export async function removeMintTask(id: string, userId: string) {
 
   await getDb().delete(mintTasks).where(and(eq(mintTasks.id, id), eq(mintTasks.userId, userId)));
   return { success: true };
+}
+
+export async function updateMintTaskStatus(
+  id: string,
+  userId: string,
+  status: 'pending' | 'monitoring' | 'ready' | 'running' | 'completed' | 'failed' | 'cancelled',
+) {
+  const [task] = await getDb()
+    .update(mintTasks)
+    .set({ status, updatedAt: new Date() })
+    .where(and(eq(mintTasks.id, id), eq(mintTasks.userId, userId)))
+    .returning();
+
+  if (!task) throw new Error('Task not found');
+
+  if (status === 'running') {
+    await logActivity(userId, 'mint_status_changed', 'Mint task started', { taskId: id, status });
+  }
+
+  if (status === 'cancelled') {
+    await logActivity(userId, 'task_cancelled', 'Mint task cancelled', { taskId: id, status });
+  }
+
+  return task;
 }

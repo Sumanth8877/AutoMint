@@ -3,17 +3,44 @@ import { collections } from '@/drizzle/schema';
 import { eq, and } from 'drizzle-orm';
 import { getCollectionMetadata } from '@/lib/blockchain/collections';
 
+const SUPPORTED_CHAINS = ['ethereum', 'base', 'polygon'] as const;
+type SupportedChain = (typeof SUPPORTED_CHAINS)[number];
+
 export async function getUserCollections(userId: string) {
   const result = await getDb().select().from(collections).where(eq(collections.userId, userId)).orderBy(collections.createdAt);
   return result;
 }
 
 export async function addCollection(userId: string, data: { name: string; contractAddress: string; chain: string }) {
+  const contractAddress = data.contractAddress.toLowerCase();
+
+  if (!data.name || !contractAddress || !data.chain) {
+    throw new Error('Name, contractAddress, and chain are required');
+  }
+
+  if (!/^0x[a-fA-F0-9]{40}$/.test(contractAddress)) {
+    throw new Error('Invalid contract address format');
+  }
+
+  if (!SUPPORTED_CHAINS.includes(data.chain as SupportedChain)) {
+    throw new Error(`Unsupported chain. Supported: ${SUPPORTED_CHAINS.join(', ')}`);
+  }
+
+  const [existing] = await getDb()
+    .select({ id: collections.id })
+    .from(collections)
+    .where(and(eq(collections.userId, userId), eq(collections.contractAddress, contractAddress)))
+    .limit(1);
+
+  if (existing) {
+    throw new Error('Collection already added');
+  }
+
   const [collection] = await getDb().insert(collections).values({
     userId,
     name: data.name,
-    contractAddress: data.contractAddress.toLowerCase(),
-    chain: data.chain as 'ethereum' | 'base' | 'polygon',
+    contractAddress,
+    chain: data.chain as SupportedChain,
   }).returning();
 
   // Best-effort metadata sync
