@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import MintUrlInput from '@/components/mint/MintUrlInput';
@@ -12,15 +12,7 @@ export default function HomePage() {
     setLoading(true);
     setAnalysis(null);
     await new Promise(r => setTimeout(r, 1800));
-    setAnalysis({
-      status: 'live',
-      collection: 'Bored Ape Yacht Club',
-      chain: 'Ethereum',
-      address: '0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D',
-      price: '0.05',
-      supply: '9,950 / 10,000',
-      confidence: 98,
-    });
+    setAnalysis({ status: 'live', collection: 'Bored Ape Yacht Club', chain: 'Ethereum', address: '0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D', price: '0.05', supply: '9,950 / 10,000', confidence: 98 });
     setLoading(false);
   };
 
@@ -36,7 +28,10 @@ export default function HomePage() {
       <main className="relative z-10 pt-16">
         <div className="w-full max-w-[1280px] mx-auto px-5 sm:px-8 py-10 sm:py-16">
           <div className="max-w-[900px] mx-auto text-center mb-10">
-            <h1 className="text-5xl md:text-6xl lg:text-7xl font-extrabold text-white leading-[1.05] tracking-tight" style={{fontFamily:'Space Grotesk, sans-serif'}}>Mint NFTs Before Everyone Else</h1>
+            <h1 className="text-5xl md:text-6xl lg:text-7xl font-extrabold text-white leading-[1.05] tracking-tight" style={{fontFamily:'Space Grotesk, sans-serif'}}>
+              <span className="block text-blue-500 text-sm font-semibold tracking-widest uppercase mb-3">AutoMint Execution Terminal</span>
+              Mint NFTs Before Everyone Else
+            </h1>
             <p className="mt-6 text-lg sm:text-xl text-slate-400 leading-relaxed">Paste any mint URL. AutoMint discovers mint requirements, prepares execution, and mints instantly when eligible.</p>
           </div>
 
