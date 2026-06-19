@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Show, SignInButton, SignUpButton, UserButton } from '@clerk/nextjs';
+import { Show, SignInButton, SignUpButton } from '@clerk/nextjs';
 import { motion } from 'framer-motion';
 import {
   ArrowRight,
@@ -21,6 +21,7 @@ import {
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
+import AutoMintUserButton from '@/components/auth/automint-user-button';
 
 const badges = ['Real-Time Analysis', 'Risk Detection', 'Demand Forecasting', 'Automation Ready'];
 
@@ -98,7 +99,7 @@ export default function HomePage() {
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </Link>
               <div className="flex h-10 items-center rounded-lg border border-border bg-white/5 px-2">
-                <UserButton />
+                <AutoMintUserButton />
               </div>
             </Show>
           </div>

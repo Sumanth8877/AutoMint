@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { UserButton } from '@clerk/nextjs';
+import AutoMintUserButton from '@/components/auth/automint-user-button';
 import {
   Activity,
   BarChart3,
@@ -137,7 +137,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
               <Bell className="h-4 w-4" aria-hidden="true" />
             </button>
             <div className="flex h-10 items-center rounded-lg border border-border bg-white/5 px-2">
-              <UserButton />
+              <AutoMintUserButton />
             </div>
           </div>
         </div>

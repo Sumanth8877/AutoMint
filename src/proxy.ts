@@ -1,5 +1,4 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
-import { syncUser } from '@/lib/auth/sync-user';
 
 const isProtectedPage = createRouteMatcher([
   '/dashboard(.*)',
@@ -15,15 +14,6 @@ const isProtectedPage = createRouteMatcher([
 export default clerkMiddleware(async (auth, request) => {
   if (isProtectedPage(request)) {
     await auth.protect();
-  }
-
-  const { userId } = await auth();
-  if (!userId) return;
-
-  try {
-    await syncUser(userId);
-  } catch (error) {
-    console.error('User sync failed:', error);
   }
 });
 
