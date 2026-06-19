@@ -6,22 +6,33 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@arcjet/next": "^1.5.0",
     "@clerk/nextjs": "^7.5.5",
     "@neondatabase/serverless": "^1.1.0",
-    "@prisma/client": "^5.22.0",
+    "@sentry/nextjs": "^10.58.0",
+    "@upstash/redis": "^1.38.0",
+    "bullmq": "^5.79.0",
+    "drizzle-orm": "^0.38.4",
+    "ioredis": "^5.11.1",
     "lucide-react": "^1.21.0",
     "next": "16.2.9",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "viem": "^2.23.4"
   },
   "devDependencies": {
+    "@sentry/cli": "^3.5.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "drizzle-kit": "^0.26.2",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
     "prisma": "^5.22.0",

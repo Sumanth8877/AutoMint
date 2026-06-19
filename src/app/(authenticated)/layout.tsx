@@ -1,5 +1,6 @@
 import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
+import { syncUser } from '@/lib/auth/sync-user';
 import Navbar from '@/components/Navbar';
 import Sidebar from '@/components/Sidebar';
 
@@ -13,6 +14,9 @@ export default async function AuthenticatedLayout({
   if (!userId) {
     redirect('/sign-in');
   }
+
+  // Sync user to database on every authenticated page visit
+  await syncUser();
 
   return (
     <div className="min-h-screen bg-[#050816]">

@@ -11,6 +11,7 @@ import {
   History,
   Settings,
   LogOut,
+  Activity,
 } from 'lucide-react';
 
 const sidebarLinks = [
@@ -19,6 +20,7 @@ const sidebarLinks = [
   { href: '/wallets', label: 'Wallets', icon: Wallet },
   { href: '/history', label: 'History', icon: History },
   { href: '/settings', label: 'Settings', icon: Settings },
+  { href: '/analytics', label: 'Analytics', icon: Activity },
 ];
 
 export default function Sidebar() {
