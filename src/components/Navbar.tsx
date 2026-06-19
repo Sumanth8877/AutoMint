@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { UserButton, useUser } from '@clerk/nextjs';
+import { useUser } from '@clerk/nextjs';
 import { Menu, X, Hexagon, ArrowUpRight } from 'lucide-react';
 
 const navLinks = [
@@ -89,38 +89,28 @@ export default function Navbar() {
           {/* Right side */}
           <div className="flex items-center gap-3">
             {isSignedIn ? (
-              <div className="flex items-center gap-3">
-                <Link
-                  href="/dashboard"
-                  className="hidden sm:inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white rounded-xl transition-all duration-300 hover:opacity-90"
-                  style={{
-                    background: 'linear-gradient(135deg, #2563EB, #3B82F6)',
-                    boxShadow: '0 4px 20px rgba(59,130,246,0.3)',
-                  }}
-                >
-                  Launch App
-                  <ArrowUpRight size={15} />
-                </Link>
-                <UserButton
-                  appearance={{
-                    elements: {
-                      avatarBox:
-                        'w-8 h-8 rounded-full ring-2 ring-blue-500/30 ring-offset-2 ring-offset-[#050816]',
-                    },
-                  }}
-                />
-              </div>
+              <Link
+                href="/dashboard"
+                className="hidden sm:inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white rounded-xl transition-all duration-300 hover:opacity-90"
+                style={{
+                  background: 'linear-gradient(135deg, #2563EB, #3B82F6)',
+                  boxShadow: '0 4px 20px rgba(59,130,246,0.3)',
+                }}
+              >
+                Launch App
+                <ArrowUpRight size={15} />
+              </Link>
             ) : (
               <div className="flex items-center gap-3">
                 <Link
-                  href="/sign-in"
+                  href="/sign-up"
                   className="hidden sm:inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white rounded-xl transition-all duration-300 hover:opacity-90"
                   style={{
                     background: 'linear-gradient(135deg, #2563EB, #3B82F6)',
                     boxShadow: '0 4px 20px rgba(59,130,246,0.3)',
                   }}
                 >
-                  Launch App
+                  Get Started
                   <ArrowUpRight size={15} />
                 </Link>
                 <Link
@@ -177,7 +167,7 @@ export default function Navbar() {
                   background: 'linear-gradient(135deg, #2563EB, #3B82F6)',
                 }}
               >
-                {isSignedIn ? 'Launch App' : 'Get Started'}
+              {isSignedIn ? 'Launch App' : 'Get Started'}
                 <ArrowUpRight size={16} />
               </Link>
               {!isSignedIn && (

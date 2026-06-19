@@ -1,10 +1,15 @@
 import { clerkMiddleware } from '@clerk/nextjs/server';
+import { syncUser } from '@/lib/auth/sync-user';
 
 export default clerkMiddleware(async (auth, request) => {
   const { userId } = await auth();
   if (!userId) return;
 
-  // Optional: lightweight user sync here if desired
+  try {
+    await syncUser();
+  } catch (error) {
+    console.error('User sync failed:', error);
+  }
 });
 
 export const config = {

@@ -210,24 +210,10 @@ export default function LandingPage() {
                 return (
                   <div
                     key={i}
-                    className="group transition-all duration-500 hover:-translate-y-0.5"
+                    className="group rounded-[24px] p-9 px-8 transition-all duration-500 hover:-translate-y-0.5 border-[rgba(59,130,246,0.06)] hover:border-[rgba(59,130,246,0.2)] bg-[rgba(17,24,39,0.4)] hover:bg-[rgba(17,24,39,0.5)] hover:shadow-[0_0_30px_rgba(59,130,246,0.06),0_0_60px_rgba(59,130,246,0.03)]"
                     style={{
-                      background: 'rgba(17,24,39,0.4)',
                       backdropFilter: 'blur(16px)',
                       WebkitBackdropFilter: 'blur(16px)',
-                      border: '1px solid rgba(59,130,246,0.06)',
-                      borderRadius: '24px',
-                      padding: '36px 32px',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = 'rgba(59,130,246,0.2)';
-                      e.currentTarget.style.boxShadow = '0 0 30px rgba(59,130,246,0.06), 0 0 60px rgba(59,130,246,0.03)';
-                      e.currentTarget.style.background = 'rgba(17,24,39,0.5)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = 'rgba(59,130,246,0.06)';
-                      e.currentTarget.style.boxShadow = 'none';
-                      e.currentTarget.style.background = 'rgba(17,24,39,0.4)';
                     }}
                   >
                     <div

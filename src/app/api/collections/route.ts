@@ -3,6 +3,7 @@ import { auth } from '@clerk/nextjs/server';
 import { getDb } from '@/lib/db';
 import { users, collections } from '@/drizzle/schema';
 import { eq, and } from 'drizzle-orm';
+import { getCollectionMetadata } from '@/lib/blockchain/collections';
 
 const SUPPORTED_CHAINS = ['ethereum', 'base', 'polygon'];
 
@@ -57,6 +58,22 @@ export async function POST(req: Request) {
     contractAddress: contractAddress.toLowerCase(),
     chain,
   }).returning();
+
+  // Best-effort metadata sync (non-blocking)
+  try {
+    const metadata = await getCollectionMetadata(contractAddress, chain);
+    await getDb().update(collections)
+      .set({
+        name: metadata.name,
+        tokenStandard: metadata.tokenStandard,
+        owner: metadata.owner,
+        totalSupply: metadata.totalSupply.toString(),
+        lastSyncedAt: new Date(),
+      })
+      .where(eq(collections.id, collection.id));
+  } catch (error) {
+    console.error('Background metadata sync failed:', error);
+  }
 
   return NextResponse.json({ collection }, { status: 201 });
 }
