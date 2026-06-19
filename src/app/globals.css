@@ -1,22 +1,19 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 @import "tailwindcss";
 
 @theme inline {
-  --color-background: #050816;
-  --color-secondary-bg: #0B1120;
-  --color-card-bg: #111827;
-  --color-primary: #3B82F6;
-  --color-primary-hover: #2563EB;
-  --color-text: #FFFFFF;
-  --color-muted: #94A3B8;
-  --color-success: #22C55E;
-  --color-warning: #F59E0B;
-  --color-danger: #EF4444;
-  --font-sans: 'Inter', sans-serif;
-  --font-heading: 'Space Grotesk', sans-serif;
-  --color-border: rgba(59, 130, 246, 0.2);
-  --color-glow: rgba(59, 130, 246, 0.15);
+  --color-background: #05070A;
+  --color-panel: #0B0F14;
+  --color-border: rgba(255, 255, 255, 0.06);
+  --color-primary: #4F8CFF;
+  --color-success: #18C964;
+  --color-warning: #F5A524;
+  --color-danger: #F31260;
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: rgba(255, 255, 255, 0.6);
+  --color-text-tertiary: rgba(255, 255, 255, 0.4);
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro', sans-serif;
 }
 
 * {
@@ -27,103 +24,68 @@
 
 html, body {
   overflow-x: hidden;
-  background: #050816;
+  background: #05070A;
   color: #FFFFFF;
-  font-family: 'Inter', sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro', sans-serif;
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 h1, h2, h3, h4, h5, h6 {
-  word-break: break-word;
-  overflow-wrap: break-word;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
-p, span, div {
-  word-break: break-word;
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
 
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: #0B1120; }
-::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #334155; }
-
-.glass {
-  background: rgba(17, 24, 39, 0.8);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(59, 130, 246, 0.15);
+::-webkit-scrollbar-track {
+  background: #05070A;
 }
 
-.glow { box-shadow: 0 0 20px rgba(59, 130, 246, 0.15), 0 0 40px rgba(59, 130, 246, 0.05); }
-
-.card {
-  background: #111827;
-  border: 1px solid rgba(59, 130, 246, 0.15);
-  border-radius: 20px;
-  backdrop-filter: blur(12px);
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
 }
 
-.gradient-text {
-  background: linear-gradient(135deg, #3B82F6, #60A5FA);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
 }
-
-.btn-gradient {
-  background: linear-gradient(90deg, #2563EB, #3B82F6);
-  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
-  transition: all 0.3s ease;
-}
-.btn-gradient:hover { box-shadow: 0 6px 25px rgba(59, 130, 246, 0.4); transform: translateY(-1px); }
-
-/* Animations */
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.animate-fadeIn { animation: fadeIn 0.3s ease-out; }
-
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.animate-slideUp { animation: slideUp 0.4s ease-out; }
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-.animate-pulse { animation: pulse 2s ease-in-out infinite; }
-
-@keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
-}
-.animate-scaleIn { animation: scaleIn 0.2s ease-out; }
 
 /* Focus styles */
 *:focus-visible {
-  outline: 2px solid rgba(59, 130, 246, 0.5);
+  outline: 2px solid #4F8CFF;
   outline-offset: 2px;
-  border-radius: 8px;
+  border-radius: 4px;
 }
 
-/* Container scale */
-.container-premium {
-  width: 100%;
-  max-width: 1280px;
-  margin-left: auto;
-  margin-right: auto;
-  padding-left: 20px;
-  padding-right: 20px;
-}
-@media (min-width: 768px) {
-  .container-premium { padding-left: 24px; padding-right: 24px; }
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
-/* Section spacing */
-.section-py { padding-top: 80px; padding-bottom: 80px; }
-@media (max-width: 767px) {
-  .section-py { padding-top: 56px; padding-bottom: 56px; }
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.animate-slideUp {
+  animation: slideUp 0.3s ease-out;
+}
+
+.animate-slideDown {
+  animation: slideDown 0.3s ease-out;
 }

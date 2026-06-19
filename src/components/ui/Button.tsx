@@ -19,23 +19,23 @@ export default function Button({
   ...props
 }: ButtonProps) {
   const baseStyles =
-    'inline-flex items-center justify-center font-medium rounded-xl transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500/50';
+    'inline-flex items-center justify-center font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4F8CFF]/50';
 
   const variants = {
     primary:
-      'btn-gradient text-white',
+      'bg-[#4F8CFF] text-white hover:bg-[#3D7AE8] active:bg-[#2B6AD6]',
     secondary:
-      'glass text-white hover:bg-blue-500/10 hover:border-blue-400/30',
+      'bg-[#0B0F14] text-white border border-[rgba(255,255,255,0.06)] hover:border-[rgba(255,255,255,0.12)]',
     ghost:
-      'bg-transparent text-muted hover:text-white hover:bg-white/5',
+      'bg-transparent text-white/60 hover:text-white hover:bg-white/5',
     danger:
-      'bg-gradient-to-r from-red-600 to-red-500 text-white shadow-lg shadow-red-500/20 hover:shadow-red-500/30',
+      'bg-[#F31260] text-white hover:bg-[#D10E52] active:bg-[#AF0A44]',
   };
 
   const sizes = {
     sm: 'px-3 py-1.5 text-sm gap-1.5',
-    md: 'px-5 py-2.5 text-sm gap-2',
-    lg: 'px-8 py-3 text-base gap-2',
+    md: 'px-4 py-2 text-sm gap-2',
+    lg: 'px-6 py-3 text-base gap-2',
   };
 
   return (

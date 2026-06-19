@@ -1,12 +1,9 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { History as HistoryIcon, Zap, ArrowUpRight } from 'lucide-react';
-import Card from '@/components/ui/Card';
-import Button from '@/components/ui/Button';
-import ActivityTimeline, { ActivityEvent } from '@/components/activity/ActivityTimeline';
+import { History as HistoryIcon, CheckCircle2, XCircle, Clock, Play } from 'lucide-react';
 
 export default function HistoryPage() {
-  const [events, setEvents] = useState<ActivityEvent[]>([]);
+  const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -15,44 +12,83 @@ export default function HistoryPage() {
         const res = await fetch('/api/activities');
         const data = await res.json();
         if (data.activities) {
-          setEvents(data.activities.map((a: any) => ({
-            id: a.id,
-            title: a.type || 'Activity',
-            description: a.description || '',
-            timestamp: a.createdAt,
-            status: (a.status === 'success' ? 'completed' : a.status === 'error' ? 'failed' : a.status === 'running' ? 'active' : 'pending') as ActivityEvent['status'],
-            group: new Date(a.createdAt).toLocaleDateString(),
-          })));
+          setEvents(data.activities);
         }
       } catch {} finally { setLoading(false); }
     };
     fetchData();
   }, []);
 
+  const groupedEvents = events.reduce((acc: any, event: any) => {
+    const date = new Date(event.createdAt).toLocaleDateString();
+    if (!acc[date]) acc[date] = [];
+    acc[date].push(event);
+    return acc;
+  }, {});
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'completed':
+      case 'success':
+        return <CheckCircle2 className="w-4 h-4 text-[#18C964]" />;
+      case 'failed':
+      case 'error':
+        return <XCircle className="w-4 h-4 text-[#F31260]" />;
+      case 'running':
+      case 'active':
+        return <Play className="w-4 h-4 text-[#4F8CFF]" />;
+      default:
+        return <Clock className="w-4 h-4 text-white/40" />;
+    }
+  };
+
   return (
-    <div className="max-w-5xl mx-auto">
+    <div>
       <div className="mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-white" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Activity</h1>
-        <p className="text-slate-500 mt-1 text-sm">Track your mint execution timeline</p>
+        <h1 className="text-2xl font-semibold text-white mb-2">Activity</h1>
+        <p className="text-white/60 text-sm">Track your execution timeline</p>
       </div>
 
       {loading ? (
-        <Card className="p-8">
-          <div className="flex justify-center py-12"><div className="w-6 h-6 rounded-full border-2 border-blue-500/30 border-t-blue-500 animate-spin" /></div>
-        </Card>
-      ) : events.length === 0 ? (
-        <Card className="p-12">
-          <div className="flex flex-col items-center justify-center py-16">
-            <div className="w-16 h-16 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-4"><HistoryIcon size={28} className="text-slate-500" /></div>
-            <h3 className="text-lg font-semibold text-white mb-2">No activity yet</h3>
-            <p className="text-slate-500 text-sm mb-6 max-w-sm text-center">Your mint activity will appear here once you start using AutoMint.</p>
-            <a href="/dashboard"><Button variant="primary"><ArrowUpRight size={16} /> Go to Dashboard</Button></a>
+        <div className="bg-[#0B0F14] border border-[rgba(255,255,255,0.06)] rounded-lg p-8">
+          <div className="flex justify-center py-12">
+            <div className="w-6 h-6 rounded-full border-2 border-[#4F8CFF]/30 border-t-[#4F8CFF] animate-spin" />
           </div>
-        </Card>
+        </div>
+      ) : events.length === 0 ? (
+        <div className="bg-[#0B0F14] border border-[rgba(255,255,255,0.06)] rounded-lg p-12">
+          <div className="flex flex-col items-center justify-center py-16">
+            <div className="w-16 h-16 rounded-xl bg-[#4F8CFF]/10 border border-[#4F8CFF]/20 flex items-center justify-center mb-4">
+              <HistoryIcon className="w-8 h-8 text-[#4F8CFF]" />
+            </div>
+            <h3 className="text-lg font-semibold text-white mb-2">No activity yet</h3>
+            <p className="text-white/40 text-sm max-w-sm text-center">Your execution activity will appear here</p>
+          </div>
+        </div>
       ) : (
-        <Card className="p-6">
-          <ActivityTimeline events={events} />
-        </Card>
+        <div className="space-y-6">
+          {Object.entries(groupedEvents).map(([date, dayEvents]: [string, any]) => (
+            <div key={date}>
+              <h3 className="text-white/40 text-sm font-medium mb-4">{date}</h3>
+              <div className="space-y-2">
+                {dayEvents.map((event: any) => (
+                  <div key={event.id} className="bg-[#0B0F14] border border-[rgba(255,255,255,0.06)] rounded-lg p-4 hover:border-[rgba(255,255,255,0.12)] transition-colors">
+                    <div className="flex items-start gap-4">
+                      <div className="mt-0.5">{getStatusIcon(event.status)}</div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-white font-medium text-sm">{event.type || 'Activity'}</p>
+                          <p className="text-white/40 text-xs">{new Date(event.createdAt).toLocaleTimeString()}</p>
+                        </div>
+                        <p className="text-white/40 text-sm">{event.description || ''}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

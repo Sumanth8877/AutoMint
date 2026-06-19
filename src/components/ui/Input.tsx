@@ -18,25 +18,25 @@ export default function Input({
   return (
     <div className="w-full">
       {label && (
-        <label className="block text-sm font-medium text-muted mb-2">
+        <label className="block text-sm font-medium text-white/60 mb-2">
           {label}
         </label>
       )}
       <div className="relative">
         {icon && (
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted">
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40">
             {icon}
           </div>
         )}
         <input
-          className={`w-full bg-[#0B1120] border border-[rgba(59,130,246,0.15)] rounded-xl px-4 py-2.5 text-white placeholder:text-muted/50 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/10 transition-all duration-300 ${
+          className={`w-full bg-[#05070A] border border-[rgba(255,255,255,0.06)] rounded-lg px-4 py-2.5 text-white placeholder:text-white/40 focus:outline-none focus:border-[#4F8CFF] focus:ring-1 focus:ring-[#4F8CFF] transition-all duration-200 ${
             icon ? 'pl-10' : ''
-          } ${error ? 'border-red-500/50 focus:border-red-500/50 focus:ring-red-500/10' : ''} ${className}`}
+          } ${error ? 'border-[#F31260] focus:border-[#F31260] focus:ring-[#F31260]' : ''} ${className}`}
           {...props}
         />
       </div>
       {error && (
-        <p className="mt-1.5 text-sm text-danger">{error}</p>
+        <p className="mt-1.5 text-sm text-[#F31260]">{error}</p>
       )}
     </div>
   );
