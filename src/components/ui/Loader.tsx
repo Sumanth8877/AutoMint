@@ -1,7 +1,5 @@
 'use client';
 
-import React from 'react';
-
 interface LoaderProps {
   size?: 'sm' | 'md' | 'lg';
   className?: string;

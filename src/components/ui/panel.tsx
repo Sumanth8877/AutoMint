@@ -1,13 +1,13 @@
-import React from 'react';
+import type { ReactNode } from 'react';
 
 interface PanelProps {
-  children: React.ReactNode;
+  children: ReactNode;
   className?: string;
 }
 
 export default function Panel({ children, className = '' }: PanelProps) {
   return (
-    <div className={`bg-[#0B0F14] border border-[rgba(255,255,255,0.06)] rounded-lg ${className}`}>
+    <div className={`rounded-lg border border-border bg-surface/80 ${className}`}>
       {children}
     </div>
   );

@@ -13,7 +13,6 @@ export interface NftTransfer {
   timestamp?: string;
 }
 
-const ERC721_TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 const ERC721_TRANSFER_EVENT = parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)');
 
 export async function getNftTransfers(params: {

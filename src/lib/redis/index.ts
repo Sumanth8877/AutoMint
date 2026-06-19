@@ -1,18 +1,20 @@
-import { Redis } from '@upstash/redis';
+import 'server-only';
 
-const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL || '';
-const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || '';
+import { Redis } from '@upstash/redis';
 
 let _redis: Redis | null = null;
 
 function getRedisClient(): Redis {
   if (!_redis) {
-    if (!REDIS_URL || !REDIS_TOKEN) {
+    const url = process.env.UPSTASH_REDIS_REST_URL;
+    const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+    if (!url || !token) {
       throw new Error('UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN must be set');
     }
     _redis = new Redis({
-      url: REDIS_URL,
-      token: REDIS_TOKEN,
+      url,
+      token,
     });
   }
   return _redis;
@@ -163,7 +165,7 @@ export interface RedisHealth {
 }
 
 export async function checkRedisHealth(): Promise<RedisHealth> {
-  const envConfigured = !!(REDIS_URL && REDIS_TOKEN);
+  const envConfigured = !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
   if (!envConfigured) {
     return { status: 'unhealthy', ping: 0, error: 'Redis env vars not configured', envConfigured: false };
   }

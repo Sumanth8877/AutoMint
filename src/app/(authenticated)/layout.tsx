@@ -1,12 +1,13 @@
 import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
+import type { ReactNode } from 'react';
 import { syncUser } from '@/lib/auth/sync-user';
 import AppShell from '@/components/app-shell';
 
 export default async function AuthenticatedLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   const { userId } = await auth();
 

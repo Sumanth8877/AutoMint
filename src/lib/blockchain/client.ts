@@ -1,35 +1,47 @@
+import 'server-only';
+
 import { createPublicClient, http } from 'viem';
+import type { PublicClient } from 'viem';
 import { mainnet, base, polygon } from 'viem/chains';
 
-const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY || '';
+type SupportedChain = 'ethereum' | 'base' | 'polygon';
+
+const clients: Partial<Record<SupportedChain, PublicClient>> = {};
 
 const alchemyUrl = (chainId: number) => {
-  const baseUrl = `https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`;
+  const apiKey = process.env.ALCHEMY_API_KEY;
+  if (!apiKey) return undefined;
+
+  const baseUrl = `https://eth-mainnet.g.alchemy.com/v2/${apiKey}`;
   switch (chainId) {
-    case 1: return `https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`;
-    case 8453: return `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`;
-    case 137: return `https://polygon-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`;
+    case 1: return `https://eth-mainnet.g.alchemy.com/v2/${apiKey}`;
+    case 8453: return `https://base-mainnet.g.alchemy.com/v2/${apiKey}`;
+    case 137: return `https://polygon-mainnet.g.alchemy.com/v2/${apiKey}`;
     default: return baseUrl;
   }
 };
 
-export const publicClients = {
-  ethereum: createPublicClient({
-    chain: mainnet,
-    transport: http(alchemyUrl(1)),
-  }),
-  base: createPublicClient({
-    chain: base,
-    transport: http(alchemyUrl(8453)),
-  }),
-  polygon: createPublicClient({
-    chain: polygon,
-    transport: http(alchemyUrl(137)),
-  }),
+const clientConfig = {
+  ethereum: { chain: mainnet, chainId: 1 },
+  base: { chain: base, chainId: 8453 },
+  polygon: { chain: polygon, chainId: 137 },
 };
 
-export function getClient(chain: string) {
-  const client = publicClients[chain as keyof typeof publicClients];
-  if (!client) throw new Error(`Unsupported chain: ${chain}`);
+export function getClient(chain: string): PublicClient {
+  if (!isSupportedChain(chain)) throw new Error(`Unsupported chain: ${chain}`);
+
+  const existing = clients[chain];
+  if (existing) return existing;
+
+  const client = createPublicClient({
+    chain: clientConfig[chain].chain,
+    transport: http(alchemyUrl(clientConfig[chain].chainId)),
+  });
+
+  clients[chain] = client;
   return client;
+}
+
+function isSupportedChain(chain: string): chain is SupportedChain {
+  return chain in clientConfig;
 }

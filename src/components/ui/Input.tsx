@@ -1,9 +1,9 @@
-import React from 'react';
+import type { InputHTMLAttributes, ReactNode } from 'react';
 
-interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
-  icon?: React.ReactNode;
+  icon?: ReactNode;
 }
 
 export default function Input({
