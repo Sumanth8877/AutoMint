@@ -56,6 +56,34 @@ export const wallets = pgTable('wallets', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+export const watchedWallets = pgTable('watched_wallets', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  walletAddress: text('wallet_address').notNull(),
+  chain: chainEnum('chain').notNull().default('ethereum'),
+  active: boolean('active').default(true).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index('idx_watched_wallets_user_id').on(table.userId),
+  walletAddressIdx: index('idx_watched_wallets_wallet_address').on(table.walletAddress),
+  userWalletChainIdx: uniqueIndex('idx_watched_wallets_user_wallet_chain').on(table.userId, table.walletAddress, table.chain),
+}));
+
+export const copyMintRules = pgTable('copy_mint_rules', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  walletAddress: text('wallet_address').notNull(),
+  maxPrice: text('max_price'),
+  quantity: integer('quantity').default(1).notNull(),
+  autoMint: boolean('auto_mint').default(false).notNull(),
+  enabled: boolean('enabled').default(true).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index('idx_copy_mint_rules_user_id').on(table.userId),
+  walletAddressIdx: index('idx_copy_mint_rules_wallet_address').on(table.walletAddress),
+  userWalletIdx: uniqueIndex('idx_copy_mint_rules_user_wallet').on(table.userId, table.walletAddress),
+}));
+
 // ─── Collections ─────────────────────────────────────
 export const collections = pgTable('collections', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -160,6 +188,8 @@ export const collectionSyncs = pgTable('collection_syncs', {
 // ─── Relations ───────────────────────────────────────
 export const usersRelations = relations(users, ({ many }) => ({
   wallets: many(wallets),
+  watchedWallets: many(watchedWallets),
+  copyMintRules: many(copyMintRules),
   collections: many(collections),
   mintTasks: many(mintTasks),
   mintHistory: many(mintHistory),
@@ -173,6 +203,14 @@ export const telegramAccountsRelations = relations(telegramAccounts, ({ one }) =
 
 export const walletsRelations = relations(wallets, ({ one }) => ({
   user: one(users, { fields: [wallets.userId], references: [users.id] }),
+}));
+
+export const watchedWalletsRelations = relations(watchedWallets, ({ one }) => ({
+  user: one(users, { fields: [watchedWallets.userId], references: [users.id] }),
+}));
+
+export const copyMintRulesRelations = relations(copyMintRules, ({ one }) => ({
+  user: one(users, { fields: [copyMintRules.userId], references: [users.id] }),
 }));
 
 export const collectionsRelations = relations(collections, ({ one }) => ({

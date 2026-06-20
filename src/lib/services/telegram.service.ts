@@ -9,8 +9,8 @@ import { resolveMintIntent } from '@/lib/resolve-mint-intent';
 import { getMintState } from '@/lib/services/mint-state.service';
 import { fetchMintRequirements } from '@/lib/services/mint-requirements.service';
 import { handleMintUrl } from '@/lib/services/mint-orchestrator.service';
-import { createWallet } from '@/lib/services/wallet.service';
 import { cancelScheduledMint, scheduleMint } from '@/lib/services/qstash.service';
+import { watchWallet } from '@/lib/services/wallet-tracker.service';
 
 const TELEGRAM_API_BASE = 'https://api.telegram.org';
 const MAX_SEND_ATTEMPTS = 3;
@@ -24,6 +24,8 @@ export type TelegramNotificationType =
   | 'high_risk_collection'
   | 'risk_analysis_complete'
   | 'wallet_balance_low'
+  | 'wallet_minted_nft'
+  | 'wallet_purchased_nft'
   | 'copy_mint_triggered';
 
 type TelegramApiResponse<T> =
@@ -307,6 +309,14 @@ function formatNotification(type: TelegramNotificationType, payload: Notificatio
       lines.push('Wallet Balance Low', truncate(subject));
       if (payload.balance && payload.symbol) lines.push(`Balance: ${payload.balance} ${payload.symbol}`);
       break;
+    case 'wallet_minted_nft':
+      lines.push('Wallet Minted NFT', truncate(subject));
+      if (payload.txHash) lines.push(`Tx: ${payload.txHash}`);
+      break;
+    case 'wallet_purchased_nft':
+      lines.push('Wallet Purchased NFT', truncate(subject));
+      if (payload.txHash) lines.push(`Tx: ${payload.txHash}`);
+      break;
     case 'copy_mint_triggered':
       lines.push('Copy Mint Triggered', truncate(subject));
       break;
@@ -547,22 +557,21 @@ async function handleWatchCommand(message: TelegramMessage, userId: string, addr
   }
 
   try {
-    const wallet = await createWallet(userId, {
-      address,
-      nickname: `Telegram ${address.slice(0, 6)}...${address.slice(-4)}`,
+    const wallet = await watchWallet(userId, {
+      walletAddress: address,
       chain: 'ethereum',
     });
-    const balance = await getWalletBalance(wallet.address, wallet.chain);
+    const balance = await getWalletBalance(wallet.walletAddress, wallet.chain);
 
     await notifyWalletBalanceIfLow({
       userId,
-      address: wallet.address,
+      address: wallet.walletAddress,
       chain: wallet.chain,
       balance: balance.balance,
       symbol: balance.symbol,
     });
 
-    await reply(message, `Wallet watch added.\n${wallet.address}\nBalance: ${balance.balance} ${balance.symbol}`);
+    await reply(message, `Wallet tracker enabled.\n${wallet.walletAddress}\nChain: ${wallet.chain}\nStatus: ${wallet.active ? 'active' : 'inactive'}\nBalance: ${balance.balance} ${balance.symbol}`);
   } catch (error) {
     await reply(message, error instanceof Error ? error.message : 'Failed to watch wallet.');
   }
