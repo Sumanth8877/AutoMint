@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, integer, pgEnum, json, boolean, index } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, uuid, integer, pgEnum, json, boolean, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
 // ─── Enums ───────────────────────────────────────────
@@ -29,6 +29,19 @@ export const users = pgTable('users', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
+
+export const telegramAccounts = pgTable('telegram_accounts', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  telegramId: text('telegram_id').notNull(),
+  username: text('username'),
+  chatId: text('chat_id').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index('idx_telegram_accounts_user_id').on(table.userId),
+  telegramIdIdx: uniqueIndex('idx_telegram_accounts_telegram_id').on(table.telegramId),
+  chatIdIdx: uniqueIndex('idx_telegram_accounts_chat_id').on(table.chatId),
+}));
 
 // ─── Wallets ─────────────────────────────────────────
 export const wallets = pgTable('wallets', {
@@ -145,6 +158,11 @@ export const usersRelations = relations(users, ({ many }) => ({
   mintTasks: many(mintTasks),
   mintHistory: many(mintHistory),
   activities: many(activities),
+  telegramAccounts: many(telegramAccounts),
+}));
+
+export const telegramAccountsRelations = relations(telegramAccounts, ({ one }) => ({
+  user: one(users, { fields: [telegramAccounts.userId], references: [users.id] }),
 }));
 
 export const walletsRelations = relations(wallets, ({ one }) => ({

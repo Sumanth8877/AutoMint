@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
-import { requireApiSession } from '@/lib/auth/require-auth';
+import { requireApiUser } from '@/lib/auth/require-auth';
 import { getWalletBalance } from '@/lib/blockchain/wallet';
+import { notifyWalletBalanceIfLow } from '@/lib/services/telegram.service';
 
 export async function GET(req: Request) {
-  const authResult = await requireApiSession();
+  const authResult = await requireApiUser();
   if ('error' in authResult) return authResult.error;
 
   const { searchParams } = new URL(req.url);
@@ -16,6 +17,13 @@ export async function GET(req: Request) {
 
   try {
     const balance = await getWalletBalance(address, chain);
+    await notifyWalletBalanceIfLow({
+      userId: authResult.userId,
+      address,
+      chain,
+      balance: balance.balance,
+      symbol: balance.symbol,
+    });
     return NextResponse.json({ balance });
   } catch (error) {
     console.error('Error fetching balance:', error);

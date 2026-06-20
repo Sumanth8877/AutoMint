@@ -3,6 +3,7 @@ import { mintTasks, wallets, collections, mintHistory } from '@/drizzle/schema';
 import { desc, eq, and, inArray } from 'drizzle-orm';
 import { simulateMint, estimateMintGas, executeMint, getMintMode, type MintParams } from '@/lib/blockchain/mint';
 import { logActivity } from '@/lib/monitoring';
+import { sendTelegramNotification } from '@/lib/services/telegram.service';
 import type { Hex } from 'viem';
 
 export async function getUserMintTasks(userId: string) {
@@ -35,6 +36,11 @@ export async function addMintTask(userId: string, data: { walletId: string; coll
     contractAddress: task.contractAddress,
   });
 
+  await sendTelegramNotification(userId, 'mint_scheduled', {
+    taskId: task.id,
+    contractAddress: task.contractAddress || undefined,
+  });
+
   return task;
 }
 
@@ -64,6 +70,10 @@ export async function executeMintTask(taskId: string, userId?: string): Promise<
   }
 
   await logActivity(claimed.userId, 'mint_status_changed', 'Mint task started', { taskId, status: 'running' });
+  await sendTelegramNotification(claimed.userId, 'mint_started', {
+    taskId,
+    contractAddress: claimed.contractAddress || undefined,
+  });
 
   if (claimed.txHash) {
     return { success: true, txHash: claimed.txHash };
@@ -71,12 +81,21 @@ export async function executeMintTask(taskId: string, userId?: string): Promise<
 
   if (!claimed.walletId || !claimed.contractAddress) {
     await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
+    await sendTelegramNotification(claimed.userId, 'mint_failed', {
+      taskId,
+      error: 'Mint task missing wallet or contract',
+    });
     return { success: false, error: 'Mint task missing wallet or contract' };
   }
 
   const [wallet] = await getDb().select().from(wallets).where(eq(wallets.id, claimed.walletId)).limit(1);
   if (!wallet) {
     await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
+    await sendTelegramNotification(claimed.userId, 'mint_failed', {
+      taskId,
+      contractAddress: claimed.contractAddress,
+      error: 'Wallet not found for mint task',
+    });
     return { success: false, error: 'Wallet not found for mint task' };
   }
 
@@ -93,12 +112,22 @@ export async function executeMintTask(taskId: string, userId?: string): Promise<
   const gas = await estimateMintGas(wallet.address as Hex, chain, params);
   if (gas.error) {
     await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
+    await sendTelegramNotification(claimed.userId, 'mint_failed', {
+      taskId,
+      contractAddress: claimed.contractAddress,
+      error: gas.error,
+    });
     return { success: false, error: gas.error };
   }
 
   const sim = await simulateMint(wallet.address as Hex, chain, params);
   if (!sim.success) {
     await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
+    await sendTelegramNotification(claimed.userId, 'mint_failed', {
+      taskId,
+      contractAddress: claimed.contractAddress,
+      error: sim.error,
+    });
     return { success: false, error: sim.error };
   }
 
@@ -119,6 +148,11 @@ export async function executeMintTask(taskId: string, userId?: string): Promise<
 
     if (!result.success) {
       await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
+      await sendTelegramNotification(claimed.userId, 'mint_failed', {
+        taskId,
+        contractAddress: claimed.contractAddress,
+        error: result.error,
+      });
       return { success: false, error: result.error };
     }
   }
@@ -149,6 +183,11 @@ export async function executeMintTask(taskId: string, userId?: string): Promise<
       txHash: result.txHash,
       chain,
       mode,
+    });
+    await sendTelegramNotification(claimed.userId, 'mint_success', {
+      taskId,
+      contractAddress: claimed.contractAddress,
+      txHash: result.txHash,
     });
   }
 
@@ -188,6 +227,10 @@ export async function updateMintTaskStatus(
 
   if (status === 'running') {
     await logActivity(userId, 'mint_status_changed', 'Mint task started', { taskId: id, status });
+    await sendTelegramNotification(userId, 'mint_started', {
+      taskId: id,
+      contractAddress: task.contractAddress || undefined,
+    });
   }
 
   if (status === 'cancelled') {
