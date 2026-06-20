@@ -4,6 +4,7 @@ import { desc, eq, and, inArray } from 'drizzle-orm';
 import { simulateMint, estimateMintGas, executeMint, getMintMode, type MintParams } from '@/lib/blockchain/mint';
 import { logActivity } from '@/lib/monitoring';
 import { sendTelegramNotification } from '@/lib/services/telegram.service';
+import { requireRiskApproval } from '@/lib/services/risk.service';
 import type { Hex } from 'viem';
 
 export async function getUserMintTasks(userId: string) {
@@ -11,7 +12,7 @@ export async function getUserMintTasks(userId: string) {
   return result;
 }
 
-export async function addMintTask(userId: string, data: { walletId: string; collectionId: string; quantity: number; chain?: string }) {
+export async function addMintTask(userId: string, data: { walletId: string; collectionId: string; quantity: number; chain?: string; safeModeEnabled?: boolean }) {
   const [wallet] = await getDb().select().from(wallets).where(and(eq(wallets.id, data.walletId), eq(wallets.userId, userId))).limit(1);
   if (!wallet) throw new Error('Wallet not found');
 
@@ -27,6 +28,7 @@ export async function addMintTask(userId: string, data: { walletId: string; coll
     contractAddress: collection.contractAddress,
     mintPrice: collection.mintPrice || undefined,
     gasLimit: undefined,
+    safeModeEnabled: data.safeModeEnabled ?? false,
   }).returning();
 
   await logActivity(userId, 'task_created', 'Mint task created', {
@@ -45,15 +47,23 @@ export async function addMintTask(userId: string, data: { walletId: string; coll
 }
 
 export async function executeMintTask(taskId: string, userId?: string): Promise<{ success: boolean; txHash?: string; error?: string }> {
+  const riskGate = await requireRiskApproval({ taskId, action: 'mint', userId });
+  if (!riskGate.approved) {
+    return {
+      success: false,
+      error: `Risk approval required: ${riskGate.risk?.riskScore ?? 0}/100`,
+    };
+  }
+
   const claimWhere = userId
     ? and(
         eq(mintTasks.id, taskId),
         eq(mintTasks.userId, userId),
-        inArray(mintTasks.status, ['pending', 'monitoring', 'ready', 'failed', 'cancelled']),
+        inArray(mintTasks.status, ['pending', 'monitoring', 'ready', 'failed']),
       )
     : and(
         eq(mintTasks.id, taskId),
-        inArray(mintTasks.status, ['pending', 'monitoring', 'ready', 'failed', 'cancelled']),
+        inArray(mintTasks.status, ['pending', 'monitoring', 'ready', 'failed']),
       );
   // ── Atomic claim: only a 'pending' task can be claimed ─────────
   const [claimed] = await getDb()

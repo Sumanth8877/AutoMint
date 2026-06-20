@@ -10,6 +10,7 @@ import { getMintState } from '@/lib/services/mint-state.service';
 import { fetchMintRequirements } from '@/lib/services/mint-requirements.service';
 import { handleMintUrl } from '@/lib/services/mint-orchestrator.service';
 import { createWallet } from '@/lib/services/wallet.service';
+import { cancelScheduledMint, scheduleMint } from '@/lib/services/qstash.service';
 
 const TELEGRAM_API_BASE = 'https://api.telegram.org';
 const MAX_SEND_ATTEMPTS = 3;
@@ -48,18 +49,31 @@ type TelegramMessage = {
   text?: string;
 };
 
+type TelegramCallbackQuery = {
+  id: string;
+  from: TelegramUser;
+  message?: TelegramMessage;
+  data?: string;
+};
+
 export type TelegramUpdate = {
   update_id: number;
   message?: TelegramMessage;
   edited_message?: TelegramMessage;
+  callback_query?: TelegramCallbackQuery;
 };
 
 type SendMessageResult = {
   message_id: number;
 };
 
+type InlineKeyboardMarkup = {
+  inline_keyboard: Array<Array<{ text: string; callback_data: string }>>;
+};
+
 type SendMessageOptions = {
   disableWebPagePreview?: boolean;
+  replyMarkup?: InlineKeyboardMarkup;
 };
 
 type NotificationPayload = {
@@ -74,6 +88,14 @@ type NotificationPayload = {
   symbol?: string;
   riskReason?: string;
   confidence?: number;
+};
+
+type SafeModePromptParams = {
+  userId: string;
+  taskId: string;
+  action: 'mint' | 'schedule';
+  riskScore: number;
+  riskReasons: string[];
 };
 
 function getTelegramBotToken() {
@@ -148,6 +170,14 @@ export async function sendTelegramMessage(
     chat_id: chatId,
     text,
     disable_web_page_preview: options.disableWebPagePreview ?? true,
+    reply_markup: options.replyMarkup,
+  });
+}
+
+async function answerCallbackQuery(callbackQueryId: string, text?: string) {
+  return telegramRequest<boolean>('answerCallbackQuery', {
+    callback_query_id: callbackQueryId,
+    text,
   });
 }
 
@@ -305,6 +335,38 @@ export async function sendTelegramNotification(
   }
 }
 
+export async function sendTelegramSafeModePrompt(params: SafeModePromptParams) {
+  try {
+    const account = await getTelegramAccountByUserId(params.userId);
+    if (!account) return { sent: false, reason: 'telegram_not_linked' };
+
+    const primaryLabel = params.action === 'schedule' ? 'Schedule Anyway' : 'Mint Anyway';
+    const primaryAction = params.action === 'schedule' ? 'schedule_anyway' : 'mint_anyway';
+    const reasons = params.riskReasons.slice(0, 5).map((reason) => `- ${reason}`).join('\n');
+
+    await sendTelegramMessage(account.chatId, [
+      params.action === 'schedule' ? 'High Risk Scheduled Mint' : 'High Risk Live Mint',
+      `Risk Score: ${params.riskScore}/100`,
+      reasons || 'No specific risk reasons available.',
+    ].join('\n'), {
+      replyMarkup: {
+        inline_keyboard: [[
+          { text: primaryLabel, callback_data: `risk:${primaryAction}:${params.taskId}` },
+          { text: 'Cancel', callback_data: `risk:cancel:${params.taskId}` },
+        ]],
+      },
+    });
+
+    return { sent: true };
+  } catch (error) {
+    console.error('Telegram safe mode prompt failed:', error);
+    return {
+      sent: false,
+      reason: error instanceof Error ? error.message : 'telegram_safe_mode_prompt_failed',
+    };
+  }
+}
+
 export async function notifyWalletBalanceIfLow(params: {
   userId: string;
   address: string;
@@ -450,12 +512,32 @@ async function handleScheduleCommand(message: TelegramMessage, userId: string, u
     mintPrice: requirements.mintPrice,
   }).returning();
 
+  if (mintState.status !== 'LIVE') {
+    const scheduledTime = mintState.startTime && mintState.startTime.getTime() > Date.now()
+      ? mintState.startTime
+      : undefined;
+    const scheduledTask = await scheduleMint({ taskId: task.id, userId, scheduledTime });
+    if (!scheduledTask.qstashMessageId) {
+      await reply(message, `Risk approval requested.\nTask: ${scheduledTask.id}`);
+      return;
+    }
+    await reply(message, `Mint scheduled.\nTask: ${scheduledTask.id}`);
+    return;
+  }
+
+  const { requireRiskApproval } = await import('@/lib/services/risk.service');
+  const riskGate = await requireRiskApproval({ taskId: task.id, action: 'mint', userId });
+  if (!riskGate.approved) {
+    await reply(message, `Risk approval requested.\nTask: ${task.id}`);
+    return;
+  }
+
   await sendTelegramNotification(userId, 'mint_scheduled', {
     url,
     taskId: task.id,
     contractAddress: intent.contractAddress,
   });
-  await reply(message, `Mint scheduled.\nTask: ${task.id}`);
+  await reply(message, `Mint is live and ready.\nTask: ${task.id}`);
 }
 
 async function handleWatchCommand(message: TelegramMessage, userId: string, address: string) {
@@ -530,16 +612,7 @@ async function handleCancelCommand(message: TelegramMessage, userId: string) {
     return;
   }
 
-  const [task] = await getDb()
-    .update(mintTasks)
-    .set({ status: 'cancelled', updatedAt: new Date() })
-    .where(and(eq(mintTasks.id, target.id), eq(mintTasks.userId, userId)))
-    .returning();
-
-  if (!task) {
-    await reply(message, 'No cancellable mint task found.');
-    return;
-  }
+  const task = await cancelScheduledMint(target.id, userId);
 
   await reply(message, `Cancelled mint task.\nTask: ${task.id}`);
 }
@@ -555,7 +628,66 @@ async function handleSettingsCommand(message: TelegramMessage, account: { userna
   ].join('\n'));
 }
 
+async function handleRiskCallback(callback: TelegramCallbackQuery) {
+  const [scope, action, taskId] = (callback.data || '').split(':');
+  if (scope !== 'risk' || !action || !taskId) {
+    await answerCallbackQuery(callback.id);
+    return { handled: false };
+  }
+
+  const account = await getTelegramAccountByTelegramId(String(callback.from.id));
+  if (!account) {
+    await answerCallbackQuery(callback.id, 'Telegram is not linked.');
+    return { handled: true };
+  }
+
+  if (action === 'cancel') {
+    const { cancelScheduledMint } = await import('@/lib/services/qstash.service');
+    await cancelScheduledMint(taskId, account.userId);
+    await answerCallbackQuery(callback.id, 'Cancelled.');
+    await sendTelegramMessage(account.chatId, `Cancelled mint task.\nTask: ${taskId}`);
+    return { handled: true };
+  }
+
+  if (action === 'schedule_anyway') {
+    const { scheduleMint } = await import('@/lib/services/qstash.service');
+    await scheduleMint({ taskId, userId: account.userId, overrideRiskFlag: true });
+    await answerCallbackQuery(callback.id, 'Scheduled.');
+    await sendTelegramMessage(account.chatId, `Scheduled mint task.\nTask: ${taskId}`);
+    return { handled: true };
+  }
+
+  if (action === 'mint_anyway') {
+    const { getDb } = await import('@/lib/db');
+    const { mintTasks } = await import('@/drizzle/schema');
+    const { eq, and } = await import('drizzle-orm');
+    const { executeMintTask } = await import('@/lib/services/mint.service');
+
+    await getDb()
+      .update(mintTasks)
+      .set({ overrideRiskFlag: true, updatedAt: new Date() })
+      .where(and(eq(mintTasks.id, taskId), eq(mintTasks.userId, account.userId)));
+
+    const result = await executeMintTask(taskId, account.userId);
+    await answerCallbackQuery(callback.id, result.success ? 'Mint started.' : 'Mint failed.');
+    await sendTelegramMessage(
+      account.chatId,
+      result.success
+        ? `Mint approved.\nTask: ${taskId}${result.txHash ? `\nTx: ${result.txHash}` : ''}`
+        : `Mint failed.\nTask: ${taskId}\nReason: ${result.error || 'Unknown error'}`,
+    );
+    return { handled: true };
+  }
+
+  await answerCallbackQuery(callback.id);
+  return { handled: false };
+}
+
 export async function handleTelegramUpdate(update: TelegramUpdate) {
+  if (update.callback_query?.data) {
+    return handleRiskCallback(update.callback_query);
+  }
+
   const message = update.message ?? update.edited_message;
   if (!message?.text) return { handled: false };
 

@@ -13,7 +13,13 @@ export async function POST(request: Request) {
   try {
     verifyQStashSignature(request.headers, rawBody);
 
-    const payload = JSON.parse(rawBody) as ScheduledMintPayload;
+    let payload: ScheduledMintPayload;
+    try {
+      payload = JSON.parse(rawBody) as ScheduledMintPayload;
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON request body' }, { status: 400 });
+    }
+
     if (!payload.taskId) {
       return NextResponse.json({ error: 'taskId is required' }, { status: 400 });
     }
@@ -23,7 +29,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('QStash webhook error:', error);
     const message = error instanceof Error ? error.message : 'QStash webhook failed';
-    const status = message.includes('signature') || message.includes('Signing') ? 401 : 500;
+    const status = message.toLowerCase().includes('signature') || message.includes('Signing') ? 401 : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }

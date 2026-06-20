@@ -9,7 +9,7 @@ import { logActivity } from '@/lib/monitoring';
 import { acquireCronLock, releaseCronLock } from '@/lib/redis/lock';
 import { executeMintTask } from '@/lib/services/mint.service';
 import { getMintState } from '@/lib/services/mint-state.service';
-import { sendTelegramNotification } from '@/lib/services/telegram.service';
+import { requireRiskApproval } from '@/lib/services/risk.service';
 
 const QSTASH_BASE_URL = 'https://qstash.upstash.io';
 const DEFAULT_SCHEDULE_DELAY_MS = 60_000;
@@ -145,16 +145,59 @@ async function deleteQStashMessage(messageId: string) {
   }
 }
 
+async function sendScheduledMintNotification(
+  userId: string,
+  type: 'mint_scheduled' | 'mint_failed' | 'wallet_balance_low',
+  payload: {
+    taskId?: string;
+    contractAddress?: string;
+    wallet?: string;
+    error?: string;
+    balance?: string;
+    symbol?: string;
+  } = {},
+) {
+  const { sendTelegramNotification } = await import('@/lib/services/telegram.service');
+  return sendTelegramNotification(userId, type, payload);
+}
+
 export async function scheduleMint(params: {
   taskId: string;
+  userId?: string;
   scheduledTime?: Date;
   overrideRiskFlag?: boolean;
 }) {
   const [task] = await getDb().select().from(mintTasks).where(eq(mintTasks.id, params.taskId)).limit(1);
   if (!task) throw new Error('Mint task not found');
+  if (params.userId && task.userId !== params.userId) throw new Error('Mint task not found');
   if (task.status === 'completed' || task.status === 'running') return task;
 
+  const overrideRiskFlag = params.overrideRiskFlag ?? task.overrideRiskFlag ?? false;
+  if (!overrideRiskFlag) {
+    const riskGate = await requireRiskApproval({ taskId: task.id, action: 'schedule' });
+    if (!riskGate.approved) {
+      const [blocked] = await getDb()
+        .update(mintTasks)
+        .set({
+          status: 'pending',
+          qstashMessageId: null,
+          scheduledTime: null,
+          safeModeEnabled: true,
+          updatedAt: new Date(),
+        })
+        .where(eq(mintTasks.id, task.id))
+        .returning();
+
+      return blocked ?? task;
+    }
+  }
+
   const scheduledTime = params.scheduledTime ?? new Date(Date.now() + DEFAULT_SCHEDULE_DELAY_MS);
+
+  if (task.qstashMessageId) {
+    await deleteQStashMessage(task.qstashMessageId);
+  }
+
   const qstash = await publishQStashMessage(task.id, scheduledTime);
   const qstashMessageId = qstash.messageId || qstash.scheduleId;
   if (!qstashMessageId) throw new Error('QStash response did not include a message id');
@@ -165,7 +208,7 @@ export async function scheduleMint(params: {
       status: 'monitoring',
       qstashMessageId,
       scheduledTime,
-      overrideRiskFlag: params.overrideRiskFlag ?? task.overrideRiskFlag ?? false,
+      overrideRiskFlag,
       updatedAt: new Date(),
     })
     .where(eq(mintTasks.id, task.id))
@@ -176,7 +219,7 @@ export async function scheduleMint(params: {
     qstashMessageId,
     scheduledTime: scheduledTime.toISOString(),
   });
-  await sendTelegramNotification(task.userId, 'mint_scheduled', {
+  await sendScheduledMintNotification(task.userId, 'mint_scheduled', {
     taskId: task.id,
     contractAddress: task.contractAddress || undefined,
   });
@@ -245,9 +288,16 @@ export async function executeScheduledMint(taskId: string) {
       return { success: true, skipped: true, txHash: task.txHash || undefined };
     }
 
+    if (task.status === 'cancelled') {
+      return { success: false, skipped: true, error: 'Mint task was cancelled' };
+    }
+
     if (!wallet || !task.walletId || !task.contractAddress) {
-      await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
-      await sendTelegramNotification(task.userId, 'mint_failed', {
+      await getDb()
+        .update(mintTasks)
+        .set({ status: 'failed', qstashMessageId: null, scheduledTime: null, updatedAt: new Date() })
+        .where(eq(mintTasks.id, taskId));
+      await sendScheduledMintNotification(task.userId, 'mint_failed', {
         taskId,
         contractAddress: task.contractAddress || undefined,
         error: 'Scheduled mint missing wallet or contract',
@@ -256,6 +306,19 @@ export async function executeScheduledMint(taskId: string) {
     }
 
     if (!task.overrideRiskFlag) {
+      const riskGate = await requireRiskApproval({ taskId, action: 'mint' });
+      if (!riskGate.approved) {
+        await getDb()
+          .update(mintTasks)
+          .set({ status: 'ready', qstashMessageId: null, scheduledTime: null, safeModeEnabled: true, updatedAt: new Date() })
+          .where(eq(mintTasks.id, taskId));
+        return {
+          success: false,
+          skipped: true,
+          error: `Risk approval required: ${riskGate.risk?.riskScore ?? 0}/100`,
+        };
+      }
+
       const mintState = await getMintState(task.contractAddress, wallet.chain);
       if (mintState.status !== 'LIVE') {
         const retryAt = mintState.startTime && mintState.startTime.getTime() > Date.now()
@@ -273,18 +336,21 @@ export async function executeScheduledMint(taskId: string) {
 
     const balance = await getWalletBalance(wallet.address, wallet.chain);
     if (!hasEnoughBalance(balance.balance, task.mintPrice, task.quantity)) {
-      await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
+      await getDb()
+        .update(mintTasks)
+        .set({ status: 'failed', qstashMessageId: null, scheduledTime: null, updatedAt: new Date() })
+        .where(eq(mintTasks.id, taskId));
       await logActivity(task.userId, 'mint_status_changed', 'Scheduled mint failed balance check', {
         taskId,
         balance: balance.balance,
         symbol: balance.symbol,
       });
-      await sendTelegramNotification(task.userId, 'wallet_balance_low', {
+      await sendScheduledMintNotification(task.userId, 'wallet_balance_low', {
         wallet: wallet.address,
         balance: balance.balance,
         symbol: balance.symbol,
       });
-      await sendTelegramNotification(task.userId, 'mint_failed', {
+      await sendScheduledMintNotification(task.userId, 'mint_failed', {
         taskId,
         contractAddress: task.contractAddress,
         error: 'Wallet balance is too low',
@@ -297,7 +363,7 @@ export async function executeScheduledMint(taskId: string) {
       .set({ status: 'ready', qstashMessageId: null, updatedAt: new Date() })
       .where(and(
         eq(mintTasks.id, taskId),
-        inArray(mintTasks.status, ['pending', 'monitoring', 'ready', 'failed', 'cancelled']),
+        inArray(mintTasks.status, ['pending', 'monitoring', 'ready']),
       ))
       .returning();
 

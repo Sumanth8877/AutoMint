@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
+import { and, eq } from 'drizzle-orm';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getErrorMessage, parseJsonBody } from '@/lib/api/errors';
 import { addMintTask, executeMintTask, getMintTaskById, getUserMintTasks, removeMintTask, updateMintTaskStatus } from '@/lib/services/mint.service';
+import { cancelScheduledMint, scheduleMint } from '@/lib/services/qstash.service';
+import { getMintState } from '@/lib/services/mint-state.service';
+import { getDb } from '@/lib/db';
+import { collections } from '@/drizzle/schema';
 
 // GET /api/mints
 export async function GET() {
@@ -22,15 +27,39 @@ export async function POST(req: Request) {
     const authResult = await requireApiUser();
     if ('error' in authResult) return authResult.error;
 
-    const body = await parseJsonBody<{ walletId?: string; collectionId?: string; quantity?: string | number }>(req);
-    const { walletId, collectionId, quantity } = body;
+    const body = await parseJsonBody<{ walletId?: string; collectionId?: string; quantity?: string | number; safeModeEnabled?: boolean }>(req);
+    const { walletId, collectionId, quantity, safeModeEnabled } = body;
 
     if (!walletId || !collectionId) {
       return NextResponse.json({ error: 'Wallet ID and Collection ID are required' }, { status: 400 });
     }
 
     const qty = Math.max(1, parseInt(String(quantity ?? '1'), 10) || 1);
-    const task = await addMintTask(authResult.userId, { walletId, collectionId, quantity: qty });
+    const task = await addMintTask(authResult.userId, { walletId, collectionId, quantity: qty, safeModeEnabled: safeModeEnabled ?? false });
+
+    const [collection] = await getDb()
+      .select()
+      .from(collections)
+      .where(and(eq(collections.id, collectionId), eq(collections.userId, authResult.userId)))
+      .limit(1);
+
+    if (!collection) {
+      return NextResponse.json({ task }, { status: 201 });
+    }
+
+    const mintState = await getMintState(collection.contractAddress, collection.chain);
+    if (mintState.status !== 'LIVE' && mintState.status !== 'ENDED') {
+      const detectedStart = mintState.startTime || collection.mintStart || undefined;
+      const scheduledTime = detectedStart && detectedStart.getTime() > Date.now() ? detectedStart : undefined;
+      const scheduledTask = await scheduleMint({ taskId: task.id, userId: authResult.userId, scheduledTime });
+
+      return NextResponse.json({ task: scheduledTask }, { status: 201 });
+    }
+
+    if (mintState.status === 'LIVE') {
+      const readyTask = await updateMintTaskStatus(task.id, authResult.userId, 'ready');
+      return NextResponse.json({ task: readyTask }, { status: 201 });
+    }
 
     return NextResponse.json({ task }, { status: 201 });
   } catch (error) {
@@ -57,7 +86,7 @@ export async function PATCH(req: Request) {
     }
 
     if (body.action === 'cancel') {
-      const task = await updateMintTaskStatus(body.id, authResult.userId, 'cancelled');
+      const task = await cancelScheduledMint(body.id, authResult.userId);
       return NextResponse.json({ task });
     }
 
@@ -86,6 +115,15 @@ export async function DELETE(req: Request) {
     const { id } = body;
 
     if (!id) return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
+
+    const existing = await getMintTaskById(id, authResult.userId);
+    if (!existing) {
+      return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+    }
+
+    if (existing.qstashMessageId) {
+      await cancelScheduledMint(id, authResult.userId);
+    }
 
     await removeMintTask(id, authResult.userId);
     return NextResponse.json({ success: true });
