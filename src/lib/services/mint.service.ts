@@ -5,6 +5,7 @@ import { simulateMint, estimateMintGas, executeMint, getMintMode, type MintParam
 import { logActivity } from '@/lib/monitoring';
 import { sendTelegramNotification } from '@/lib/services/telegram.service';
 import { requireRiskApproval } from '@/lib/services/risk.service';
+import { addBreadcrumb, captureException, captureMessage, startSpan } from '@/lib/observability/sentry';
 import type { Hex } from 'viem';
 
 export async function getUserMintTasks(userId: string) {
@@ -47,6 +48,7 @@ export async function addMintTask(userId: string, data: { walletId: string; coll
 }
 
 export async function executeMintTask(taskId: string, userId?: string): Promise<{ success: boolean; txHash?: string; error?: string }> {
+  return startSpan('mint.execute_task', { area: 'minting', taskId, userId }, async () => {
   const riskGate = await requireRiskApproval({ taskId, action: 'mint', userId });
   if (!riskGate.approved) {
     return {
@@ -80,6 +82,12 @@ export async function executeMintTask(taskId: string, userId?: string): Promise<
   }
 
   await logActivity(claimed.userId, 'mint_status_changed', 'Mint task started', { taskId, status: 'running' });
+  addBreadcrumb({
+    category: 'mint',
+    message: 'mint started',
+    level: 'info',
+    data: { taskId, userId: claimed.userId, walletId: claimed.walletId, collectionId: claimed.collectionId, chain: claimed.contractAddress },
+  });
   await sendTelegramNotification(claimed.userId, 'mint_started', {
     taskId,
     contractAddress: claimed.contractAddress || undefined,
@@ -91,6 +99,12 @@ export async function executeMintTask(taskId: string, userId?: string): Promise<
 
   if (!claimed.walletId || !claimed.contractAddress) {
     await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
+    await captureMessage('Mint task missing wallet or contract', {
+      area: 'minting',
+      level: 'error',
+      context: { userId: claimed.userId, taskId, walletId: claimed.walletId ?? undefined, collection: claimed.collectionId ?? undefined },
+      fingerprint: ['mint', 'missing-wallet-contract'],
+    });
     await sendTelegramNotification(claimed.userId, 'mint_failed', {
       taskId,
       error: 'Mint task missing wallet or contract',
@@ -101,6 +115,12 @@ export async function executeMintTask(taskId: string, userId?: string): Promise<
   const [wallet] = await getDb().select().from(wallets).where(eq(wallets.id, claimed.walletId)).limit(1);
   if (!wallet) {
     await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
+    await captureMessage('Wallet not found for mint task', {
+      area: 'minting',
+      level: 'error',
+      context: { userId: claimed.userId, taskId, walletId: claimed.walletId },
+      fingerprint: ['mint', 'wallet-not-found'],
+    });
     await sendTelegramNotification(claimed.userId, 'mint_failed', {
       taskId,
       contractAddress: claimed.contractAddress,
@@ -122,6 +142,13 @@ export async function executeMintTask(taskId: string, userId?: string): Promise<
   const gas = await estimateMintGas(wallet.address as Hex, chain, params);
   if (gas.error) {
     await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
+    await captureMessage('Gas estimation failed', {
+      area: 'minting',
+      level: 'error',
+      context: { userId: claimed.userId, taskId, walletId: claimed.walletId, wallet: wallet.address, collection: claimed.collectionId ?? undefined, chain },
+      extra: { error: gas.error, contractAddress: claimed.contractAddress },
+      fingerprint: ['mint', 'gas-estimation'],
+    });
     await sendTelegramNotification(claimed.userId, 'mint_failed', {
       taskId,
       contractAddress: claimed.contractAddress,
@@ -133,6 +160,13 @@ export async function executeMintTask(taskId: string, userId?: string): Promise<
   const sim = await simulateMint(wallet.address as Hex, chain, params);
   if (!sim.success) {
     await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
+    await captureMessage('Mint simulation failed', {
+      area: 'minting',
+      level: 'error',
+      context: { userId: claimed.userId, taskId, walletId: claimed.walletId, wallet: wallet.address, collection: claimed.collectionId ?? undefined, chain },
+      extra: { error: sim.error, contractAddress: claimed.contractAddress },
+      fingerprint: ['mint', 'simulation'],
+    });
     await sendTelegramNotification(claimed.userId, 'mint_failed', {
       taskId,
       contractAddress: claimed.contractAddress,
@@ -158,6 +192,13 @@ export async function executeMintTask(taskId: string, userId?: string): Promise<
 
     if (!result.success) {
       await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
+      await captureMessage('Mint transaction failed', {
+        area: 'minting',
+        level: 'error',
+        context: { userId: claimed.userId, taskId, walletId: claimed.walletId, wallet: wallet.address, collection: claimed.collectionId ?? undefined, chain },
+        extra: { error: result.error, contractAddress: claimed.contractAddress },
+        fingerprint: ['mint', 'transaction-failed'],
+      });
       await sendTelegramNotification(claimed.userId, 'mint_failed', {
         taskId,
         contractAddress: claimed.contractAddress,
@@ -201,7 +242,22 @@ export async function executeMintTask(taskId: string, userId?: string): Promise<
     });
   }
 
+  addBreadcrumb({
+    category: 'mint',
+    message: 'mint completed',
+    level: 'info',
+    data: { taskId, userId: claimed.userId, txHash: result.txHash, chain, mode },
+  });
+
   return { success: true, txHash: result.txHash };
+  }).catch(async (error) => {
+    await captureException(error, {
+      area: 'minting',
+      context: { userId, taskId },
+      fingerprint: ['mint', 'execute-task'],
+    });
+    throw error;
+  });
 }
 
 export async function removeMintTask(id: string, userId: string) {

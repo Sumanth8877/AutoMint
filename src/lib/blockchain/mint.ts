@@ -1,7 +1,9 @@
-import { createWalletClient, http, parseAbi, parseEther, Hex, encodeFunctionData } from 'viem';
+import { parseAbi, parseEther, Hex, encodeFunctionData } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { mainnet, base, polygon, type Chain } from 'viem/chains';
 import { getClient } from './client';
+import { getWalletClient } from '@/lib/services/rpc-manager.service';
+import { captureException, captureMessage } from '@/lib/observability/sentry';
 
 // ─── MINT_MODE Configuration ─────────────────────
 
@@ -17,20 +19,6 @@ export function getMintMode(): MintMode {
 }
 
 // ─── Config ───────────────────────────────────────
-
-const VOUCHED_RPC = process.env.ALCHEMY_API_KEY
-  ? {
-      ethereum: `https://eth-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`,
-      base: `https://base-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`,
-      polygon: `https://polygon-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`,
-    }
-  : {};
-
-function getRpcUrl(chain: string): string {
-  const v = VOUCHED_RPC[chain as keyof typeof VOUCHED_RPC];
-  if (!v) throw new Error(`No RPC configured for chain: ${chain}`);
-  return v;
-}
 
 const CHAIN_OBJECTS: Record<string, Chain> = {
   ethereum: mainnet,
@@ -107,6 +95,11 @@ export async function simulateMint(
 
     return { success: true };
   } catch (error) {
+    await captureException(error, {
+      area: 'minting',
+      context: { wallet: address, chain, collection: params.contractAddress },
+      fingerprint: ['mint', 'simulate-contract-call'],
+    });
     return {
       success: false,
       error: getErrorMessage(error) || 'Simulation failed',
@@ -134,6 +127,11 @@ export async function estimateMintGas(
 
     return { gasLimit: estimate };
   } catch (error) {
+      await captureException(error, {
+        area: 'minting',
+        context: { wallet: address, chain, collection: params.contractAddress },
+        fingerprint: ['mint', 'gas-estimation'],
+      });
       return {
         gasLimit: BigInt(200000),
         error: getErrorMessage(error) || 'Gas estimation failed',
@@ -214,7 +212,6 @@ export async function executeMint(
     }
 
     // ── Build and broadcast real transaction ─────────
-    const chainObj = getChain(chain);
     const mintData = buildMintData(params);
 
     const privateKey = process.env.PRIVATE_KEY as Hex | undefined;
@@ -228,17 +225,13 @@ export async function executeMint(
     }
 
     const account = privateKeyToAccount(privateKey);
-
-    const walletClient = createWalletClient({
-      account,
-      chain: chainObj,
-      transport: http(getRpcUrl(chain)),
-    });
+    const walletClient = getWalletClient(chain, account);
 
     const value = params.mintPrice ? parseEther(params.mintPrice) : BigInt(0);
 
     const hash = await walletClient.sendTransaction({
-      chain: chainObj,
+      account,
+      chain: getChain(chain),
       to: params.contractAddress,
       data: mintData,
       value,
@@ -249,6 +242,15 @@ export async function executeMint(
     const client = getClient(chain);
     const receipt = await client.waitForTransactionReceipt({ hash });
 
+    if (receipt.status !== 'success') {
+      await captureMessage('Mint transaction reverted', {
+        area: 'minting',
+        level: 'error',
+        context: { wallet: address, chain, collection: params.contractAddress, transactionHash: hash },
+        fingerprint: ['mint', 'reverted'],
+      });
+    }
+
     return {
       success: receipt.status === 'success',
       txHash: hash,
@@ -256,6 +258,11 @@ export async function executeMint(
       blockNumber: receipt.blockNumber,
     };
   } catch (error) {
+    await captureException(error, {
+      area: 'minting',
+      context: { wallet: address, chain, collection: params.contractAddress },
+      fingerprint: ['mint', 'execute'],
+    });
     return {
       success: false,
       error: getErrorMessage(error) || 'Mint execution failed',

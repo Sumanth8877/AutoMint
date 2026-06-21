@@ -124,10 +124,11 @@ export async function executeMintFast(
 
     // ── 3. Decrypt wallet + prepare ───────────────
     const privateKey = await getDecryptedPrivateKey(wallet.id, wallet.userId);
-    const { createWalletClient, http, parseAbi, encodeFunctionData } = await import('viem');
+    const { parseAbi, encodeFunctionData } = await import('viem');
     const { SUPPORTED_CHAINS } = await import('@/lib/blockchain/chains');
     const { parseEther } = await import('viem');
     const { privateKeyToAccount } = await import('viem/accounts');
+    const { getWalletClient } = await import('@/lib/services/rpc-manager.service');
 
     const chainObj = SUPPORTED_CHAINS[intent.chain as keyof typeof SUPPORTED_CHAINS];
     if (!chainObj) {
@@ -136,18 +137,7 @@ export async function executeMintFast(
 
     const account = privateKeyToAccount(privateKey as `0x${string}`);
 
-    const rpcUrl =
-      intent.chain === 'ethereum'
-        ? `https://eth-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`
-        : intent.chain === 'base'
-          ? `https://base-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`
-          : `https://polygon-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`;
-
-    const walletClient = createWalletClient({
-      account,
-      chain: chainObj,
-      transport: http(rpcUrl),
-    });
+    const walletClient = getWalletClient(intent.chain, account);
 
     const mintParams = buildMintParams(intent);
 
@@ -168,6 +158,7 @@ export async function executeMintFast(
 
     // ── 6. Broadcast transaction ───────────────────
     const txHash = await walletClient.sendTransaction({
+      account,
       chain: chainObj,
       to: intent.contractAddress as `0x${string}`,
       data: mintData,

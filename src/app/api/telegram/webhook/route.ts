@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { parseJsonBody } from '@/lib/api/errors';
 import { handleTelegramUpdate, type TelegramUpdate } from '@/lib/services/telegram.service';
+import { captureException } from '@/lib/observability/sentry';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +24,13 @@ export async function POST(request: Request) {
     console.error('Telegram webhook error:', error);
     const message = error instanceof Error ? error.message : 'Telegram webhook failed';
     const status = message === 'Invalid JSON request body' ? 400 : 500;
+    if (status >= 500) {
+      await captureException(error, {
+        area: 'telegram',
+        context: { route: '/api/telegram/webhook' },
+        fingerprint: ['telegram', 'webhook'],
+      });
+    }
     return NextResponse.json({ error: message }, { status });
   }
 }

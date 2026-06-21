@@ -10,6 +10,7 @@ import { acquireCronLock, releaseCronLock } from '@/lib/redis/lock';
 import { executeMintTask } from '@/lib/services/mint.service';
 import { getMintState } from '@/lib/services/mint-state.service';
 import { requireRiskApproval } from '@/lib/services/risk.service';
+import { addBreadcrumb, captureException, captureMessage } from '@/lib/observability/sentry';
 
 const QSTASH_BASE_URL = 'https://qstash.upstash.io';
 const DEFAULT_SCHEDULE_DELAY_MS = 60_000;
@@ -112,6 +113,12 @@ export function verifyQStashSignature(headers: Headers, rawBody: string) {
 }
 
 async function publishQStashMessage(taskId: string, scheduledTime: Date) {
+  addBreadcrumb({
+    category: 'qstash',
+    message: 'scheduling started',
+    level: 'info',
+    data: { taskId, scheduledTime: scheduledTime.toISOString() },
+  });
   const webhookUrl = getWebhookUrl();
   const response = await fetch(`${QSTASH_BASE_URL}/v2/publish/${encodePublishUrl(webhookUrl)}`, {
     method: 'POST',
@@ -125,7 +132,13 @@ async function publishQStashMessage(taskId: string, scheduledTime: Date) {
 
   if (!response.ok) {
     const text = await response.text().catch(() => '');
-    throw new Error(text || `QStash publish failed with status ${response.status}`);
+    const error = new Error(text || `QStash publish failed with status ${response.status}`);
+    await captureException(error, {
+      area: 'qstash',
+      context: { taskId, scheduledTime: scheduledTime.toISOString() },
+      fingerprint: ['qstash', 'publish'],
+    });
+    throw error;
   }
 
   return await response.json() as QStashPublishResponse;
@@ -201,6 +214,12 @@ export async function scheduleMint(params: {
   const qstash = await publishQStashMessage(task.id, scheduledTime);
   const qstashMessageId = qstash.messageId || qstash.scheduleId;
   if (!qstashMessageId) throw new Error('QStash response did not include a message id');
+  addBreadcrumb({
+    category: 'qstash',
+    message: 'scheduling completed',
+    level: 'info',
+    data: { taskId: task.id, qstashMessageId, scheduledTime: scheduledTime.toISOString() },
+  });
 
   const [updated] = await getDb()
     .update(mintTasks)
@@ -276,6 +295,12 @@ export async function executeScheduledMint(taskId: string) {
   const lockName = `mint:${taskId}`;
   const lockAcquired = await acquireCronLock(lockName, MINT_LOCK_TTL_SECONDS);
   if (!lockAcquired) {
+    await captureMessage('QStash duplicate execution attempt', {
+      area: 'qstash',
+      level: 'warning',
+      context: { taskId, lockName },
+      fingerprint: ['qstash', 'duplicate-execution'],
+    });
     return { success: false, skipped: true, error: 'Mint task is already locked' };
   }
 

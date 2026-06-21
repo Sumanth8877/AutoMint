@@ -5,6 +5,7 @@ import { getDb } from '@/lib/db';
 import { collections, mintHistory, mintTasks, wallets } from '@/drizzle/schema';
 import { logActivity } from '@/lib/monitoring';
 import { getMintState } from '@/lib/services/mint-state.service';
+import { addBreadcrumb, captureException, startSpan } from '@/lib/observability/sentry';
 
 const RISK_THRESHOLD = 50;
 
@@ -195,6 +196,7 @@ function scoreDomainAge(createdAt?: Date | null) {
 }
 
 export async function analyzeMintRisk(taskId: string): Promise<RiskAnalysis> {
+  return startSpan('risk.analyze_mint', { area: 'risk', taskId }, async () => {
   const subject = await loadRiskSubject(taskId);
   if (!subject?.task) throw new Error('Mint task not found');
 
@@ -257,7 +259,22 @@ export async function analyzeMintRisk(taskId: string): Promise<RiskAnalysis> {
     weights: analysis.weights,
   });
 
+  addBreadcrumb({
+    category: 'risk',
+    message: 'risk analysis completed',
+    level: 'info',
+    data: { taskId, userId: task.userId, riskScore, riskReasons },
+  });
+
   return analysis;
+  }).catch(async (error) => {
+    await captureException(error, {
+      area: 'risk',
+      context: { taskId },
+      fingerprint: ['risk', 'analysis'],
+    });
+    throw error;
+  });
 }
 
 export function isHighRisk(riskScore: number) {

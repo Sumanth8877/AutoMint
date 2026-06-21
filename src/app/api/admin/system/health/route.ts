@@ -4,6 +4,7 @@ import { requireAdminApiSession } from '@/lib/auth/require-auth';
 import { checkRedisHealth } from '@/lib/redis';
 import { getClient } from '@/lib/blockchain/client';
 import { getTaskCounts } from '@/lib/services/task.service';
+import { getRpcHealthSnapshot } from '@/lib/services/rpc-manager.service';
 import { sql } from 'drizzle-orm';
 
 function getErrorMessage(error: unknown) {
@@ -25,16 +26,18 @@ export async function GET() {
   // ─── Redis Health ───────────────────────────────
   const redis = await checkRedisHealth();
 
-  // ─── Alchemy Health (check Ethereum RPC) ────────
-  let alchemy: { status: string; error?: string } = { status: 'healthy' };
+  let rpc: { status: string; error?: string; providers?: Awaited<ReturnType<typeof getRpcHealthSnapshot>> } = { status: 'healthy' };
   try {
     const client = getClient('ethereum');
     const blockNumber = await client.getBlockNumber();
+    const providers = await getRpcHealthSnapshot();
     if (blockNumber === BigInt(0)) {
-      alchemy = { status: 'warning', error: 'Block number is 0' };
+      rpc = { status: 'warning', error: 'Block number is 0', providers };
+    } else {
+      rpc = { status: 'healthy', providers };
     }
   } catch (error) {
-    alchemy = { status: 'unhealthy', error: getErrorMessage(error) };
+    rpc = { status: 'unhealthy', error: getErrorMessage(error), providers: await getRpcHealthSnapshot() };
   }
 
   // ─── Task Counts ───────────────────────────────
@@ -53,11 +56,7 @@ export async function GET() {
       ping: redis.ping,
       error: redis.error,
     },
-    alchemy,
-    quicknode: {
-      status: 'unknown',
-      note: 'QuickNode configured via ALCHEMY_RPC env vars as fallback',
-    },
+    rpc,
     cache: {
       connected: redis.status === 'healthy',
       envConfigured: redis.envConfigured,
@@ -66,8 +65,8 @@ export async function GET() {
     summary: {
       database: database.status,
       redis: redis.status,
-      alchemy: alchemy.status,
-      overall: [database.status, redis.status, alchemy.status].every((s) => s === 'healthy') ? 'healthy' : 'degraded',
+      rpc: rpc.status,
+      overall: [database.status, redis.status, rpc.status].every((s) => s === 'healthy') ? 'healthy' : 'degraded',
     },
   };
 

@@ -11,6 +11,7 @@ import { fetchMintRequirements } from '@/lib/services/mint-requirements.service'
 import { handleMintUrl } from '@/lib/services/mint-orchestrator.service';
 import { cancelScheduledMint, scheduleMint } from '@/lib/services/qstash.service';
 import { watchWallet } from '@/lib/services/wallet-tracker.service';
+import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
 
 const TELEGRAM_API_BASE = 'https://api.telegram.org';
 const MAX_SEND_ATTEMPTS = 3;
@@ -152,6 +153,17 @@ async function telegramRequest<T>(method: string, payload: Record<string, unknow
       throw lastError;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error('Telegram request failed');
+      if (attempt === MAX_SEND_ATTEMPTS) {
+        await captureException(lastError, {
+          area: 'telegram',
+          context: {
+            chatId: typeof payload.chat_id === 'string' || typeof payload.chat_id === 'number' ? String(payload.chat_id) : undefined,
+            method,
+          },
+          extra: { payload: { ...payload, text: typeof payload.text === 'string' ? payload.text.slice(0, 120) : undefined } },
+          fingerprint: ['telegram', method],
+        });
+      }
       if (attempt < MAX_SEND_ATTEMPTS) {
         await sleep(250 * 2 ** (attempt - 1));
         continue;
@@ -446,6 +458,12 @@ async function handleStart(message: TelegramMessage, token: string) {
     chatId: String(message.chat.id),
   });
 
+  addBreadcrumb({
+    category: 'telegram',
+    message: 'telegram linked',
+    level: 'info',
+    data: { telegramId: message.from.id, chatId: message.chat.id },
+  });
   await sendTelegramMessage(account.chatId, 'Telegram linked to AutoMint. Commands: /mint <url>, /schedule <url>, /watch <wallet>, /status, /cancel, /settings.');
 }
 
@@ -638,6 +656,7 @@ async function handleSettingsCommand(message: TelegramMessage, account: { userna
 }
 
 async function handleRiskCallback(callback: TelegramCallbackQuery) {
+  try {
   const [scope, action, taskId] = (callback.data || '').split(':');
   if (scope !== 'risk' || !action || !taskId) {
     await answerCallbackQuery(callback.id);
@@ -690,6 +709,18 @@ async function handleRiskCallback(callback: TelegramCallbackQuery) {
 
   await answerCallbackQuery(callback.id);
   return { handled: false };
+  } catch (error) {
+    await captureException(error, {
+      area: 'telegram',
+      context: {
+        telegramId: String(callback.from.id),
+        chatId: callback.message?.chat.id ? String(callback.message.chat.id) : undefined,
+        callbackData: callback.data,
+      },
+      fingerprint: ['telegram', 'callback'],
+    });
+    throw error;
+  }
 }
 
 export async function handleTelegramUpdate(update: TelegramUpdate) {

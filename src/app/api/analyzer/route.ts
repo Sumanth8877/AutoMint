@@ -7,6 +7,7 @@ import { getMintState } from '@/lib/services/mint-state.service';
 import { resolveMintIntent } from '@/lib/resolve-mint-intent';
 import { parseJsonBody } from '@/lib/api/errors';
 import { sendTelegramNotification } from '@/lib/services/telegram.service';
+import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Analyzer request failed';
@@ -25,6 +26,7 @@ export async function POST(req: Request) {
     }
 
     const normalizedInput = input.startsWith('0x') ? `https://etherscan.io/address/${input}` : input;
+    addBreadcrumb({ category: 'discovery', message: 'URL submitted', level: 'info', data: { url: normalizedInput, userId: authResult.userId } });
     const intent = await resolveMintIntent(normalizedInput);
 
     if (!intent.contractAddress) {
@@ -53,6 +55,7 @@ export async function POST(req: Request) {
       mintFunction,
       analyzedAt: new Date().toISOString(),
     };
+    addBreadcrumb({ category: 'discovery', message: 'discovery completed', level: 'info', data: { url: normalizedInput, userId: authResult.userId, contractAddress: intent.contractAddress, chain: intent.chain } });
 
     await sendTelegramNotification(authResult.userId, 'risk_analysis_complete', {
       url: input,
@@ -74,6 +77,13 @@ export async function POST(req: Request) {
   } catch (error) {
     const message = getErrorMessage(error);
     const status = message === 'Invalid JSON request body' ? 400 : 500;
+    if (status >= 500) {
+      await captureException(error, {
+        area: 'discovery',
+        context: { route: '/api/analyzer' },
+        fingerprint: ['analyzer', 'route'],
+      });
+    }
     return NextResponse.json({ error: message }, { status });
   }
 }

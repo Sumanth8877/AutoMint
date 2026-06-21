@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { captureException } from '@/lib/observability/sentry';
+
 export type DiscoverySocials = {
   twitter?: string;
   discord?: string;
@@ -155,7 +157,13 @@ export async function discoverWithJina(openseaUrl: string): Promise<DiscoveryPro
   });
 
   if (!response.ok) {
-    throw new Error(`Jina discovery failed with status ${response.status}`);
+    const error = new Error(`Jina discovery failed with status ${response.status}`);
+    await captureException(error, {
+      area: 'discovery',
+      context: { url: openseaUrl, provider: 'jina' },
+      fingerprint: ['discovery', 'jina'],
+    });
+    throw error;
   }
 
   const contentType = response.headers.get('content-type') || '';
@@ -167,5 +175,14 @@ export async function discoverWithJina(openseaUrl: string): Promise<DiscoveryPro
   }
 
   const text = await response.text();
-  return extractDiscoveryFields(text);
+  try {
+    return extractDiscoveryFields(text);
+  } catch (error) {
+    await captureException(error, {
+      area: 'discovery',
+      context: { url: openseaUrl, provider: 'jina' },
+      fingerprint: ['discovery', 'jina', 'parsing'],
+    });
+    throw error;
+  }
 }

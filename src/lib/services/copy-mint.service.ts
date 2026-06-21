@@ -8,6 +8,7 @@ import { acquireCronLock, releaseCronLock } from '@/lib/redis/lock';
 import { executeMintTask } from '@/lib/services/mint.service';
 import { fetchMintRequirements } from '@/lib/services/mint-requirements.service';
 import { getMintState } from '@/lib/services/mint-state.service';
+import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
 
 type CopyMintEvent = {
   userId: string;
@@ -150,6 +151,7 @@ function priceAllowed(mintPrice: string | null | undefined, maxPrice: string | n
 }
 
 export async function handleCopyMintEvent(event: CopyMintEvent) {
+  try {
   const contractAddress = normalizeAddress(event.contractAddress);
   if (!isValidAddress(contractAddress)) {
     return { action: 'skipped' as const, reason: 'invalid_contract' };
@@ -167,6 +169,12 @@ export async function handleCopyMintEvent(event: CopyMintEvent) {
   }
 
   try {
+    addBreadcrumb({
+      category: 'copy-mint',
+      message: 'copy mint evaluation started',
+      level: 'info',
+      data: { userId: event.userId, wallet: event.watchedWalletAddress, chain: event.chain, contractAddress },
+    });
     const [mintState, requirements] = await Promise.all([
       getMintState(contractAddress, event.chain),
       fetchMintRequirements(contractAddress, event.chain),
@@ -260,5 +268,19 @@ export async function handleCopyMintEvent(event: CopyMintEvent) {
     return { action: 'failed' as const, taskId: task.id, error: result.error };
   } finally {
     await releaseCronLock(lockName);
+  }
+  } catch (error) {
+    await captureException(error, {
+      area: 'copy-mint',
+      context: {
+        userId: event.userId,
+        wallet: event.watchedWalletAddress,
+        chain: event.chain,
+        collection: event.contractAddress,
+        transactionHash: event.transactionHash,
+      },
+      fingerprint: ['copy-mint', 'execution'],
+    });
+    throw error;
   }
 }

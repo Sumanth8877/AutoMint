@@ -3,6 +3,7 @@ import 'server-only';
 import { getCache, setCache } from '@/lib/redis';
 import { discoverWithFirecrawl } from '@/lib/services/firecrawl.provider';
 import { discoverWithJina, type DiscoveryProviderResult, type DiscoverySocials } from '@/lib/services/jina.provider';
+import { addBreadcrumb, captureException, startSpan } from '@/lib/observability/sentry';
 
 const DISCOVERY_TTL_SECONDS = 24 * 60 * 60;
 const REQUIRED_FIELDS = ['contract', 'chain', 'mintPrice', 'mintStatus', 'mintTime'] as const;
@@ -127,21 +128,30 @@ function mergeProviderResults(primary: DiscoveryProviderResult, fallback: Discov
 }
 
 export async function discoverCollection(openseaUrl: string): Promise<DiscoveryResult> {
+  return startSpan('discovery.collection', { area: 'discovery', url: openseaUrl }, async () => {
   const { url, slug } = parseOpenSeaUrl(openseaUrl);
+  addBreadcrumb({ category: 'discovery', message: 'URL submitted', level: 'info', data: { url, slug } });
   const cacheKey = getCacheKey(slug);
   const cached = await getCache<DiscoveryResult>(cacheKey);
 
   if (cached) return cached;
 
+  addBreadcrumb({ category: 'discovery', message: 'discovery started', level: 'info', data: { url, provider: 'jina' } });
   const jinaResult = await discoverWithJina(url);
   let result = toDiscoveryResult(jinaResult);
 
   if (getMissingRequiredFields(result).length > 0) {
     try {
+      addBreadcrumb({ category: 'discovery', message: 'discovery fallback started', level: 'info', data: { url, provider: 'firecrawl', missing: getMissingRequiredFields(result) } });
       const firecrawlResult = await discoverWithFirecrawl(url);
       result = toDiscoveryResult(mergeProviderResults(jinaResult, firecrawlResult));
     } catch (error) {
       console.error('Firecrawl discovery fallback failed:', error);
+      await captureException(error, {
+        area: 'discovery',
+        context: { url, provider: 'firecrawl', collection: slug },
+        fingerprint: ['discovery', 'firecrawl', 'fallback'],
+      });
     }
   }
 
@@ -152,5 +162,7 @@ export async function discoverCollection(openseaUrl: string): Promise<DiscoveryR
   };
 
   await setCache(cacheKey, normalized, DISCOVERY_TTL_SECONDS);
+  addBreadcrumb({ category: 'discovery', message: 'discovery completed', level: 'info', data: { url, slug, collection: normalized.collectionName, contract: normalized.contract } });
   return normalized;
+  });
 }

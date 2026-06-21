@@ -3,6 +3,7 @@ import {
   handleAlchemyWalletWebhook,
   verifyAlchemyWebhookSignature,
 } from '@/lib/services/wallet-tracker.service';
+import { captureException } from '@/lib/observability/sentry';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +26,13 @@ export async function POST(request: Request) {
     console.error('Alchemy wallet webhook error:', error);
     const message = error instanceof Error ? error.message : 'Alchemy wallet webhook failed';
     const status = message.toLowerCase().includes('signature') ? 401 : 500;
+    if (status >= 500) {
+      await captureException(error, {
+        area: 'wallet-tracker',
+        context: { route: '/api/webhooks/alchemy/wallet', provider: 'alchemy' },
+        fingerprint: ['wallet-tracker', 'webhook'],
+      });
+    }
     return NextResponse.json({ error: message }, { status });
   }
 }
