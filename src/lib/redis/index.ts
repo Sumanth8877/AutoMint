@@ -4,13 +4,19 @@ import { Redis } from '@upstash/redis';
 
 let _redis: Redis | null = null;
 
+function getRedisConfig() {
+  return {
+    url: process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN,
+  };
+}
+
 function getRedisClient(): Redis {
   if (!_redis) {
-    const url = process.env.UPSTASH_REDIS_REST_URL;
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+    const { url, token } = getRedisConfig();
 
     if (!url || !token) {
-      throw new Error('UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN must be set');
+      throw new Error('UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN or KV_REST_API_URL/KV_REST_API_TOKEN must be set');
     }
     _redis = new Redis({
       url,
@@ -165,7 +171,8 @@ export interface RedisHealth {
 }
 
 export async function checkRedisHealth(): Promise<RedisHealth> {
-  const envConfigured = !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+  const { url, token } = getRedisConfig();
+  const envConfigured = !!(url && token);
   if (!envConfigured) {
     return { status: 'unhealthy', ping: 0, error: 'Redis env vars not configured', envConfigured: false };
   }
