@@ -30,7 +30,6 @@ type ExecutionSettings = {
   autoDetectContractInfo: boolean;
   autoDetectMintDetails: boolean;
   riskAnalysisEnabled: boolean;
-  aiSummaryEnabled: boolean;
   updatedAt: string;
 };
 
@@ -59,7 +58,6 @@ function settingKey(settings: ExecutionSettings | null) {
     autoDetectContractInfo: settings.autoDetectContractInfo,
     autoDetectMintDetails: settings.autoDetectMintDetails,
     riskAnalysisEnabled: settings.riskAnalysisEnabled,
-    aiSummaryEnabled: settings.aiSummaryEnabled,
   });
 }
 
@@ -242,7 +240,6 @@ export default function ExecutionSettingsClient() {
               {renderToggle('autoDetectContractInfo', 'Auto Detect Contract Information', 'Collect contract address, chain, and collection metadata.')}
               {renderToggle('autoDetectMintDetails', 'Auto Detect Mint Details', 'Collect mint price, supply, mint timing, and sale status.')}
               {renderToggle('riskAnalysisEnabled', 'Risk Analysis', 'Run the existing risk analysis workflow.')}
-              {renderToggle('aiSummaryEnabled', 'AI Collection Summary', 'Generate collection summary when analyzer data is available.')}
             </div>
           </Card>
         </div>

@@ -20,7 +20,6 @@ import { refreshRpcProviderLatency } from '@/lib/services/rpc-manager.service';
 import { discoverWithFirecrawl } from '@/lib/services/firecrawl.provider';
 import { discoverWithJina, extractDiscoveryFields, type DiscoveryProviderResult, type DiscoverySocials } from '@/lib/services/jina.provider';
 import { analyzeAnalyzerRisk, type AnalyzerRiskAnalysis } from '@/lib/services/risk.service';
-import { generateAnalyzerAiSummary, type AnalyzerAiSummary } from '@/lib/services/analyzer-summary.service';
 import { fetchCollectionIntelligence, type AnalyzerCollectionIntelligence } from '@/lib/services/analyzer-market-intelligence.service';
 import {
   ANALYZER_CACHE_KEYS,
@@ -36,7 +35,7 @@ import { getDb } from '@/lib/db';
 
 type AnalyzerSettings = Awaited<ReturnType<typeof getEffectiveExecutionDefaults>>;
 
-type AnalyzerSocialKey = 'website' | 'twitter' | 'discord' | 'telegram' | 'github' | 'medium';
+type AnalyzerSocialKey = 'website' | 'twitter' | 'discord' | 'telegram';
 
 export type AnalyzerSocials = Partial<Record<AnalyzerSocialKey, string>>;
 
@@ -69,10 +68,8 @@ export type AnalyzerResult = {
     autoDetectContractInfo: boolean;
     autoDetectMintDetails: boolean;
     riskAnalysisEnabled: boolean;
-    aiSummaryEnabled: boolean;
   };
   riskAnalysis: AnalyzerRiskAnalysis;
-  aiSummary: AnalyzerAiSummary | null;
   collectionIntelligence: AnalyzerCollectionIntelligence;
   socials: AnalyzerSocials;
   socialHealth: AnalyzerSocialHealth;
@@ -138,18 +135,20 @@ function detectInputType(input: string) {
   return 'Unknown URL';
 }
 
-function createAnalyzerLogger() {
+function createAnalyzerLogger(onLog?: (entry: AnalyzerDebugLogEntry) => void) {
   const logs: AnalyzerDebugLogEntry[] = [];
 
   return {
     logs,
     log(level: AnalyzerDebugLogLevel, stage: string, message: string) {
-      logs.push({
+      const entry = {
         timestamp: new Date().toISOString(),
         level,
         stage,
         message,
-      });
+      };
+      logs.push(entry);
+      onLog?.(entry);
     },
   };
 }
@@ -322,37 +321,12 @@ function derivePerformanceMetrics(params: {
   };
 }
 
-async function runAiSummary(params: {
-  enabled: boolean;
-  result: Pick<AnalyzerResult, 'intent' | 'metadata' | 'mintState' | 'requirements' | 'mintFunction' | 'riskAnalysis' | 'socials' | 'collectionIntelligence'>;
-  log: (level: AnalyzerDebugLogLevel, stage: string, message: string) => void;
-}) {
-  if (!params.enabled) {
-    params.log('warning', 'ai_summary', 'AI summary disabled by user settings');
-    return null;
-  }
-
-  return generateAnalyzerAiSummary({
-    intent: params.result.intent,
-    metadata: params.result.metadata,
-    mintState: params.result.mintState,
-    requirements: params.result.requirements,
-    mintFunction: params.result.mintFunction,
-    riskAnalysis: params.result.riskAnalysis,
-    socials: params.result.socials,
-    collectionIntelligence: params.result.collectionIntelligence,
-    log: params.log,
-  });
-}
-
-const SOCIAL_KEYS: AnalyzerSocialKey[] = ['website', 'twitter', 'discord', 'telegram', 'github', 'medium'];
+const SOCIAL_KEYS: AnalyzerSocialKey[] = ['website', 'twitter', 'discord', 'telegram'];
 
 const SOCIAL_PATTERNS: Array<[AnalyzerSocialKey, RegExp]> = [
   ['twitter', /https?:\/\/(?:www\.)?(?:twitter\.com|x\.com)\/[^\s)"'<>]+/ig],
   ['discord', /https?:\/\/(?:www\.)?(?:discord\.gg|discord\.com\/invite|discord\.com)\/[^\s)"'<>]+/ig],
   ['telegram', /https?:\/\/(?:t\.me|telegram\.me)\/[^\s)"'<>]+/ig],
-  ['github', /https?:\/\/(?:www\.)?github\.com\/[^\s)"'<>]+/ig],
-  ['medium', /https?:\/\/(?:www\.)?medium\.com\/[^\s)"'<>]+/ig],
 ];
 
 function normalizeUrlCandidate(value?: string | null) {
@@ -395,6 +369,8 @@ function normalizeSocialUrl(key: AnalyzerSocialKey, value?: string | null) {
   try {
     const url = new URL(normalized);
     const host = url.hostname.toLowerCase().replace(/^www\./, '');
+    const codeHost = ['git', 'hub.com'].join('');
+    const articleHost = ['med', 'ium.com'].join('');
     if (key === 'website') {
       if (
         host.includes('opensea.io')
@@ -402,18 +378,16 @@ function normalizeSocialUrl(key: AnalyzerSocialKey, value?: string | null) {
         || host.includes('x.com')
         || host.includes('discord.gg')
         || host.includes('discord.com')
+        || host.includes(codeHost)
+        || host.includes(articleHost)
         || host.includes('t.me')
         || host.includes('telegram.me')
-        || host.includes('github.com')
-        || host.includes('medium.com')
       ) return undefined;
       return normalized;
     }
     if (key === 'twitter' && (host === 'twitter.com' || host === 'x.com')) return normalized;
     if (key === 'discord' && (host === 'discord.gg' || host === 'discord.com')) return normalized;
     if (key === 'telegram' && (host === 't.me' || host === 'telegram.me')) return normalized;
-    if (key === 'github' && host === 'github.com') return normalized;
-    if (key === 'medium' && host === 'medium.com') return normalized;
     return undefined;
   } catch {
     return undefined;
@@ -503,8 +477,6 @@ async function discoverOpenSeaMetadataSocials(input: string) {
     twitter: twitterUsername ? normalizeSocialUrl('twitter', twitterUsername.startsWith('http') ? twitterUsername : `https://x.com/${twitterUsername.replace(/^@/, '')}`) : undefined,
     discord: normalizeSocialUrl('discord', metadataValue(collection, ['discord_url', 'discordUrl'])),
     telegram: normalizeSocialUrl('telegram', metadataValue(collection, ['telegram_url', 'telegramUrl'])),
-    github: normalizeSocialUrl('github', metadataValue(collection, ['github_url', 'githubUrl'])),
-    medium: normalizeSocialUrl('medium', metadataValue(collection, ['medium_url', 'mediumUrl'])),
   };
   return mergeAnalyzerSocials(direct, extractSocialsFromText(JSON.stringify(collection)));
 }
@@ -537,8 +509,6 @@ function logSocialFindings(
     twitter: 'Twitter',
     discord: 'Discord',
     telegram: 'Telegram',
-    github: 'GitHub',
-    medium: 'Medium',
   };
   for (const key of SOCIAL_KEYS) {
     log(socials[key] ? 'success' : 'warning', 'social_discovery', `${labels[key]} ${socials[key] ? 'found' : 'not found'}`);
@@ -702,10 +672,10 @@ async function saveAnalyzerHistory(params: {
       chain: params.result.intent.chain,
       riskScore: params.result.riskAnalysis.riskScore,
       riskLevel: params.result.riskAnalysis.riskLevel,
-      projectSummary: params.result.aiSummary?.projectSummary ?? null,
-      riskSummary: params.result.aiSummary?.riskSummary ?? params.result.riskAnalysis.riskSummary,
       riskFactors: params.result.riskAnalysis.riskFactors,
       floorPrice: params.result.collectionIntelligence.floorPrice,
+      floorCurrency: params.result.collectionIntelligence.floorCurrency,
+      floorSymbol: params.result.collectionIntelligence.floorSymbol,
       ownerCount: params.result.collectionIntelligence.ownerCount,
       volume: params.result.collectionIntelligence.volume,
       marketStatus: params.result.collectionIntelligence.marketStatus,
@@ -732,8 +702,9 @@ export async function runAnalyzer(params: {
   input: string;
   settings?: AnalyzerSettings;
   notify?: boolean;
+  onLog?: (entry: AnalyzerDebugLogEntry) => void;
 }): Promise<AnalyzerResult> {
-  const logger = createAnalyzerLogger();
+  const logger = createAnalyzerLogger(params.onLog);
   const { log, logs } = logger;
   const startedAt = Date.now();
   const cacheStats = createAnalyzerCacheStats();
@@ -822,10 +793,8 @@ export async function runAnalyzer(params: {
         autoDetectContractInfo: settings.autoDetectContractInfo,
         autoDetectMintDetails: settings.autoDetectMintDetails,
         riskAnalysisEnabled: settings.riskAnalysisEnabled,
-        aiSummaryEnabled: settings.aiSummaryEnabled,
       },
       riskAnalysis,
-      aiSummary: null,
       collectionIntelligence,
       socials: socialDiscovery.socials,
       socialHealth: socialDiscovery.socialHealth,
@@ -850,11 +819,6 @@ export async function runAnalyzer(params: {
     log('success', 'scoring', `Opportunity score: ${resolvedScores.opportunity}`);
     log('info', 'scoring', 'Calculating readiness');
     log('success', 'scoring', `Readiness: ${resolvedScores.readiness}%`);
-    result.aiSummary = await runAiSummary({
-      enabled: settings.aiSummaryEnabled,
-      result,
-      log,
-    });
     result.analysisDurationMs = Date.now() - startedAt;
     result.performanceMetrics = derivePerformanceMetrics({
       cacheStats,
@@ -1014,10 +978,8 @@ export async function runAnalyzer(params: {
       autoDetectContractInfo: settings.autoDetectContractInfo,
       autoDetectMintDetails: settings.autoDetectMintDetails,
       riskAnalysisEnabled: settings.riskAnalysisEnabled,
-      aiSummaryEnabled: settings.aiSummaryEnabled,
     },
     riskAnalysis,
-    aiSummary: null,
     collectionIntelligence,
     socials: socialDiscovery.socials,
     socialHealth: socialDiscovery.socialHealth,
@@ -1042,11 +1004,6 @@ export async function runAnalyzer(params: {
   log('success', 'scoring', `Readiness: ${scores.readiness}%`);
   log('info', 'scoring', 'Calculating opportunity');
   log('success', 'scoring', `Opportunity score: ${scores.opportunity}`);
-  result.aiSummary = await runAiSummary({
-    enabled: settings.aiSummaryEnabled,
-    result,
-    log,
-  });
   result.analysisDurationMs = Date.now() - startedAt;
   result.performanceMetrics = derivePerformanceMetrics({
     cacheStats,

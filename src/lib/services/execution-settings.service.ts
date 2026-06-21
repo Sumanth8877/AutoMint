@@ -19,7 +19,6 @@ export type ExecutionSettingsUpdate = {
   autoDetectContractInfo?: boolean;
   autoDetectMintDetails?: boolean;
   riskAnalysisEnabled?: boolean;
-  aiSummaryEnabled?: boolean;
 };
 
 function clampInteger(value: number, min: number, max: number, field: string) {
@@ -112,8 +111,6 @@ export async function updateExecutionSettings(userId: string, input: Record<stri
   if ('autoDetectContractInfo' in input) update.autoDetectContractInfo = assertBoolean(input.autoDetectContractInfo, 'autoDetectContractInfo');
   if ('autoDetectMintDetails' in input) update.autoDetectMintDetails = assertBoolean(input.autoDetectMintDetails, 'autoDetectMintDetails');
   if ('riskAnalysisEnabled' in input) update.riskAnalysisEnabled = assertBoolean(input.riskAnalysisEnabled, 'riskAnalysisEnabled');
-  if ('aiSummaryEnabled' in input) update.aiSummaryEnabled = assertBoolean(input.aiSummaryEnabled, 'aiSummaryEnabled');
-
   if ('defaultWalletId' in input) {
     const walletId = typeof input.defaultWalletId === 'string' && input.defaultWalletId ? input.defaultWalletId : null;
     if (walletId) {
@@ -147,6 +144,5 @@ export async function getEffectiveExecutionDefaults(userId: string) {
     autoDetectContractInfo: settings.autoDetectContractInfo,
     autoDetectMintDetails: settings.autoDetectMintDetails,
     riskAnalysisEnabled: settings.riskAnalysisEnabled,
-    aiSummaryEnabled: settings.aiSummaryEnabled,
   };
 }

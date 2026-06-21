@@ -55,10 +55,10 @@ type AnalyzerHistoryRow = {
   chain: string;
   riskScore: number | null;
   riskLevel: 'Low' | 'Medium' | 'High' | 'Critical';
-  projectSummary: string | null;
-  riskSummary: string;
   riskFactors: string[] | null;
   floorPrice: string | null;
+  floorCurrency: string | null;
+  floorSymbol: string | null;
   ownerCount: number | null;
   volume: string | null;
   marketStatus: string | null;
@@ -74,8 +74,6 @@ type AnalyzerHistoryRow = {
     twitter?: string;
     discord?: string;
     telegram?: string;
-    github?: string;
-    medium?: string;
   } | null;
   socialCount: number;
   analysisDurationMs: number;
@@ -159,6 +157,13 @@ function formatMetric(value: string | number | null | undefined) {
   if (value === null || value === undefined || value === '') return 'Unavailable';
   if (typeof value === 'number') return value.toLocaleString();
   return value;
+}
+
+function formatFloorPrice(item: Pick<AnalyzerHistoryRow, 'floorPrice' | 'floorCurrency' | 'floorSymbol'>) {
+  if (!item.floorPrice) return 'Unavailable';
+  const symbol = item.floorSymbol ?? item.floorCurrency;
+  if (!symbol || item.floorPrice.toLowerCase().includes(symbol.toLowerCase())) return item.floorPrice;
+  return `${item.floorPrice} ${symbol}`;
 }
 
 function formatCountdown(value?: string | null) {
@@ -610,7 +615,7 @@ function AnalyzerHistoryTable({
                   <Badge variant={riskBadgeVariant(row.riskLevel)}>{typeof row.riskScore === 'number' ? `${row.riskScore} ${row.riskLevel}` : row.riskLevel}</Badge>
                 </td>
                 <td className="px-5 py-4 text-sm text-muted">{formatMetric(row.marketStatus)}</td>
-                <td className="px-5 py-4 font-mono text-sm text-text">{formatMetric(row.floorPrice)}</td>
+                <td className="px-5 py-4 font-mono text-sm text-text">{formatFloorPrice(row)}</td>
                 <td className="px-5 py-4 font-mono text-sm text-text">{formatMetric(row.ownerCount)}</td>
                 <td className="px-5 py-4 font-mono text-sm text-text">{row.opportunityScore}</td>
                 <td className="px-5 py-4 font-mono text-sm text-text">{row.readinessScore}%</td>
@@ -698,10 +703,8 @@ function DetailsModal({ selected, onClose }: { selected: SelectedRow; onClose: (
         ['Contract', item.contractAddress || 'Not recorded'],
         ['Chain', item.chain],
         ['Risk Score', typeof item.riskScore === 'number' ? `${item.riskScore} ${item.riskLevel}` : item.riskLevel],
-        ['Project Summary', item.projectSummary ?? 'Summary unavailable'],
-        ['Risk Summary', item.riskSummary],
         ['Risk Factors', item.riskFactors?.length ? item.riskFactors.join(', ') : 'None recorded'],
-        ['Floor Price', formatMetric(item.floorPrice)],
+        ['Floor Price', formatFloorPrice(item)],
         ['Owner Count', formatMetric(item.ownerCount)],
         ['Volume', formatMetric(item.volume)],
         ['Market Status', formatMetric(item.marketStatus)],

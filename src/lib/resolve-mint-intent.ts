@@ -336,41 +336,6 @@ async function fetchBrowserbaseOpenSeaMeta(url: string, slug: string, logger?: A
   }
 }
 
-async function fetchReservoirCollectionMeta(slug: string, logger?: AnalyzerDebugLogger): Promise<OpenSeaCollectionMeta | undefined> {
-  try {
-    logDebug(logger, 'info', 'discovery', 'Using Reservoir');
-    const url = `https://api.reservoir.tools/collections/v7?slug=${encodeURIComponent(slug)}&limit=1`;
-    const res = await fetch(url, {
-      headers: { Accept: 'application/json' },
-      signal: AbortSignal.timeout(5_000),
-    });
-    if (!res.ok) {
-      logDebug(logger, 'warning', 'discovery', `Reservoir failed: HTTP ${res.status}`);
-      return undefined;
-    }
-
-    const json = await res.json();
-    const collection = Array.isArray(json?.collections) ? json.collections[0] : undefined;
-    const id = typeof collection?.id === 'string' ? collection.id : undefined;
-    const contract = id?.split(':')[0];
-    if (!contract || !ETH_ADDRESS_RE.test(contract)) {
-      logDebug(logger, 'warning', 'discovery', 'Reservoir failed: empty contract metadata');
-      return undefined;
-    }
-
-    logDebug(logger, 'success', 'discovery', 'Reservoir fallback succeeded');
-    return {
-      name: typeof collection.name === 'string' ? collection.name : slug,
-      slug,
-      primaryAssetContractAddress: contract.toLowerCase(),
-      chain: 'ethereum',
-    };
-  } catch (error) {
-    logDebug(logger, 'warning', 'discovery', `Reservoir failed: ${error instanceof Error ? error.message : String(error)}`);
-    return undefined;
-  }
-}
-
 async function resolveOpenSeaCollectionMeta(url: string, slug: string, logger?: AnalyzerDebugLogger, telemetry?: AnalyzerResolutionTelemetry) {
   async function runParallelStage(resolvers: Array<{ name: string; run: (signal?: AbortSignal) => Promise<OpenSeaCollectionMeta | undefined> }>) {
     logDebug(logger, 'info', 'discovery', 'Parallel execution started');
@@ -436,7 +401,7 @@ async function resolveOpenSeaCollectionMeta(url: string, slug: string, logger?: 
   if (fastResult) {
     logDebug(logger, 'warning', 'discovery', 'Provider cancelled: Firecrawl');
     logDebug(logger, 'warning', 'discovery', 'Provider cancelled: Jina');
-    logDebug(logger, 'warning', 'discovery', 'Provider cancelled: Reservoir');
+    logDebug(logger, 'warning', 'discovery', 'Provider cancelled: Browserbase');
     return fastResult;
   }
 
@@ -447,7 +412,6 @@ async function resolveOpenSeaCollectionMeta(url: string, slug: string, logger?: 
   ]);
   if (fallbackResult) {
     logDebug(logger, 'warning', 'discovery', 'Provider cancelled: Browserbase');
-    logDebug(logger, 'warning', 'discovery', 'Provider cancelled: Reservoir');
     return fallbackResult;
   }
 
@@ -458,19 +422,7 @@ async function resolveOpenSeaCollectionMeta(url: string, slug: string, logger?: 
   telemetry?.providerChain.push({ provider: 'Browserbase', status: browserbaseStatus, durationMs: browserbaseDurationMs });
   telemetry?.timingBreakdown.push({ stage: 'Browserbase', durationMs: browserbaseDurationMs });
   logDebug(logger, browserbaseStatus === 'success' ? 'success' : 'warning', 'discovery', `Browserbase completed in ${browserbaseDurationMs}ms`);
-  if (browserbase?.primaryAssetContractAddress) {
-    logDebug(logger, 'warning', 'discovery', 'Provider cancelled: Reservoir');
-    return browserbase;
-  }
-
-  const startedAt = Date.now();
-  const reservoir = await fetchReservoirCollectionMeta(slug, logger);
-  const durationMs = Date.now() - startedAt;
-  const status = reservoir?.primaryAssetContractAddress ? 'success' : 'failed';
-  telemetry?.providerChain.push({ provider: 'Reservoir', status, durationMs });
-  telemetry?.timingBreakdown.push({ stage: 'Reservoir API', durationMs });
-  logDebug(logger, status === 'success' ? 'success' : 'warning', 'discovery', `Reservoir completed in ${durationMs}ms`);
-  if (reservoir?.primaryAssetContractAddress) return reservoir;
+  if (browserbase?.primaryAssetContractAddress) return browserbase;
 
   logDebug(logger, 'error', 'contract_resolution', 'No contract found');
   return undefined;

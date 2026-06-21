@@ -75,7 +75,6 @@ export const executionSettings = pgTable('execution_settings', {
   autoDetectContractInfo: boolean('auto_detect_contract_info').default(true).notNull(),
   autoDetectMintDetails: boolean('auto_detect_mint_details').default(true).notNull(),
   riskAnalysisEnabled: boolean('risk_analysis_enabled').default(true).notNull(),
-  aiSummaryEnabled: boolean('ai_summary_enabled').default(true).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
@@ -317,10 +316,10 @@ export const analyzerHistory = pgTable('analyzer_history', {
   chain: text('chain').notNull(),
   riskScore: integer('risk_score').notNull(),
   riskLevel: text('risk_level').notNull().default('Medium'),
-  projectSummary: text('project_summary'),
-  riskSummary: text('risk_summary').notNull().default('Risk summary unavailable'),
   riskFactors: json('risk_factors').$type<string[]>(),
   floorPrice: text('floor_price'),
+  floorCurrency: text('floor_currency'),
+  floorSymbol: text('floor_symbol'),
   ownerCount: integer('owner_count'),
   volume: text('volume'),
   marketStatus: text('market_status'),
@@ -338,8 +337,6 @@ export const analyzerHistory = pgTable('analyzer_history', {
     twitter?: string;
     discord?: string;
     telegram?: string;
-    github?: string;
-    medium?: string;
   }>(),
   socialCount: integer('social_count').notNull().default(0),
   analysisDurationMs: integer('analysis_duration_ms').notNull(),

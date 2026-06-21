@@ -31,7 +31,6 @@ export type AnalyzerRiskAnalysis = {
   riskScore: number;
   riskLevel: RiskLevel;
   riskFactors: string[];
-  riskSummary: string;
   weights: RiskAnalysis['weights'];
 };
 
@@ -40,8 +39,6 @@ export type AnalyzerRiskSocials = {
   twitter?: string;
   discord?: string;
   telegram?: string;
-  github?: string;
-  medium?: string;
 };
 
 type PromptAction = 'mint' | 'schedule';
@@ -250,12 +247,6 @@ function scoreDomainAge(createdAt?: Date | null) {
   return { score: 0, reasons: [] };
 }
 
-function summarizeRisk(riskScore: number, riskFactors: string[]) {
-  const level = getRiskLevel(riskScore);
-  if (riskFactors.length === 0) return `${level} risk. No material analyzer risk factors were detected from available signals.`;
-  return `${level} risk based on ${riskFactors.length} detected factor${riskFactors.length === 1 ? '' : 's'}.`;
-}
-
 export async function analyzeAnalyzerRisk(params: {
   userId: string;
   contractAddress?: string | null;
@@ -318,7 +309,6 @@ export async function analyzeAnalyzerRisk(params: {
     riskScore,
     riskLevel: getRiskLevel(riskScore),
     riskFactors,
-    riskSummary: summarizeRisk(riskScore, riskFactors),
     weights: rawWeights,
   };
 }

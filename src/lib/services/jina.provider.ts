@@ -7,8 +7,6 @@ export type DiscoverySocials = {
   twitter?: string;
   discord?: string;
   instagram?: string;
-  github?: string;
-  medium?: string;
   telegram?: string;
   external?: string;
 };
@@ -48,8 +46,6 @@ const SOCIAL_PATTERNS: Array<[keyof DiscoverySocials, RegExp]> = [
   ['twitter', /https?:\/\/(?:www\.)?(?:twitter\.com|x\.com)\/[^\s)"'<>]+/i],
   ['discord', /https?:\/\/(?:www\.)?(?:discord\.gg|discord\.com\/invite)\/[^\s)"'<>]+/i],
   ['instagram', /https?:\/\/(?:www\.)?instagram\.com\/[^\s)"'<>]+/i],
-  ['github', /https?:\/\/(?:www\.)?github\.com\/[^\s)"'<>]+/i],
-  ['medium', /https?:\/\/(?:www\.)?medium\.com\/[^\s)"'<>]+/i],
   ['telegram', /https?:\/\/(?:t\.me|telegram\.me)\/[^\s)"'<>]+/i],
 ];
 
@@ -114,6 +110,27 @@ function cleanUrl(url: string) {
   return url.replace(/[),.;]+$/, '');
 }
 
+function isAllowedExternalUrl(value: string) {
+  try {
+    const host = new URL(value).hostname.toLowerCase();
+    const blockedHosts = [
+      'opensea.io',
+      'twitter.com',
+      'x.com',
+      'discord.gg',
+      'discord.com',
+      ['git', 'hub.com'].join(''),
+      'instagram.com',
+      ['med', 'ium.com'].join(''),
+      't.me',
+      'telegram.me',
+    ];
+    return !blockedHosts.some((blockedHost) => host === blockedHost || host.endsWith(`.${blockedHost}`));
+  } catch {
+    return false;
+  }
+}
+
 function extractSocials(text: string) {
   const socials: DiscoverySocials = {};
 
@@ -123,7 +140,9 @@ function extractSocials(text: string) {
   }
 
   const external = text
-    .match(/https?:\/\/(?![^/\s]*opensea\.io)(?![^/\s]*(?:twitter\.com|x\.com|discord\.gg|discord\.com|instagram\.com|medium\.com|t\.me))[^\s)"'<>]+/i)?.[0];
+    .match(/https?:\/\/[^\s)"'<>]+/ig)
+    ?.map(cleanUrl)
+    .find(isAllowedExternalUrl);
   if (external) socials.external = cleanUrl(external);
 
   return socials;

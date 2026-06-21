@@ -14,6 +14,8 @@ export type AnalyzerCollectionIntelligence = {
   chain: string;
   tokenStandard: string;
   floorPrice: string | null;
+  floorCurrency: string | null;
+  floorSymbol: string | null;
   volume: string | null;
   ownerCount: number | null;
   itemCount: number | null;
@@ -28,12 +30,6 @@ type MarketProviderResult = Partial<AnalyzerCollectionIntelligence> & {
   source: string;
   recentSalesCount?: number | null;
   floorChangePercent?: number | null;
-};
-
-const RESERVOIR_HOSTS: Record<string, string> = {
-  ethereum: 'https://api.reservoir.tools',
-  base: 'https://api-base.reservoir.tools',
-  polygon: 'https://api-polygon.reservoir.tools',
 };
 
 function numericValue(value: unknown): number | null {
@@ -64,10 +60,21 @@ function boolValue(value: unknown): boolean | null {
   return null;
 }
 
-function formatEth(value: unknown) {
+function formatCurrencyAmount(value: unknown, symbol = 'ETH') {
   const number = numericValue(value);
   if (number === null || number <= 0) return null;
-  return `${Number(number.toFixed(number >= 10 ? 2 : 4))} ETH`;
+  return `${Number(number.toFixed(number >= 10 ? 2 : 4))} ${symbol}`;
+}
+
+function openSeaPaymentSymbol(stats: Record<string, unknown>) {
+  const paymentToken = stats.payment_token;
+  const token = typeof paymentToken === 'object' && paymentToken !== null ? paymentToken as Record<string, unknown> : {};
+  return stringValue(token.symbol)
+    ?? stringValue(stats.floor_price_symbol)
+    ?? stringValue(stats.floorPriceSymbol)
+    ?? stringValue(stats.currency)
+    ?? stringValue(stats.symbol)
+    ?? 'ETH';
 }
 
 function mergeResults(base: AnalyzerCollectionIntelligence, result: MarketProviderResult): AnalyzerCollectionIntelligence {
@@ -78,6 +85,8 @@ function mergeResults(base: AnalyzerCollectionIntelligence, result: MarketProvid
     creator: result.creator ?? base.creator,
     verified: result.verified ?? base.verified,
     floorPrice: result.floorPrice ?? base.floorPrice,
+    floorCurrency: result.floorCurrency ?? base.floorCurrency,
+    floorSymbol: result.floorSymbol ?? base.floorSymbol,
     volume: result.volume ?? base.volume,
     ownerCount: result.ownerCount ?? base.ownerCount,
     itemCount: result.itemCount ?? base.itemCount,
@@ -196,6 +205,8 @@ async function fetchOpenSeaIntelligence(intent: MintIntent): Promise<MarketProvi
   const contracts = Array.isArray(collection.contracts) ? collection.contracts : [];
   const firstContract = contracts.find((item): item is Record<string, unknown> => typeof item === 'object' && item !== null);
 
+  const floorSymbol = openSeaPaymentSymbol(stats);
+
   return {
     source: 'OpenSea',
     collectionName: optionalString(collection.name),
@@ -203,42 +214,14 @@ async function fetchOpenSeaIntelligence(intent: MintIntent): Promise<MarketProvi
     creator: stringValue(collection.creator) ?? stringValue(collection.owner),
     verified: boolValue(collection.safelist_status) ?? boolValue(collection.is_verified),
     contractAddress: stringValue(firstContract?.address),
-    floorPrice: formatEth(stats.floor_price),
-    volume: formatEth(stats.volume ?? stats.total_volume),
+    floorCurrency: floorSymbol,
+    floorSymbol,
+    floorPrice: formatCurrencyAmount(stats.floor_price, floorSymbol),
+    volume: formatCurrencyAmount(stats.volume ?? stats.total_volume),
     ownerCount: numericValue(stats.num_owners ?? collection.owner_count),
     itemCount: numericValue(stats.total_supply ?? collection.total_supply),
-    marketCap: formatEth(stats.market_cap),
+    marketCap: formatCurrencyAmount(stats.market_cap),
     recentSalesCount: numericValue(stats.sales ?? stats.num_sales),
-  };
-}
-
-async function fetchReservoirIntelligence(intent: MintIntent): Promise<MarketProviderResult | null> {
-  const host = RESERVOIR_HOSTS[intent.chain];
-  if (!host || !intent.contractAddress) return null;
-  const json = await fetchJson(`${host}/collections/v7?id=${encodeURIComponent(intent.contractAddress)}`) as Record<string, unknown>;
-  const collections = Array.isArray(json.collections) ? json.collections : [];
-  const collection = collections.find((item): item is Record<string, unknown> => typeof item === 'object' && item !== null);
-  if (!collection) return null;
-
-  const floorAsk = typeof collection.floorAsk === 'object' && collection.floorAsk !== null ? collection.floorAsk as Record<string, unknown> : {};
-  const price = typeof floorAsk.price === 'object' && floorAsk.price !== null ? floorAsk.price as Record<string, unknown> : {};
-  const amount = typeof price.amount === 'object' && price.amount !== null ? price.amount as Record<string, unknown> : {};
-  const volume = typeof collection.volume === 'object' && collection.volume !== null ? collection.volume as Record<string, unknown> : {};
-  const floorSale = typeof collection.floorSale === 'object' && collection.floorSale !== null ? collection.floorSale as Record<string, unknown> : {};
-
-  return {
-    source: 'Reservoir',
-    collectionName: optionalString(collection.name),
-    description: stringValue(collection.description),
-    creator: stringValue(collection.creator),
-    verified: boolValue(collection.openseaVerificationStatus),
-    floorPrice: formatEth(amount.native ?? amount.decimal),
-    volume: formatEth(volume.allTime ?? volume['30day'] ?? volume['7day'] ?? volume['1day']),
-    ownerCount: numericValue(collection.ownerCount),
-    itemCount: numericValue(collection.tokenCount),
-    marketCap: formatEth(collection.marketCap),
-    recentSalesCount: numericValue(floorSale.count ?? collection.salesCount),
-    floorChangePercent: numericValue(collection.floorAskPercentChange),
   };
 }
 
@@ -263,7 +246,9 @@ async function fetchAlchemyIntelligence(intent: MintIntent): Promise<MarketProvi
     collectionName: optionalString(metadata.name ?? openSea.collectionName),
     description: stringValue(openSea.description),
     creator: stringValue(openSea.twitterUsername ?? openSea.discordUrl),
-    floorPrice: formatEth(openSea.floorPrice),
+    floorCurrency: 'ETH',
+    floorSymbol: 'ETH',
+    floorPrice: formatCurrencyAmount(openSea.floorPrice),
     itemCount: numericValue(metadata.totalSupply),
   };
 }
@@ -275,7 +260,7 @@ export async function fetchCollectionIntelligence(params: {
   timingBreakdown: AnalyzerTiming[];
 }): Promise<AnalyzerCollectionIntelligence> {
   const base: AnalyzerCollectionIntelligence = {
-    collectionName: params.metadata.name ?? params.intent.collectionName ?? params.intent.collectionSlug ?? 'Unknown Collection',
+    collectionName: params.intent.collectionName ?? params.metadata.name ?? params.intent.collectionSlug ?? 'Resolved Collection',
     description: null,
     creator: null,
     verified: null,
@@ -283,6 +268,8 @@ export async function fetchCollectionIntelligence(params: {
     chain: params.intent.chain,
     tokenStandard: params.metadata.tokenStandard,
     floorPrice: null,
+    floorCurrency: null,
+    floorSymbol: null,
     volume: null,
     ownerCount: null,
     itemCount: numericValue(params.metadata.totalSupply),
@@ -301,7 +288,6 @@ export async function fetchCollectionIntelligence(params: {
   const startedAt = Date.now();
   const providerResults = await Promise.allSettled([
     fetchOpenSeaIntelligence(params.intent),
-    fetchReservoirIntelligence(params.intent),
     fetchAlchemyIntelligence(params.intent),
   ]);
   params.timingBreakdown.push({ stage: 'Market Intelligence', durationMs: Date.now() - startedAt });

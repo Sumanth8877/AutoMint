@@ -11,7 +11,6 @@ CREATE TABLE "execution_settings" (
   "auto_detect_contract_info" boolean DEFAULT true NOT NULL,
   "auto_detect_mint_details" boolean DEFAULT true NOT NULL,
   "risk_analysis_enabled" boolean DEFAULT true NOT NULL,
-  "ai_summary_enabled" boolean DEFAULT true NOT NULL,
   "created_at" timestamp DEFAULT now() NOT NULL,
   "updated_at" timestamp DEFAULT now() NOT NULL,
   CONSTRAINT "execution_settings_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE cascade,
