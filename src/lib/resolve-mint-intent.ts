@@ -177,7 +177,7 @@ function normalizeOpenSeaApiContract(collection: Record<string, unknown>, slug: 
  *
  * No UI assumptions — only metadata for normalization.
  */
-async function fetchOpenSeaCollectionMeta(slug: string, logger?: AnalyzerDebugLogger): Promise<OpenSeaCollectionMeta | undefined> {
+async function fetchOpenSeaCollectionMeta(slug: string, logger?: AnalyzerDebugLogger, signal?: AbortSignal): Promise<OpenSeaCollectionMeta | undefined> {
   const apiKey = process.env.OPENSEA_API_KEY;
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (apiKey) {
@@ -192,7 +192,7 @@ async function fetchOpenSeaCollectionMeta(slug: string, logger?: AnalyzerDebugLo
   try {
     logDebug(logger, 'info', 'discovery', 'Using OpenSea API');
     for (const url of urls) {
-      const res = await fetch(url, { headers, signal: AbortSignal.timeout(5_000) });
+      const res = await fetch(url, { headers, signal: signal ?? AbortSignal.timeout(5_000) });
       if (!res.ok) {
         logDebug(logger, 'warning', 'discovery', `OpenSea API returned ${res.status}`);
         continue;
@@ -227,7 +227,7 @@ function extractChainFromText(text: string) {
   return normalizeChain(text.match(/\b(ethereum|base|polygon|matic|solana)\b/i)?.[1]);
 }
 
-async function fetchOpenSeaPageMeta(url: string, slug: string, logger?: AnalyzerDebugLogger): Promise<OpenSeaCollectionMeta | undefined> {
+async function fetchOpenSeaPageMeta(url: string, slug: string, logger?: AnalyzerDebugLogger, signal?: AbortSignal): Promise<OpenSeaCollectionMeta | undefined> {
   try {
     logDebug(logger, 'info', 'discovery', 'Using Direct Fetch for OpenSea page metadata');
     const res = await fetch(url, {
@@ -235,7 +235,7 @@ async function fetchOpenSeaPageMeta(url: string, slug: string, logger?: Analyzer
         Accept: 'text/html,application/xhtml+xml',
         'User-Agent': 'AutoMintAnalyzer/1.0',
       },
-      signal: AbortSignal.timeout(8_000),
+      signal: signal ?? AbortSignal.timeout(8_000),
     });
     if (!res.ok) {
       logDebug(logger, 'warning', 'discovery', `Direct Fetch returned ${res.status}`);
@@ -310,6 +310,32 @@ async function fetchJinaOpenSeaMeta(url: string, slug: string, logger?: Analyzer
   }
 }
 
+async function fetchBrowserbaseOpenSeaMeta(url: string, slug: string, logger?: AnalyzerDebugLogger): Promise<OpenSeaCollectionMeta | undefined> {
+  try {
+    logDebug(logger, 'info', 'discovery', 'Using Browserbase');
+    const { discoverWithBrowserbase } = await import('@/lib/services/browserbase.provider');
+    const result = await discoverWithBrowserbase(url, (message) => {
+      const level: AnalyzerDebugLogLevel = message.includes('failed') ? 'warning' : message.includes('succeeded') ? 'success' : 'info';
+      logDebug(logger, level, 'discovery', message);
+    });
+    if (!result.contract || !ETH_ADDRESS_RE.test(result.contract)) {
+      logDebug(logger, 'warning', 'discovery', 'Browserbase failed: empty contract response');
+      return undefined;
+    }
+
+    logDebug(logger, 'success', 'discovery', 'Browserbase succeeded');
+    return {
+      name: result.collectionName ?? slug,
+      slug,
+      primaryAssetContractAddress: result.contract.toLowerCase(),
+      chain: normalizeChain(result.chain),
+    };
+  } catch (error) {
+    logDebug(logger, 'warning', 'discovery', `Browserbase failed: ${error instanceof Error ? error.message : String(error)}`);
+    return undefined;
+  }
+}
+
 async function fetchReservoirCollectionMeta(slug: string, logger?: AnalyzerDebugLogger): Promise<OpenSeaCollectionMeta | undefined> {
   try {
     logDebug(logger, 'info', 'discovery', 'Using Reservoir');
@@ -346,26 +372,105 @@ async function fetchReservoirCollectionMeta(slug: string, logger?: AnalyzerDebug
 }
 
 async function resolveOpenSeaCollectionMeta(url: string, slug: string, logger?: AnalyzerDebugLogger, telemetry?: AnalyzerResolutionTelemetry) {
-  const resolvers = [
-    { name: 'OpenSea API', run: () => fetchOpenSeaCollectionMeta(slug, logger) },
-    { name: 'Direct Fetch', run: () => fetchOpenSeaPageMeta(url, slug, logger) },
+  async function runParallelStage(resolvers: Array<{ name: string; run: (signal?: AbortSignal) => Promise<OpenSeaCollectionMeta | undefined> }>) {
+    logDebug(logger, 'info', 'discovery', 'Parallel execution started');
+    const controllers = resolvers.map(() => new AbortController());
+    const attempts = resolvers.map((resolver, index) => {
+      const startedAt = Date.now();
+      return resolver.run(controllers[index].signal)
+        .then((result) => ({
+          name: resolver.name,
+          result,
+          durationMs: Date.now() - startedAt,
+        }))
+        .catch((error) => {
+          if (controllers[index].signal.aborted) {
+            logDebug(logger, 'warning', 'discovery', `Provider cancelled: ${resolver.name}`);
+          } else {
+            logDebug(logger, 'warning', 'discovery', `${resolver.name} failed: ${error instanceof Error ? error.message : String(error)}`);
+          }
+          return {
+            name: resolver.name,
+            result: undefined,
+            durationMs: Date.now() - startedAt,
+          };
+        });
+    });
+
+    return new Promise<OpenSeaCollectionMeta | undefined>((resolve) => {
+      let remaining = attempts.length;
+      let settled = false;
+      attempts.forEach((attempt, index) => {
+        void attempt.then((entry) => {
+          const status = entry.result?.primaryAssetContractAddress ? 'success' : 'failed';
+          telemetry?.providerChain.push({ provider: entry.name, status, durationMs: entry.durationMs });
+          telemetry?.timingBreakdown.push({ stage: entry.name === 'OpenSea API' ? 'OpenSea Resolution' : entry.name, durationMs: entry.durationMs });
+          logDebug(logger, status === 'success' ? 'success' : 'warning', 'discovery', `${entry.name} completed in ${entry.durationMs}ms`);
+
+          if (!settled && entry.result?.primaryAssetContractAddress) {
+            settled = true;
+            controllers.forEach((controller, controllerIndex) => {
+              if (controllerIndex !== index && !controller.signal.aborted) {
+                controller.abort();
+                logDebug(logger, 'warning', 'discovery', `Provider cancelled: ${resolvers[controllerIndex].name}`);
+              }
+            });
+            resolve(entry.result);
+            return;
+          }
+
+          remaining -= 1;
+          if (!settled && remaining === 0) {
+            settled = true;
+            resolve(undefined);
+          }
+        });
+      });
+    });
+  }
+
+  const fastResult = await runParallelStage([
+    { name: 'OpenSea API', run: (signal) => fetchOpenSeaCollectionMeta(slug, logger, signal) },
+    { name: 'Direct Fetch', run: (signal) => fetchOpenSeaPageMeta(url, slug, logger, signal) },
+  ]);
+  if (fastResult) {
+    logDebug(logger, 'warning', 'discovery', 'Provider cancelled: Firecrawl');
+    logDebug(logger, 'warning', 'discovery', 'Provider cancelled: Jina');
+    logDebug(logger, 'warning', 'discovery', 'Provider cancelled: Reservoir');
+    return fastResult;
+  }
+
+  logDebug(logger, 'info', 'discovery', 'Switching to fallback providers');
+  const fallbackResult = await runParallelStage([
     { name: 'Firecrawl', run: () => fetchFirecrawlOpenSeaMeta(url, slug, logger) },
     { name: 'Jina', run: () => fetchJinaOpenSeaMeta(url, slug, logger) },
-    { name: 'Reservoir API', run: () => fetchReservoirCollectionMeta(slug, logger) },
-  ];
-
-  for (const [index, resolver] of resolvers.entries()) {
-    const startedAt = Date.now();
-    const result = await resolver.run();
-    const durationMs = Date.now() - startedAt;
-    const status = result?.primaryAssetContractAddress ? 'success' : 'failed';
-    telemetry?.providerChain.push({ provider: resolver.name === 'Reservoir API' ? 'Reservoir' : resolver.name, status, durationMs });
-    telemetry?.timingBreakdown.push({ stage: resolver.name === 'OpenSea API' ? 'OpenSea Resolution' : resolver.name, durationMs });
-    logDebug(logger, status === 'success' ? 'success' : 'warning', 'discovery', `${resolver.name === 'Reservoir API' ? 'Reservoir' : resolver.name} completed in ${durationMs}ms`);
-    if (result?.primaryAssetContractAddress) return result;
-    const next = resolvers[index + 1];
-    if (next) logDebug(logger, 'info', 'discovery', `Switching to ${next.name}`);
+  ]);
+  if (fallbackResult) {
+    logDebug(logger, 'warning', 'discovery', 'Provider cancelled: Browserbase');
+    logDebug(logger, 'warning', 'discovery', 'Provider cancelled: Reservoir');
+    return fallbackResult;
   }
+
+  const browserbaseStartedAt = Date.now();
+  const browserbase = await fetchBrowserbaseOpenSeaMeta(url, slug, logger);
+  const browserbaseDurationMs = Date.now() - browserbaseStartedAt;
+  const browserbaseStatus = browserbase?.primaryAssetContractAddress ? 'success' : 'failed';
+  telemetry?.providerChain.push({ provider: 'Browserbase', status: browserbaseStatus, durationMs: browserbaseDurationMs });
+  telemetry?.timingBreakdown.push({ stage: 'Browserbase', durationMs: browserbaseDurationMs });
+  logDebug(logger, browserbaseStatus === 'success' ? 'success' : 'warning', 'discovery', `Browserbase completed in ${browserbaseDurationMs}ms`);
+  if (browserbase?.primaryAssetContractAddress) {
+    logDebug(logger, 'warning', 'discovery', 'Provider cancelled: Reservoir');
+    return browserbase;
+  }
+
+  const startedAt = Date.now();
+  const reservoir = await fetchReservoirCollectionMeta(slug, logger);
+  const durationMs = Date.now() - startedAt;
+  const status = reservoir?.primaryAssetContractAddress ? 'success' : 'failed';
+  telemetry?.providerChain.push({ provider: 'Reservoir', status, durationMs });
+  telemetry?.timingBreakdown.push({ stage: 'Reservoir API', durationMs });
+  logDebug(logger, status === 'success' ? 'success' : 'warning', 'discovery', `Reservoir completed in ${durationMs}ms`);
+  if (reservoir?.primaryAssetContractAddress) return reservoir;
 
   logDebug(logger, 'error', 'contract_resolution', 'No contract found');
   return undefined;

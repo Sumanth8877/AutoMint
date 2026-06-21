@@ -54,11 +54,30 @@ type AnalyzerHistoryRow = {
   contractAddress: string | null;
   chain: string;
   riskScore: number | null;
+  riskLevel: 'Low' | 'Medium' | 'High' | 'Critical';
+  projectSummary: string | null;
+  riskSummary: string;
+  riskFactors: string[] | null;
+  floorPrice: string | null;
+  ownerCount: number | null;
+  volume: string | null;
+  marketStatus: string | null;
+  healthScore: number | null;
   opportunityScore: number;
   readinessScore: number;
   mintState: string;
   providerUsed: string;
+  cacheUsed: boolean;
   rpcProviderUsed: string | null;
+  socials: {
+    website?: string;
+    twitter?: string;
+    discord?: string;
+    telegram?: string;
+    github?: string;
+    medium?: string;
+  } | null;
+  socialCount: number;
   analysisDurationMs: number;
   createdAt: string;
 };
@@ -130,6 +149,18 @@ function formatMilliseconds(value: number) {
   return `${(value / 1000).toFixed(value < 10_000 ? 1 : 0)}s`;
 }
 
+function formatSocials(socials: AnalyzerHistoryRow['socials']) {
+  if (!socials) return 'None recorded';
+  const entries = Object.entries(socials).filter((entry): entry is [string, string] => Boolean(entry[1]));
+  return entries.length ? entries.map(([key, value]) => `${key}: ${value}`).join(', ') : 'None recorded';
+}
+
+function formatMetric(value: string | number | null | undefined) {
+  if (value === null || value === undefined || value === '') return 'Unavailable';
+  if (typeof value === 'number') return value.toLocaleString();
+  return value;
+}
+
 function formatCountdown(value?: string | null) {
   if (!value) return 'Waiting for schedule';
   const diff = new Date(value).getTime() - Date.now();
@@ -167,12 +198,12 @@ function scheduledStatus(status: string): { label: string; variant: BadgeVariant
   return { label: 'Cancelled', variant: 'warning' };
 }
 
-function riskLevel(score?: number | null): { label: string; variant: BadgeVariant } {
-  if (typeof score !== 'number') return { label: 'Unknown', variant: 'default' };
-  if (score <= 25) return { label: 'LOW', variant: 'success' };
-  if (score <= 50) return { label: 'MEDIUM', variant: 'info' };
-  if (score <= 75) return { label: 'HIGH', variant: 'warning' };
-  return { label: 'CRITICAL', variant: 'danger' };
+function riskBadgeVariant(level?: string | null): BadgeVariant {
+  if (level === 'Low') return 'success';
+  if (level === 'Medium') return 'info';
+  if (level === 'High') return 'warning';
+  if (level === 'Critical') return 'danger';
+  return 'default';
 }
 
 function optionValue(label: string) {
@@ -554,10 +585,15 @@ function AnalyzerHistoryTable({
             <th className="px-5 py-3 font-medium">Contract Address</th>
             <th className="px-5 py-3 font-medium">Chain</th>
             <th className="px-5 py-3 font-medium">Risk Score</th>
+            <th className="px-5 py-3 font-medium">Market Status</th>
+            <th className="px-5 py-3 font-medium">Floor</th>
+            <th className="px-5 py-3 font-medium">Owners</th>
             <th className="px-5 py-3 font-medium">Opportunity Score</th>
             <th className="px-5 py-3 font-medium">Readiness</th>
             <th className="px-5 py-3 font-medium">Provider Used</th>
+            <th className="px-5 py-3 font-medium">Cache</th>
             <th className="px-5 py-3 font-medium">RPC Provider</th>
+            <th className="px-5 py-3 font-medium">Socials</th>
             <th className="px-5 py-3 font-medium">Analysis Duration</th>
             <th className="px-5 py-3 font-medium">Date</th>
             <th className="px-5 py-3 font-medium">Actions</th>
@@ -565,19 +601,23 @@ function AnalyzerHistoryTable({
         </thead>
         <tbody className="divide-y divide-border">
           {rows.map((row) => {
-            const risk = riskLevel(row.riskScore);
             return (
               <tr key={row.id} className="hover:bg-white/5">
                 <td className="px-5 py-4 font-medium text-text">{collectionLabel(row)}</td>
                 <td className="px-5 py-4 font-mono text-sm text-muted">{shortAddress(row.contractAddress)}</td>
                 <td className="px-5 py-4 text-sm capitalize text-muted">{row.chain}</td>
                 <td className="px-5 py-4">
-                  <Badge variant={risk.variant}>{typeof row.riskScore === 'number' ? `${row.riskScore} ${risk.label}` : risk.label}</Badge>
+                  <Badge variant={riskBadgeVariant(row.riskLevel)}>{typeof row.riskScore === 'number' ? `${row.riskScore} ${row.riskLevel}` : row.riskLevel}</Badge>
                 </td>
+                <td className="px-5 py-4 text-sm text-muted">{formatMetric(row.marketStatus)}</td>
+                <td className="px-5 py-4 font-mono text-sm text-text">{formatMetric(row.floorPrice)}</td>
+                <td className="px-5 py-4 font-mono text-sm text-text">{formatMetric(row.ownerCount)}</td>
                 <td className="px-5 py-4 font-mono text-sm text-text">{row.opportunityScore}</td>
                 <td className="px-5 py-4 font-mono text-sm text-text">{row.readinessScore}%</td>
                 <td className="px-5 py-4 text-sm text-muted">{row.providerUsed}</td>
+                <td className="px-5 py-4 text-sm text-muted">{row.cacheUsed ? 'Used' : 'Missed'}</td>
                 <td className="px-5 py-4 text-sm text-muted">{row.rpcProviderUsed ?? 'Not used'}</td>
+                <td className="px-5 py-4 font-mono text-sm text-text">{row.socialCount}</td>
                 <td className="px-5 py-4 font-mono text-sm text-muted">{formatMilliseconds(row.analysisDurationMs)}</td>
                 <td className="px-5 py-4 text-sm text-muted">{formatDate(row.createdAt)}</td>
                 <td className="px-5 py-4">
@@ -651,19 +691,29 @@ function DetailsModal({ selected, onClose }: { selected: SelectedRow; onClose: (
   }
 
   const item = selected.item;
-  const risk = riskLevel(item.riskScore);
   return (
     <Modal open title="Analyzer Details" onClose={onClose}>
       <DetailGrid rows={[
         ['Collection', collectionLabel(item)],
         ['Contract', item.contractAddress || 'Not recorded'],
         ['Chain', item.chain],
-        ['Risk Score', typeof item.riskScore === 'number' ? `${item.riskScore} ${risk.label}` : risk.label],
+        ['Risk Score', typeof item.riskScore === 'number' ? `${item.riskScore} ${item.riskLevel}` : item.riskLevel],
+        ['Project Summary', item.projectSummary ?? 'Summary unavailable'],
+        ['Risk Summary', item.riskSummary],
+        ['Risk Factors', item.riskFactors?.length ? item.riskFactors.join(', ') : 'None recorded'],
+        ['Floor Price', formatMetric(item.floorPrice)],
+        ['Owner Count', formatMetric(item.ownerCount)],
+        ['Volume', formatMetric(item.volume)],
+        ['Market Status', formatMetric(item.marketStatus)],
+        ['Health Score', item.healthScore === null ? 'Unavailable' : `${item.healthScore}/100`],
         ['Opportunity Score', String(item.opportunityScore)],
         ['Readiness', `${item.readinessScore}%`],
         ['Mint State', item.mintState],
         ['Provider Used', item.providerUsed],
+        ['Cache Used', item.cacheUsed ? 'YES' : 'NO'],
         ['RPC Provider', item.rpcProviderUsed ?? 'Not used'],
+        ['Detected Socials', String(item.socialCount)],
+        ['Social Links', formatSocials(item.socials)],
         ['Analysis Duration', formatMilliseconds(item.analysisDurationMs)],
         ['Date', formatDate(item.createdAt)],
         ['Input', item.input],

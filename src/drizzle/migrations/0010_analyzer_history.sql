@@ -7,6 +7,9 @@ CREATE TABLE "analyzer_history" (
   "contract_address" text,
   "chain" text NOT NULL,
   "risk_score" integer NOT NULL,
+  "risk_level" text DEFAULT 'Medium' NOT NULL,
+  "risk_summary" text DEFAULT 'Risk summary unavailable' NOT NULL,
+  "risk_factors" json,
   "opportunity_score" integer NOT NULL,
   "readiness_score" integer NOT NULL,
   "mint_state" text NOT NULL,
@@ -14,6 +17,8 @@ CREATE TABLE "analyzer_history" (
   "rpc_provider_used" text,
   "provider_chain" json,
   "timing_breakdown" json,
+  "socials" json,
+  "social_count" integer DEFAULT 0 NOT NULL,
   "analysis_duration_ms" integer NOT NULL,
   "created_at" timestamp DEFAULT now() NOT NULL,
   CONSTRAINT "analyzer_history_user_id_users_id_fk"

@@ -3,9 +3,11 @@ import 'server-only';
 import { captureException } from '@/lib/observability/sentry';
 
 export type DiscoverySocials = {
+  website?: string;
   twitter?: string;
   discord?: string;
   instagram?: string;
+  github?: string;
   medium?: string;
   telegram?: string;
   external?: string;
@@ -46,8 +48,9 @@ const SOCIAL_PATTERNS: Array<[keyof DiscoverySocials, RegExp]> = [
   ['twitter', /https?:\/\/(?:www\.)?(?:twitter\.com|x\.com)\/[^\s)"'<>]+/i],
   ['discord', /https?:\/\/(?:www\.)?(?:discord\.gg|discord\.com\/invite)\/[^\s)"'<>]+/i],
   ['instagram', /https?:\/\/(?:www\.)?instagram\.com\/[^\s)"'<>]+/i],
+  ['github', /https?:\/\/(?:www\.)?github\.com\/[^\s)"'<>]+/i],
   ['medium', /https?:\/\/(?:www\.)?medium\.com\/[^\s)"'<>]+/i],
-  ['telegram', /https?:\/\/t\.me\/[^\s)"'<>]+/i],
+  ['telegram', /https?:\/\/(?:t\.me|telegram\.me)\/[^\s)"'<>]+/i],
 ];
 
 function normalizeReaderUrl(targetUrl: string) {

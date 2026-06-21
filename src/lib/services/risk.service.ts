@@ -25,6 +25,25 @@ export type RiskAnalysis = {
   };
 };
 
+export type RiskLevel = 'Low' | 'Medium' | 'High' | 'Critical';
+
+export type AnalyzerRiskAnalysis = {
+  riskScore: number;
+  riskLevel: RiskLevel;
+  riskFactors: string[];
+  riskSummary: string;
+  weights: RiskAnalysis['weights'];
+};
+
+export type AnalyzerRiskSocials = {
+  website?: string;
+  twitter?: string;
+  discord?: string;
+  telegram?: string;
+  github?: string;
+  medium?: string;
+};
+
 type PromptAction = 'mint' | 'schedule';
 
 async function loadRiskSubject(taskId: string) {
@@ -50,6 +69,13 @@ function addRisk(reasons: string[], reason: string, points: number) {
 
 function clampScore(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+export function getRiskLevel(riskScore: number): RiskLevel {
+  if (riskScore <= 25) return 'Low';
+  if (riskScore <= 50) return 'Medium';
+  if (riskScore <= 75) return 'High';
+  return 'Critical';
 }
 
 async function scoreContractAnalysis(params: {
@@ -161,7 +187,11 @@ function scoreSocialAnalysis(params: {
   owner?: string | null;
   tokenStandard?: string | null;
   floorPrice?: string | null;
+  volume?: string | null;
+  ownerCount?: number | null;
+  verifiedStatus?: boolean | null;
   totalSupply?: string | null;
+  socials?: AnalyzerRiskSocials;
 }) {
   const reasons: string[] = [];
   let score = 0;
@@ -178,8 +208,31 @@ function scoreSocialAnalysis(params: {
   if (!params.floorPrice) {
     score += addRisk(reasons, 'Collection floor price is unavailable', 3);
   }
+  if (!params.volume) {
+    score += addRisk(reasons, 'Collection volume is unavailable', 3);
+  }
+  if (params.ownerCount === null || params.ownerCount === undefined) {
+    score += addRisk(reasons, 'Owner count is unavailable', 3);
+  } else if (params.ownerCount < 100) {
+    score += addRisk(reasons, 'Owner count is low', 4);
+  }
+  if (params.verifiedStatus === false) {
+    score += addRisk(reasons, 'Collection is not verified', 5);
+  }
   if (!params.totalSupply) {
     score += addRisk(reasons, 'Collection supply is unavailable', 3);
+  }
+  if (!params.socials?.website) {
+    score += addRisk(reasons, 'Project website was not discovered', 4);
+  }
+  if (!params.socials?.twitter) {
+    score += addRisk(reasons, 'Twitter/X social link was not discovered', 4);
+  }
+  if (!params.socials?.discord) {
+    score += addRisk(reasons, 'Discord social link was not discovered', 4);
+  }
+  if (!params.socials?.telegram) {
+    score += addRisk(reasons, 'Telegram social link was not discovered', 2);
   }
 
   return { score: Math.min(score, 20), reasons };
@@ -195,6 +248,79 @@ function scoreDomainAge(createdAt?: Date | null) {
   if (ageDays < 7) return { score: 6, reasons: ['Collection was added less than 7 days ago'] };
   if (ageDays < 30) return { score: 3, reasons: ['Collection was added less than 30 days ago'] };
   return { score: 0, reasons: [] };
+}
+
+function summarizeRisk(riskScore: number, riskFactors: string[]) {
+  const level = getRiskLevel(riskScore);
+  if (riskFactors.length === 0) return `${level} risk. No material analyzer risk factors were detected from available signals.`;
+  return `${level} risk based on ${riskFactors.length} detected factor${riskFactors.length === 1 ? '' : 's'}.`;
+}
+
+export async function analyzeAnalyzerRisk(params: {
+  userId: string;
+  contractAddress?: string | null;
+  chain?: string | null;
+  mintFunction?: string | null;
+  mintPrice?: string | null;
+  collectionName?: string | null;
+  owner?: string | null;
+  tokenStandard?: string | null;
+  floorPrice?: string | null;
+  volume?: string | null;
+  ownerCount?: number | null;
+  verifiedStatus?: boolean | null;
+  totalSupply?: string | null;
+  socials?: AnalyzerRiskSocials;
+  discoveredAt?: Date | null;
+}): Promise<AnalyzerRiskAnalysis> {
+  const [contract, trustedWallet, social, domainAge] = await Promise.all([
+    scoreContractAnalysis({
+      contractAddress: params.contractAddress,
+      chain: params.chain,
+      mintFunction: params.mintFunction,
+      mintPrice: params.mintPrice,
+    }),
+    scoreTrustedWalletActivity({
+      userId: params.userId,
+      walletId: null,
+      collectionId: null,
+    }),
+    Promise.resolve(scoreSocialAnalysis({
+      collectionName: params.collectionName,
+      owner: params.owner,
+      tokenStandard: params.tokenStandard,
+      floorPrice: params.floorPrice,
+      volume: params.volume,
+      ownerCount: params.ownerCount,
+      verifiedStatus: params.verifiedStatus,
+      totalSupply: params.totalSupply,
+      socials: params.socials,
+    })),
+    Promise.resolve(scoreDomainAge(params.discoveredAt)),
+  ]);
+
+  const rawWeights = {
+    contractAnalysis: contract.score,
+    trustedWalletActivity: trustedWallet.score,
+    socialAnalysis: social.score,
+    domainAge: domainAge.score,
+  };
+  const configuredWeights = await getAdaptiveRiskWeights();
+  const riskScore = clampScore(applyRiskWeights(rawWeights, configuredWeights));
+  const riskFactors = [
+    ...contract.reasons,
+    ...trustedWallet.reasons,
+    ...social.reasons,
+    ...domainAge.reasons,
+  ];
+
+  return {
+    riskScore,
+    riskLevel: getRiskLevel(riskScore),
+    riskFactors,
+    riskSummary: summarizeRisk(riskScore, riskFactors),
+    weights: rawWeights,
+  };
 }
 
 export async function analyzeMintRisk(taskId: string): Promise<RiskAnalysis> {
@@ -221,6 +347,7 @@ export async function analyzeMintRisk(taskId: string): Promise<RiskAnalysis> {
       tokenStandard: collection?.tokenStandard,
       floorPrice: collection?.floorPrice,
       totalSupply: collection?.totalSupply,
+      socials: undefined,
     })),
     Promise.resolve(scoreDomainAge(collection?.createdAt ?? task.createdAt)),
   ]);

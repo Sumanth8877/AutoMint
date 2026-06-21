@@ -316,13 +316,32 @@ export const analyzerHistory = pgTable('analyzer_history', {
   contractAddress: text('contract_address'),
   chain: text('chain').notNull(),
   riskScore: integer('risk_score').notNull(),
+  riskLevel: text('risk_level').notNull().default('Medium'),
+  projectSummary: text('project_summary'),
+  riskSummary: text('risk_summary').notNull().default('Risk summary unavailable'),
+  riskFactors: json('risk_factors').$type<string[]>(),
+  floorPrice: text('floor_price'),
+  ownerCount: integer('owner_count'),
+  volume: text('volume'),
+  marketStatus: text('market_status'),
+  healthScore: integer('health_score'),
   opportunityScore: integer('opportunity_score').notNull(),
   readinessScore: integer('readiness_score').notNull(),
   mintState: text('mint_state').notNull(),
   providerUsed: text('provider_used').notNull(),
+  cacheUsed: boolean('cache_used').default(false).notNull(),
   rpcProviderUsed: text('rpc_provider_used'),
   providerChain: json('provider_chain').$type<Array<{ provider: string; status: 'success' | 'failed'; durationMs: number }>>(),
   timingBreakdown: json('timing_breakdown').$type<Array<{ stage: string; durationMs: number }>>(),
+  socials: json('socials').$type<{
+    website?: string;
+    twitter?: string;
+    discord?: string;
+    telegram?: string;
+    github?: string;
+    medium?: string;
+  }>(),
+  socialCount: integer('social_count').notNull().default(0),
   analysisDurationMs: integer('analysis_duration_ms').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => ({
