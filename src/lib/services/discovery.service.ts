@@ -137,16 +137,51 @@ export async function discoverCollection(openseaUrl: string): Promise<DiscoveryR
   if (cached) return cached;
 
   addBreadcrumb({ category: 'discovery', message: 'discovery started', level: 'info', data: { url, provider: 'jina' } });
-  const jinaResult = await discoverWithJina(url);
+  const jinaStartedAt = Date.now();
+  const { trackAnalyticsEvent } = await import('@/lib/services/analytics.service');
+  let jinaResult: DiscoveryProviderResult;
+  try {
+    jinaResult = await discoverWithJina(url);
+    await trackAnalyticsEvent({
+      eventType: 'discovery',
+      status: 'success',
+      provider: 'jina',
+      durationMs: Date.now() - jinaStartedAt,
+      metadata: { url, slug },
+    });
+  } catch (error) {
+    await trackAnalyticsEvent({
+      eventType: 'discovery',
+      status: 'failed',
+      provider: 'jina',
+      durationMs: Date.now() - jinaStartedAt,
+      metadata: { url, slug },
+    });
+    throw error;
+  }
   let result = toDiscoveryResult(jinaResult);
 
   if (getMissingRequiredFields(result).length > 0) {
     try {
       addBreadcrumb({ category: 'discovery', message: 'discovery fallback started', level: 'info', data: { url, provider: 'firecrawl', missing: getMissingRequiredFields(result) } });
+      const firecrawlStartedAt = Date.now();
       const firecrawlResult = await discoverWithFirecrawl(url);
+      await trackAnalyticsEvent({
+        eventType: 'discovery',
+        status: 'success',
+        provider: 'firecrawl',
+        durationMs: Date.now() - firecrawlStartedAt,
+        metadata: { url, slug, missing: getMissingRequiredFields(result) },
+      });
       result = toDiscoveryResult(mergeProviderResults(jinaResult, firecrawlResult));
     } catch (error) {
       console.error('Firecrawl discovery fallback failed:', error);
+      await trackAnalyticsEvent({
+        eventType: 'discovery',
+        status: 'failed',
+        provider: 'firecrawl',
+        metadata: { url, slug, missing: getMissingRequiredFields(result) },
+      });
       await captureException(error, {
         area: 'discovery',
         context: { url, provider: 'firecrawl', collection: slug },

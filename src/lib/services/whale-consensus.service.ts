@@ -215,12 +215,25 @@ export async function recordTrustedWalletMintEvent(input: ConsensusEventInput) {
         walletCount,
         confidence,
       });
+      const { trackAnalyticsEvent } = await import('@/lib/services/analytics.service');
+      await trackAnalyticsEvent({
+        userId: user.id,
+        eventType: 'whale_consensus',
+        status: 'triggered',
+        metadata: { collection, walletCount, confidence, sourceWallet: walletAddress },
+      });
 
       if (user.consensusAutoMint) {
-        await executeConsensusCopyMint({
+        const result = await executeConsensusCopyMint({
           userId: user.id,
           collection,
           chain,
+        });
+        await trackAnalyticsEvent({
+          userId: user.id,
+          eventType: 'whale_consensus_mint',
+          status: result.success ? 'success' : 'failed',
+          metadata: { collection, walletCount, confidence, taskId: 'taskId' in result ? result.taskId : undefined },
         });
       }
 

@@ -134,6 +134,13 @@ async function publishQStashMessage(taskId: string, scheduledTime: Date, type: S
   if (!response.ok) {
     const text = await response.text().catch(() => '');
     const error = new Error(text || `QStash publish failed with status ${response.status}`);
+    const { trackAnalyticsEvent } = await import('@/lib/services/analytics.service');
+    await trackAnalyticsEvent({
+      eventType: 'qstash',
+      status: 'failed',
+      provider: type,
+      metadata: { taskId, scheduledTime: scheduledTime.toISOString() },
+    });
     await captureException(error, {
       area: 'qstash',
       context: { taskId, scheduledTime: scheduledTime.toISOString(), type },
@@ -142,7 +149,15 @@ async function publishQStashMessage(taskId: string, scheduledTime: Date, type: S
     throw error;
   }
 
-  return await response.json() as QStashPublishResponse;
+  const result = await response.json() as QStashPublishResponse;
+  const { trackAnalyticsEvent } = await import('@/lib/services/analytics.service');
+  await trackAnalyticsEvent({
+    eventType: 'qstash',
+    status: 'scheduled',
+    provider: type,
+    metadata: { taskId, scheduledTime: scheduledTime.toISOString(), messageId: result.messageId, scheduleId: result.scheduleId },
+  });
+  return result;
 }
 
 function getRiskCheckTime(scheduledTime: Date) {
@@ -417,8 +432,25 @@ export async function executeScheduledMint(taskId: string) {
     }
 
     await logActivity(task.userId, 'mint_status_changed', 'Scheduled mint triggered', { taskId });
+    const { trackAnalyticsEvent } = await import('@/lib/services/analytics.service');
+    await trackAnalyticsEvent({
+      userId: task.userId,
+      eventType: 'qstash',
+      status: 'executed',
+      provider: 'execute',
+      metadata: { taskId },
+    });
     lockReleased = true;
     return executeMintTask(taskId, task.userId, { existingLockToken: mintLock.token });
+  } catch (error) {
+    const { trackAnalyticsEvent } = await import('@/lib/services/analytics.service');
+    await trackAnalyticsEvent({
+      eventType: 'qstash',
+      status: 'failed',
+      provider: 'execute',
+      metadata: { taskId, error: error instanceof Error ? error.message : String(error) },
+    });
+    throw error;
   } finally {
     if (!lockReleased) await releaseLock(taskId, mintLock.token);
   }

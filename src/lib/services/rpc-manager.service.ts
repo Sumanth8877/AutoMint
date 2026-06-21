@@ -145,6 +145,13 @@ function getProviderWalletClient(provider: RpcProvider, chainName: string, accou
 }
 
 async function recordSuccess(provider: RpcProvider, responseTime: number) {
+  const { trackAnalyticsEvent } = await import('@/lib/services/analytics.service');
+  await trackAnalyticsEvent({
+    eventType: 'rpc',
+    status: 'success',
+    provider,
+    durationMs: responseTime,
+  });
   const previous = await getHealth(provider);
   const restored = previous.unhealthyUntil !== null || previous.consecutiveFailures > 0;
   const health = {
@@ -168,6 +175,14 @@ async function recordSuccess(provider: RpcProvider, responseTime: number) {
 }
 
 async function recordFailure(provider: RpcProvider, error: unknown, responseTime: number) {
+  const { trackAnalyticsEvent } = await import('@/lib/services/analytics.service');
+  await trackAnalyticsEvent({
+    eventType: 'rpc',
+    status: 'failed',
+    provider,
+    durationMs: responseTime,
+    metadata: { error: error instanceof Error ? error.message : String(error) },
+  });
   const previous = await getHealth(provider);
   const consecutiveFailures = previous.consecutiveFailures + 1;
   const unhealthyUntil = consecutiveFailures >= CIRCUIT_FAILURE_THRESHOLD
@@ -184,6 +199,13 @@ async function recordFailure(provider: RpcProvider, error: unknown, responseTime
   await setHealth(health);
 
   if (consecutiveFailures === CIRCUIT_FAILURE_THRESHOLD) {
+    await trackAnalyticsEvent({
+      eventType: 'rpc',
+      status: 'failover',
+      provider,
+      durationMs: responseTime,
+      metadata: { error: health.lastFailure, unhealthyUntil },
+    });
     logRpc('failover activation', { provider, unhealthyUntil });
     await captureMessage('RPC failover activation', {
       area: 'rpc',

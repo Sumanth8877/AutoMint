@@ -143,6 +143,15 @@ async function telegramRequest<T>(method: string, payload: Record<string, unknow
       const body = await response.json().catch(() => null) as TelegramApiResponse<T> | null;
 
       if (response.ok && body?.ok) {
+        const { trackAnalyticsEvent } = await import('@/lib/services/analytics.service');
+        await trackAnalyticsEvent({
+          eventType: 'telegram',
+          status: 'success',
+          provider: method,
+          metadata: {
+            chatId: typeof payload.chat_id === 'string' || typeof payload.chat_id === 'number' ? String(payload.chat_id) : undefined,
+          },
+        });
         return body.result;
       }
 
@@ -161,6 +170,16 @@ async function telegramRequest<T>(method: string, payload: Record<string, unknow
     } catch (error) {
       lastError = error instanceof Error ? error : new Error('Telegram request failed');
       if (attempt === MAX_SEND_ATTEMPTS) {
+        const { trackAnalyticsEvent } = await import('@/lib/services/analytics.service');
+        await trackAnalyticsEvent({
+          eventType: 'telegram',
+          status: 'failed',
+          provider: method,
+          metadata: {
+            chatId: typeof payload.chat_id === 'string' || typeof payload.chat_id === 'number' ? String(payload.chat_id) : undefined,
+            error: lastError.message,
+          },
+        });
         await captureException(lastError, {
           area: 'telegram',
           context: {

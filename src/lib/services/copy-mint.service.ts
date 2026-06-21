@@ -208,6 +208,13 @@ export async function handleCopyMintEvent(event: CopyMintEvent) {
       wallet: event.watchedWalletAddress,
       contractAddress,
     });
+    const { trackAnalyticsEvent } = await import('@/lib/services/analytics.service');
+    await trackAnalyticsEvent({
+      userId: event.userId,
+      eventType: 'copy_mint',
+      status: 'triggered',
+      metadata: { wallet: event.watchedWalletAddress, contractAddress, ruleId: rule.id },
+    });
 
     if (!rule.autoMint) {
       await logActivity(event.userId, 'mint_status_changed', 'Copy mint detected; auto mint disabled', {

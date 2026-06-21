@@ -108,6 +108,22 @@ export const consensusEvents = pgTable('consensus_events', {
   collectionWalletIdx: uniqueIndex('idx_consensus_events_collection_wallet').on(table.collection, table.walletAddress),
 }));
 
+export const analyticsEvents = pgTable('analytics_events', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+  eventType: text('event_type').notNull(),
+  status: text('status').notNull(),
+  provider: text('provider'),
+  durationMs: integer('duration_ms'),
+  metadata: json('metadata').$type<Record<string, unknown>>(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index('idx_analytics_events_user_id').on(table.userId),
+  eventTypeIdx: index('idx_analytics_events_event_type').on(table.eventType),
+  providerIdx: index('idx_analytics_events_provider').on(table.provider),
+  createdAtIdx: index('idx_analytics_events_created_at').on(table.createdAt),
+}));
+
 // ─── Collections ─────────────────────────────────────
 export const collections = pgTable('collections', {
   id: uuid('id').defaultRandom().primaryKey(),
