@@ -1,7 +1,6 @@
 import {
   Activity,
   AlertTriangle,
-  BarChart3,
   Clock3,
   Gauge,
   ShieldCheck,
@@ -11,7 +10,6 @@ import {
 } from 'lucide-react';
 import { redirect } from 'next/navigation';
 import Card from '@/components/ui/Card';
-import { EmptyState } from '@/components/ui/empty-state';
 import { MetricCard } from '@/components/ui/metric-card';
 import { PageHeader } from '@/components/ui/page-header';
 import { requireApiUser } from '@/lib/auth/require-auth';
@@ -52,9 +50,9 @@ function SectionHeader({ icon: Icon, title, description }: { icon: typeof Activi
       <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-lg border border-accent/20 bg-accent/10 text-accent">
         <Icon className="h-4 w-4" aria-hidden="true" />
       </div>
-      <div>
+      <div className="min-w-0">
         <h2 className="font-semibold text-text">{title}</h2>
-        <p className="mt-1 text-sm leading-6 text-muted">{description}</p>
+        <p className="mt-1 text-wrap text-sm leading-6 text-muted">{description}</p>
       </div>
     </div>
   );
@@ -62,11 +60,11 @@ function SectionHeader({ icon: Icon, title, description }: { icon: typeof Activi
 
 function StatGrid({ items }: { items: Array<{ label: string; value: string | number; detail?: string }> }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-3">
       {items.map((item) => (
-        <div key={item.label} className="rounded-lg border border-border bg-background/60 p-4">
-          <p className="text-xs font-medium uppercase text-muted">{item.label}</p>
-          <p className="mt-2 font-mono text-2xl font-semibold text-text">{item.value}</p>
+        <div key={item.label} className="min-w-0 rounded-lg border border-border bg-background/60 p-4">
+          <p className="text-wrap text-xs font-medium uppercase text-muted">{item.label}</p>
+          <p className="mt-2 break-words font-mono text-2xl font-semibold text-text">{item.value}</p>
           {item.detail ? <p className="mt-1 text-xs text-muted">{item.detail}</p> : null}
         </div>
       ))}
@@ -78,8 +76,8 @@ function BarChart({ points, dual = false }: { points: ChartPoint[]; dual?: boole
   const max = maxValue(points);
 
   return (
-    <div className="h-44 rounded-lg border border-border bg-background/60 p-4">
-      <div className="flex h-32 items-end gap-2">
+    <div className="h-44 min-w-0 overflow-hidden rounded-lg border border-border bg-background/60 p-4">
+      <div className="flex h-32 min-w-0 items-end gap-2">
         {points.map((point) => (
           <div key={point.label} className="group flex min-w-0 flex-1 flex-col items-center gap-2">
             <div className="flex h-28 w-full items-end gap-1">
@@ -108,14 +106,14 @@ function OutcomeBars({ points }: { points: ChartPoint[] }) {
   const total = points.reduce((sum, point) => sum + point.value, 0);
 
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 space-y-3">
       {points.map((point) => {
         const width = total > 0 ? (point.value / total) * 100 : 0;
         const isFailure = point.label.toLowerCase().includes('failed');
         return (
           <div key={point.label}>
-            <div className="mb-1 flex items-center justify-between text-sm">
-              <span className="text-muted">{point.label}</span>
+            <div className="mb-1 flex min-w-0 items-center justify-between gap-3 text-sm">
+              <span className="min-w-0 truncate text-muted">{point.label}</span>
               <span className="font-mono text-text">{point.value}</span>
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-white/5">
@@ -150,53 +148,8 @@ export default async function AnalyticsPage() {
         <MetricCard label="Risk Average" value={analytics.kpis.averageRiskScore} detail={`${analytics.kpis.highRiskCollections} high risk`} icon={ShieldCheck} tone={analytics.kpis.averageRiskScore >= 51 ? 'warning' : 'success'} />
       </div>
 
-      {!analytics.hasData ? (
-        <div className="mt-6">
-          <EmptyState
-            icon={BarChart3}
-            title="No analytics yet"
-            description="Analytics will appear after your mint tasks, execution history, or analyzer results are recorded."
-          />
-        </div>
-      ) : null}
-
-      <div className="mt-6 grid gap-6 xl:grid-cols-2">
-        <Card tone="elevated" className="p-5">
-          <SectionHeader icon={Wallet} title="Profit & Spend Analytics" description="Spending totals from executed mint records, including mint price and recorded gas usage when available." />
-          <StatGrid
-            items={[
-              { label: 'Total Spend', value: formatEth(analytics.spendAnalytics.totalSpendEth) },
-              { label: 'Average Mint Cost', value: formatEth(analytics.spendAnalytics.averageMintCostEth) },
-              { label: 'Highest Mint Cost', value: formatEth(analytics.spendAnalytics.highestMintCostEth) },
-              { label: 'Lowest Mint Cost', value: formatEth(analytics.spendAnalytics.lowestMintCostEth) },
-            ]}
-          />
-        </Card>
-
-        <Card className="p-5">
-          <SectionHeader icon={Gauge} title="Mint Performance" description="Execution outcomes from your mint task and mint history records." />
-          <StatGrid
-            items={[
-              { label: 'Successful Mints', value: analytics.mintPerformance.successfulMints },
-              { label: 'Failed Mints', value: analytics.mintPerformance.failedMints },
-              { label: 'Success Rate', value: formatPercent(analytics.mintPerformance.successRate) },
-            ]}
-          />
-          <div className="mt-5 grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
-            <div>
-              <p className="mb-2 text-xs font-medium uppercase text-muted">Mints Over Time</p>
-              <BarChart points={analytics.mintPerformance.mintsOverTime} dual />
-            </div>
-            <div>
-              <p className="mb-2 text-xs font-medium uppercase text-muted">Success vs Failure</p>
-              <OutcomeBars points={analytics.mintPerformance.successVsFailure} />
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      <div className="mt-6 grid gap-6 xl:grid-cols-2">
-        <Card className="p-5">
+      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <Card className="min-w-0 p-5">
           <SectionHeader icon={Clock3} title="Execution Performance" description="Timing from task creation to confirmation, with RPC latency from user-scoped RPC execution events." />
           <StatGrid
             items={[
@@ -208,7 +161,42 @@ export default async function AnalyticsPage() {
           />
         </Card>
 
-        <Card className="p-5">
+        <Card className="min-w-0 p-5">
+          <SectionHeader icon={Gauge} title="Mint Performance" description="Execution outcomes from your mint task and mint history records." />
+          <StatGrid
+            items={[
+              { label: 'Successful Mints', value: analytics.mintPerformance.successfulMints },
+              { label: 'Failed Mints', value: analytics.mintPerformance.failedMints },
+              { label: 'Success Rate', value: formatPercent(analytics.mintPerformance.successRate) },
+            ]}
+          />
+          <div className="mt-5 grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(150px,0.75fr)]">
+            <div className="min-w-0">
+              <p className="mb-2 text-xs font-medium uppercase text-muted">Mints Over Time</p>
+              <BarChart points={analytics.mintPerformance.mintsOverTime} dual />
+            </div>
+            <div className="min-w-0">
+              <p className="mb-2 text-xs font-medium uppercase text-muted">Success vs Failure</p>
+              <OutcomeBars points={analytics.mintPerformance.successVsFailure} />
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <Card tone="elevated" className="min-w-0 p-5">
+          <SectionHeader icon={Wallet} title="Profit & Spend Analytics" description="Spending totals from executed mint records, including mint price and recorded gas usage when available." />
+          <StatGrid
+            items={[
+              { label: 'Total Spend', value: formatEth(analytics.spendAnalytics.totalSpendEth) },
+              { label: 'Average Mint Cost', value: formatEth(analytics.spendAnalytics.averageMintCostEth) },
+              { label: 'Highest Mint Cost', value: formatEth(analytics.spendAnalytics.highestMintCostEth) },
+              { label: 'Lowest Mint Cost', value: formatEth(analytics.spendAnalytics.lowestMintCostEth) },
+            ]}
+          />
+        </Card>
+
+        <Card className="min-w-0 p-5">
           <SectionHeader icon={AlertTriangle} title="Risk Analytics" description="Analyzer risk distribution from stored risk scores on your collection mint tasks." />
           <StatGrid
             items={[
