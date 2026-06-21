@@ -9,7 +9,7 @@ import { applyRiskWeights, getAdaptiveRiskWeights } from '@/lib/services/risk-le
 import { addBreadcrumb, captureException, startSpan } from '@/lib/observability/sentry';
 import { isTelegramEnabled } from '@/lib/services/telegram.service';
 
-const RISK_THRESHOLD = 50;
+const RISK_THRESHOLD = 75;
 
 export type RiskContext = 'live_mint' | 'scheduled_mint';
 
@@ -281,8 +281,8 @@ export async function analyzeMintRisk(taskId: string): Promise<RiskAnalysis> {
   });
 }
 
-export function isHighRisk(riskScore: number) {
-  return riskScore >= RISK_THRESHOLD;
+export function isHighRisk(riskScore: number, threshold = RISK_THRESHOLD) {
+  return riskScore > threshold;
 }
 
 export async function sendSafeModePrompt(params: {
@@ -319,7 +319,7 @@ export async function requireRiskApproval(params: {
   if (task.overrideRiskFlag) return { approved: true, risk: null };
 
   const risk = await analyzeMintRisk(params.taskId);
-  if (!isHighRisk(risk.riskScore)) return { approved: true, risk };
+  if (!isHighRisk(risk.riskScore, task.riskThreshold)) return { approved: true, risk };
 
   await getDb()
     .update(mintTasks)

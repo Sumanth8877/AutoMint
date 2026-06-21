@@ -8,7 +8,7 @@ const groups = [
   { title: 'General', icon: User, items: ['Profile', 'Appearance', 'Language'] },
   { title: 'Wallets', icon: Wallet, items: ['Connected Wallets'] },
   { title: 'RPC Providers', icon: Radio, items: ['Provider Settings', 'Gas Optimization', 'Timeout Settings'] },
-  { title: 'Execution', icon: SlidersHorizontal, items: ['Mint Defaults', 'Retry Logic', 'Risk Gates'] },
+  { title: 'Execution', icon: SlidersHorizontal, items: ['Execution Settings'] },
   { title: 'Notifications', icon: Bell, items: ['Email Notifications'] },
   { title: 'Security', icon: Lock, items: ['API Keys'] },
 ];
@@ -17,6 +17,7 @@ const icons = [Palette, Wallet, Radio, ShieldCheck, Bell, KeyRound];
 
 function settingHref(groupTitle: string, item: string) {
   if (groupTitle === 'Wallets' && item === 'Connected Wallets') return '/settings/connected-wallets';
+  if (groupTitle === 'Execution' && item === 'Execution Settings') return '/settings/execution';
   if (groupTitle === 'Notifications' && item === 'Email Notifications') return '/settings/email-notifications';
   if (groupTitle === 'Security' && item === 'API Keys') return '/settings/api-keys';
   return null;

@@ -7,6 +7,7 @@ import { cancelScheduledMint, scheduleMint } from '@/lib/services/qstash.service
 import { getMintState } from '@/lib/services/mint-state.service';
 import { getDb } from '@/lib/db';
 import { collections } from '@/drizzle/schema';
+import { getEffectiveExecutionDefaults } from '@/lib/services/execution-settings.service';
 
 // GET /api/mints
 export async function GET() {
@@ -27,15 +28,33 @@ export async function POST(req: Request) {
     const authResult = await requireApiUser();
     if ('error' in authResult) return authResult.error;
 
-    const body = await parseJsonBody<{ walletId?: string; collectionId?: string; quantity?: string | number; safeModeEnabled?: boolean }>(req);
-    const { walletId, collectionId, quantity, safeModeEnabled } = body;
+    const body = await parseJsonBody<{
+      walletId?: string;
+      collectionId?: string;
+      quantity?: string | number;
+      safeModeEnabled?: boolean;
+      gasStrategy?: 'STANDARD' | 'FAST' | 'AGGRESSIVE';
+      maxRetries?: number;
+      riskThreshold?: number;
+    }>(req);
+    const { collectionId, quantity, safeModeEnabled } = body;
+    const defaults = await getEffectiveExecutionDefaults(authResult.userId);
+    const walletId = body.walletId || defaults.defaultWalletId || undefined;
 
     if (!walletId || !collectionId) {
       return NextResponse.json({ error: 'Wallet ID and Collection ID are required' }, { status: 400 });
     }
 
-    const qty = Math.max(1, parseInt(String(quantity ?? '1'), 10) || 1);
-    const task = await addMintTask(authResult.userId, { walletId, collectionId, quantity: qty, safeModeEnabled: safeModeEnabled ?? false });
+    const qty = Math.max(1, parseInt(String(quantity ?? defaults.defaultMintQuantity), 10) || defaults.defaultMintQuantity);
+    const task = await addMintTask(authResult.userId, {
+      walletId,
+      collectionId,
+      quantity: qty,
+      safeModeEnabled: safeModeEnabled ?? false,
+      gasStrategy: body.gasStrategy ?? defaults.gasStrategy,
+      maxRetries: body.maxRetries ?? defaults.maxRetries,
+      riskThreshold: body.riskThreshold ?? defaults.riskThreshold,
+    });
 
     const [collection] = await getDb()
       .select()

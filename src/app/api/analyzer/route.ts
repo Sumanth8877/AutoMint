@@ -8,6 +8,7 @@ import { resolveMintIntent } from '@/lib/resolve-mint-intent';
 import { parseJsonBody } from '@/lib/api/errors';
 import { sendTelegramNotification } from '@/lib/services/telegram.service';
 import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
+import { getEffectiveExecutionDefaults } from '@/lib/services/execution-settings.service';
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Analyzer request failed';
@@ -27,6 +28,7 @@ export async function POST(req: Request) {
 
     const normalizedInput = input.startsWith('0x') ? `https://etherscan.io/address/${input}` : input;
     addBreadcrumb({ category: 'discovery', message: 'URL submitted', level: 'info', data: { url: normalizedInput, userId: authResult.userId } });
+    const settings = await getEffectiveExecutionDefaults(authResult.userId);
     const intent = await resolveMintIntent(normalizedInput);
 
     if (!intent.contractAddress) {
@@ -37,12 +39,22 @@ export async function POST(req: Request) {
     }
 
     const [metadata, mintState, requirements, discoveredAbi] = await Promise.all([
-      getCollectionMetadata(intent.contractAddress, intent.chain),
-      getMintState(intent.contractAddress, intent.chain),
-      fetchMintRequirements(intent.contractAddress, intent.chain),
-      discoverContractABI(intent.contractAddress, intent.chain),
+      settings.autoDetectContractInfo
+        ? getCollectionMetadata(intent.contractAddress, intent.chain)
+        : Promise.resolve({ name: 'Unknown Collection', symbol: 'UNKNOWN', totalSupply: BigInt(0), tokenStandard: 'Unknown' as const, owner: intent.contractAddress }),
+      settings.autoDetectMintDetails
+        ? getMintState(intent.contractAddress, intent.chain)
+        : Promise.resolve({ status: 'UNKNOWN' as const }),
+      settings.autoDetectMintDetails
+        ? fetchMintRequirements(intent.contractAddress, intent.chain)
+        : Promise.resolve({ mintFunction: 'mint', mintPrice: '0' }),
+      settings.autoDetectContractInfo
+        ? discoverContractABI(intent.contractAddress, intent.chain)
+        : Promise.resolve({ abi: [], source: 'fallback' as const, confidence: 0 }),
     ]);
-    const mintFunction = discoverMintFunction(discoveredAbi.abi);
+    const mintFunction = settings.autoDetectContractInfo
+      ? discoverMintFunction(discoveredAbi.abi)
+      : { functionName: 'mint', selector: 'mint(uint256)', confidence: 0 };
 
     const response = {
       intent,
@@ -53,24 +65,33 @@ export async function POST(req: Request) {
       mintState,
       requirements,
       mintFunction,
+      analyzerPreferences: {
+        autoDetectSocials: settings.autoDetectSocials,
+        autoDetectContractInfo: settings.autoDetectContractInfo,
+        autoDetectMintDetails: settings.autoDetectMintDetails,
+        riskAnalysisEnabled: settings.riskAnalysisEnabled,
+        aiSummaryEnabled: settings.aiSummaryEnabled,
+      },
       analyzedAt: new Date().toISOString(),
     };
     addBreadcrumb({ category: 'discovery', message: 'discovery completed', level: 'info', data: { url: normalizedInput, userId: authResult.userId, contractAddress: intent.contractAddress, chain: intent.chain } });
 
-    await sendTelegramNotification(authResult.userId, 'risk_analysis_complete', {
-      url: input,
-      collectionName: metadata.name,
-      contractAddress: intent.contractAddress,
-      confidence: intent.confidence,
-    });
-
-    if (!intent.isValid || intent.confidence < 0.55 || mintFunction.confidence < 0.55 || mintState.status === 'UNKNOWN') {
-      await sendTelegramNotification(authResult.userId, 'high_risk_collection', {
+    if (settings.riskAnalysisEnabled) {
+      await sendTelegramNotification(authResult.userId, 'risk_analysis_complete', {
         url: input,
-        collectionName: metadata.name,
+        collectionName: metadata.name ?? undefined,
         contractAddress: intent.contractAddress,
-        riskReason: 'Low confidence or unknown mint state',
+        confidence: intent.confidence,
       });
+
+      if (!intent.isValid || intent.confidence < 0.55 || mintFunction.confidence < 0.55 || mintState.status === 'UNKNOWN') {
+        await sendTelegramNotification(authResult.userId, 'high_risk_collection', {
+          url: input,
+          collectionName: metadata.name ?? undefined,
+          contractAddress: intent.contractAddress,
+          riskReason: 'Low confidence or unknown mint state',
+        });
+      }
     }
 
     return NextResponse.json(response);

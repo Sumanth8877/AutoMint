@@ -62,6 +62,26 @@ export const emailNotificationPreferences = pgTable('email_notification_preferen
 }));
 
 // ─── Wallets ─────────────────────────────────────────
+export const executionSettings = pgTable('execution_settings', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  defaultMintQuantity: integer('default_mint_quantity').default(1).notNull(),
+  defaultWalletId: uuid('default_wallet_id'),
+  gasStrategy: text('gas_strategy').default('STANDARD').notNull().$type<'STANDARD' | 'FAST' | 'AGGRESSIVE'>(),
+  maxRetries: integer('max_retries').default(25).notNull(),
+  riskThreshold: integer('risk_threshold').default(75).notNull(),
+  autoRunAnalyzer: boolean('auto_run_analyzer').default(true).notNull(),
+  autoDetectSocials: boolean('auto_detect_socials').default(true).notNull(),
+  autoDetectContractInfo: boolean('auto_detect_contract_info').default(true).notNull(),
+  autoDetectMintDetails: boolean('auto_detect_mint_details').default(true).notNull(),
+  riskAnalysisEnabled: boolean('risk_analysis_enabled').default(true).notNull(),
+  aiSummaryEnabled: boolean('ai_summary_enabled').default(true).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: uniqueIndex('idx_execution_settings_user_id').on(table.userId),
+}));
+
 export const wallets = pgTable('wallets', {
   id: uuid('id').defaultRandom().primaryKey(),
   userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
@@ -238,6 +258,9 @@ export const mintTasks = pgTable('mint_tasks', {
   overrideRiskFlag: boolean('override_risk_flag').default(false).notNull(),
   riskScore: integer('risk_score'),
   riskReasons: json('risk_reasons').$type<string[]>(),
+  gasStrategy: text('gas_strategy').default('STANDARD').notNull().$type<'STANDARD' | 'FAST' | 'AGGRESSIVE'>(),
+  maxRetries: integer('max_retries').default(25).notNull(),
+  riskThreshold: integer('risk_threshold').default(75).notNull(),
   originalRiskScore: integer('original_risk_score'),
   latestRiskScore: integer('latest_risk_score'),
   originalRiskReasons: json('original_risk_reasons').$type<string[]>(),
@@ -327,6 +350,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   activities: many(activities),
   telegramAccounts: many(telegramAccounts),
   emailNotificationPreferences: many(emailNotificationPreferences),
+  executionSettings: many(executionSettings),
 }));
 
 export const telegramAccountsRelations = relations(telegramAccounts, ({ one }) => ({
@@ -335,6 +359,11 @@ export const telegramAccountsRelations = relations(telegramAccounts, ({ one }) =
 
 export const emailNotificationPreferencesRelations = relations(emailNotificationPreferences, ({ one }) => ({
   user: one(users, { fields: [emailNotificationPreferences.userId], references: [users.id] }),
+}));
+
+export const executionSettingsRelations = relations(executionSettings, ({ one }) => ({
+  user: one(users, { fields: [executionSettings.userId], references: [users.id] }),
+  defaultWallet: one(wallets, { fields: [executionSettings.defaultWalletId], references: [wallets.id] }),
 }));
 
 export const walletsRelations = relations(wallets, ({ one }) => ({

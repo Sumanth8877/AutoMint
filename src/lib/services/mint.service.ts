@@ -5,6 +5,7 @@ import { simulateMint, estimateMintGas, executeMint, getMintMode, type MintParam
 import { logActivity } from '@/lib/monitoring';
 import { sendTelegramNotification } from '@/lib/services/telegram.service';
 import { sendMintFailedEmail, sendMintScheduledEmail, sendMintSuccessEmail, sendSystemErrorEmail } from '@/lib/services/email-notification.service';
+import type { GasStrategy } from '@/lib/services/execution-settings.service';
 import { requireRiskApproval } from '@/lib/services/risk.service';
 import { addBreadcrumb, captureException, captureMessage, startSpan } from '@/lib/observability/sentry';
 import { acquireLock, releaseLock } from '@/lib/services/mint-lock.service';
@@ -15,7 +16,16 @@ export async function getUserMintTasks(userId: string) {
   return result;
 }
 
-export async function addMintTask(userId: string, data: { walletId: string; collectionId: string; quantity: number; chain?: string; safeModeEnabled?: boolean }) {
+export async function addMintTask(userId: string, data: {
+  walletId: string;
+  collectionId: string;
+  quantity: number;
+  chain?: string;
+  safeModeEnabled?: boolean;
+  gasStrategy?: GasStrategy;
+  maxRetries?: number;
+  riskThreshold?: number;
+}) {
   const [wallet] = await getDb().select().from(wallets).where(and(eq(wallets.id, data.walletId), eq(wallets.userId, userId))).limit(1);
   if (!wallet) throw new Error('Wallet not found');
   if (wallet.walletType !== 'EVM') throw new Error('Only EVM wallets can be used for mint tasks');
@@ -33,6 +43,9 @@ export async function addMintTask(userId: string, data: { walletId: string; coll
     mintPrice: collection.mintPrice || undefined,
     gasLimit: undefined,
     safeModeEnabled: data.safeModeEnabled ?? false,
+    gasStrategy: data.gasStrategy ?? 'STANDARD',
+    maxRetries: data.maxRetries ?? 25,
+    riskThreshold: data.riskThreshold ?? 75,
   }).returning();
 
   await logActivity(userId, 'task_created', 'Mint task created', {
