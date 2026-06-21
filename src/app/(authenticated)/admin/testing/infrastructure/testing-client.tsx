@@ -31,6 +31,8 @@ type InfrastructureSummary = {
   testedAt: string;
 };
 
+type BadgeVariant = 'default' | 'success' | 'warning' | 'danger' | 'info';
+
 const statusMeta = {
   passed: {
     label: 'Passed',
@@ -59,6 +61,13 @@ function readinessTone(readiness: InfrastructureSummary['readiness']) {
   return 'danger';
 }
 
+function readinessBadge(readiness: InfrastructureSummary['readiness']): BadgeVariant {
+  if (readiness === 'Mostly Ready') return 'info';
+  if (readiness === 'Production Ready') return 'success';
+  if (readiness === 'Needs Attention') return 'warning';
+  return 'danger';
+}
+
 function formatDate(value: string) {
   if (!value) return 'Never';
   return new Date(value).toLocaleString();
@@ -79,19 +88,6 @@ export default function InfrastructureTestingClient() {
     };
   }, [summary]);
 
-  const loadResults = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const payload = await apiRequest<InfrastructureSummary>('/api/admin/testing/infrastructure');
-      setSummary(payload);
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Failed to load infrastructure test results.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const runTests = async () => {
     setRunning(true);
     setError(null);
@@ -108,7 +104,25 @@ export default function InfrastructureTestingClient() {
   };
 
   useEffect(() => {
-    void loadResults();
+    let active = true;
+
+    apiRequest<InfrastructureSummary>('/api/admin/testing/infrastructure')
+      .then((payload) => {
+        if (!active) return;
+        setSummary(payload);
+        setError(null);
+      })
+      .catch((requestError) => {
+        if (!active) return;
+        setError(requestError instanceof Error ? requestError.message : 'Failed to load infrastructure test results.');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   return (
@@ -130,7 +144,7 @@ export default function InfrastructureTestingClient() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={summary ? readinessTone(summary.readiness) : 'default'}>
+              <Badge variant={summary ? readinessBadge(summary.readiness) : 'default'}>
                 {summary?.readiness ?? 'No assessment'}
               </Badge>
               <span className="inline-flex items-center gap-1.5 text-xs text-muted">
