@@ -19,7 +19,6 @@ export async function PATCH(req: Request, context: RouteContext) {
 
     const { id } = await context.params;
     const body = await parseJsonBody<UpdateWalletBody>(req);
-
     const wallet = await updateWallet(id, authResult.userId, {
       nickname: body.nickname ?? null,
       chain: body.chain,

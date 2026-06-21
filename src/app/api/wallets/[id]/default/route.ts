@@ -18,7 +18,11 @@ export async function PATCH(_req: Request, context: RouteContext) {
     return NextResponse.json({ wallet });
   } catch (error) {
     const message = getErrorMessage(error, 'Failed to set default wallet');
-    const status = message.includes('not found') ? 404 : 500;
+    const status = message.includes('not found')
+      ? 404
+      : message.includes('must be')
+        ? 400
+        : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }

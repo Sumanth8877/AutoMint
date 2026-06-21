@@ -1,6 +1,6 @@
 import { getDb } from '@/lib/db';
-import { wallets, walletPermissions } from '@/drizzle/schema';
-import { eq, and } from 'drizzle-orm';
+import { executionSettings, mintTasks, wallets, walletPermissions } from '@/drizzle/schema';
+import { eq, and, sql } from 'drizzle-orm';
 import { getWalletBalance } from '@/lib/blockchain/wallet';
 import { encryptPrivateKey, decryptPrivateKey } from '@/lib/security/encryption';
 import { logActivity } from '@/lib/monitoring';
@@ -10,7 +10,30 @@ const SUPPORTED_CHAINS = ['ethereum', 'base', 'polygon'] as const;
 type SupportedChain = (typeof SUPPORTED_CHAINS)[number];
 
 export async function getUserWallets(userId: string) {
-  const result = await getDb().select().from(wallets).where(eq(wallets.userId, userId)).orderBy(wallets.createdAt);
+  const result = await getDb()
+    .select({
+      id: wallets.id,
+      userId: wallets.userId,
+      address: wallets.address,
+      nickname: wallets.nickname,
+      chain: wallets.chain,
+      walletType: wallets.walletType,
+      isDefault: wallets.isDefault,
+      encryptedPrivateKey: wallets.encryptedPrivateKey,
+      encryptionVersion: wallets.encryptionVersion,
+      createdAt: wallets.createdAt,
+      updatedAt: wallets.updatedAt,
+      pendingScheduledTasks: sql<number>`count(${mintTasks.id}) filter (
+        where ${mintTasks.walletId} = ${wallets.id}
+          and (${mintTasks.scheduledTime} is not null or ${mintTasks.qstashMessageId} is not null)
+          and ${mintTasks.status} in ('pending', 'monitoring', 'ready', 'running')
+      )::int`,
+    })
+    .from(wallets)
+    .leftJoin(mintTasks, and(eq(mintTasks.walletId, wallets.id), eq(mintTasks.userId, userId)))
+    .where(eq(wallets.userId, userId))
+    .groupBy(wallets.id)
+    .orderBy(wallets.createdAt);
   return result;
 }
 
@@ -53,6 +76,16 @@ export async function createWallet(userId: string, data: { address: string; nick
     walletType: detected.walletType,
     isDefault: !existingUserWallet,
   }).returning();
+
+  if (wallet.isDefault && wallet.walletType === 'EVM') {
+    await getDb()
+      .insert(executionSettings)
+      .values({ userId, defaultWalletId: wallet.id })
+      .onConflictDoUpdate({
+        target: executionSettings.userId,
+        set: { defaultWalletId: wallet.id, updatedAt: new Date() },
+      });
+  }
 
   await getDb().insert(walletPermissions).values({
     userId,
@@ -173,6 +206,7 @@ export async function updateWallet(id: string, userId: string, data: { nickname?
 export async function setDefaultWallet(id: string, userId: string) {
   const existing = await getWalletById(id, userId);
   if (!existing) throw new Error('Wallet not found');
+  if (existing.walletType !== 'EVM') throw new Error('Default wallet must be an EVM wallet');
 
   await getDb()
     .update(wallets)
@@ -184,6 +218,14 @@ export async function setDefaultWallet(id: string, userId: string) {
     .set({ isDefault: true, updatedAt: new Date() })
     .where(and(eq(wallets.id, id), eq(wallets.userId, userId)))
     .returning();
+
+  await getDb()
+    .insert(executionSettings)
+    .values({ userId, defaultWalletId: updated.id })
+    .onConflictDoUpdate({
+      target: executionSettings.userId,
+      set: { defaultWalletId: updated.id, updatedAt: new Date() },
+    });
 
   return updated;
 }

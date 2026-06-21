@@ -1,22 +1,20 @@
 import Link from 'next/link';
-import { Bell, ChevronRight, KeyRound, Lock, Radio, Settings, SlidersHorizontal, User, Wallet } from 'lucide-react';
+import { Bell, ChevronRight, KeyRound, Lock, Radio, Settings, SlidersHorizontal, User } from 'lucide-react';
 import Card from '@/components/ui/Card';
 import { PageHeader } from '@/components/ui/page-header';
 
 const groups = [
   { title: 'General', icon: User, items: ['Profile'] },
-  { title: 'Wallets', icon: Wallet, items: ['Connected Wallets'] },
   { title: 'RPC Providers', icon: Radio, items: ['Provider Settings'] },
   { title: 'Execution', icon: SlidersHorizontal, items: ['Execution Settings'] },
   { title: 'Notifications', icon: Bell, items: ['Email Notifications'] },
   { title: 'Security', icon: Lock, items: ['API Keys'] },
 ];
 
-const icons = [User, Wallet, Radio, SlidersHorizontal, Bell, KeyRound];
+const icons = [User, Radio, SlidersHorizontal, Bell, KeyRound];
 
 function settingHref(groupTitle: string, item: string) {
   if (groupTitle === 'General' && item === 'Profile') return '/settings/profile';
-  if (groupTitle === 'Wallets' && item === 'Connected Wallets') return '/settings/connected-wallets';
   if (groupTitle === 'RPC Providers' && item === 'Provider Settings') return '/settings/rpc-providers';
   if (groupTitle === 'Execution' && item === 'Execution Settings') return '/settings/execution';
   if (groupTitle === 'Notifications' && item === 'Email Notifications') return '/settings/email-notifications';

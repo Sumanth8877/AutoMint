@@ -68,23 +68,16 @@ export function normalizeWalletAddress(address: string, walletType = detectWalle
   return walletType === 'EVM' ? trimmed.toLowerCase() : trimmed;
 }
 
-function isPotentialUnknownWalletAddress(address: string) {
-  return /^[A-Za-z0-9:_-]{16,128}$/.test(address);
-}
-
 export function isWalletType(value: unknown): value is WalletType {
   return typeof value === 'string' && WALLET_TYPES.includes(value as WalletType);
 }
 
 export function assertValidWalletAddress(address: string, walletTypeOverride?: WalletType) {
   const walletType = detectWalletType(address);
-  const resolvedType = walletType === 'UNKNOWN' && walletTypeOverride === 'UNKNOWN' ? 'UNKNOWN' : walletType;
+  const resolvedType = walletTypeOverride && walletTypeOverride !== 'UNKNOWN' ? walletTypeOverride : walletType;
 
-  if (resolvedType === 'UNKNOWN' && !isPotentialUnknownWalletAddress(address.trim())) {
-    throw new Error('Invalid wallet address format');
-  }
-  if (walletType === 'UNKNOWN' && !walletTypeOverride) {
-    throw new Error('Wallet type could not be detected. Choose Unknown to store this address.');
+  if (resolvedType === 'UNKNOWN') {
+    throw new Error('Wallet type could not be detected. Enter a valid EVM, Solana, or Bitcoin address.');
   }
 
   return {

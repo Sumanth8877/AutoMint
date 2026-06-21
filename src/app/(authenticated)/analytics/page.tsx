@@ -1,63 +1,98 @@
-import { auth } from '@clerk/nextjs/server';
 import {
   Activity,
   AlertTriangle,
   BarChart3,
-  Bot,
   Clock3,
   Gauge,
-  Radio,
   ShieldCheck,
-  Target,
   TrendingUp,
   Wallet,
-  Waves,
   Zap,
 } from 'lucide-react';
 import { redirect } from 'next/navigation';
-import Badge from '@/components/ui/Badge';
 import Card from '@/components/ui/Card';
+import { EmptyState } from '@/components/ui/empty-state';
 import { MetricCard } from '@/components/ui/metric-card';
 import { PageHeader } from '@/components/ui/page-header';
-import { syncUser } from '@/lib/auth/sync-user';
-import { getAnalyticsDashboard } from '@/lib/services/analytics.service';
+import { requireApiUser } from '@/lib/auth/require-auth';
+import { getAnalyticsDashboard, type ChartPoint } from '@/lib/services/analytics.service';
 
 function formatPercent(value: number) {
   return `${value.toFixed(value % 1 === 0 ? 0 : 1)}%`;
 }
 
-function formatMs(value: number) {
-  if (value >= 1000) return `${(value / 1000).toFixed(1)}s`;
-  return `${value}ms`;
+function formatEth(value: number) {
+  return `${value.toLocaleString(undefined, {
+    minimumFractionDigits: value === 0 ? 0 : 3,
+    maximumFractionDigits: 4,
+  })} ETH`;
 }
 
-function maxValue(points: Array<{ value: number; secondary?: number }>) {
+function formatDuration(seconds: number) {
+  if (seconds <= 0) return '0s';
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+}
+
+function formatLatency(ms: number) {
+  if (ms <= 0) return '0ms';
+  if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${ms}ms`;
+}
+
+function maxValue(points: ChartPoint[]) {
   return Math.max(1, ...points.flatMap((point) => [point.value, point.secondary ?? 0]));
 }
 
-function BarChart({
-  points,
-  kind = 'default',
-}: {
-  points: Array<{ label: string; value: number; secondary?: number }>;
-  kind?: 'default' | 'percent' | 'latency';
-}) {
-  const max = kind === 'percent' ? 100 : maxValue(points);
+function SectionHeader({ icon: Icon, title, description }: { icon: typeof Activity; title: string; description: string }) {
+  return (
+    <div className="mb-5 flex items-start gap-3">
+      <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-lg border border-accent/20 bg-accent/10 text-accent">
+        <Icon className="h-4 w-4" aria-hidden="true" />
+      </div>
+      <div>
+        <h2 className="font-semibold text-text">{title}</h2>
+        <p className="mt-1 text-sm leading-6 text-muted">{description}</p>
+      </div>
+    </div>
+  );
+}
+
+function StatGrid({ items }: { items: Array<{ label: string; value: string | number; detail?: string }> }) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {items.map((item) => (
+        <div key={item.label} className="rounded-lg border border-border bg-background/60 p-4">
+          <p className="text-xs font-medium uppercase text-muted">{item.label}</p>
+          <p className="mt-2 font-mono text-2xl font-semibold text-text">{item.value}</p>
+          {item.detail ? <p className="mt-1 text-xs text-muted">{item.detail}</p> : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BarChart({ points, dual = false }: { points: ChartPoint[]; dual?: boolean }) {
+  const max = maxValue(points);
 
   return (
-    <div className="h-40 rounded-lg border border-border bg-background/60 p-4">
-      <div className="flex h-28 items-end gap-2">
+    <div className="h-44 rounded-lg border border-border bg-background/60 p-4">
+      <div className="flex h-32 items-end gap-2">
         {points.map((point) => (
           <div key={point.label} className="group flex min-w-0 flex-1 flex-col items-center gap-2">
-            <div className="flex h-24 w-full items-end gap-1">
+            <div className="flex h-28 w-full items-end gap-1">
               <div
                 className="w-full rounded-t bg-accent/75 transition group-hover:bg-accent"
                 style={{ height: `${Math.max(4, (point.value / max) * 100)}%` }}
+                title={`${point.label}: ${point.value}`}
               />
-              {point.secondary !== undefined ? (
+              {dual && point.secondary !== undefined ? (
                 <div
                   className="w-full rounded-t bg-success/70 transition group-hover:bg-success"
                   style={{ height: `${Math.max(4, (point.secondary / max) * 100)}%` }}
+                  title={`${point.label}: ${point.secondary} successful`}
                 />
               ) : null}
             </div>
@@ -69,277 +104,122 @@ function BarChart({
   );
 }
 
-function DistributionChart({ points }: { points: Array<{ label: string; value: number }> }) {
-  const max = maxValue(points);
+function OutcomeBars({ points }: { points: ChartPoint[] }) {
+  const total = points.reduce((sum, point) => sum + point.value, 0);
+
   return (
     <div className="space-y-3">
-      {points.map((point) => (
-        <div key={point.label}>
-          <div className="mb-1 flex items-center justify-between text-xs">
-            <span className="text-muted">{point.label}</span>
-            <span className="font-mono text-text">{point.value}</span>
+      {points.map((point) => {
+        const width = total > 0 ? (point.value / total) * 100 : 0;
+        const isFailure = point.label.toLowerCase().includes('failed');
+        return (
+          <div key={point.label}>
+            <div className="mb-1 flex items-center justify-between text-sm">
+              <span className="text-muted">{point.label}</span>
+              <span className="font-mono text-text">{point.value}</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-white/5">
+              <div className={`h-full rounded-full ${isFailure ? 'bg-danger' : 'bg-success'}`} style={{ width: `${Math.max(total > 0 ? 4 : 0, width)}%` }} />
+            </div>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-white/5">
-            <div className="h-full rounded-full bg-warning" style={{ width: `${Math.max(3, (point.value / max) * 100)}%` }} />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function SectionHeader({ icon: Icon, title }: { icon: typeof Activity; title: string }) {
-  return (
-    <div className="mb-5 flex items-center gap-3">
-      <Icon className="h-5 w-5 text-accent" aria-hidden="true" />
-      <h2 className="font-semibold text-text">{title}</h2>
+        );
+      })}
     </div>
   );
 }
 
 export default async function AnalyticsPage() {
-  const session = await auth();
-  if (!session.userId) redirect('/sign-in');
+  const auth = await requireApiUser();
+  if ('error' in auth) redirect('/sign-in');
 
-  const user = await syncUser(session.userId);
-  if (!user) redirect('/sign-in');
-
-  const analytics = await getAnalyticsDashboard(user.id);
+  const analytics = await getAnalyticsDashboard(auth.userId);
 
   return (
     <div>
       <PageHeader
-        eyebrow="Telemetry"
-        title="Analytics"
-        description="Production metrics for mint outcomes, scheduled execution, discovery, risk, wallet tracking, consensus, and infrastructure health."
-        actions={<Badge variant="info">Updated {new Date(analytics.generatedAt).toLocaleTimeString()}</Badge>}
+        eyebrow="Analytics"
+        title="Mint Analytics"
+        description="User-owned mint performance, execution speed, spend, risk, and scheduled mint outcomes."
+        actions={<span className="rounded-lg border border-border bg-surface px-3 py-2 font-mono text-xs text-muted">Updated {new Date(analytics.generatedAt).toLocaleTimeString()}</span>}
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Total Mints" value={analytics.mintMetrics.totalMints} detail={`${analytics.mintMetrics.successfulMints} successful`} icon={Zap} tone="primary" />
-        <MetricCard label="Success Rate" value={formatPercent(analytics.mintMetrics.successRate)} detail={`${analytics.mintMetrics.failedMints} failed mints`} icon={TrendingUp} tone="success" />
-        <MetricCard label="Scheduled Mints" value={analytics.schedulingMetrics.scheduledMints} detail={`${analytics.schedulingMetrics.executedMints} executed`} icon={Clock3} tone="accent" />
-        <MetricCard label="Risk Average" value={analytics.riskMetrics.averageRiskScore} detail={`${analytics.riskMetrics.highRiskCount} high risk`} icon={ShieldCheck} tone={analytics.riskMetrics.averageRiskScore >= 50 ? 'warning' : 'success'} />
+        <MetricCard label="Total Mints" value={analytics.kpis.totalMints} detail={`${analytics.kpis.successfulMints} successful`} icon={Zap} tone="primary" />
+        <MetricCard label="Success Rate" value={formatPercent(analytics.kpis.successRate)} detail={`${analytics.kpis.failedMints} failed mints`} icon={TrendingUp} tone="success" />
+        <MetricCard label="Scheduled Mints" value={analytics.kpis.scheduledMints} detail={`${analytics.kpis.executedScheduledMints} executed`} icon={Clock3} tone="accent" />
+        <MetricCard label="Risk Average" value={analytics.kpis.averageRiskScore} detail={`${analytics.kpis.highRiskCollections} high risk`} icon={ShieldCheck} tone={analytics.kpis.averageRiskScore >= 51 ? 'warning' : 'success'} />
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+      {!analytics.hasData ? (
+        <div className="mt-6">
+          <EmptyState
+            icon={BarChart3}
+            title="No analytics yet"
+            description="Analytics will appear after your mint tasks, execution history, or analyzer results are recorded."
+          />
+        </div>
+      ) : null}
+
+      <div className="mt-6 grid gap-6 xl:grid-cols-2">
         <Card tone="elevated" className="p-5">
-          <SectionHeader icon={BarChart3} title="Overview" />
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-lg border border-border bg-background/60 p-4">
-              <p className="text-xs uppercase text-muted">Executed</p>
-              <p className="mt-2 font-mono text-2xl font-semibold text-text">{analytics.schedulingMetrics.executedMints}</p>
-              <p className="mt-1 text-xs text-muted">Scheduled mints completed</p>
-            </div>
-            <div className="rounded-lg border border-border bg-background/60 p-4">
-              <p className="text-xs uppercase text-muted">Cancelled</p>
-              <p className="mt-2 font-mono text-2xl font-semibold text-text">{analytics.schedulingMetrics.cancelledMints}</p>
-              <p className="mt-1 text-xs text-muted">Stopped before execution</p>
-            </div>
-            <div className="rounded-lg border border-border bg-background/60 p-4">
-              <p className="text-xs uppercase text-muted">Low Risk</p>
-              <p className="mt-2 font-mono text-2xl font-semibold text-text">{analytics.riskMetrics.lowRiskCount}</p>
-              <p className="mt-1 text-xs text-muted">Scores below 50</p>
-            </div>
-          </div>
-          <div className="mt-5">
-            <BarChart points={analytics.charts.dailyMints} />
-          </div>
+          <SectionHeader icon={Wallet} title="Profit & Spend Analytics" description="Spending totals from executed mint records, including mint price and recorded gas usage when available." />
+          <StatGrid
+            items={[
+              { label: 'Total Spend', value: formatEth(analytics.spendAnalytics.totalSpendEth) },
+              { label: 'Average Mint Cost', value: formatEth(analytics.spendAnalytics.averageMintCostEth) },
+              { label: 'Highest Mint Cost', value: formatEth(analytics.spendAnalytics.highestMintCostEth) },
+              { label: 'Lowest Mint Cost', value: formatEth(analytics.spendAnalytics.lowestMintCostEth) },
+            ]}
+          />
         </Card>
 
         <Card className="p-5">
-          <SectionHeader icon={Gauge} title="Mint Performance" />
-          <div className="space-y-5">
+          <SectionHeader icon={Gauge} title="Mint Performance" description="Execution outcomes from your mint task and mint history records." />
+          <StatGrid
+            items={[
+              { label: 'Successful Mints', value: analytics.mintPerformance.successfulMints },
+              { label: 'Failed Mints', value: analytics.mintPerformance.failedMints },
+              { label: 'Success Rate', value: formatPercent(analytics.mintPerformance.successRate) },
+            ]}
+          />
+          <div className="mt-5 grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
             <div>
-              <div className="mb-2 flex items-center justify-between text-sm">
-                <span className="text-muted">Success rate</span>
-                <span className="font-mono text-text">{formatPercent(analytics.mintMetrics.successRate)}</span>
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-white/5">
-                <div className="h-full rounded-full bg-success" style={{ width: `${analytics.mintMetrics.successRate}%` }} />
-              </div>
+              <p className="mb-2 text-xs font-medium uppercase text-muted">Mints Over Time</p>
+              <BarChart points={analytics.mintPerformance.mintsOverTime} dual />
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-lg border border-border bg-white/5 p-3">
-                <p className="text-xs text-muted">Successful mints</p>
-                <p className="mt-2 font-mono text-xl text-text">{analytics.mintMetrics.successfulMints}</p>
-              </div>
-              <div className="rounded-lg border border-border bg-white/5 p-3">
-                <p className="text-xs text-muted">Failed mints</p>
-                <p className="mt-2 font-mono text-xl text-text">{analytics.mintMetrics.failedMints}</p>
-              </div>
-            </div>
-            <BarChart points={analytics.charts.successRate} kind="percent" />
-          </div>
-        </Card>
-      </div>
-
-      <div className="mt-6 grid gap-6 xl:grid-cols-3">
-        <Card className="p-5">
-          <SectionHeader icon={Target} title="Discovery Performance" />
-          <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
-              <MetricCard label="Jina Success" value={formatPercent(analytics.discoveryMetrics.jinaSuccessRate)} icon={Bot} tone="accent" />
-              <MetricCard label="Firecrawl Success" value={formatPercent(analytics.discoveryMetrics.firecrawlSuccessRate)} icon={Waves} tone="primary" />
-              <MetricCard label="Avg Discovery" value={formatMs(analytics.discoveryMetrics.averageDiscoveryTime)} icon={Clock3} tone="muted" />
-            </div>
-            <BarChart points={analytics.charts.discoveryLatency} kind="latency" />
-          </div>
-        </Card>
-
-        <Card className="p-5">
-          <SectionHeader icon={Wallet} title="Wallet Tracking" />
-          <div className="grid gap-3">
-            <div className="flex items-center justify-between rounded-lg border border-border bg-white/5 p-3">
-              <span className="text-sm text-muted">Tracked wallets</span>
-              <span className="font-mono text-text">{analytics.walletTrackerMetrics.trackedWallets}</span>
-            </div>
-            <div className="flex items-center justify-between rounded-lg border border-border bg-white/5 p-3">
-              <span className="text-sm text-muted">Detected mints</span>
-              <span className="font-mono text-text">{analytics.walletTrackerMetrics.detectedMints}</span>
-            </div>
-            <div className="flex items-center justify-between rounded-lg border border-border bg-white/5 p-3">
-              <span className="text-sm text-muted">Copy mint triggers</span>
-              <span className="font-mono text-text">{analytics.walletTrackerMetrics.copyMintTriggers}</span>
-            </div>
-          </div>
-          <div className="mt-5 rounded-lg border border-border bg-background/60 p-4">
-            <p className="mb-3 text-xs font-semibold uppercase text-muted">Whale Consensus</p>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted">Triggers</span>
-                <span className="font-mono text-text">{analytics.whaleConsensusMetrics.consensusTriggers}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted">Consensus mints</span>
-                <span className="font-mono text-text">{analytics.whaleConsensusMetrics.successfulConsensusMints}</span>
-              </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted">Collections</span>
-              <span className="font-mono text-text">{analytics.whaleConsensusMetrics.uniqueConsensusCollections}</span>
-            </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted">Accuracy</span>
-              <span className="font-mono text-text">{formatPercent(analytics.whaleConsensusMetrics.whaleConsensusAccuracy)}</span>
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      <Card className="p-5">
-        <SectionHeader icon={AlertTriangle} title="Risk Distribution" />
-        <DistributionChart points={analytics.charts.riskDistribution} />
-        <div className="mt-5 grid gap-3">
-          <div className="flex items-center justify-between rounded-lg border border-border bg-white/5 p-3">
-            <span className="text-sm text-muted">Prediction accuracy</span>
-            <span className="font-mono text-text">{formatPercent(analytics.riskMetrics.predictionAccuracy)}</span>
-          </div>
-          <div className="flex items-center justify-between rounded-lg border border-border bg-white/5 p-3">
-            <span className="text-sm text-muted">Engine confidence</span>
-            <span className="font-mono text-text">{formatPercent(analytics.riskMetrics.riskEngineConfidence)}</span>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-lg border border-border bg-white/5 p-3">
-              <p className="text-xs text-muted">False positives</p>
-              <p className="mt-2 font-mono text-xl text-text">{analytics.riskMetrics.falsePositives}</p>
-            </div>
-            <div className="rounded-lg border border-border bg-white/5 p-3">
-              <p className="text-xs text-muted">False negatives</p>
-              <p className="mt-2 font-mono text-xl text-text">{analytics.riskMetrics.falseNegatives}</p>
-            </div>
-          </div>
-        </div>
-      </Card>
-    </div>
-
-      <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_1fr]">
-        <Card className="overflow-hidden">
-          <div className="border-b border-border p-5">
-            <SectionHeader icon={Wallet} title="Wallet Reputation Leaderboard" />
-          </div>
-          <div className="divide-y divide-border">
-            {analytics.walletReputation.leaderboard.length === 0 ? (
-              <div className="p-5 text-sm text-muted">No wallet reputation records yet.</div>
-            ) : analytics.walletReputation.leaderboard.map((wallet) => (
-              <div key={wallet.id} className="grid gap-3 p-4 sm:grid-cols-[1fr_90px_90px] sm:items-center">
-                <div className="min-w-0">
-                  <p className="truncate font-mono text-sm text-text">{wallet.walletAddress}</p>
-                  <p className="text-xs text-muted">{wallet.chain}</p>
-                </div>
-                <Badge variant={wallet.reputationScore >= 75 ? 'success' : wallet.reputationScore >= 50 ? 'info' : 'warning'}>{wallet.reputationScore}</Badge>
-                <span className="font-mono text-sm text-muted">{wallet.successfulProjects}/{wallet.totalMints}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        <Card className="overflow-hidden">
-          <div className="border-b border-border p-5">
-            <SectionHeader icon={ShieldCheck} title="Risk Analytics" />
-          </div>
-          <div className="p-5">
-            <DistributionChart points={analytics.charts.learnedRiskDistribution} />
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-lg border border-border bg-white/5 p-3">
-                <p className="text-xs text-muted">Most accurate wallets</p>
-                <p className="mt-2 font-mono text-xl text-text">{analytics.walletReputation.mostAccurate.length}</p>
-              </div>
-              <div className="rounded-lg border border-border bg-white/5 p-3">
-                <p className="text-xs text-muted">Copy mint sources</p>
-                <p className="mt-2 font-mono text-xl text-text">{analytics.walletReputation.copyMintSources.length}</p>
-              </div>
+            <div>
+              <p className="mb-2 text-xs font-medium uppercase text-muted">Success vs Failure</p>
+              <OutcomeBars points={analytics.mintPerformance.successVsFailure} />
             </div>
           </div>
         </Card>
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_1fr]">
+      <div className="mt-6 grid gap-6 xl:grid-cols-2">
         <Card className="p-5">
-          <SectionHeader icon={Radio} title="Infrastructure Health" />
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-lg border border-border bg-white/5 p-4">
-              <p className="text-xs uppercase text-muted">RPC Usage</p>
-              <div className="mt-4">
-                <BarChart points={analytics.charts.rpcUsage} />
-              </div>
-              <div className="mt-4 grid gap-2 text-sm">
-                <div className="flex justify-between"><span className="text-muted">Alchemy latency</span><span className="font-mono text-text">{formatMs(analytics.rpcMetrics.alchemyLatency)}</span></div>
-                <div className="flex justify-between"><span className="text-muted">QuickNode latency</span><span className="font-mono text-text">{formatMs(analytics.rpcMetrics.quicknodeLatency)}</span></div>
-                <div className="flex justify-between"><span className="text-muted">Failovers</span><span className="font-mono text-text">{analytics.rpcMetrics.failoverCount}</span></div>
-              </div>
-            </div>
-            <div className="space-y-3">
-              <div className="rounded-lg border border-border bg-white/5 p-4">
-                <p className="text-xs uppercase text-muted">QStash</p>
-                <p className="mt-2 font-mono text-xl text-text">{analytics.qstashMetrics.jobsScheduled}</p>
-                <p className="text-xs text-muted">{analytics.qstashMetrics.jobsExecuted} executed / {analytics.qstashMetrics.jobFailures} failed</p>
-              </div>
-              <div className="rounded-lg border border-border bg-white/5 p-4">
-                <p className="text-xs uppercase text-muted">Telegram</p>
-                <p className="mt-2 font-mono text-xl text-text">{analytics.telegramMetrics.messagesSent}</p>
-                <p className="text-xs text-muted">{analytics.telegramMetrics.messageFailures} delivery failures</p>
-              </div>
-            </div>
-          </div>
+          <SectionHeader icon={Clock3} title="Execution Performance" description="Timing from task creation to confirmation, with RPC latency from user-scoped RPC execution events." />
+          <StatGrid
+            items={[
+              { label: 'Average Execution Time', value: formatDuration(analytics.executionPerformance.averageExecutionTimeSeconds) },
+              { label: 'Fastest Execution', value: formatDuration(analytics.executionPerformance.fastestExecutionSeconds) },
+              { label: 'Slowest Execution', value: formatDuration(analytics.executionPerformance.slowestExecutionSeconds) },
+              { label: 'Average RPC Latency', value: formatLatency(analytics.executionPerformance.averageRpcLatencyMs) },
+            ]}
+          />
         </Card>
 
-        <Card className="overflow-hidden">
-          <div className="border-b border-border p-5">
-            <SectionHeader icon={Activity} title="Recent Analytics Events" />
-          </div>
-          <div className="divide-y divide-border">
-            {analytics.recentEvents.length === 0 ? (
-              <div className="p-5 text-sm text-muted">No recent events.</div>
-            ) : analytics.recentEvents.map((event) => (
-              <div key={event.id} className="grid gap-2 p-4 sm:grid-cols-[1fr_150px] sm:items-center">
-                <div>
-                  <p className="text-sm font-medium text-text">{event.title}</p>
-                  <p className="mt-1 text-xs text-muted">{event.type}</p>
-                </div>
-                <span className="font-mono text-xs text-muted">{new Date(event.createdAt).toLocaleString()}</span>
-              </div>
-            ))}
-          </div>
+        <Card className="p-5">
+          <SectionHeader icon={AlertTriangle} title="Risk Analytics" description="Analyzer risk distribution from stored risk scores on your collection mint tasks." />
+          <StatGrid
+            items={[
+              { label: 'Collections Analyzed', value: analytics.riskAnalytics.collectionsAnalyzed },
+              { label: 'Average Risk Score', value: analytics.riskAnalytics.averageRiskScore },
+              { label: 'Low Risk Count', value: analytics.riskAnalytics.lowRiskCount, detail: '0-25' },
+              { label: 'Medium Risk Count', value: analytics.riskAnalytics.mediumRiskCount, detail: '26-50' },
+              { label: 'High Risk Count', value: analytics.riskAnalytics.highRiskCount, detail: '51-75' },
+              { label: 'Critical Risk Count', value: analytics.riskAnalytics.criticalRiskCount, detail: '76-100' },
+            ]}
+          />
         </Card>
       </div>
     </div>
