@@ -54,7 +54,7 @@ function isConfigured(): boolean {
   return !!(BROWSERBASE_API_KEY && BROWSERBASE_PROJECT_ID);
 }
 
-async function request(path: string, method: 'GET' | 'POST' | 'DELETE' = 'GET') {
+async function request(path: string, method: 'GET' | 'POST' | 'DELETE' = 'GET', body?: unknown) {
   if (!isConfigured()) {
     throw new Error('Browserbase not configured: BROWSERBASE_API_KEY and BROWSERBASE_PROJECT_ID required');
   }
@@ -66,6 +66,7 @@ async function request(path: string, method: 'GET' | 'POST' | 'DELETE' = 'GET') 
       'Content-Type': 'application/json',
       'X-BB-API-Key': BROWSERBASE_API_KEY,
     },
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -103,7 +104,7 @@ export async function createBrowserSession(
     body.timeoutMs = options.timeoutMinutes * 60_000;
   }
 
-  const data = await request('/sessions', 'POST');
+  const data = await request('/sessions', 'POST', body);
 
   return {
     id: data.id || data.sessionId,
