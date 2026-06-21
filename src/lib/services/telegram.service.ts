@@ -214,6 +214,21 @@ export async function sendTelegramMessage(
   });
 }
 
+export async function sendAdminTelegramAlert(text: string) {
+  const chatIds = (process.env.ADMIN_TELEGRAM_CHAT_IDS || process.env.ADMIN_TELEGRAM_CHAT_ID || '')
+    .split(',')
+    .map((chatId) => chatId.trim())
+    .filter(Boolean);
+
+  if (chatIds.length === 0) return { sent: false, reason: 'admin_telegram_not_configured' };
+
+  const results = await Promise.allSettled(chatIds.map((chatId) => sendTelegramMessage(chatId, text)));
+  return {
+    sent: results.some((result) => result.status === 'fulfilled'),
+    failures: results.filter((result) => result.status === 'rejected').length,
+  };
+}
+
 async function answerCallbackQuery(callbackQueryId: string, text?: string) {
   return telegramRequest<boolean>('answerCallbackQuery', {
     callback_query_id: callbackQueryId,

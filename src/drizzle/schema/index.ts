@@ -5,6 +5,7 @@ import { relations } from 'drizzle-orm';
 export const chainEnum = pgEnum('chain', ['ethereum', 'base', 'polygon']);
 export const mintStatusEnum = pgEnum('mint_status', ['pending', 'monitoring', 'ready', 'running', 'completed', 'failed', 'cancelled']);
 export const mintHistoryStatusEnum = pgEnum('mint_history_status', ['pending', 'confirmed', 'failed']);
+export const infrastructureTestStatusEnum = pgEnum('infrastructure_test_status', ['passed', 'failed', 'warning']);
 export const activityTypeEnum = pgEnum('activity_type', [
   'wallet_added',
   'wallet_removed',
@@ -124,6 +125,49 @@ export const analyticsEvents = pgTable('analytics_events', {
   createdAtIdx: index('idx_analytics_events_created_at').on(table.createdAt),
 }));
 
+export const walletReputation = pgTable('wallet_reputation', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  walletAddress: text('wallet_address').notNull(),
+  chain: chainEnum('chain').notNull().default('ethereum'),
+  reputationScore: integer('reputation_score').default(50).notNull(),
+  totalMints: integer('total_mints').default(0).notNull(),
+  successfulProjects: integer('successful_projects').default(0).notNull(),
+  failedProjects: integer('failed_projects').default(0).notNull(),
+  rugProjects: integer('rug_projects').default(0).notNull(),
+  lastUpdated: timestamp('last_updated').defaultNow().notNull(),
+}, (table) => ({
+  walletChainIdx: uniqueIndex('idx_wallet_reputation_wallet_chain').on(table.walletAddress, table.chain),
+  scoreIdx: index('idx_wallet_reputation_score').on(table.reputationScore),
+}));
+
+export const collectionOutcomes = pgTable('collection_outcomes', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  contract: text('contract').notNull(),
+  collectionName: text('collection_name'),
+  originalRiskScore: integer('original_risk_score').notNull(),
+  outcome: text('outcome').notNull(),
+  discoveredAt: timestamp('discovered_at').defaultNow().notNull(),
+  evaluatedAt: timestamp('evaluated_at').defaultNow().notNull(),
+}, (table) => ({
+  contractIdx: index('idx_collection_outcomes_contract').on(table.contract),
+  outcomeIdx: index('idx_collection_outcomes_outcome').on(table.outcome),
+  evaluatedAtIdx: index('idx_collection_outcomes_evaluated_at').on(table.evaluatedAt),
+}));
+
+export const riskWeightPerformance = pgTable('risk_weight_performance', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  contractWeight: integer('contract_weight').notNull(),
+  walletWeight: integer('wallet_weight').notNull(),
+  socialWeight: integer('social_weight').notNull(),
+  domainWeight: integer('domain_weight').notNull(),
+  predictionAccuracy: integer('prediction_accuracy').default(0).notNull(),
+  falsePositives: integer('false_positives').default(0).notNull(),
+  falseNegatives: integer('false_negatives').default(0).notNull(),
+  evaluatedAt: timestamp('evaluated_at').defaultNow().notNull(),
+}, (table) => ({
+  evaluatedAtIdx: index('idx_risk_weight_performance_evaluated_at').on(table.evaluatedAt),
+}));
+
 // ─── Collections ─────────────────────────────────────
 export const collections = pgTable('collections', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -228,6 +272,23 @@ export const collectionSyncs = pgTable('collection_syncs', {
   message: text('message'),
   syncedAt: timestamp('synced_at').defaultNow().notNull(),
 });
+
+export const infrastructureTestRuns = pgTable('infrastructure_test_runs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  service: text('service').notNull(),
+  status: infrastructureTestStatusEnum('status').notNull(),
+  score: integer('score').notNull(),
+  latency: integer('latency').notNull(),
+  summary: text('summary').notNull(),
+  reasoning: text('reasoning').notNull(),
+  rootCause: text('root_cause').notNull(),
+  fixRecommendation: text('fix_recommendation').notNull(),
+  response: json('response').$type<Record<string, unknown>>(),
+  testedAt: timestamp('tested_at').defaultNow().notNull(),
+}, (table) => ({
+  serviceIdx: index('idx_infrastructure_test_runs_service').on(table.service),
+  testedAtIdx: index('idx_infrastructure_test_runs_tested_at').on(table.testedAt),
+}));
 
 // ─── Relations ───────────────────────────────────────
 export const usersRelations = relations(users, ({ many }) => ({

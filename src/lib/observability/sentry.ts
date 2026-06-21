@@ -144,7 +144,7 @@ function baseEvent(options: CaptureOptions = {}) {
 
 async function sendEvent(event: Record<string, unknown>) {
   const dsn = getDsn();
-  if (!dsn || process.env.SENTRY_DISABLED === 'true') return;
+  if (!dsn || process.env.SENTRY_DISABLED === 'true') return false;
 
   try {
     const parsed = parseDsn(dsn);
@@ -154,14 +154,16 @@ async function sendEvent(event: Record<string, unknown>) {
       JSON.stringify(event),
     ].join('\n');
 
-    await fetch(parsed.endpoint, {
+    const response = await fetch(parsed.endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-sentry-envelope' },
       body: envelope,
       keepalive: typeof window !== 'undefined',
     });
+    return response.ok;
   } catch (error) {
     if (process.env.NODE_ENV !== 'production') console.error('Sentry capture failed:', error);
+    return false;
   }
 }
 
@@ -182,30 +184,32 @@ export function addBreadcrumb(input: Omit<Breadcrumb, 'timestamp'>) {
 
 export async function captureException(error: unknown, options: CaptureOptions = {}) {
   const exception = serializeError(error);
-  if (!shouldCapture(exception.value)) return;
+  if (!shouldCapture(exception.value)) return null;
   if (!initialized) initSentry();
 
-  await sendEvent({
+  const event = {
     ...baseEvent(options),
     exception: { values: [exception] },
-  });
+  };
+  return await sendEvent(event) ? String(event.event_id) : null;
 }
 
 export async function captureMessage(message: string, options: CaptureOptions = {}) {
-  if (!shouldCapture(message)) return;
+  if (!shouldCapture(message)) return null;
   if (!initialized) initSentry();
 
-  await sendEvent({
+  const event = {
     ...baseEvent(options),
     message,
     level: options.level ?? 'info',
-  });
+  };
+  return await sendEvent(event) ? String(event.event_id) : null;
 }
 
 export async function capturePerformance(name: string, durationMs: number, options: CaptureOptions = {}) {
   if (!initialized) initSentry();
 
-  await sendEvent({
+  const event = {
     ...baseEvent({ ...options, level: 'info' }),
     message: `performance:${name}`,
     type: 'transaction',
@@ -215,7 +219,8 @@ export async function capturePerformance(name: string, durationMs: number, optio
     measurements: {
       duration_ms: { value: durationMs, unit: 'millisecond' },
     },
-  });
+  };
+  return await sendEvent(event) ? String(event.event_id) : null;
 }
 
 export async function startSpan<T>(

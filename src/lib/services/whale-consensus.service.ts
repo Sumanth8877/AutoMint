@@ -8,6 +8,7 @@ import { logActivity } from '@/lib/monitoring';
 import { getMintState } from '@/lib/services/mint-state.service';
 import { fetchMintRequirements } from '@/lib/services/mint-requirements.service';
 import { executeMintTask } from '@/lib/services/mint.service';
+import { getWalletReputationWeight, updateWalletReputation } from '@/lib/services/wallet-reputation.service';
 import { addBreadcrumb, captureException, captureMessage } from '@/lib/observability/sentry';
 
 type Chain = 'ethereum' | 'base' | 'polygon';
@@ -46,10 +47,10 @@ function consensusTriggerKey(userId: string, collection: string, threshold: numb
   return `consensus:trigger:${userId}:${normalizeAddress(collection)}:${threshold}`;
 }
 
-function confidenceForCount(walletCount: number): ConsensusConfidence {
-  if (walletCount >= 10) return 'very_high';
-  if (walletCount >= 5) return 'high';
-  if (walletCount >= 3) return 'medium';
+function confidenceForWeightedScore(weightedScore: number): ConsensusConfidence {
+  if (weightedScore >= 10) return 'very_high';
+  if (weightedScore >= 5) return 'high';
+  if (weightedScore >= 3) return 'medium';
   return 'none';
 }
 
@@ -82,6 +83,31 @@ async function loadConsensusCount(collection: string) {
   return walletCount;
 }
 
+async function loadWeightedConsensus(collection: string, chain: Chain) {
+  const events = await getDb()
+    .select({ walletAddress: consensusEvents.walletAddress })
+    .from(consensusEvents)
+    .where(eq(consensusEvents.collection, normalizeAddress(collection)));
+
+  let weightedScore = 0;
+  const wallets = [];
+  for (const event of events) {
+    const reputation = await getWalletReputationWeight(event.walletAddress, chain);
+    weightedScore += reputation.weight;
+    wallets.push({
+      walletAddress: event.walletAddress,
+      reputationScore: reputation.reputationScore,
+      weight: reputation.weight,
+    });
+  }
+
+  return {
+    walletCount: events.length,
+    weightedScore: Math.round(weightedScore * 100) / 100,
+    wallets,
+  };
+}
+
 async function loadDefaultMintWallet(userId: string, chain: Chain) {
   const [sameChain] = await getDb()
     .select()
@@ -106,6 +132,7 @@ async function sendConsensusAlert(params: {
   userId: string;
   collection: string;
   walletCount: number;
+  weightedScore: number;
   confidence: ConsensusConfidence;
 }) {
   const { getTelegramAccountByUserId, sendTelegramMessage } = await import('@/lib/services/telegram.service');
@@ -116,6 +143,7 @@ async function sendConsensusAlert(params: {
     'Whale Consensus Reached',
     `Collection: ${params.collection}`,
     `Wallet Count: ${params.walletCount}`,
+    `Weighted Score: ${params.weightedScore}`,
     `Confidence: ${params.confidence.replace('_', ' ')}`,
   ].join('\n'), {
     replyMarkup: {
@@ -178,13 +206,14 @@ export async function recordTrustedWalletMintEvent(input: ConsensusEventInput) {
       });
 
     const walletCount = await loadConsensusCount(collection);
-    const confidence = confidenceForCount(walletCount);
+    const weightedConsensus = await loadWeightedConsensus(collection, chain);
+    const confidence = confidenceForWeightedScore(weightedConsensus.weightedScore);
 
     addBreadcrumb({
       category: 'whale-consensus',
       message: 'trusted wallet mint recorded',
       level: 'info',
-      data: { collection, walletAddress, walletCount, confidence, chain },
+      data: { collection, walletAddress, walletCount, weightedScore: weightedConsensus.weightedScore, confidence, chain },
     });
 
     if (confidence === 'none') {
@@ -194,7 +223,7 @@ export async function recordTrustedWalletMintEvent(input: ConsensusEventInput) {
     const eligibleUsers = await getDb()
       .select()
       .from(users)
-      .where(and(eq(users.consensusEnabled, true), lte(users.consensusThreshold, walletCount)));
+      .where(and(eq(users.consensusEnabled, true), lte(users.consensusThreshold, Math.floor(weightedConsensus.weightedScore))));
 
     const notifications = [];
     for (const user of eligibleUsers) {
@@ -204,23 +233,32 @@ export async function recordTrustedWalletMintEvent(input: ConsensusEventInput) {
       await logActivity(user.id, 'mint_status_changed', 'Whale consensus reached', {
         collection,
         walletCount,
+        weightedScore: weightedConsensus.weightedScore,
         confidence,
         sourceWallet: walletAddress,
         transactionHash: input.transactionHash,
+        weightedWallets: weightedConsensus.wallets,
       });
 
       await sendConsensusAlert({
         userId: user.id,
         collection,
         walletCount,
+        weightedScore: weightedConsensus.weightedScore,
         confidence,
+      });
+      await updateWalletReputation({
+        walletAddress,
+        chain,
+        outcome: 'consensus_correct',
+        metadata: { collection, walletCount, weightedScore: weightedConsensus.weightedScore },
       });
       const { trackAnalyticsEvent } = await import('@/lib/services/analytics.service');
       await trackAnalyticsEvent({
         userId: user.id,
         eventType: 'whale_consensus',
         status: 'triggered',
-        metadata: { collection, walletCount, confidence, sourceWallet: walletAddress },
+        metadata: { collection, walletCount, weightedScore: weightedConsensus.weightedScore, confidence, sourceWallet: walletAddress },
       });
 
       if (user.consensusAutoMint) {
@@ -240,7 +278,7 @@ export async function recordTrustedWalletMintEvent(input: ConsensusEventInput) {
       notifications.push(user.id);
     }
 
-    return { triggered: notifications.length > 0, walletCount, confidence, users: notifications };
+    return { triggered: notifications.length > 0, walletCount, weightedScore: weightedConsensus.weightedScore, confidence, users: notifications };
   } catch (error) {
     await captureException(error, {
       area: 'whale-consensus',

@@ -11,6 +11,8 @@ import {
   watchedWallets,
 } from '@/drizzle/schema';
 import { getRpcHealthSnapshot } from '@/lib/services/rpc-manager.service';
+import { getMostAccurateWallets, getMostSuccessfulCopyMintSources, getWalletReputationLeaderboard } from '@/lib/services/wallet-reputation.service';
+import { getRiskLearningMetrics, getRiskWeightHistory } from '@/lib/services/risk-learning.service';
 import { captureException } from '@/lib/observability/sentry';
 
 type AnalyticsStatus = 'success' | 'failed' | 'scheduled' | 'executed' | 'triggered';
@@ -146,6 +148,11 @@ export async function getAnalyticsDashboard(userId: string) {
       globalAnalyticsEvents,
       allConsensusEvents,
       rpcHealth,
+      reputationLeaderboard,
+      accurateWallets,
+      copyMintSources,
+      riskLearningMetrics,
+      riskWeightHistory,
     ] = await Promise.all([
       getDb().select().from(mintTasks).where(and(eq(mintTasks.userId, userId), gte(mintTasks.createdAt, since30))),
       getDb().select().from(mintHistory).where(and(eq(mintHistory.userId, userId), gte(mintHistory.createdAt, since30))),
@@ -154,6 +161,11 @@ export async function getAnalyticsDashboard(userId: string) {
       getDb().select().from(analyticsEvents).where(and(or(eq(analyticsEvents.userId, userId), sql`${analyticsEvents.userId} is null`), gte(analyticsEvents.createdAt, since30))),
       getDb().select().from(consensusEvents).where(gte(consensusEvents.detectedAt, since30)),
       getRpcHealthSnapshot(),
+      getWalletReputationLeaderboard(10),
+      getMostAccurateWallets(10),
+      getMostSuccessfulCopyMintSources(10),
+      getRiskLearningMetrics(),
+      getRiskWeightHistory(10),
     ]);
 
     const completedMints = userMintTasks.filter((task) => task.status === 'completed').length;
@@ -199,6 +211,10 @@ export async function getAnalyticsDashboard(userId: string) {
         averageRiskScore: average(userMintTasks.map((task) => task.riskScore)),
         highRiskCount: highRisk,
         lowRiskCount: lowRisk,
+        predictionAccuracy: riskLearningMetrics.predictionAccuracy,
+        riskEngineConfidence: riskLearningMetrics.riskEngineConfidence,
+        falsePositives: riskLearningMetrics.falsePositives,
+        falseNegatives: riskLearningMetrics.falseNegatives,
       },
       walletTrackerMetrics: {
         trackedWallets: userWatchedWallets.length,
@@ -209,6 +225,7 @@ export async function getAnalyticsDashboard(userId: string) {
         consensusTriggers,
         successfulConsensusMints,
         uniqueConsensusCollections: new Set(allConsensusEvents.map((event) => event.collection)).size,
+        whaleConsensusAccuracy: riskLearningMetrics.whaleConsensusAccuracy,
       },
       rpcMetrics: {
         alchemyRequests,
@@ -235,6 +252,16 @@ export async function getAnalyticsDashboard(userId: string) {
           { label: 'QuickNode', value: quicknodeRequests },
         ],
         riskDistribution: riskDistribution(userMintTasks),
+        learnedRiskDistribution: riskLearningMetrics.scoreDistribution,
+      },
+      walletReputation: {
+        leaderboard: reputationLeaderboard,
+        mostAccurate: accurateWallets,
+        copyMintSources,
+      },
+      riskLearning: {
+        ...riskLearningMetrics,
+        weightHistory: riskWeightHistory,
       },
       recentEvents: userActivities.slice(0, 12).map((activity) => ({
         id: activity.id,

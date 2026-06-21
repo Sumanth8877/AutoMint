@@ -214,17 +214,82 @@ export default async function AnalyticsPage() {
                 <span className="text-muted">Consensus mints</span>
                 <span className="font-mono text-text">{analytics.whaleConsensusMetrics.successfulConsensusMints}</span>
               </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted">Collections</span>
-                <span className="font-mono text-text">{analytics.whaleConsensusMetrics.uniqueConsensusCollections}</span>
-              </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted">Collections</span>
+              <span className="font-mono text-text">{analytics.whaleConsensusMetrics.uniqueConsensusCollections}</span>
             </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted">Accuracy</span>
+              <span className="font-mono text-text">{formatPercent(analytics.whaleConsensusMetrics.whaleConsensusAccuracy)}</span>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      <Card className="p-5">
+        <SectionHeader icon={AlertTriangle} title="Risk Distribution" />
+        <DistributionChart points={analytics.charts.riskDistribution} />
+        <div className="mt-5 grid gap-3">
+          <div className="flex items-center justify-between rounded-lg border border-border bg-white/5 p-3">
+            <span className="text-sm text-muted">Prediction accuracy</span>
+            <span className="font-mono text-text">{formatPercent(analytics.riskMetrics.predictionAccuracy)}</span>
+          </div>
+          <div className="flex items-center justify-between rounded-lg border border-border bg-white/5 p-3">
+            <span className="text-sm text-muted">Engine confidence</span>
+            <span className="font-mono text-text">{formatPercent(analytics.riskMetrics.riskEngineConfidence)}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-lg border border-border bg-white/5 p-3">
+              <p className="text-xs text-muted">False positives</p>
+              <p className="mt-2 font-mono text-xl text-text">{analytics.riskMetrics.falsePositives}</p>
+            </div>
+            <div className="rounded-lg border border-border bg-white/5 p-3">
+              <p className="text-xs text-muted">False negatives</p>
+              <p className="mt-2 font-mono text-xl text-text">{analytics.riskMetrics.falseNegatives}</p>
+            </div>
+          </div>
+        </div>
+      </Card>
+    </div>
+
+      <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_1fr]">
+        <Card className="overflow-hidden">
+          <div className="border-b border-border p-5">
+            <SectionHeader icon={Wallet} title="Wallet Reputation Leaderboard" />
+          </div>
+          <div className="divide-y divide-border">
+            {analytics.walletReputation.leaderboard.length === 0 ? (
+              <div className="p-5 text-sm text-muted">No wallet reputation records yet.</div>
+            ) : analytics.walletReputation.leaderboard.map((wallet) => (
+              <div key={wallet.id} className="grid gap-3 p-4 sm:grid-cols-[1fr_90px_90px] sm:items-center">
+                <div className="min-w-0">
+                  <p className="truncate font-mono text-sm text-text">{wallet.walletAddress}</p>
+                  <p className="text-xs text-muted">{wallet.chain}</p>
+                </div>
+                <Badge variant={wallet.reputationScore >= 75 ? 'success' : wallet.reputationScore >= 50 ? 'info' : 'warning'}>{wallet.reputationScore}</Badge>
+                <span className="font-mono text-sm text-muted">{wallet.successfulProjects}/{wallet.totalMints}</span>
+              </div>
+            ))}
           </div>
         </Card>
 
-        <Card className="p-5">
-          <SectionHeader icon={AlertTriangle} title="Risk Distribution" />
-          <DistributionChart points={analytics.charts.riskDistribution} />
+        <Card className="overflow-hidden">
+          <div className="border-b border-border p-5">
+            <SectionHeader icon={ShieldCheck} title="Risk Analytics" />
+          </div>
+          <div className="p-5">
+            <DistributionChart points={analytics.charts.learnedRiskDistribution} />
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-lg border border-border bg-white/5 p-3">
+                <p className="text-xs text-muted">Most accurate wallets</p>
+                <p className="mt-2 font-mono text-xl text-text">{analytics.walletReputation.mostAccurate.length}</p>
+              </div>
+              <div className="rounded-lg border border-border bg-white/5 p-3">
+                <p className="text-xs text-muted">Copy mint sources</p>
+                <p className="mt-2 font-mono text-xl text-text">{analytics.walletReputation.copyMintSources.length}</p>
+              </div>
+            </div>
+          </div>
         </Card>
       </div>
 

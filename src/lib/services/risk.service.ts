@@ -5,6 +5,7 @@ import { getDb } from '@/lib/db';
 import { collections, mintHistory, mintTasks, wallets } from '@/drizzle/schema';
 import { logActivity } from '@/lib/monitoring';
 import { getMintState } from '@/lib/services/mint-state.service';
+import { applyRiskWeights, getAdaptiveRiskWeights } from '@/lib/services/risk-learning.service';
 import { addBreadcrumb, captureException, startSpan } from '@/lib/observability/sentry';
 
 const RISK_THRESHOLD = 50;
@@ -223,7 +224,14 @@ export async function analyzeMintRisk(taskId: string): Promise<RiskAnalysis> {
     Promise.resolve(scoreDomainAge(collection?.createdAt ?? task.createdAt)),
   ]);
 
-  const riskScore = clampScore(contract.score + trustedWallet.score + social.score + domainAge.score);
+  const rawWeights = {
+    contractAnalysis: contract.score,
+    trustedWalletActivity: trustedWallet.score,
+    socialAnalysis: social.score,
+    domainAge: domainAge.score,
+  };
+  const configuredWeights = await getAdaptiveRiskWeights();
+  const riskScore = clampScore(applyRiskWeights(rawWeights, configuredWeights));
   const riskReasons = [
     ...contract.reasons,
     ...trustedWallet.reasons,
@@ -235,12 +243,7 @@ export async function analyzeMintRisk(taskId: string): Promise<RiskAnalysis> {
     riskScore,
     riskReasons,
     safeModeEnabled: task.safeModeEnabled,
-    weights: {
-      contractAnalysis: contract.score,
-      trustedWalletActivity: trustedWallet.score,
-      socialAnalysis: social.score,
-      domainAge: domainAge.score,
-    },
+    weights: rawWeights,
   };
 
   await getDb()
