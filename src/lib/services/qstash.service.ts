@@ -6,15 +6,15 @@ import { getDb } from '@/lib/db';
 import { getWalletBalance } from '@/lib/blockchain/wallet';
 import { mintTasks, wallets } from '@/drizzle/schema';
 import { logActivity } from '@/lib/monitoring';
-import { acquireCronLock, releaseCronLock } from '@/lib/redis/lock';
 import { executeMintTask } from '@/lib/services/mint.service';
 import { getMintState } from '@/lib/services/mint-state.service';
 import { requireRiskApproval } from '@/lib/services/risk.service';
 import { addBreadcrumb, captureException, captureMessage } from '@/lib/observability/sentry';
+import { acquireLock, releaseLock } from '@/lib/services/mint-lock.service';
+import { executeScheduledRiskCheck, hasBlockingRiskChange, storeOriginalRiskSnapshot } from '@/lib/services/scheduled-risk-check.service';
 
 const QSTASH_BASE_URL = 'https://qstash.upstash.io';
 const DEFAULT_SCHEDULE_DELAY_MS = 60_000;
-const MINT_LOCK_TTL_SECONDS = 180;
 
 type QStashPublishResponse = {
   messageId?: string;
@@ -31,6 +31,7 @@ type QStashJwtPayload = {
 
 export type ScheduledMintPayload = {
   taskId: string;
+  type?: 'execute' | 'risk_check';
 };
 
 function getQStashToken() {
@@ -112,12 +113,12 @@ export function verifyQStashSignature(headers: Headers, rawBody: string) {
   throw new Error('Invalid QStash signature');
 }
 
-async function publishQStashMessage(taskId: string, scheduledTime: Date) {
+async function publishQStashMessage(taskId: string, scheduledTime: Date, type: ScheduledMintPayload['type'] = 'execute') {
   addBreadcrumb({
     category: 'qstash',
     message: 'scheduling started',
     level: 'info',
-    data: { taskId, scheduledTime: scheduledTime.toISOString() },
+    data: { taskId, scheduledTime: scheduledTime.toISOString(), type },
   });
   const webhookUrl = getWebhookUrl();
   const response = await fetch(`${QSTASH_BASE_URL}/v2/publish/${encodePublishUrl(webhookUrl)}`, {
@@ -127,7 +128,7 @@ async function publishQStashMessage(taskId: string, scheduledTime: Date) {
       'Content-Type': 'application/json',
       'Upstash-Not-Before': String(secondsFromDate(scheduledTime)),
     },
-    body: JSON.stringify({ taskId } satisfies ScheduledMintPayload),
+    body: JSON.stringify({ taskId, type } satisfies ScheduledMintPayload),
   });
 
   if (!response.ok) {
@@ -135,13 +136,18 @@ async function publishQStashMessage(taskId: string, scheduledTime: Date) {
     const error = new Error(text || `QStash publish failed with status ${response.status}`);
     await captureException(error, {
       area: 'qstash',
-      context: { taskId, scheduledTime: scheduledTime.toISOString() },
+      context: { taskId, scheduledTime: scheduledTime.toISOString(), type },
       fingerprint: ['qstash', 'publish'],
     });
     throw error;
   }
 
   return await response.json() as QStashPublishResponse;
+}
+
+function getRiskCheckTime(scheduledTime: Date) {
+  const oneHourBefore = new Date(scheduledTime.getTime() - 60 * 60 * 1000);
+  return oneHourBefore.getTime() > Date.now() ? oneHourBefore : undefined;
 }
 
 async function deleteQStashMessage(messageId: string) {
@@ -211,7 +217,13 @@ export async function scheduleMint(params: {
     await deleteQStashMessage(task.qstashMessageId);
   }
 
-  const qstash = await publishQStashMessage(task.id, scheduledTime);
+  const originalRisk = await storeOriginalRiskSnapshot(task.id);
+  const riskCheckTime = getRiskCheckTime(scheduledTime);
+  if (riskCheckTime && !overrideRiskFlag) {
+    await publishQStashMessage(task.id, riskCheckTime, 'risk_check');
+  }
+
+  const qstash = await publishQStashMessage(task.id, scheduledTime, 'execute');
   const qstashMessageId = qstash.messageId || qstash.scheduleId;
   if (!qstashMessageId) throw new Error('QStash response did not include a message id');
   addBreadcrumb({
@@ -228,6 +240,10 @@ export async function scheduleMint(params: {
       qstashMessageId,
       scheduledTime,
       overrideRiskFlag,
+      originalRiskScore: originalRisk.riskScore,
+      latestRiskScore: originalRisk.riskScore,
+      originalRiskReasons: originalRisk.riskReasons,
+      latestRiskReasons: originalRisk.riskReasons,
       updatedAt: new Date(),
     })
     .where(eq(mintTasks.id, task.id))
@@ -292,18 +308,18 @@ function hasEnoughBalance(balance: string, mintPrice: string | null, quantity: n
 }
 
 export async function executeScheduledMint(taskId: string) {
-  const lockName = `mint:${taskId}`;
-  const lockAcquired = await acquireCronLock(lockName, MINT_LOCK_TTL_SECONDS);
-  if (!lockAcquired) {
+  const mintLock = await acquireLock(taskId);
+  if (!mintLock.acquired) {
     await captureMessage('QStash duplicate execution attempt', {
       area: 'qstash',
       level: 'warning',
-      context: { taskId, lockName },
+      context: { taskId, lockName: mintLock.key },
       fingerprint: ['qstash', 'duplicate-execution'],
     });
     return { success: false, skipped: true, error: 'Mint task is already locked' };
   }
 
+  let lockReleased = false;
   try {
     const row = await loadTaskWithWallet(taskId);
     if (!row?.task) throw new Error('Mint task not found');
@@ -315,6 +331,10 @@ export async function executeScheduledMint(taskId: string) {
 
     if (task.status === 'cancelled') {
       return { success: false, skipped: true, error: 'Mint task was cancelled' };
+    }
+
+    if (hasBlockingRiskChange(task)) {
+      return { success: false, skipped: true, error: 'Risk score changed; approval required' };
     }
 
     if (!wallet || !task.walletId || !task.contractAddress) {
@@ -397,8 +417,13 @@ export async function executeScheduledMint(taskId: string) {
     }
 
     await logActivity(task.userId, 'mint_status_changed', 'Scheduled mint triggered', { taskId });
-    return executeMintTask(taskId, task.userId);
+    lockReleased = true;
+    return executeMintTask(taskId, task.userId, { existingLockToken: mintLock.token });
   } finally {
-    await releaseCronLock(lockName);
+    if (!lockReleased) await releaseLock(taskId, mintLock.token);
   }
+}
+
+export async function executeScheduledRiskRecheck(taskId: string) {
+  return executeScheduledRiskCheck(taskId);
 }

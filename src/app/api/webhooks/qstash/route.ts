@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import {
   executeScheduledMint,
+  executeScheduledRiskRecheck,
   verifyQStashSignature,
   type ScheduledMintPayload,
 } from '@/lib/services/qstash.service';
@@ -25,7 +26,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'taskId is required' }, { status: 400 });
     }
 
-    const result = await executeScheduledMint(payload.taskId);
+    const result = payload.type === 'risk_check'
+      ? await executeScheduledRiskRecheck(payload.taskId)
+      : await executeScheduledMint(payload.taskId);
     return NextResponse.json({ ok: true, result });
   } catch (error) {
     console.error('QStash webhook error:', error);

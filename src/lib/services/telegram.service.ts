@@ -101,6 +101,13 @@ type SafeModePromptParams = {
   riskReasons: string[];
 };
 
+type RiskChangePromptParams = {
+  userId: string;
+  taskId: string;
+  previousScore: number;
+  currentScore: number;
+};
+
 function getTelegramBotToken() {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) throw new Error('TELEGRAM_BOT_TOKEN is not configured');
@@ -389,6 +396,34 @@ export async function sendTelegramSafeModePrompt(params: SafeModePromptParams) {
   }
 }
 
+export async function sendTelegramRiskChangePrompt(params: RiskChangePromptParams) {
+  try {
+    const account = await getTelegramAccountByUserId(params.userId);
+    if (!account) return { sent: false, reason: 'telegram_not_linked' };
+
+    await sendTelegramMessage(account.chatId, [
+      'Risk Score Changed',
+      `Previous: ${params.previousScore}`,
+      `Current: ${params.currentScore}`,
+    ].join('\n'), {
+      replyMarkup: {
+        inline_keyboard: [[
+          { text: 'Mint Anyway', callback_data: `risk:approve_mint:${params.taskId}` },
+          { text: 'Cancel', callback_data: `risk:cancel:${params.taskId}` },
+        ]],
+      },
+    });
+
+    return { sent: true };
+  } catch (error) {
+    console.error('Telegram risk change prompt failed:', error);
+    return {
+      sent: false,
+      reason: error instanceof Error ? error.message : 'telegram_risk_change_prompt_failed',
+    };
+  }
+}
+
 export async function notifyWalletBalanceIfLow(params: {
   userId: string;
   address: string;
@@ -659,7 +694,6 @@ async function handleRiskCallback(callback: TelegramCallbackQuery) {
   try {
   const [scope, action, taskId] = (callback.data || '').split(':');
   if (scope !== 'risk' || !action || !taskId) {
-    await answerCallbackQuery(callback.id);
     return { handled: false };
   }
 
@@ -707,6 +741,21 @@ async function handleRiskCallback(callback: TelegramCallbackQuery) {
     return { handled: true };
   }
 
+  if (action === 'approve_mint') {
+    const { getDb } = await import('@/lib/db');
+    const { mintTasks } = await import('@/drizzle/schema');
+    const { eq, and } = await import('drizzle-orm');
+
+    await getDb()
+      .update(mintTasks)
+      .set({ overrideRiskFlag: true, safeModeEnabled: false, updatedAt: new Date() })
+      .where(and(eq(mintTasks.id, taskId), eq(mintTasks.userId, account.userId)));
+
+    await answerCallbackQuery(callback.id, 'Approved.');
+    await sendTelegramMessage(account.chatId, `Scheduled mint approved.\nTask: ${taskId}`);
+    return { handled: true };
+  }
+
   await answerCallbackQuery(callback.id);
   return { handled: false };
   } catch (error) {
@@ -723,9 +772,65 @@ async function handleRiskCallback(callback: TelegramCallbackQuery) {
   }
 }
 
+async function handleConsensusCallback(callback: TelegramCallbackQuery) {
+  try {
+    const [scope, action, collection] = (callback.data || '').split(':');
+    if (scope !== 'consensus' || !action || !collection) {
+      await answerCallbackQuery(callback.id);
+      return { handled: false };
+    }
+
+    const account = await getTelegramAccountByTelegramId(String(callback.from.id));
+    if (!account) {
+      await answerCallbackQuery(callback.id, 'Telegram is not linked.');
+      return { handled: true };
+    }
+
+    if (action === 'ignore') {
+      await answerCallbackQuery(callback.id, 'Ignored.');
+      return { handled: true };
+    }
+
+    if (action === 'copy') {
+      const { executeConsensusCopyMint } = await import('@/lib/services/whale-consensus.service');
+      const result = await executeConsensusCopyMint({
+        userId: account.userId,
+        collection,
+        chain: 'ethereum',
+      });
+
+      await answerCallbackQuery(callback.id, result.success ? 'Copy mint started.' : 'Copy mint failed.');
+      const txHash = 'txHash' in result ? result.txHash : undefined;
+      await sendTelegramMessage(
+        account.chatId,
+        result.success
+          ? `Copy mint triggered.\nCollection: ${collection}${txHash ? `\nTx: ${txHash}` : ''}`
+          : `Copy mint failed.\nCollection: ${collection}\nReason: ${result.error || 'Unknown error'}`,
+      );
+      return { handled: true };
+    }
+
+    await answerCallbackQuery(callback.id);
+    return { handled: false };
+  } catch (error) {
+    await captureException(error, {
+      area: 'telegram',
+      context: {
+        telegramId: String(callback.from.id),
+        chatId: callback.message?.chat.id ? String(callback.message.chat.id) : undefined,
+        callbackData: callback.data,
+      },
+      fingerprint: ['telegram', 'consensus-callback'],
+    });
+    throw error;
+  }
+}
+
 export async function handleTelegramUpdate(update: TelegramUpdate) {
   if (update.callback_query?.data) {
-    return handleRiskCallback(update.callback_query);
+    const riskResult = await handleRiskCallback(update.callback_query);
+    if (riskResult.handled) return riskResult;
+    return handleConsensusCallback(update.callback_query);
   }
 
   const message = update.message ?? update.edited_message;

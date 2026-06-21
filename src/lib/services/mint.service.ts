@@ -6,6 +6,7 @@ import { logActivity } from '@/lib/monitoring';
 import { sendTelegramNotification } from '@/lib/services/telegram.service';
 import { requireRiskApproval } from '@/lib/services/risk.service';
 import { addBreadcrumb, captureException, captureMessage, startSpan } from '@/lib/observability/sentry';
+import { acquireLock, releaseLock } from '@/lib/services/mint-lock.service';
 import type { Hex } from 'viem';
 
 export async function getUserMintTasks(userId: string) {
@@ -47,8 +48,20 @@ export async function addMintTask(userId: string, data: { walletId: string; coll
   return task;
 }
 
-export async function executeMintTask(taskId: string, userId?: string): Promise<{ success: boolean; txHash?: string; error?: string }> {
+export async function executeMintTask(
+  taskId: string,
+  userId?: string,
+  options: { existingLockToken?: string } = {},
+): Promise<{ success: boolean; txHash?: string; error?: string }> {
   return startSpan('mint.execute_task', { area: 'minting', taskId, userId }, async () => {
+  const mintLock = options.existingLockToken
+    ? { acquired: true, mintId: taskId, key: `mint-lock:${taskId}`, token: options.existingLockToken }
+    : await acquireLock(taskId);
+  if (!mintLock.acquired) {
+    return { success: false, error: 'Mint execution already locked' };
+  }
+
+  try {
   const riskGate = await requireRiskApproval({ taskId, action: 'mint', userId });
   if (!riskGate.approved) {
     return {
@@ -250,6 +263,9 @@ export async function executeMintTask(taskId: string, userId?: string): Promise<
   });
 
   return { success: true, txHash: result.txHash };
+  } finally {
+    await releaseLock(taskId, mintLock.token);
+  }
   }).catch(async (error) => {
     await captureException(error, {
       area: 'minting',

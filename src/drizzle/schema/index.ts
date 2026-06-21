@@ -26,6 +26,9 @@ export const users = pgTable('users', {
   clerkId: text('clerk_id').unique().notNull(),
   email: text('email').notNull(),
   username: text('username'),
+  consensusEnabled: boolean('consensus_enabled').default(false).notNull(),
+  consensusThreshold: integer('consensus_threshold').default(3).notNull(),
+  consensusAutoMint: boolean('consensus_auto_mint').default(false).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -84,6 +87,27 @@ export const copyMintRules = pgTable('copy_mint_rules', {
   userWalletIdx: uniqueIndex('idx_copy_mint_rules_user_wallet').on(table.userId, table.walletAddress),
 }));
 
+export const trustedWallets = pgTable('trusted_wallets', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  walletAddress: text('wallet_address').notNull(),
+  label: text('label'),
+  active: boolean('active').default(true).notNull(),
+}, (table) => ({
+  walletAddressIdx: uniqueIndex('idx_trusted_wallets_wallet_address').on(table.walletAddress),
+  activeIdx: index('idx_trusted_wallets_active').on(table.active),
+}));
+
+export const consensusEvents = pgTable('consensus_events', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  collection: text('collection').notNull(),
+  walletAddress: text('wallet_address').notNull(),
+  detectedAt: timestamp('detected_at').defaultNow().notNull(),
+}, (table) => ({
+  collectionIdx: index('idx_consensus_events_collection').on(table.collection),
+  walletAddressIdx: index('idx_consensus_events_wallet_address').on(table.walletAddress),
+  collectionWalletIdx: uniqueIndex('idx_consensus_events_collection_wallet').on(table.collection, table.walletAddress),
+}));
+
 // ─── Collections ─────────────────────────────────────
 export const collections = pgTable('collections', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -136,6 +160,10 @@ export const mintTasks = pgTable('mint_tasks', {
   overrideRiskFlag: boolean('override_risk_flag').default(false).notNull(),
   riskScore: integer('risk_score'),
   riskReasons: json('risk_reasons').$type<string[]>(),
+  originalRiskScore: integer('original_risk_score'),
+  latestRiskScore: integer('latest_risk_score'),
+  originalRiskReasons: json('original_risk_reasons').$type<string[]>(),
+  latestRiskReasons: json('latest_risk_reasons').$type<string[]>(),
   safeModeEnabled: boolean('safe_mode_enabled').default(false).notNull(),
   confirmedAt: timestamp('confirmed_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),

@@ -4,11 +4,11 @@ import { and, eq } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
 import { copyMintRules, mintTasks, wallets } from '@/drizzle/schema';
 import { logActivity } from '@/lib/monitoring';
-import { acquireCronLock, releaseCronLock } from '@/lib/redis/lock';
 import { executeMintTask } from '@/lib/services/mint.service';
 import { fetchMintRequirements } from '@/lib/services/mint-requirements.service';
 import { getMintState } from '@/lib/services/mint-state.service';
 import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
+import { acquireLock, releaseLock } from '@/lib/services/mint-lock.service';
 
 type CopyMintEvent = {
   userId: string;
@@ -163,8 +163,8 @@ export async function handleCopyMintEvent(event: CopyMintEvent) {
   }
 
   const lockName = `copy-mint:${event.userId}:${rule.id}:${contractAddress}:${event.transactionHash || event.tokenId || 'latest'}`;
-  const locked = await acquireCronLock(lockName, 180);
-  if (!locked) {
+  const mintLock = await acquireLock(lockName);
+  if (!mintLock.acquired) {
     return { action: 'skipped' as const, reason: 'locked' };
   }
 
@@ -267,7 +267,7 @@ export async function handleCopyMintEvent(event: CopyMintEvent) {
     });
     return { action: 'failed' as const, taskId: task.id, error: result.error };
   } finally {
-    await releaseCronLock(lockName);
+    await releaseLock(lockName, mintLock.token);
   }
   } catch (error) {
     await captureException(error, {
