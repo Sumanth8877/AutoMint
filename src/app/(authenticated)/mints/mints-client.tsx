@@ -12,6 +12,7 @@ import { Modal } from '@/components/ui/modal';
 import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { apiRequest } from '@/lib/api/client';
+import type { WalletType } from '@/lib/wallets/detection';
 
 type MintTask = {
   id: string;
@@ -29,6 +30,7 @@ type WalletRecord = {
   address: string;
   nickname: string | null;
   chain: string;
+  walletType: WalletType;
 };
 
 type CollectionRecord = {
@@ -74,6 +76,7 @@ export default function MintsClient() {
 
   const collectionById = useMemo(() => new Map(collections.map((collection) => [collection.id, collection])), [collections]);
   const walletById = useMemo(() => new Map(wallets.map((wallet) => [wallet.id, wallet])), [wallets]);
+  const evmWallets = useMemo(() => wallets.filter((wallet) => wallet.walletType === 'EVM'), [wallets]);
   const runningCount = tasks.filter((task) => task.status === 'running').length;
   const queuedCount = tasks.filter((task) => task.status === 'pending' || task.status === 'monitoring').length;
   const readyCount = tasks.filter((task) => task.status === 'ready').length;
@@ -235,7 +238,10 @@ export default function MintsClient() {
                   <div className="col-span-2 hidden md:block">
                     <Badge variant={statusVariant(task.status) as 'success' | 'warning' | 'danger' | 'info'}>{task.status}</Badge>
                   </div>
-                  <p className="col-span-2 hidden font-mono text-sm text-muted lg:block">{wallet ? shortAddress(wallet.address) : 'Unassigned'}</p>
+                  <div className="col-span-2 hidden min-w-0 lg:block">
+                    <p className="truncate font-mono text-sm text-muted">{wallet ? shortAddress(wallet.address) : 'Unassigned'}</p>
+                    {wallet ? <Badge variant="info">{wallet.walletType}</Badge> : null}
+                  </div>
                   <p className="col-span-2 hidden font-mono text-sm text-text sm:block">{task.quantity}</p>
                   <div className="col-span-7 flex justify-end gap-1 sm:col-span-1">
                     <button type="button" onClick={() => startTask(task)} disabled={updatingId === task.id || task.status === 'running' || task.status === 'completed'} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-white/5 hover:text-text disabled:opacity-50" aria-label={`${task.status === 'failed' || task.status === 'cancelled' ? 'Retry' : 'Start'} ${title}`}>
@@ -293,8 +299,8 @@ export default function MintsClient() {
               required
             >
               <option value="">Select wallet</option>
-              {wallets.map((wallet) => (
-                <option key={wallet.id} value={wallet.id}>{wallet.nickname || shortAddress(wallet.address)} / {wallet.chain}</option>
+              {evmWallets.map((wallet) => (
+                <option key={wallet.id} value={wallet.id}>{wallet.nickname || shortAddress(wallet.address)} / {wallet.walletType} / {wallet.chain}</option>
               ))}
             </select>
           </label>

@@ -71,7 +71,7 @@ async function loadDefaultMintWallet(userId: string, chain: string) {
   const [sameChain] = await getDb()
     .select()
     .from(wallets)
-    .where(and(eq(wallets.userId, userId), eq(wallets.chain, chain as 'ethereum' | 'base' | 'polygon')))
+    .where(and(eq(wallets.userId, userId), eq(wallets.chain, chain as 'ethereum' | 'base' | 'polygon'), eq(wallets.walletType, 'EVM')))
     .orderBy(wallets.createdAt)
     .limit(1);
 
@@ -80,7 +80,7 @@ async function loadDefaultMintWallet(userId: string, chain: string) {
   const [fallback] = await getDb()
     .select()
     .from(wallets)
-    .where(eq(wallets.userId, userId))
+    .where(and(eq(wallets.userId, userId), eq(wallets.walletType, 'EVM')))
     .orderBy(wallets.createdAt)
     .limit(1);
 

@@ -6,7 +6,7 @@ import { PageHeader } from '@/components/ui/page-header';
 
 const groups = [
   { title: 'General', icon: User, items: ['Profile', 'Appearance', 'Language'] },
-  { title: 'Wallets', icon: Wallet, items: ['Connected Wallets', 'Default Wallet', 'Network Preferences'] },
+  { title: 'Wallets', icon: Wallet, items: ['Connected Wallets'] },
   { title: 'RPC Providers', icon: Radio, items: ['Provider Settings', 'Gas Optimization', 'Timeout Settings'] },
   { title: 'Execution', icon: SlidersHorizontal, items: ['Mint Defaults', 'Retry Logic', 'Risk Gates'] },
   { title: 'Notifications', icon: Bell, items: ['Email Notifications'] },
@@ -16,6 +16,7 @@ const groups = [
 const icons = [Palette, Wallet, Radio, ShieldCheck, Bell, KeyRound];
 
 function settingHref(groupTitle: string, item: string) {
+  if (groupTitle === 'Wallets' && item === 'Connected Wallets') return '/settings/connected-wallets';
   if (groupTitle === 'Notifications' && item === 'Email Notifications') return '/settings/email-notifications';
   if (groupTitle === 'Security' && item === 'API Keys') return '/settings/api-keys';
   return null;

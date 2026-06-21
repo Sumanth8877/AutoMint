@@ -22,14 +22,14 @@ export async function POST(req: Request) {
     const authResult = await requireApiUser();
     if ('error' in authResult) return authResult.error;
 
-    const body = await parseJsonBody<{ address?: string; nickname?: string; chain?: string }>(req);
-    const { address, nickname, chain } = body;
+    const body = await parseJsonBody<{ address?: string; nickname?: string; chain?: string; walletTypeOverride?: string | null }>(req);
+    const { address, nickname, chain, walletTypeOverride } = body;
 
     if (!address || !chain) {
       return NextResponse.json({ error: 'Address and chain are required' }, { status: 400 });
     }
 
-    const wallet = await createWallet(authResult.userId, { address, nickname, chain });
+    const wallet = await createWallet(authResult.userId, { address, nickname, chain, walletTypeOverride });
 
     return NextResponse.json({ wallet }, { status: 201 });
   } catch (error) {

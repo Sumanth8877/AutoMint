@@ -27,6 +27,7 @@ export async function GET(request: Request) {
           title: wallets.nickname,
           fallbackTitle: wallets.address,
           subtitle: wallets.chain,
+          walletType: wallets.walletType,
         })
         .from(wallets)
         .where(and(eq(wallets.userId, userId), or(ilike(wallets.address, pattern), ilike(wallets.nickname, pattern))))
@@ -60,7 +61,7 @@ export async function GET(request: Request) {
         id: row.id,
         type: 'wallet' as const,
         title: row.title || row.fallbackTitle,
-        subtitle: row.subtitle,
+        subtitle: row.walletType === 'EVM' ? `${row.walletType} / ${row.subtitle}` : row.walletType,
         href: '/wallets',
       })),
       ...collectionRows.map((row) => ({

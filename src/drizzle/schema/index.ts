@@ -1,5 +1,5 @@
 import { pgTable, text, timestamp, uuid, integer, pgEnum, json, boolean, index, uniqueIndex } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 
 // ─── Enums ───────────────────────────────────────────
 export const chainEnum = pgEnum('chain', ['ethereum', 'base', 'polygon']);
@@ -68,11 +68,15 @@ export const wallets = pgTable('wallets', {
   address: text('address').notNull(),
   nickname: text('nickname'),
   chain: chainEnum('chain').notNull().default('ethereum'),
+  walletType: text('wallet_type').default('UNKNOWN').notNull().$type<'EVM' | 'SOLANA' | 'BITCOIN' | 'UNKNOWN'>(),
+  isDefault: boolean('is_default').default(false).notNull(),
   encryptedPrivateKey: text('encrypted_private_key'),
   encryptionVersion: integer('encryption_version').default(1),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  defaultWalletIdx: uniqueIndex('idx_wallets_default_per_user').on(table.userId).where(sql`${table.isDefault} = true`),
+}));
 
 export const watchedWallets = pgTable('watched_wallets', {
   id: uuid('id').defaultRandom().primaryKey(),

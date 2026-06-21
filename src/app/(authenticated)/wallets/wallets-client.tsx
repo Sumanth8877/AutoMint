@@ -12,12 +12,15 @@ import { Modal } from '@/components/ui/modal';
 import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { apiRequest } from '@/lib/api/client';
+import type { WalletType } from '@/lib/wallets/detection';
 
 type WalletRecord = {
   id: string;
   address: string;
   nickname: string | null;
   chain: string;
+  walletType: WalletType;
+  isDefault: boolean;
   createdAt: string;
 };
 
@@ -31,6 +34,19 @@ const explorerHosts: Record<string, string> = {
   base: 'https://basescan.org/address/',
   polygon: 'https://polygonscan.com/address/',
 };
+
+const typeExplorerHosts: Partial<Record<WalletType, string>> = {
+  SOLANA: 'https://solscan.io/account/',
+  BITCOIN: 'https://mempool.space/address/',
+};
+
+const walletTypeFilters: Array<{ value: 'ALL' | WalletType; label: string }> = [
+  { value: 'ALL', label: 'All' },
+  { value: 'EVM', label: 'EVM' },
+  { value: 'SOLANA', label: 'Solana' },
+  { value: 'BITCOIN', label: 'Bitcoin' },
+  { value: 'UNKNOWN', label: 'Unknown' },
+];
 
 function shortAddress(address: string) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
@@ -46,9 +62,14 @@ export default function WalletsClient() {
   const [modalOpen, setModalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
-  const [form, setForm] = useState({ nickname: '', address: '', chain: 'ethereum' });
+  const [form, setForm] = useState({ nickname: '', address: '', chain: 'ethereum', walletTypeOverride: '' });
+  const [walletTypeFilter, setWalletTypeFilter] = useState<'ALL' | WalletType>('ALL');
 
   const readyCount = useMemo(() => wallets.length, [wallets.length]);
+  const filteredWallets = useMemo(() => {
+    if (walletTypeFilter === 'ALL') return wallets;
+    return wallets.filter((wallet) => wallet.walletType === walletTypeFilter);
+  }, [walletTypeFilter, wallets]);
 
   useEffect(() => {
     let active = true;
@@ -74,6 +95,11 @@ export default function WalletsClient() {
   }, []);
 
   const refreshBalance = async (wallet: WalletRecord) => {
+    if (wallet.walletType !== 'EVM') {
+      setError('Balance refresh is currently available for EVM wallets only.');
+      return;
+    }
+
     setRefreshingId(wallet.id);
     setError(null);
 
@@ -99,11 +125,12 @@ export default function WalletsClient() {
           address: form.address.trim(),
           nickname: form.nickname.trim() || null,
           chain: form.chain,
+          walletTypeOverride: form.walletTypeOverride || null,
         },
       });
 
       setWallets((current) => [...current, payload.wallet]);
-      setForm({ nickname: '', address: '', chain: 'ethereum' });
+      setForm({ nickname: '', address: '', chain: 'ethereum', walletTypeOverride: '' });
       setModalOpen(false);
     } catch (requestError) {
       setFormError(requestError instanceof Error ? requestError.message : 'Failed to add wallet.');
@@ -140,9 +167,9 @@ export default function WalletsClient() {
   };
 
   const openExplorer = (wallet: WalletRecord) => {
-    const host = explorerHosts[wallet.chain];
+    const host = wallet.walletType === 'EVM' ? explorerHosts[wallet.chain] : typeExplorerHosts[wallet.walletType];
     if (!host) {
-      setError(`No explorer configured for ${wallet.chain}.`);
+      setError(`No explorer configured for ${wallet.walletType}.`);
       return;
     }
 
@@ -169,6 +196,23 @@ export default function WalletsClient() {
         <MetricCard label="Balances" value={String(Object.keys(balances).length)} detail="Refreshed this session" icon={RefreshCw} tone="warning" />
       </div>
 
+      <div className="mt-6 flex flex-wrap gap-2">
+        {walletTypeFilters.map((filter) => (
+          <button
+            key={filter.value}
+            type="button"
+            onClick={() => setWalletTypeFilter(filter.value)}
+            className={`h-8 rounded-lg border px-3 text-xs font-medium transition ${
+              walletTypeFilter === filter.value
+                ? 'border-primary/40 bg-primary/15 text-text'
+                : 'border-border bg-white/5 text-muted hover:text-text'
+            }`}
+          >
+            {filter.label}
+          </button>
+        ))}
+      </div>
+
       {error ? (
         <div className="mt-6 rounded-lg border border-danger/20 bg-danger/10 p-3 text-sm text-danger" role="alert">
           {error}
@@ -183,8 +227,8 @@ export default function WalletsClient() {
               <Skeleton className="mt-4 h-4 w-full" />
             </Card>
           ))
-        ) : wallets.length > 0 ? (
-          wallets.map((wallet) => {
+        ) : filteredWallets.length > 0 ? (
+          filteredWallets.map((wallet) => {
             const balance = balances[wallet.id];
 
             return (
@@ -197,7 +241,9 @@ export default function WalletsClient() {
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="font-semibold text-text">{wallet.nickname || shortAddress(wallet.address)}</h2>
                       <Badge variant="success">Ready</Badge>
-                      <Badge>{wallet.chain}</Badge>
+                      <Badge variant="info">{wallet.walletType}</Badge>
+                      {wallet.isDefault ? <Badge>DEFAULT</Badge> : null}
+                      {wallet.walletType === 'EVM' ? <Badge>{wallet.chain}</Badge> : null}
                     </div>
                     <p className="mt-1 truncate font-mono text-sm text-muted">{wallet.address}</p>
                   </div>
@@ -206,7 +252,7 @@ export default function WalletsClient() {
                     <button type="button" onClick={() => copyAddress(wallet)} className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-white/5 hover:text-text" aria-label={`Copy ${wallet.address}`}>
                       <Copy className="h-4 w-4" aria-hidden="true" />
                     </button>
-                    <button type="button" onClick={() => refreshBalance(wallet)} disabled={refreshingId === wallet.id} className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-white/5 hover:text-text disabled:opacity-50" aria-label={`Refresh ${wallet.address}`}>
+                    <button type="button" onClick={() => refreshBalance(wallet)} disabled={refreshingId === wallet.id || wallet.walletType !== 'EVM'} className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-white/5 hover:text-text disabled:opacity-50" aria-label={`Refresh ${wallet.address}`}>
                       <RefreshCw className={`h-4 w-4 ${refreshingId === wallet.id ? 'animate-spin' : ''}`} aria-hidden="true" />
                     </button>
                     <button type="button" onClick={() => openExplorer(wallet)} className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-white/5 hover:text-text" aria-label={`Open ${wallet.address}`}>
@@ -220,6 +266,10 @@ export default function WalletsClient() {
               </Card>
             );
           })
+        ) : wallets.length > 0 ? (
+          <Card className="p-5">
+            <p className="text-sm text-muted">No wallets match this filter.</p>
+          </Card>
         ) : (
           <EmptyState
             icon={AlertTriangle}
@@ -238,9 +288,20 @@ export default function WalletsClient() {
       <Modal open={modalOpen} title="Add Wallet" onClose={() => setModalOpen(false)}>
         <form onSubmit={submitWallet} className="space-y-4">
           <Input label="Nickname" value={form.nickname} onChange={(event) => setForm((current) => ({ ...current, nickname: event.target.value }))} placeholder="Primary Mint" />
-          <Input label="Address" value={form.address} onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))} placeholder="0x..." required />
+          <Input label="Address" value={form.address} onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))} placeholder="0x, Solana, or Bitcoin address" required />
           <label className="block text-sm font-medium text-muted">
-            Chain
+            Wallet Type Override
+            <select
+              value={form.walletTypeOverride}
+              onChange={(event) => setForm((current) => ({ ...current, walletTypeOverride: event.target.value }))}
+              className="mt-2 h-11 w-full rounded-lg border border-border bg-background/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            >
+              <option value="">Automatic detection</option>
+              <option value="UNKNOWN">Unknown</option>
+            </select>
+          </label>
+          <label className="block text-sm font-medium text-muted">
+            EVM Network
             <select
               value={form.chain}
               onChange={(event) => setForm((current) => ({ ...current, chain: event.target.value }))}

@@ -4,6 +4,7 @@ import { eq, and } from 'drizzle-orm';
 import { getWalletBalance } from '@/lib/blockchain/wallet';
 import { encryptPrivateKey, decryptPrivateKey } from '@/lib/security/encryption';
 import { logActivity } from '@/lib/monitoring';
+import { assertValidWalletAddress, isWalletType, type WalletType } from '@/lib/wallets/detection';
 
 const SUPPORTED_CHAINS = ['ethereum', 'base', 'polygon'] as const;
 type SupportedChain = (typeof SUPPORTED_CHAINS)[number];
@@ -18,35 +19,39 @@ export async function getWalletById(id: string, userId: string) {
   return result[0] || null;
 }
 
-function isValidAddress(address: string): boolean {
-  return /^0x[0-9a-fA-F]{40}$/.test(address);
-}
+export async function createWallet(userId: string, data: { address: string; nickname?: string | null; chain: string; walletTypeOverride?: string | null }) {
+  const override = isWalletType(data.walletTypeOverride) ? data.walletTypeOverride as WalletType : undefined;
+  const detected = assertValidWalletAddress(data.address, override);
 
-export async function createWallet(userId: string, data: { address: string; nickname?: string | null; chain: string }) {
-  const address = data.address.toLowerCase();
-  if (!isValidAddress(address)) {
-    throw new Error('Invalid wallet address format');
-  }
-
-  if (!SUPPORTED_CHAINS.includes(data.chain as SupportedChain)) {
+  if (detected.walletType === 'EVM' && !SUPPORTED_CHAINS.includes(data.chain as SupportedChain)) {
     throw new Error(`Unsupported chain. Supported: ${SUPPORTED_CHAINS.join(', ')}`);
   }
+
+  const chain = detected.walletType === 'EVM' ? data.chain as SupportedChain : 'ethereum';
 
   const [existing] = await getDb()
     .select({ id: wallets.id })
     .from(wallets)
-    .where(and(eq(wallets.userId, userId), eq(wallets.address, address), eq(wallets.chain, data.chain as SupportedChain)))
+    .where(and(eq(wallets.userId, userId), eq(wallets.address, detected.address)))
     .limit(1);
 
   if (existing) {
     throw new Error('Wallet already added');
   }
 
+  const [existingUserWallet] = await getDb()
+    .select({ id: wallets.id })
+    .from(wallets)
+    .where(eq(wallets.userId, userId))
+    .limit(1);
+
   const [wallet] = await getDb().insert(wallets).values({
     userId,
-    address,
+    address: detected.address,
     nickname: data.nickname || null,
-    chain: data.chain as SupportedChain,
+    chain,
+    walletType: detected.walletType,
+    isDefault: !existingUserWallet,
   }).returning();
 
   await getDb().insert(walletPermissions).values({
@@ -60,24 +65,40 @@ export async function createWallet(userId: string, data: { address: string; nick
     walletId: wallet.id,
     address: wallet.address,
     chain: wallet.chain,
+    walletType: wallet.walletType,
   });
 
   return wallet;
 }
 
 export async function importWallet(userId: string, data: { address: string; privateKey: string; nickname?: string | null; chain: string }) {
-  const address = data.address.toLowerCase();
-  if (!isValidAddress(address)) {
-    throw new Error('Invalid wallet address format');
+  const detected = assertValidWalletAddress(data.address);
+  if (detected.walletType !== 'EVM') {
+    throw new Error('Private key import is only supported for EVM wallets');
+  }
+
+  if (!SUPPORTED_CHAINS.includes(data.chain as SupportedChain)) {
+    throw new Error(`Unsupported chain. Supported: ${SUPPORTED_CHAINS.join(', ')}`);
   }
 
   const encrypted = encryptPrivateKey(data.privateKey);
 
+  const [existing] = await getDb()
+    .select({ id: wallets.id })
+    .from(wallets)
+    .where(and(eq(wallets.userId, userId), eq(wallets.address, detected.address)))
+    .limit(1);
+
+  if (existing) {
+    throw new Error('Wallet already added');
+  }
+
   const [wallet] = await getDb().insert(wallets).values({
     userId,
-    address,
+    address: detected.address,
     nickname: data.nickname || null,
-    chain: data.chain as 'ethereum' | 'base' | 'polygon',
+    chain: data.chain as SupportedChain,
+    walletType: detected.walletType,
     encryptedPrivateKey: JSON.stringify(encrypted),
     encryptionVersion: 1,
   }).returning();
@@ -93,6 +114,7 @@ export async function importWallet(userId: string, data: { address: string; priv
     walletId: wallet.id,
     address: wallet.address,
     chain: wallet.chain,
+    walletType: wallet.walletType,
   });
 
   return wallet;
@@ -125,6 +147,45 @@ export async function removeWallet(id: string, userId: string) {
   });
 
   return { success: true };
+}
+
+export async function updateWallet(id: string, userId: string, data: { nickname?: string | null; chain?: string }) {
+  const existing = await getWalletById(id, userId);
+  if (!existing) throw new Error('Wallet not found');
+
+  if (data.chain && !SUPPORTED_CHAINS.includes(data.chain as SupportedChain)) {
+    throw new Error(`Unsupported chain. Supported: ${SUPPORTED_CHAINS.join(', ')}`);
+  }
+
+  const [updated] = await getDb()
+    .update(wallets)
+    .set({
+      nickname: data.nickname ?? null,
+      chain: (data.chain ?? existing.chain) as SupportedChain,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(wallets.id, id), eq(wallets.userId, userId)))
+    .returning();
+
+  return updated;
+}
+
+export async function setDefaultWallet(id: string, userId: string) {
+  const existing = await getWalletById(id, userId);
+  if (!existing) throw new Error('Wallet not found');
+
+  await getDb()
+    .update(wallets)
+    .set({ isDefault: false, updatedAt: new Date() })
+    .where(eq(wallets.userId, userId));
+
+  const [updated] = await getDb()
+    .update(wallets)
+    .set({ isDefault: true, updatedAt: new Date() })
+    .where(and(eq(wallets.id, id), eq(wallets.userId, userId)))
+    .returning();
+
+  return updated;
 }
 
 export async function fetchBalance(address: string, chain: string) {

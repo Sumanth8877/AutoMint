@@ -18,6 +18,7 @@ export async function getUserMintTasks(userId: string) {
 export async function addMintTask(userId: string, data: { walletId: string; collectionId: string; quantity: number; chain?: string; safeModeEnabled?: boolean }) {
   const [wallet] = await getDb().select().from(wallets).where(and(eq(wallets.id, data.walletId), eq(wallets.userId, userId))).limit(1);
   if (!wallet) throw new Error('Wallet not found');
+  if (wallet.walletType !== 'EVM') throw new Error('Only EVM wallets can be used for mint tasks');
 
   const [collection] = await getDb().select().from(collections).where(and(eq(collections.id, data.collectionId), eq(collections.userId, userId))).limit(1);
   if (!collection) throw new Error('Collection not found');
