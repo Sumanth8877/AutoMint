@@ -105,6 +105,9 @@ export const wallets = pgTable('wallets', {
   isDefault: boolean('is_default').default(false).notNull(),
   encryptedPrivateKey: text('encrypted_private_key'),
   encryptionVersion: integer('encryption_version').default(1),
+  balance: text('balance'),
+  balanceSymbol: text('balance_symbol'),
+  balanceUpdatedAt: timestamp('balance_updated_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
@@ -114,10 +117,13 @@ export const wallets = pgTable('wallets', {
 export const watchedWallets = pgTable('watched_wallets', {
   id: uuid('id').defaultRandom().primaryKey(),
   userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  walletName: text('wallet_name'),
   walletAddress: text('wallet_address').notNull(),
+  networkType: text('network_type').default('EVM').notNull().$type<'EVM' | 'SOLANA' | 'BITCOIN'>(),
   chain: chainEnum('chain').notNull().default('ethereum'),
   active: boolean('active').default(true).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
   userIdIdx: index('idx_watched_wallets_user_id').on(table.userId),
   walletAddressIdx: index('idx_watched_wallets_wallet_address').on(table.walletAddress),
@@ -130,9 +136,12 @@ export const copyMintRules = pgTable('copy_mint_rules', {
   walletAddress: text('wallet_address').notNull(),
   maxPrice: text('max_price'),
   quantity: integer('quantity').default(1).notNull(),
+  riskThreshold: integer('risk_threshold').default(75).notNull(),
+  destinationWalletId: uuid('destination_wallet_id').references(() => wallets.id, { onDelete: 'set null' }),
   autoMint: boolean('auto_mint').default(false).notNull(),
   enabled: boolean('enabled').default(true).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
   userIdIdx: index('idx_copy_mint_rules_user_id').on(table.userId),
   walletAddressIdx: index('idx_copy_mint_rules_wallet_address').on(table.walletAddress),

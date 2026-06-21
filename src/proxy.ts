@@ -6,6 +6,7 @@ const isProtectedPage = createRouteMatcher([
   '/analytics(.*)',
   '/mints(.*)',
   '/wallets(.*)',
+  '/whale-tracker(.*)',
   '/settings(.*)',
   '/collections(.*)',
   '/analyzer(.*)',

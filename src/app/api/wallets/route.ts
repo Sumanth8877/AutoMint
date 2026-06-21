@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getErrorMessage, parseJsonBody } from '@/lib/api/errors';
-import { createWallet, getUserWallets, removeWallet } from '@/lib/services/wallet.service';
+import { getUserWallets, importWallet, removeWallet } from '@/lib/services/wallet.service';
+import type { ImportWalletType } from '@/lib/wallets/private-key';
 
 // GET /api/wallets
 export async function GET() {
@@ -22,19 +23,27 @@ export async function POST(req: Request) {
     const authResult = await requireApiUser();
     if ('error' in authResult) return authResult.error;
 
-    const body = await parseJsonBody<{ address?: string; nickname?: string; chain?: string; walletTypeOverride?: string | null }>(req);
-    const { address, nickname, chain, walletTypeOverride } = body;
+    const body = await parseJsonBody<{ walletType?: ImportWalletType; privateKey?: string; nickname?: string | null }>(req);
+    const { walletType, privateKey, nickname } = body;
 
-    if (!address || !chain) {
-      return NextResponse.json({ error: 'Address and chain are required' }, { status: 400 });
+    if (walletType !== 'EVM' && walletType !== 'SOLANA' && walletType !== 'BITCOIN') {
+      return NextResponse.json({ error: 'Wallet type is required' }, { status: 400 });
     }
 
-    const wallet = await createWallet(authResult.userId, { address, nickname, chain, walletTypeOverride });
+    if (!privateKey) {
+      return NextResponse.json({ error: 'Private key is required' }, { status: 400 });
+    }
+
+    const wallet = await importWallet(authResult.userId, { walletType, privateKey, nickname });
 
     return NextResponse.json({ wallet }, { status: 201 });
   } catch (error) {
-    const message = getErrorMessage(error, 'Failed to create wallet');
-    const status = message === 'Wallet already added' ? 409 : message === 'Invalid JSON request body' ? 400 : message.includes('Invalid') || message.includes('Unsupported') ? 400 : 500;
+    const message = getErrorMessage(error, 'Failed to import wallet');
+    const status = message === 'Wallet already added'
+      ? 409
+      : message === 'Invalid JSON request body' || message.includes('Invalid') || message.includes('required')
+        ? 400
+        : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }

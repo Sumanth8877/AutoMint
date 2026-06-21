@@ -138,7 +138,6 @@ export default async function AnalyticsPage() {
         eyebrow="Analytics"
         title="Mint Analytics"
         description="User-owned mint performance, execution speed, spend, risk, and scheduled mint outcomes."
-        actions={<span className="rounded-lg border border-border bg-surface px-3 py-2 font-mono text-xs text-muted">Updated {new Date(analytics.generatedAt).toLocaleTimeString()}</span>}
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

@@ -10,6 +10,7 @@ import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
 type SupportedChain = 'ethereum' | 'base' | 'polygon';
+export type WatchedWalletNetworkType = 'EVM' | 'SOLANA' | 'BITCOIN';
 
 type AlchemyWebhookActivity = {
   fromAddress?: string;
@@ -57,8 +58,33 @@ function normalizeAddress(address: string) {
   return address.trim().toLowerCase();
 }
 
-function isValidAddress(address: string) {
+function normalizeWalletAddress(address: string, networkType: WatchedWalletNetworkType) {
+  return networkType === 'EVM' ? normalizeAddress(address) : address.trim();
+}
+
+function isValidEvmAddress(address: string) {
   return /^0x[a-fA-F0-9]{40}$/.test(address);
+}
+
+function isValidSolanaAddress(address: string) {
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address);
+}
+
+function isValidBitcoinAddress(address: string) {
+  return /^(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,90}$/.test(address);
+}
+
+function normalizeNetworkType(networkType: string | undefined): WatchedWalletNetworkType {
+  const value = (networkType || 'EVM').trim().toUpperCase();
+  if (value === 'SOLANA') return 'SOLANA';
+  if (value === 'BITCOIN') return 'BITCOIN';
+  return 'EVM';
+}
+
+function validateAddress(address: string, networkType: WatchedWalletNetworkType) {
+  if (networkType === 'EVM') return isValidEvmAddress(address);
+  if (networkType === 'SOLANA') return isValidSolanaAddress(address);
+  return isValidBitcoinAddress(address);
 }
 
 function normalizeChain(chain: string | undefined): SupportedChain {
@@ -148,26 +174,37 @@ export function verifyAlchemyWebhookSignature(headers: Headers, rawBody: string)
   return true;
 }
 
-export async function watchWallet(userId: string, data: { walletAddress: string; chain?: string }) {
-  const walletAddress = normalizeAddress(data.walletAddress);
-  if (!isValidAddress(walletAddress)) throw new Error('Invalid wallet address');
+export async function watchWallet(userId: string, data: { walletAddress: string; chain?: string; walletName?: string | null; networkType?: string }) {
+  const networkType = normalizeNetworkType(data.networkType);
+  const walletAddress = normalizeWalletAddress(data.walletAddress, networkType);
+  if (!validateAddress(walletAddress, networkType)) throw new Error('Invalid wallet address');
 
   const chain = normalizeChain(data.chain);
   const [wallet] = await getDb()
     .insert(watchedWallets)
     .values({
       userId,
+      walletName: data.walletName?.trim() || null,
       walletAddress,
+      networkType,
       chain,
       active: true,
+      updatedAt: new Date(),
     })
     .onConflictDoUpdate({
       target: [watchedWallets.userId, watchedWallets.walletAddress, watchedWallets.chain],
-      set: { active: true },
+      set: {
+        walletName: data.walletName?.trim() || null,
+        networkType,
+        active: true,
+        updatedAt: new Date(),
+      },
     })
     .returning();
 
-  await updateAlchemyWebhookAddresses({ chain, add: [walletAddress] });
+  if (networkType === 'EVM') {
+    await updateAlchemyWebhookAddresses({ chain, add: [walletAddress] });
+  }
   await logActivity(userId, 'wallet_added', 'Wallet tracker enabled', { walletAddress, chain });
 
   return wallet;
@@ -179,7 +216,7 @@ export async function unwatchWallet(userId: string, data: { walletAddress: strin
 
   const [wallet] = await getDb()
     .update(watchedWallets)
-    .set({ active: false })
+    .set({ active: false, updatedAt: new Date() })
     .where(and(
       eq(watchedWallets.userId, userId),
       eq(watchedWallets.walletAddress, walletAddress),
@@ -199,7 +236,7 @@ export async function unwatchWallet(userId: string, data: { walletAddress: strin
     ))
     .limit(1);
 
-  if (!stillWatched) {
+  if (!stillWatched && wallet.networkType === 'EVM') {
     await updateAlchemyWebhookAddresses({ chain, remove: [walletAddress] });
   }
 
@@ -212,6 +249,55 @@ export async function getUserWatchedWallets(userId: string) {
     .select()
     .from(watchedWallets)
     .where(eq(watchedWallets.userId, userId));
+}
+
+export async function updateWatchedWallet(userId: string, id: string, data: { walletName?: string | null; active?: boolean }) {
+  const [wallet] = await getDb()
+    .update(watchedWallets)
+    .set({
+      ...(data.walletName !== undefined ? { walletName: data.walletName?.trim() || null } : {}),
+      ...(data.active !== undefined ? { active: data.active } : {}),
+      updatedAt: new Date(),
+    })
+    .where(and(eq(watchedWallets.userId, userId), eq(watchedWallets.id, id)))
+    .returning();
+
+  if (!wallet) throw new Error('Watched wallet not found');
+  await logActivity(userId, data.active === false ? 'wallet_removed' : 'wallet_added', data.active === false ? 'Wallet tracker paused' : 'Wallet tracker updated', {
+    walletAddress: wallet.walletAddress,
+    chain: wallet.chain,
+    active: wallet.active,
+  });
+
+  return wallet;
+}
+
+export async function deleteWatchedWallet(userId: string, id: string) {
+  const [wallet] = await getDb()
+    .delete(watchedWallets)
+    .where(and(eq(watchedWallets.userId, userId), eq(watchedWallets.id, id)))
+    .returning();
+
+  if (!wallet) throw new Error('Watched wallet not found');
+
+  if (wallet.active && wallet.networkType === 'EVM') {
+    const [stillWatched] = await getDb()
+      .select({ id: watchedWallets.id })
+      .from(watchedWallets)
+      .where(and(
+        eq(watchedWallets.walletAddress, wallet.walletAddress),
+        eq(watchedWallets.chain, wallet.chain),
+        eq(watchedWallets.active, true),
+      ))
+      .limit(1);
+
+    if (!stillWatched) {
+      await updateAlchemyWebhookAddresses({ chain: wallet.chain, remove: [wallet.walletAddress] });
+    }
+  }
+
+  await logActivity(userId, 'wallet_removed', 'Wallet tracker deleted', { walletAddress: wallet.walletAddress, chain: wallet.chain });
+  return wallet;
 }
 
 function hasPurchaseHint(activity: AlchemyWebhookActivity) {
@@ -261,7 +347,7 @@ export async function handleAlchemyWalletWebhook(payload: AlchemyWebhookPayload)
   const candidateAddresses = Array.from(new Set(activities.flatMap((activity) => [
     activity.fromAddress ? normalizeAddress(activity.fromAddress) : null,
     activity.toAddress ? normalizeAddress(activity.toAddress) : null,
-  ]).filter((address): address is string => Boolean(address && isValidAddress(address)))));
+  ]).filter((address): address is string => Boolean(address && isValidEvmAddress(address)))));
 
   const watchers = await loadWatchers(candidateAddresses, chain);
   const watcherByAddress = new Map(watchers.map((watcher) => [watcher.walletAddress, watcher]));

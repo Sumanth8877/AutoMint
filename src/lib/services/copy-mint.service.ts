@@ -23,6 +23,8 @@ type CopyMintRuleInput = {
   walletAddress: string;
   maxPrice?: string | number | null;
   quantity?: string | number | null;
+  riskThreshold?: string | number | null;
+  destinationWalletId?: string | null;
   autoMint?: boolean;
   enabled?: boolean;
 };
@@ -37,6 +39,12 @@ function isValidAddress(address: string) {
 
 function normalizeQuantity(quantity: string | number | null | undefined) {
   return Math.max(1, parseInt(String(quantity ?? '1'), 10) || 1);
+}
+
+function normalizeRiskThreshold(riskThreshold: string | number | null | undefined) {
+  const value = parseInt(String(riskThreshold ?? '75'), 10);
+  if (!Number.isFinite(value)) return 75;
+  return Math.max(0, Math.min(100, value));
 }
 
 function normalizeMaxPrice(maxPrice: string | number | null | undefined) {
@@ -67,7 +75,17 @@ async function sendCopyMintNotification(
   return sendTelegramNotification(userId, type, payload);
 }
 
-async function loadDefaultMintWallet(userId: string, chain: string) {
+async function loadDefaultMintWallet(userId: string, chain: string, destinationWalletId?: string | null) {
+  if (destinationWalletId) {
+    const [destinationWallet] = await getDb()
+      .select()
+      .from(wallets)
+      .where(and(eq(wallets.userId, userId), eq(wallets.id, destinationWalletId), eq(wallets.walletType, 'EVM')))
+      .limit(1);
+
+    if (destinationWallet) return destinationWallet;
+  }
+
   const [sameChain] = await getDb()
     .select()
     .from(wallets)
@@ -87,9 +105,23 @@ async function loadDefaultMintWallet(userId: string, chain: string) {
   return fallback ?? null;
 }
 
+async function normalizeDestinationWalletId(userId: string, destinationWalletId: string | null | undefined) {
+  if (!destinationWalletId) return null;
+
+  const [wallet] = await getDb()
+    .select({ id: wallets.id })
+    .from(wallets)
+    .where(and(eq(wallets.userId, userId), eq(wallets.id, destinationWalletId)))
+    .limit(1);
+
+  if (!wallet) throw new Error('Destination wallet not found');
+  return wallet.id;
+}
+
 export async function upsertCopyMintRule(userId: string, data: CopyMintRuleInput) {
   const walletAddress = normalizeAddress(data.walletAddress);
   if (!isValidAddress(walletAddress)) throw new Error('Invalid wallet address');
+  const destinationWalletId = await normalizeDestinationWalletId(userId, data.destinationWalletId);
 
   const [rule] = await getDb()
     .insert(copyMintRules)
@@ -98,16 +130,22 @@ export async function upsertCopyMintRule(userId: string, data: CopyMintRuleInput
       walletAddress,
       maxPrice: normalizeMaxPrice(data.maxPrice),
       quantity: normalizeQuantity(data.quantity),
+      riskThreshold: normalizeRiskThreshold(data.riskThreshold),
+      destinationWalletId,
       autoMint: data.autoMint ?? false,
       enabled: data.enabled ?? true,
+      updatedAt: new Date(),
     })
     .onConflictDoUpdate({
       target: [copyMintRules.userId, copyMintRules.walletAddress],
       set: {
         maxPrice: normalizeMaxPrice(data.maxPrice),
         quantity: normalizeQuantity(data.quantity),
+        riskThreshold: normalizeRiskThreshold(data.riskThreshold),
+        destinationWalletId,
         autoMint: data.autoMint ?? false,
         enabled: data.enabled ?? true,
+        updatedAt: new Date(),
       },
     })
     .returning();
@@ -117,6 +155,8 @@ export async function upsertCopyMintRule(userId: string, data: CopyMintRuleInput
     walletAddress,
     maxPrice: rule.maxPrice,
     quantity: rule.quantity,
+    riskThreshold: rule.riskThreshold,
+    destinationWalletId: rule.destinationWalletId,
     autoMint: rule.autoMint,
     enabled: rule.enabled,
   });
@@ -129,6 +169,53 @@ export async function getCopyMintRules(userId: string) {
     .select()
     .from(copyMintRules)
     .where(eq(copyMintRules.userId, userId));
+}
+
+export async function updateCopyMintRule(userId: string, id: string, data: Partial<CopyMintRuleInput>) {
+  const values: Partial<typeof copyMintRules.$inferInsert> = {
+    updatedAt: new Date(),
+  };
+
+  if (data.maxPrice !== undefined) values.maxPrice = normalizeMaxPrice(data.maxPrice);
+  if (data.quantity !== undefined) values.quantity = normalizeQuantity(data.quantity);
+  if (data.riskThreshold !== undefined) values.riskThreshold = normalizeRiskThreshold(data.riskThreshold);
+  if (data.destinationWalletId !== undefined) values.destinationWalletId = await normalizeDestinationWalletId(userId, data.destinationWalletId);
+  if (data.autoMint !== undefined) values.autoMint = data.autoMint;
+  if (data.enabled !== undefined) values.enabled = data.enabled;
+
+  const [rule] = await getDb()
+    .update(copyMintRules)
+    .set(values)
+    .where(and(eq(copyMintRules.userId, userId), eq(copyMintRules.id, id)))
+    .returning();
+
+  if (!rule) throw new Error('Copy mint rule not found');
+  await logActivity(userId, 'mint_status_changed', 'Copy mint rule updated', {
+    ruleId: rule.id,
+    walletAddress: rule.walletAddress,
+    maxPrice: rule.maxPrice,
+    quantity: rule.quantity,
+    riskThreshold: rule.riskThreshold,
+    autoMint: rule.autoMint,
+    enabled: rule.enabled,
+  });
+
+  return rule;
+}
+
+export async function deleteCopyMintRule(userId: string, id: string) {
+  const [rule] = await getDb()
+    .delete(copyMintRules)
+    .where(and(eq(copyMintRules.userId, userId), eq(copyMintRules.id, id)))
+    .returning();
+
+  if (!rule) throw new Error('Copy mint rule not found');
+  await logActivity(userId, 'mint_status_changed', 'Copy mint rule deleted', {
+    ruleId: rule.id,
+    walletAddress: rule.walletAddress,
+  });
+
+  return rule;
 }
 
 async function findRule(userId: string, walletAddress: string) {
@@ -224,7 +311,7 @@ export async function handleCopyMintEvent(event: CopyMintEvent) {
       return { action: 'detected' as const, reason: 'auto_mint_disabled' };
     }
 
-    const wallet = await loadDefaultMintWallet(event.userId, event.chain);
+    const wallet = await loadDefaultMintWallet(event.userId, event.chain, rule.destinationWalletId);
     if (!wallet) {
       await sendCopyMintNotification(event.userId, 'mint_failed', {
         wallet: event.watchedWalletAddress,

@@ -61,7 +61,6 @@ export type AnalyticsDashboard = {
     criticalRiskCount: number;
   };
   hasData: boolean;
-  generatedAt: string;
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -304,7 +303,6 @@ export async function getAnalyticsDashboard(userId: string): Promise<AnalyticsDa
         criticalRiskCount: mintStats?.criticalRiskCount ?? 0,
       },
       hasData: totalMints > 0 || (mintStats?.collectionsAnalyzed ?? 0) > 0,
-      generatedAt: new Date().toISOString(),
     };
   } catch (error) {
     await captureException(error, {

@@ -1,66 +1,198 @@
+import { and, eq, sql } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
 import { executionSettings, mintTasks, wallets, walletPermissions } from '@/drizzle/schema';
-import { eq, and, sql } from 'drizzle-orm';
 import { getWalletBalance } from '@/lib/blockchain/wallet';
 import { encryptPrivateKey, decryptPrivateKey } from '@/lib/security/encryption';
 import { logActivity } from '@/lib/monitoring';
-import { assertValidWalletAddress, isWalletType, type WalletType } from '@/lib/wallets/detection';
+import { deriveWalletFromPrivateKey, type ImportWalletType } from '@/lib/wallets/private-key';
 
-const SUPPORTED_CHAINS = ['ethereum', 'base', 'polygon'] as const;
-type SupportedChain = (typeof SUPPORTED_CHAINS)[number];
+const DEFAULT_EVM_CHAIN = 'ethereum' as const;
 
-export async function getUserWallets(userId: string) {
+type WalletRow = typeof wallets.$inferSelect;
+type PublicWalletRow = Omit<WalletRow, 'encryptedPrivateKey' | 'encryptionVersion'> & {
+  pendingScheduledTasks?: number;
+};
+
+export type PublicWallet = {
+  id: string;
+  userId: string;
+  address: string;
+  nickname: string | null;
+  chain: WalletRow['chain'];
+  walletType: WalletRow['walletType'];
+  isDefault: boolean;
+  balance: string | null;
+  balanceSymbol: string | null;
+  balanceUpdatedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  pendingScheduledTasks: number;
+};
+
+type BalanceSnapshot = {
+  balance: string;
+  symbol: string;
+  updatedAt: Date;
+};
+
+function toPublicWallet(row: PublicWalletRow): PublicWallet {
+  return {
+    id: row.id,
+    userId: row.userId,
+    address: row.address,
+    nickname: row.nickname,
+    chain: row.chain,
+    walletType: row.walletType,
+    isDefault: row.isDefault,
+    balance: row.balance,
+    balanceSymbol: row.balanceSymbol,
+    balanceUpdatedAt: row.balanceUpdatedAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    pendingScheduledTasks: row.pendingScheduledTasks ?? 0,
+  };
+}
+
+function publicWalletSelect() {
+  return {
+    id: wallets.id,
+    userId: wallets.userId,
+    address: wallets.address,
+    nickname: wallets.nickname,
+    chain: wallets.chain,
+    walletType: wallets.walletType,
+    isDefault: wallets.isDefault,
+    balance: wallets.balance,
+    balanceSymbol: wallets.balanceSymbol,
+    balanceUpdatedAt: wallets.balanceUpdatedAt,
+    createdAt: wallets.createdAt,
+    updatedAt: wallets.updatedAt,
+    pendingScheduledTasks: sql<number>`count(${mintTasks.id}) filter (
+      where ${mintTasks.walletId} = ${wallets.id}
+        and (${mintTasks.scheduledTime} is not null or ${mintTasks.qstashMessageId} is not null)
+        and ${mintTasks.status} in ('pending', 'monitoring', 'ready', 'running')
+    )::int`,
+  };
+}
+
+export async function getUserWallets(userId: string): Promise<PublicWallet[]> {
   const result = await getDb()
-    .select({
-      id: wallets.id,
-      userId: wallets.userId,
-      address: wallets.address,
-      nickname: wallets.nickname,
-      chain: wallets.chain,
-      walletType: wallets.walletType,
-      isDefault: wallets.isDefault,
-      encryptedPrivateKey: wallets.encryptedPrivateKey,
-      encryptionVersion: wallets.encryptionVersion,
-      createdAt: wallets.createdAt,
-      updatedAt: wallets.updatedAt,
-      pendingScheduledTasks: sql<number>`count(${mintTasks.id}) filter (
-        where ${mintTasks.walletId} = ${wallets.id}
-          and (${mintTasks.scheduledTime} is not null or ${mintTasks.qstashMessageId} is not null)
-          and ${mintTasks.status} in ('pending', 'monitoring', 'ready', 'running')
-      )::int`,
-    })
+    .select(publicWalletSelect())
     .from(wallets)
     .leftJoin(mintTasks, and(eq(mintTasks.walletId, wallets.id), eq(mintTasks.userId, userId)))
     .where(eq(wallets.userId, userId))
     .groupBy(wallets.id)
     .orderBy(wallets.createdAt);
-  return result;
+
+  return result.map(toPublicWallet);
 }
 
 export async function getWalletById(id: string, userId: string) {
-  const result = await getDb().select().from(wallets).where(and(eq(wallets.id, id), eq(wallets.userId, userId))).limit(1);
+  const result = await getDb()
+    .select()
+    .from(wallets)
+    .where(and(eq(wallets.id, id), eq(wallets.userId, userId)))
+    .limit(1);
+
   return result[0] || null;
 }
 
-export async function createWallet(userId: string, data: { address: string; nickname?: string | null; chain: string; walletTypeOverride?: string | null }) {
-  const override = isWalletType(data.walletTypeOverride) ? data.walletTypeOverride as WalletType : undefined;
-  const detected = assertValidWalletAddress(data.address, override);
+async function getPublicWalletById(id: string, userId: string) {
+  const [wallet] = await getUserWallets(userId);
+  if (wallet?.id === id) return wallet;
 
-  if (detected.walletType === 'EVM' && !SUPPORTED_CHAINS.includes(data.chain as SupportedChain)) {
-    throw new Error(`Unsupported chain. Supported: ${SUPPORTED_CHAINS.join(', ')}`);
+  const result = await getDb()
+    .select(publicWalletSelect())
+    .from(wallets)
+    .leftJoin(mintTasks, and(eq(mintTasks.walletId, wallets.id), eq(mintTasks.userId, userId)))
+    .where(and(eq(wallets.id, id), eq(wallets.userId, userId)))
+    .groupBy(wallets.id)
+    .limit(1);
+
+  return result[0] ? toPublicWallet(result[0]) : null;
+}
+
+async function fetchSolanaBalance(address: string): Promise<BalanceSnapshot> {
+  const response = await fetch('https://api.mainnet-beta.solana.com', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 'automint-wallet-balance',
+      method: 'getBalance',
+      params: [address],
+    }),
+    cache: 'no-store',
+  });
+
+  if (!response.ok) throw new Error('Failed to refresh balance');
+  const payload = await response.json() as { result?: { value?: number } };
+  const lamports = payload.result?.value;
+  if (typeof lamports !== 'number') throw new Error('Failed to refresh balance');
+
+  return {
+    balance: (lamports / 1_000_000_000).toString(),
+    symbol: 'SOL',
+    updatedAt: new Date(),
+  };
+}
+
+async function fetchBitcoinBalance(address: string): Promise<BalanceSnapshot> {
+  const response = await fetch(`https://mempool.space/api/address/${encodeURIComponent(address)}`, {
+    cache: 'no-store',
+  });
+
+  if (!response.ok) throw new Error('Failed to refresh balance');
+  const payload = await response.json() as {
+    chain_stats?: { funded_txo_sum?: number; spent_txo_sum?: number };
+    mempool_stats?: { funded_txo_sum?: number; spent_txo_sum?: number };
+  };
+  const confirmed = (payload.chain_stats?.funded_txo_sum ?? 0) - (payload.chain_stats?.spent_txo_sum ?? 0);
+  const pending = (payload.mempool_stats?.funded_txo_sum ?? 0) - (payload.mempool_stats?.spent_txo_sum ?? 0);
+
+  return {
+    balance: ((confirmed + pending) / 100_000_000).toString(),
+    symbol: 'BTC',
+    updatedAt: new Date(),
+  };
+}
+
+async function fetchWalletBalanceSnapshot(wallet: Pick<WalletRow, 'address' | 'chain' | 'walletType'>): Promise<BalanceSnapshot> {
+  if (wallet.walletType === 'EVM') {
+    const balance = await getWalletBalance(wallet.address, wallet.chain);
+    return { ...balance, updatedAt: new Date() };
   }
 
-  const chain = detected.walletType === 'EVM' ? data.chain as SupportedChain : 'ethereum';
+  if (wallet.walletType === 'SOLANA') return fetchSolanaBalance(wallet.address);
+  if (wallet.walletType === 'BITCOIN') return fetchBitcoinBalance(wallet.address);
+  return { balance: '0', symbol: 'UNKNOWN', updatedAt: new Date() };
+}
+
+async function storeBalance(walletId: string, userId: string, snapshot: BalanceSnapshot) {
+  const [updated] = await getDb()
+    .update(wallets)
+    .set({
+      balance: snapshot.balance,
+      balanceSymbol: snapshot.symbol,
+      balanceUpdatedAt: snapshot.updatedAt,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(wallets.id, walletId), eq(wallets.userId, userId)))
+    .returning();
+
+  return updated;
+}
+
+export async function importWallet(userId: string, data: { walletType: ImportWalletType; privateKey: string; nickname?: string | null }) {
+  const derived = deriveWalletFromPrivateKey(data.walletType, data.privateKey);
 
   const [existing] = await getDb()
     .select({ id: wallets.id })
     .from(wallets)
-    .where(and(eq(wallets.userId, userId), eq(wallets.address, detected.address)))
+    .where(and(eq(wallets.userId, userId), eq(wallets.address, derived.address)))
     .limit(1);
 
-  if (existing) {
-    throw new Error('Wallet already added');
-  }
+  if (existing) throw new Error('Wallet already added');
 
   const [existingUserWallet] = await getDb()
     .select({ id: wallets.id })
@@ -68,94 +200,60 @@ export async function createWallet(userId: string, data: { address: string; nick
     .where(eq(wallets.userId, userId))
     .limit(1);
 
-  const [wallet] = await getDb().insert(wallets).values({
+  const encrypted = encryptPrivateKey(derived.privateKey);
+  const initialWallet = {
     userId,
-    address: detected.address,
+    address: derived.address,
     nickname: data.nickname || null,
-    chain,
-    walletType: detected.walletType,
+    chain: DEFAULT_EVM_CHAIN,
+    walletType: derived.walletType,
+    encryptedPrivateKey: encrypted,
+    encryptionVersion: 1,
     isDefault: !existingUserWallet,
+  };
+
+  const balance = await fetchWalletBalanceSnapshot(initialWallet);
+
+  const [wallet] = await getDb().insert(wallets).values({
+    ...initialWallet,
+    balance: balance.balance,
+    balanceSymbol: balance.symbol,
+    balanceUpdatedAt: balance.updatedAt,
   }).returning();
 
-  if (wallet.isDefault && wallet.walletType === 'EVM') {
+  if (wallet.isDefault) {
     await getDb()
       .insert(executionSettings)
-      .values({ userId, defaultWalletId: wallet.id })
+      .values({ userId, defaultWalletId: wallet.walletType === 'EVM' ? wallet.id : null })
       .onConflictDoUpdate({
         target: executionSettings.userId,
-        set: { defaultWalletId: wallet.id, updatedAt: new Date() },
+        set: { defaultWalletId: wallet.walletType === 'EVM' ? wallet.id : null, updatedAt: new Date() },
       });
   }
 
   await getDb().insert(walletPermissions).values({
     userId,
     walletId: wallet.id,
-    canMint: false,
-    canMonitor: true,
-  });
-
-  await logActivity(userId, 'wallet_added', 'Wallet created', {
-    walletId: wallet.id,
-    address: wallet.address,
-    chain: wallet.chain,
-    walletType: wallet.walletType,
-  });
-
-  return wallet;
-}
-
-export async function importWallet(userId: string, data: { address: string; privateKey: string; nickname?: string | null; chain: string }) {
-  const detected = assertValidWalletAddress(data.address);
-  if (detected.walletType !== 'EVM') {
-    throw new Error('Private key import is only supported for EVM wallets');
-  }
-
-  if (!SUPPORTED_CHAINS.includes(data.chain as SupportedChain)) {
-    throw new Error(`Unsupported chain. Supported: ${SUPPORTED_CHAINS.join(', ')}`);
-  }
-
-  const encrypted = encryptPrivateKey(data.privateKey);
-
-  const [existing] = await getDb()
-    .select({ id: wallets.id })
-    .from(wallets)
-    .where(and(eq(wallets.userId, userId), eq(wallets.address, detected.address)))
-    .limit(1);
-
-  if (existing) {
-    throw new Error('Wallet already added');
-  }
-
-  const [wallet] = await getDb().insert(wallets).values({
-    userId,
-    address: detected.address,
-    nickname: data.nickname || null,
-    chain: data.chain as SupportedChain,
-    walletType: detected.walletType,
-    encryptedPrivateKey: JSON.stringify(encrypted),
-    encryptionVersion: 1,
-  }).returning();
-
-  await getDb().insert(walletPermissions).values({
-    userId,
-    walletId: wallet.id,
-    canMint: false,
+    canMint: wallet.walletType === 'EVM',
     canMonitor: true,
   });
 
   await logActivity(userId, 'wallet_imported', 'Wallet imported', {
     walletId: wallet.id,
     address: wallet.address,
-    chain: wallet.chain,
     walletType: wallet.walletType,
   });
 
-  return wallet;
+  const publicWallet = await getPublicWalletById(wallet.id, userId);
+  if (!publicWallet) throw new Error('Failed to load imported wallet');
+  return publicWallet;
 }
 
 export async function getDecryptedPrivateKey(walletId: string, userId: string): Promise<string> {
   const [wallet] = await getDb()
-    .select()
+    .select({
+      encryptedPrivateKey: wallets.encryptedPrivateKey,
+    })
     .from(wallets)
     .where(and(eq(wallets.id, walletId), eq(wallets.userId, userId)))
     .limit(1);
@@ -163,8 +261,7 @@ export async function getDecryptedPrivateKey(walletId: string, userId: string): 
   if (!wallet) throw new Error('Wallet not found');
   if (!wallet.encryptedPrivateKey) throw new Error('Wallet does not have an imported private key');
 
-  const payload = JSON.parse(wallet.encryptedPrivateKey) as Parameters<typeof decryptPrivateKey>[0];
-  return decryptPrivateKey(payload);
+  return decryptPrivateKey(wallet.encryptedPrivateKey);
 }
 
 export async function removeWallet(id: string, userId: string) {
@@ -173,40 +270,43 @@ export async function removeWallet(id: string, userId: string) {
 
   await getDb().delete(wallets).where(and(eq(wallets.id, id), eq(wallets.userId, userId)));
 
+  if (existing.isDefault) {
+    await getDb()
+      .update(executionSettings)
+      .set({ defaultWalletId: null, updatedAt: new Date() })
+      .where(eq(executionSettings.userId, userId));
+  }
+
   await logActivity(userId, 'wallet_removed', 'Wallet removed', {
     walletId: id,
     address: existing.address,
-    chain: existing.chain,
+    walletType: existing.walletType,
   });
 
   return { success: true };
 }
 
-export async function updateWallet(id: string, userId: string, data: { nickname?: string | null; chain?: string }) {
+export async function updateWallet(id: string, userId: string, data: { nickname?: string | null }) {
   const existing = await getWalletById(id, userId);
   if (!existing) throw new Error('Wallet not found');
-
-  if (data.chain && !SUPPORTED_CHAINS.includes(data.chain as SupportedChain)) {
-    throw new Error(`Unsupported chain. Supported: ${SUPPORTED_CHAINS.join(', ')}`);
-  }
 
   const [updated] = await getDb()
     .update(wallets)
     .set({
       nickname: data.nickname ?? null,
-      chain: (data.chain ?? existing.chain) as SupportedChain,
       updatedAt: new Date(),
     })
     .where(and(eq(wallets.id, id), eq(wallets.userId, userId)))
     .returning();
 
-  return updated;
+  const publicWallet = await getPublicWalletById(updated.id, userId);
+  if (!publicWallet) throw new Error('Wallet not found');
+  return publicWallet;
 }
 
 export async function setDefaultWallet(id: string, userId: string) {
   const existing = await getWalletById(id, userId);
   if (!existing) throw new Error('Wallet not found');
-  if (existing.walletType !== 'EVM') throw new Error('Default wallet must be an EVM wallet');
 
   await getDb()
     .update(wallets)
@@ -221,21 +321,38 @@ export async function setDefaultWallet(id: string, userId: string) {
 
   await getDb()
     .insert(executionSettings)
-    .values({ userId, defaultWalletId: updated.id })
+    .values({ userId, defaultWalletId: updated.walletType === 'EVM' ? updated.id : null })
     .onConflictDoUpdate({
       target: executionSettings.userId,
-      set: { defaultWalletId: updated.id, updatedAt: new Date() },
+      set: { defaultWalletId: updated.walletType === 'EVM' ? updated.id : null, updatedAt: new Date() },
     });
 
-  return updated;
+  const publicWallet = await getPublicWalletById(updated.id, userId);
+  if (!publicWallet) throw new Error('Wallet not found');
+  return publicWallet;
+}
+
+export async function refreshWalletBalance(id: string, userId: string) {
+  const wallet = await getWalletById(id, userId);
+  if (!wallet) throw new Error('Wallet not found');
+
+  const snapshot = await fetchWalletBalanceSnapshot(wallet);
+  const updated = await storeBalance(id, userId, snapshot);
+  return {
+    wallet: toPublicWallet({ ...updated, pendingScheduledTasks: 0 }),
+    balance: {
+      balance: snapshot.balance,
+      symbol: snapshot.symbol,
+      updatedAt: snapshot.updatedAt.toISOString(),
+    },
+  };
 }
 
 export async function fetchBalance(address: string, chain: string) {
   try {
-    const bal = await getWalletBalance(address, chain);
-    return { success: true, balance: bal };
-  } catch (error) {
-    console.error('Balance fetch failed:', error);
+    const balance = await getWalletBalance(address, chain);
+    return { success: true, balance };
+  } catch {
     return { success: false, balance: null, error: 'Failed to fetch balance' };
   }
 }
