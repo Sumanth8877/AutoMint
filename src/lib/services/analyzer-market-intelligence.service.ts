@@ -78,15 +78,17 @@ function openSeaPaymentSymbol(stats: Record<string, unknown>) {
 }
 
 function mergeResults(base: AnalyzerCollectionIntelligence, result: MarketProviderResult): AnalyzerCollectionIntelligence {
+  const hasFloorPrice = result.floorPrice !== undefined && result.floorPrice !== null;
+
   return {
     ...base,
     collectionName: result.collectionName ?? base.collectionName,
     description: result.description ?? base.description,
     creator: result.creator ?? base.creator,
     verified: result.verified ?? base.verified,
-    floorPrice: result.floorPrice ?? base.floorPrice,
-    floorCurrency: result.floorCurrency ?? base.floorCurrency,
-    floorSymbol: result.floorSymbol ?? base.floorSymbol,
+    floorPrice: hasFloorPrice ? result.floorPrice ?? null : base.floorPrice,
+    floorCurrency: hasFloorPrice ? result.floorCurrency ?? base.floorCurrency : base.floorCurrency,
+    floorSymbol: hasFloorPrice ? result.floorSymbol ?? base.floorSymbol : base.floorSymbol,
     volume: result.volume ?? base.volume,
     ownerCount: result.ownerCount ?? base.ownerCount,
     itemCount: result.itemCount ?? base.itemCount,

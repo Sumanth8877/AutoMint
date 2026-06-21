@@ -654,13 +654,19 @@ async function runAnalyzerRisk(params: {
   return risk;
 }
 
-async function saveAnalyzerHistory(params: {
+type SaveAnalyzerHistoryParams = {
   userId: string;
   input: string;
   result: AnalyzerResult;
   scores: ReturnType<typeof deriveAnalyzerScores>;
   analysisDurationMs: number;
-}) {
+};
+
+function analyzerErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function saveAnalyzerHistory(params: SaveAnalyzerHistoryParams) {
   const [record] = await getDb()
     .insert(analyzerHistory)
     .values({
@@ -695,6 +701,21 @@ async function saveAnalyzerHistory(params: {
     .returning({ id: analyzerHistory.id });
 
   return record.id;
+}
+
+async function saveAnalyzerHistorySafely(
+  params: SaveAnalyzerHistoryParams,
+  log: (level: AnalyzerDebugLogLevel, stage: string, message: string) => void,
+) {
+  try {
+    const historyId = await saveAnalyzerHistory(params);
+    log('success', 'history', 'Analyzer history saved');
+    log('success', 'history', `History record id: ${historyId}`);
+    return historyId;
+  } catch (error) {
+    log('warning', 'history', `Analyzer history save failed: ${analyzerErrorMessage(error)}`);
+    return null;
+  }
 }
 
 export async function runAnalyzer(params: {
@@ -826,15 +847,13 @@ export async function runAnalyzer(params: {
       providerChain: result.providerChain,
     });
     result.timingBreakdown.push({ stage: 'Total Duration', durationMs: result.analysisDurationMs });
-    const historyId = await saveAnalyzerHistory({
+    await saveAnalyzerHistorySafely({
       userId: params.userId,
       input: params.input,
       result,
       scores: resolvedScores,
       analysisDurationMs: result.analysisDurationMs,
-    });
-    log('success', 'history', 'Analyzer history saved');
-    log('success', 'history', `History record id: ${historyId}`);
+    }, log);
     log('success', 'completion', `Total analysis duration: ${result.analysisDurationMs}ms`);
     log('warning', 'completion', 'Analysis partially completed');
     return result;
@@ -1012,15 +1031,13 @@ export async function runAnalyzer(params: {
   });
   result.timingBreakdown.push({ stage: 'Total Duration', durationMs: result.analysisDurationMs });
 
-  const historyId = await saveAnalyzerHistory({
+  await saveAnalyzerHistorySafely({
     userId: params.userId,
     input: params.input,
     result,
     scores,
     analysisDurationMs: result.analysisDurationMs,
-  });
-  log('success', 'history', 'Analyzer history saved');
-  log('success', 'history', `History record id: ${historyId}`);
+  }, log);
   log('success', 'completion', `Total analysis duration: ${result.analysisDurationMs}ms`);
   log('success', 'completion', `Total duration reduced with cache hit rate ${result.performanceMetrics.cacheHitRate}%`);
 
