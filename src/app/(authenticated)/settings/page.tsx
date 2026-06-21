@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { Bell, ChevronRight, KeyRound, Lock, Radio, Settings, SlidersHorizontal, User, Wallet } from 'lucide-react';
-import Badge from '@/components/ui/Badge';
 import Card from '@/components/ui/Card';
 import { PageHeader } from '@/components/ui/page-header';
 
@@ -14,10 +13,6 @@ const groups = [
 ];
 
 const icons = [User, Wallet, Radio, SlidersHorizontal, Bell, KeyRound];
-
-function formatItemCount(count: number) {
-  return `${count} ${count === 1 ? 'item' : 'items'}`;
-}
 
 function settingHref(groupTitle: string, item: string) {
   if (groupTitle === 'General' && item === 'Profile') return '/settings/profile';
@@ -45,14 +40,13 @@ export default function SettingsPage() {
 
           return (
             <Card key={group.title} tone="interactive" className="overflow-hidden">
-              <div className="flex items-center justify-between border-b border-border p-5">
+              <div className="flex items-center border-b border-border p-5">
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-accent/20 bg-accent/10 text-accent">
                     <GroupIcon className="h-5 w-5" aria-hidden="true" />
                   </div>
                   <h2 className="font-semibold text-text">{group.title}</h2>
                 </div>
-                <Badge>{formatItemCount(group.items.length)}</Badge>
               </div>
               <div className="divide-y divide-border">
                 {group.items.map((item) => {

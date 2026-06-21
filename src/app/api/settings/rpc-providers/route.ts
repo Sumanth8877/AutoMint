@@ -5,12 +5,12 @@ import {
   getRpcProviderSettings,
   updateRpcProviderSettings,
 } from '@/lib/services/rpc-provider-settings.service';
-import { getRpcRoutingSnapshot } from '@/lib/services/rpc-manager.service';
+import { refreshRpcProviderLatency } from '@/lib/services/rpc-manager.service';
 
 async function getPayload(userId: string) {
   const [settings, routing] = await Promise.all([
     getRpcProviderSettings(userId),
-    getRpcRoutingSnapshot(userId),
+    refreshRpcProviderLatency(userId),
   ]);
 
   return {

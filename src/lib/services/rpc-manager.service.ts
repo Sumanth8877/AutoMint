@@ -512,3 +512,24 @@ export async function getRpcRoutingSnapshot(userId?: string, chain = 'ethereum')
     providers,
   };
 }
+
+export async function refreshRpcProviderLatency(userId?: string, chain = 'ethereum') {
+  const normalizedChain = normalizeChainName(chain);
+  const settings = await getEffectiveRpcSettings(userId);
+  const timeoutSeconds = normalizeTimeoutSeconds(settings.rpcTimeoutSeconds);
+
+  await Promise.all(PROVIDERS.map(async (provider) => {
+    if (!await isProviderConfigured(provider, normalizedChain)) return;
+
+    const startedAt = Date.now();
+    try {
+      const client = await getProviderClient(provider, normalizedChain, timeoutSeconds);
+      await client.getBlockNumber();
+      await recordSuccess(provider, Date.now() - startedAt);
+    } catch (error) {
+      await recordFailure(provider, error, Date.now() - startedAt);
+    }
+  }));
+
+  return getRpcRoutingSnapshot(userId, normalizedChain);
+}
