@@ -75,15 +75,27 @@ const SERVICE_KEYWORDS: Array<[string, KnownService]> = [
   ['QSTASH', 'QStash'],
   ['SENTRY', 'Sentry'],
   ['DATABASE', 'Database'],
-  ['POSTGRES', 'Database'],
-  ['NEON', 'Database'],
   ['REDIS', 'Redis'],
   ['KV_REST', 'Redis'],
   ['CLERK', 'Clerk'],
 ];
 
-const DISCOVERY_PATTERN = /(API|KEY|TOKEN|SECRET|URL|URI|DSN|RPC|WSS|WEBHOOK|DATABASE|REDIS|CLERK|SENTRY|QSTASH|FIRECRAWL|JINA|BROWSERBASE|ALCHEMY|QUICKNODE|NEON|POSTGRES)/;
-const IGNORED_PREFIXES = ['npm_', 'npm_config_', 'PROCESSOR_', 'ProgramFiles', 'CommonProgramFiles'];
+const SERVICE_DISCOVERY_PATTERN = /(ALCHEMY|QUICKNODE|JINA|FIRECRAWL|BROWSERBASE|QSTASH|SENTRY|CLERK|REDIS|KV_REST)/;
+const GENERIC_SERVICE_SECRET_PATTERN = /^[A-Z][A-Z0-9_]+_(API_KEY|RPC_URL|WSS_URL|DSN)$/;
+const IGNORED_PREFIXES = [
+  'npm_',
+  'npm_config_',
+  'AWS_',
+  'VERCEL_',
+  'NODE_',
+  'PG',
+  'POSTGRES_',
+  'NEON_',
+  'VITE_',
+  'PROCESSOR_',
+  'ProgramFiles',
+  'CommonProgramFiles',
+];
 const IGNORED_NAMES = new Set([
   'ALLUSERSPROFILE',
   'APPDATA',
@@ -105,6 +117,10 @@ const IGNORED_NAMES = new Set([
   'USERDOMAIN',
   'USERNAME',
   'USERPROFILE',
+  'DATABASE_URL_UNPOOLED',
+  'ENCRYPTION_KEY',
+  'KV_URL',
+  'REDIS_URL',
   'WINDIR',
 ]);
 
@@ -131,7 +147,8 @@ function shouldSurfaceVariable(variableName: string) {
   if (KNOWN_VARIABLES.some((item) => item.variableName === variableName)) return true;
   if (IGNORED_NAMES.has(variableName)) return false;
   if (IGNORED_PREFIXES.some((prefix) => variableName.startsWith(prefix))) return false;
-  return DISCOVERY_PATTERN.test(variableName.toUpperCase());
+  const upper = variableName.toUpperCase();
+  return SERVICE_DISCOVERY_PATTERN.test(upper) || GENERIC_SERVICE_SECRET_PATTERN.test(upper);
 }
 
 function getDiscoveredVariableNames() {

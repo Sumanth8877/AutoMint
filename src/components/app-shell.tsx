@@ -7,11 +7,9 @@ import { usePathname, useRouter } from 'next/navigation';
 import AutoMintUserButton from '@/components/auth/automint-user-button';
 import { apiRequest } from '@/lib/api/client';
 import {
-  Activity,
   BarChart3,
   Bell,
   ChevronRight,
-  Clock3,
   FolderKanban,
   Gauge,
   History,
@@ -322,19 +320,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
       <main className="lg:ml-72">
         <div className="mx-auto w-full max-w-[1280px] px-4 py-6 sm:px-6 lg:py-8">
-          <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-3">
-            {[
-              { label: 'Live monitors', value: '148', icon: Activity, color: 'text-accent' },
-              { label: 'Avg latency', value: '218ms', icon: Clock3, color: 'text-success' },
-              { label: 'Risk blocks', value: '12', icon: ShieldCheck, color: 'text-warning' },
-            ].map((item) => (
-              <div key={item.label} className="flex items-center gap-3 rounded-lg border border-border bg-surface/55 px-4 py-3">
-                <item.icon className={`h-4 w-4 ${item.color}`} aria-hidden="true" />
-                <span className="text-xs uppercase text-muted">{item.label}</span>
-                <span className="ml-auto font-mono text-sm text-text">{item.value}</span>
-              </div>
-            ))}
-          </div>
           {children}
         </div>
       </main>

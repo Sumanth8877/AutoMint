@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, RefreshCw, TestTube2 } from 'lucide-react';
 import Link from 'next/link';
 import Badge from '@/components/ui/Badge';
@@ -35,6 +35,8 @@ type IntegrationStatusResponse = {
   summary: IntegrationSummary;
 };
 
+type StatusFilter = 'all' | 'passing' | 'failing' | 'untested';
+
 function statusBadgeVariant(status: IntegrationStatus) {
   if (status === 'PASS') return 'success';
   if (status === 'FAIL') return 'danger';
@@ -51,27 +53,44 @@ export default function ApiKeysClient() {
   const [loading, setLoading] = useState(true);
   const [testing, setTesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastRefreshAt, setLastRefreshAt] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
   const summary = payload?.summary;
-  const grouped = useMemo(() => {
+  const filteredGroups = useMemo(() => {
+    const visible = (payload?.integrations ?? []).filter((integration) => {
+      if (statusFilter === 'passing') return integration.status === 'PASS';
+      if (statusFilter === 'failing') return integration.status === 'FAIL';
+      if (statusFilter === 'untested') return integration.status === 'UNKNOWN';
+      return true;
+    });
     const groups = new Map<string, IntegrationVariable[]>();
 
-    for (const integration of payload?.integrations ?? []) {
+    for (const integration of visible) {
       const existing = groups.get(integration.serviceName) ?? [];
       existing.push(integration);
       groups.set(integration.serviceName, existing);
     }
 
     return Array.from(groups.entries()).sort(([left], [right]) => left.localeCompare(right));
-  }, [payload]);
+  }, [payload, statusFilter]);
+
+  function handlePayload(response: IntegrationStatusResponse) {
+    setPayload(response);
+    setLastRefreshAt(new Date().toISOString());
+  }
 
   async function loadIntegrations() {
+    setLoading(true);
     setError(null);
     try {
-      const response = await apiRequest<IntegrationStatusResponse>('/api/settings/integrations');
-      setPayload(response);
+      const response = await apiRequest<IntegrationStatusResponse>('/api/settings/integrations', {
+        cache: 'no-store',
+      });
+      handlePayload(response);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to load integration status.');
+      setLastRefreshAt(new Date().toISOString());
     } finally {
       setLoading(false);
     }
@@ -83,10 +102,12 @@ export default function ApiKeysClient() {
     try {
       const response = await apiRequest<IntegrationStatusResponse>('/api/settings/integrations', {
         method: 'POST',
+        cache: 'no-store',
       });
-      setPayload(response);
+      handlePayload(response);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to test integrations.');
+      setLastRefreshAt(new Date().toISOString());
     } finally {
       setTesting(false);
     }
@@ -95,15 +116,18 @@ export default function ApiKeysClient() {
   useEffect(() => {
     let active = true;
 
-    apiRequest<IntegrationStatusResponse>('/api/settings/integrations')
+    apiRequest<IntegrationStatusResponse>('/api/settings/integrations', {
+      cache: 'no-store',
+    })
       .then((response) => {
         if (!active) return;
-        setPayload(response);
+        handlePayload(response);
         setError(null);
       })
       .catch((requestError) => {
         if (!active) return;
         setError(requestError instanceof Error ? requestError.message : 'Failed to load integration status.');
+        setLastRefreshAt(new Date().toISOString());
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -125,6 +149,9 @@ export default function ApiKeysClient() {
           <h1 className="mt-3 text-2xl font-semibold text-text sm:text-3xl">API Keys</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
             Runtime integration status from environment configuration. Secret values are never displayed.
+          </p>
+          <p className="mt-2 text-xs text-muted">
+            Last Refresh: {formatTime(lastRefreshAt)}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -154,8 +181,29 @@ export default function ApiKeysClient() {
       ) : null}
 
       <Card className="mt-6 overflow-hidden">
-        <div className="border-b border-border px-5 py-4">
+        <div className="flex flex-col gap-3 border-b border-border px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
           <h2 className="font-semibold text-text">Integration Variables</h2>
+          <div className="flex flex-wrap gap-2">
+            {[
+              ['all', 'All'],
+              ['passing', 'Passing'],
+              ['failing', 'Failing'],
+              ['untested', 'Untested'],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setStatusFilter(value as StatusFilter)}
+                className={`h-8 rounded-lg border px-3 text-xs font-medium transition ${
+                  statusFilter === value
+                    ? 'border-primary/40 bg-primary/15 text-text'
+                    : 'border-border bg-white/5 text-muted hover:text-text'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-[1120px] w-full text-left text-sm">
@@ -177,22 +225,37 @@ export default function ApiKeysClient() {
                   <td className="px-4 py-8 text-center text-muted" colSpan={8}>Loading integration status...</td>
                 </tr>
               ) : payload && payload.integrations.length > 0 ? (
-                payload.integrations.map((integration) => (
-                  <tr key={integration.variableName}>
-                    <td className="px-4 py-3 font-mono text-text">{integration.variableName}</td>
-                    <td className="px-4 py-3 text-text">{integration.serviceName}</td>
-                    <td className="px-4 py-3">
-                      <Badge variant={integration.configured ? 'success' : 'danger'}>{integration.configured ? 'YES' : 'NO'}</Badge>
-                    </td>
-                    <td className="px-4 py-3 text-muted">{integration.source}</td>
-                    <td className="px-4 py-3">
-                      <Badge variant={statusBadgeVariant(integration.status)}>{integration.status}</Badge>
-                    </td>
-                    <td className="px-4 py-3 text-muted">{formatTime(integration.lastTestedAt)}</td>
-                    <td className="px-4 py-3 font-mono text-muted">{integration.latency === null ? '-' : `${integration.latency}ms`}</td>
-                    <td className="max-w-[320px] px-4 py-3 text-danger">{integration.error ?? '-'}</td>
+                filteredGroups.length > 0 ? (
+                  filteredGroups.map(([serviceName, integrations]) => (
+                    <Fragment key={serviceName}>
+                      <tr className="bg-white/[0.03]">
+                        <td className="px-4 py-3 font-semibold text-text" colSpan={8}>
+                          {serviceName}
+                        </td>
+                      </tr>
+                      {integrations.map((integration) => (
+                        <tr key={integration.variableName}>
+                          <td className="px-4 py-3 font-mono text-text">{integration.variableName}</td>
+                          <td className="px-4 py-3 text-text">{integration.serviceName}</td>
+                          <td className="px-4 py-3">
+                            <Badge variant={integration.configured ? 'success' : 'danger'}>{integration.configured ? 'YES' : 'NO'}</Badge>
+                          </td>
+                          <td className="px-4 py-3 text-muted">{integration.source}</td>
+                          <td className="px-4 py-3">
+                            <Badge variant={statusBadgeVariant(integration.status)}>{integration.status}</Badge>
+                          </td>
+                          <td className="px-4 py-3 text-muted">{formatTime(integration.lastTestedAt)}</td>
+                          <td className="px-4 py-3 font-mono text-muted">{integration.latency === null ? '-' : `${integration.latency}ms`}</td>
+                          <td className="max-w-[320px] px-4 py-3 text-danger">{integration.error ?? '-'}</td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  ))
+                ) : (
+                  <tr>
+                    <td className="px-4 py-8 text-center text-muted" colSpan={8}>No integrations match this filter.</td>
                   </tr>
-                ))
+                )
               ) : (
                 <tr>
                   <td className="px-4 py-8 text-center text-muted" colSpan={8}>No integration environment variables detected.</td>
@@ -202,35 +265,6 @@ export default function ApiKeysClient() {
           </table>
         </div>
       </Card>
-
-      <div className="mt-6 grid gap-4 lg:grid-cols-2">
-        {grouped.map(([serviceName, integrations]) => {
-          const configured = integrations.filter((item) => item.configured).length;
-          const failing = integrations.some((item) => item.status === 'FAIL');
-          const passing = integrations.some((item) => item.status === 'PASS');
-
-          return (
-            <Card key={serviceName} className="p-5">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h3 className="font-semibold text-text">{serviceName}</h3>
-                  <p className="mt-1 text-xs text-muted">{configured}/{integrations.length} configured</p>
-                </div>
-                <Badge variant={failing ? 'danger' : passing ? 'success' : 'default'}>
-                  {failing ? 'FAIL' : passing ? 'PASS' : 'UNKNOWN'}
-                </Badge>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {integrations.map((integration) => (
-                  <span key={integration.variableName} className="rounded border border-border bg-white/5 px-2 py-1 font-mono text-xs text-muted">
-                    {integration.variableName}
-                  </span>
-                ))}
-              </div>
-            </Card>
-          );
-        })}
-      </div>
     </div>
   );
 }
