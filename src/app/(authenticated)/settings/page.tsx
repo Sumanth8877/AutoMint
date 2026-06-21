@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Bell, ChevronRight, KeyRound, Lock, Palette, Radio, Save, Settings, ShieldCheck, SlidersHorizontal, TestTube2, User, Wallet } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
@@ -16,7 +17,7 @@ const groups = [
   { title: 'RPC Providers', icon: Radio, items: ['Provider Settings', 'Gas Optimization', 'Timeout Settings'] },
   { title: 'Execution', icon: SlidersHorizontal, items: ['Mint Defaults', 'Retry Logic', 'Risk Gates'] },
   { title: 'Notifications', icon: Bell, items: ['Alert Preferences', 'Email Notifications', 'Push Notifications'] },
-  { title: 'Security', icon: Lock, items: ['Two-Factor Auth', 'Session Management', 'API Keys'] },
+  { title: 'Security', icon: Lock, items: ['Two-Factor Auth', 'Session Management', 'API Keys', 'Runtime Check'] },
 ];
 
 const icons = [Palette, Wallet, Radio, ShieldCheck, Bell, KeyRound];
@@ -169,16 +170,28 @@ export default function SettingsPage() {
               </div>
               <div className="divide-y divide-border">
                 {group.items.map((item) => (
-                  <button
-                    key={item}
-                    type="button"
-                    onClick={() => openSetting(`${group.title}: ${item}`)}
-                    className="flex w-full items-center gap-3 px-5 py-4 text-left hover:bg-white/5"
-                  >
-                    <ItemIcon className="h-4 w-4 text-muted" aria-hidden="true" />
-                    <span className="text-sm font-medium text-text">{item}</span>
-                    <ChevronRight className="ml-auto h-4 w-4 text-muted" aria-hidden="true" />
-                  </button>
+                  item === 'Runtime Check' ? (
+                    <Link
+                      key={item}
+                      href="/settings/runtime-check"
+                      className="flex w-full items-center gap-3 px-5 py-4 text-left hover:bg-white/5"
+                    >
+                      <ItemIcon className="h-4 w-4 text-muted" aria-hidden="true" />
+                      <span className="text-sm font-medium text-text">{item}</span>
+                      <ChevronRight className="ml-auto h-4 w-4 text-muted" aria-hidden="true" />
+                    </Link>
+                  ) : (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => openSetting(`${group.title}: ${item}`)}
+                      className="flex w-full items-center gap-3 px-5 py-4 text-left hover:bg-white/5"
+                    >
+                      <ItemIcon className="h-4 w-4 text-muted" aria-hidden="true" />
+                      <span className="text-sm font-medium text-text">{item}</span>
+                      <ChevronRight className="ml-auto h-4 w-4 text-muted" aria-hidden="true" />
+                    </button>
+                  )
                 ))}
               </div>
             </Card>
