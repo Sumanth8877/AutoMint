@@ -290,6 +290,14 @@ export const infrastructureTestRuns = pgTable('infrastructure_test_runs', {
   testedAtIdx: index('idx_infrastructure_test_runs_tested_at').on(table.testedAt),
 }));
 
+export const integrationSettings = pgTable('integration_settings', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  key: text('key').unique().notNull(),
+  valueEncrypted: text('value_encrypted').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 // ─── Relations ───────────────────────────────────────
 export const usersRelations = relations(users, ({ many }) => ({
   wallets: many(wallets),

@@ -1,67 +1,64 @@
-/**
- * AES-256-GCM encryption for wallet private keys.
- *
- * Production notes:
- * - Master key should come from a secrets manager (Vercel Environment Variables,
- *   AWS Secrets Manager, etc.), NOT hardcoded.
- * - For Vercel: store ENCRYPTION_MASTER_KEY in project env.
- * - Key format: 32-byte hex string (64 chars) for AES-256.
- */
+import 'server-only';
 
-import crypto from 'crypto';
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
-const MASTER_KEY_HEX = process.env.ENCRYPTION_MASTER_KEY || '';
+const ALGORITHM = 'aes-256-gcm';
+const IV_BYTES = 12;
+const KEY_BYTES = 32;
 
-export function getMasterKey(): Buffer {
-  if (!MASTER_KEY_HEX) {
-    throw new Error('ENCRYPTION_MASTER_KEY is not configured');
+function getEncryptionKey() {
+  const raw = process.env.ENCRYPTION_KEY;
+  if (!raw) throw new Error('ENCRYPTION_KEY is not configured');
+
+  const trimmed = raw.trim();
+  const key = /^[a-f0-9]{64}$/i.test(trimmed)
+    ? Buffer.from(trimmed, 'hex')
+    : Buffer.from(trimmed, 'base64');
+
+  if (key.length !== KEY_BYTES) {
+    throw new Error('ENCRYPTION_KEY must be a 32-byte base64 or 64-character hex value');
   }
-  const buf = Buffer.from(MASTER_KEY_HEX, 'hex');
-  if (buf.length !== 32) {
-    throw new Error('ENCRYPTION_MASTER_KEY must be 64 hex characters (32 bytes)');
-  }
-  return buf;
+
+  return key;
 }
 
-export interface EncryptedPayload {
-  ciphertext: string;      // hex
-  iv: string;               // hex
-  tag: string;              // hex (auth tag)
-  version: number;          // encryption version for rotation
-}
+export function encrypt(text: string) {
+  if (!text) throw new Error('Cannot encrypt an empty value');
 
-/**
- * Encrypt a private key string.
- * Returns JSON-serializable payload.
- */
-export function encryptPrivateKey(privateKeyPlain: string): EncryptedPayload {
-  const key = getMasterKey();
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-
-  const ciphertext = Buffer.concat([cipher.update(privateKeyPlain, 'utf8'), cipher.final()]);
+  const iv = randomBytes(IV_BYTES);
+  const cipher = createCipheriv(ALGORITHM, getEncryptionKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
   const tag = cipher.getAuthTag();
 
-  return {
-    ciphertext: ciphertext.toString('hex'),
-    iv: iv.toString('hex'),
-    tag: tag.toString('hex'),
-    version: 1,
-  };
+  return [
+    'v1',
+    iv.toString('base64url'),
+    tag.toString('base64url'),
+    encrypted.toString('base64url'),
+  ].join(':');
 }
 
-/**
- * Decrypt a payload back to private key plaintext.
- */
-export function decryptPrivateKey(payload: EncryptedPayload): string {
-  const key = getMasterKey();
-  const iv = Buffer.from(payload.iv, 'hex');
-  const tag = Buffer.from(payload.tag, 'hex');
-  const ciphertext = Buffer.from(payload.ciphertext, 'hex');
+export function decrypt(text: string) {
+  const [version, ivBase64, tagBase64, encryptedBase64] = text.split(':');
+  if (version !== 'v1' || !ivBase64 || !tagBase64 || !encryptedBase64) {
+    throw new Error('Encrypted value format is invalid');
+  }
 
-  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv as Buffer);
-  decipher.setAuthTag(tag);
+  const decipher = createDecipheriv(ALGORITHM, getEncryptionKey(), Buffer.from(ivBase64, 'base64url'));
+  decipher.setAuthTag(Buffer.from(tagBase64, 'base64url'));
 
-  const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-  return plaintext.toString('utf8');
+  return Buffer.concat([
+    decipher.update(Buffer.from(encryptedBase64, 'base64url')),
+    decipher.final(),
+  ]).toString('utf8');
+}
+
+export function encryptPrivateKey(privateKey: string) {
+  return encrypt(privateKey);
+}
+
+export function decryptPrivateKey(payload: string | { encrypted?: string; value?: string }) {
+  const encrypted = typeof payload === 'string' ? payload : payload.encrypted ?? payload.value;
+  if (!encrypted) throw new Error('Encrypted private key payload is invalid');
+  return decrypt(encrypted);
 }

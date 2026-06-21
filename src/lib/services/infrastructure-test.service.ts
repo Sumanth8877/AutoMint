@@ -41,6 +41,7 @@ export type InfrastructureTestResult = {
 const TEST_URL = 'https://opensea.io/collection/azuki';
 const TEST_WALLET = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045';
 const QSTASH_BASE_URL = 'https://qstash.upstash.io';
+const ETHEREUM_CHAIN_ID = 1;
 
 function serviceScore(status: InfrastructureTestStatus, latency: number) {
   if (status === 'skipped') return 100;
@@ -182,11 +183,17 @@ function createDirectRpcClient(provider: 'alchemy' | 'quicknode') {
 
 async function testDirectRpc(provider: 'alchemy' | 'quicknode') {
   const client = createDirectRpcClient(provider);
-  const [blockNumber, balance] = await Promise.all([
+  const [chainId, blockNumber, balance] = await Promise.all([
+    client.getChainId(),
     client.getBlockNumber(),
     client.getBalance({ address: TEST_WALLET }),
   ]);
+  if (chainId !== ETHEREUM_CHAIN_ID) {
+    throw new Error(`${provider} RPC returned chain id ${chainId}; expected Ethereum mainnet (${ETHEREUM_CHAIN_ID})`);
+  }
   return {
+    chain: 'ethereum',
+    chainId,
     blockNumber: blockNumber.toString(),
     wallet: TEST_WALLET,
     balance: formatEther(balance),
@@ -311,21 +318,35 @@ export async function testQuickNode() {
 
 export async function testRpcFailover() {
   return executeTest('RPC Failover', async () => {
+    const ethereum = getChain('Ethereum');
+    if (ethereum.id !== ETHEREUM_CHAIN_ID) {
+      throw new Error(`Chain mapping returned ${ethereum.id}; expected Ethereum mainnet (${ETHEREUM_CHAIN_ID})`);
+    }
+
+    const attempts: Array<'alchemy' | 'quicknode'> = [];
     const result = await withRpcFailover('ethereum', 'infrastructureFailoverProbe', async (client: PublicClient, provider) => {
+      attempts.push(provider);
       if (provider === 'alchemy') throw new Error('Simulated Alchemy unavailable');
-      const [blockNumber, balance] = await Promise.all([
+      const [chainId, blockNumber, balance] = await Promise.all([
+        client.getChainId(),
         client.getBlockNumber(),
         client.getBalance({ address: TEST_WALLET }),
       ]);
+      if (chainId !== ETHEREUM_CHAIN_ID) {
+        throw new Error(`Failover RPC returned chain id ${chainId}; expected Ethereum mainnet (${ETHEREUM_CHAIN_ID})`);
+      }
       return {
         handledBy: provider,
+        chain: 'ethereum',
+        chainId,
         blockNumber: blockNumber.toString(),
         wallet: TEST_WALLET,
         balance: formatEther(balance),
       };
-    });
+    }, { providerOrder: ['alchemy', 'quicknode'] });
+    if (attempts[0] !== 'alchemy') throw new Error('RPC manager did not select Alchemy first for the forced failover probe');
     if (result.handledBy !== 'quicknode') throw new Error('RPC failover did not route to QuickNode');
-    return result;
+    return { ...result, attempts };
   }, 'RPC failover routed the request to QuickNode after simulated Alchemy failure.');
 }
 

@@ -86,30 +86,30 @@ export async function executeScheduledRiskCheck(taskId: string) {
     });
 
     if (delta >= RISK_CHANGE_THRESHOLD) {
-      if (!isTelegramEnabled()) {
-        await logActivity(task.userId, 'mint_status_changed', 'Risk approval channel unavailable', {
-          taskId,
-          previousScore,
-          latestRiskScore: risk.riskScore,
-          delta,
-          approvalChannel: 'telegram_disabled',
-        });
-
-        return {
-          continue: true,
-          previousScore,
-          latestRiskScore: risk.riskScore,
-          delta,
-          approvalChannel: 'telegram_disabled',
-        };
-      }
-
-      const { sendTelegramRiskChangePrompt } = await import('@/lib/services/telegram.service');
       await getDb()
         .update(mintTasks)
         .set({ safeModeEnabled: true, updatedAt: new Date() })
         .where(eq(mintTasks.id, taskId));
 
+      if (!isTelegramEnabled()) {
+        await logActivity(task.userId, 'mint_status_changed', 'Risk change manual approval required', {
+          taskId,
+          previousScore,
+          latestRiskScore: risk.riskScore,
+          delta,
+          approvalChannel: 'manual_required',
+        });
+
+        return {
+          continue: false,
+          previousScore,
+          latestRiskScore: risk.riskScore,
+          delta,
+          approvalChannel: 'manual_required',
+        };
+      }
+
+      const { sendTelegramRiskChangePrompt } = await import('@/lib/services/telegram.service');
       await sendTelegramRiskChangePrompt({
         userId: task.userId,
         taskId,
@@ -136,7 +136,6 @@ export function hasBlockingRiskChange(task: {
   originalRiskScore: number | null;
   latestRiskScore: number | null;
 }) {
-  if (!isTelegramEnabled()) return false;
   if (task.overrideRiskFlag) return false;
   if (task.originalRiskScore === null || task.latestRiskScore === null) return false;
   return getRiskDelta(task.originalRiskScore, task.latestRiskScore) >= RISK_CHANGE_THRESHOLD;

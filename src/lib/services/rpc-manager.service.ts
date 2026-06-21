@@ -1,11 +1,13 @@
 import 'server-only';
 
+import { createHash } from 'node:crypto';
 import { createPublicClient, createWalletClient, http, type Account, type PublicClient, type WalletClient } from 'viem';
 import { getCache, setCache } from '@/lib/redis';
 import { getChain } from '@/lib/blockchain/chains';
 import { addBreadcrumb, captureException, captureMessage } from '@/lib/observability/sentry';
+import { getAllSettings } from '@/lib/services/integration-settings.service';
 
-type RpcProvider = 'alchemy' | 'quicknode';
+export type RpcProvider = 'alchemy' | 'quicknode';
 type RpcHealth = {
   provider: RpcProvider;
   responseTime: number;
@@ -30,6 +32,15 @@ const CIRCUIT_OPEN_MS = 60_000;
 const HEALTH_TTL_SECONDS = 24 * 60 * 60;
 const publicClients = new Map<string, RpcClient>();
 const walletClients = new Map<string, WalletClient>();
+
+type RpcFailoverOptions = {
+  providerOrder?: RpcProvider[];
+};
+
+function normalizeChainName(chain: string) {
+  getChain(chain);
+  return chain.toLowerCase();
+}
 
 function healthKey(provider: RpcProvider) {
   return `rpc:health:${provider}`;
@@ -56,25 +67,45 @@ async function setHealth(health: RpcHealth) {
   await setCache(healthKey(health.provider), health, HEALTH_TTL_SECONDS);
 }
 
-function getAlchemyUrl(chain: string) {
-  const specific = process.env[`ALCHEMY_${chain.toUpperCase()}_RPC_URL`];
-  if (specific) return specific;
+async function getAlchemyUrl(chain: string) {
+  const chainName = normalizeChainName(chain);
+  const settings = await getStoredIntegrationSettings();
+  const apiKey = settings.ALCHEMY_API_KEY?.value || process.env.ALCHEMY_API_KEY;
+  if (apiKey) {
+    if (chainName === 'base') return `https://base-mainnet.g.alchemy.com/v2/${apiKey}`;
+    if (chainName === 'polygon') return `https://polygon-mainnet.g.alchemy.com/v2/${apiKey}`;
+    return `https://eth-mainnet.g.alchemy.com/v2/${apiKey}`;
+  }
 
-  const apiKey = process.env.ALCHEMY_API_KEY;
-  if (!apiKey) return process.env.ALCHEMY_RPC_URL;
-
-  if (chain === 'base') return `https://base-mainnet.g.alchemy.com/v2/${apiKey}`;
-  if (chain === 'polygon') return `https://polygon-mainnet.g.alchemy.com/v2/${apiKey}`;
-  return `https://eth-mainnet.g.alchemy.com/v2/${apiKey}`;
+  return process.env[`ALCHEMY_${chainName.toUpperCase()}_RPC_URL`] || process.env.ALCHEMY_RPC_URL;
 }
 
-function getQuickNodeUrl(chain: string) {
-  return process.env[`QUICKNODE_${chain.toUpperCase()}_RPC_URL`]
+async function getQuickNodeUrl(chain: string) {
+  const chainName = normalizeChainName(chain);
+  const settings = await getStoredIntegrationSettings();
+  return settings.QUICKNODE_RPC_URL?.value
+    || process.env[`QUICKNODE_${chainName.toUpperCase()}_RPC_URL`]
     || process.env.QUICKNODE_RPC_URL;
 }
 
-function getProviderUrl(provider: RpcProvider, chain: string) {
+async function getProviderUrl(provider: RpcProvider, chain: string) {
   return provider === 'alchemy' ? getAlchemyUrl(chain) : getQuickNodeUrl(chain);
+}
+
+function getClientCacheKey(provider: RpcProvider, chain: string, url: string, account?: string) {
+  const urlHash = createHash('sha256').update(url).digest('hex').slice(0, 16);
+  return [provider, chain, urlHash, account].filter(Boolean).join(':');
+}
+
+async function getStoredIntegrationSettings() {
+  try {
+    return await getAllSettings();
+  } catch (error) {
+    logRpc('database integration settings unavailable', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return {};
+  }
 }
 
 function isRetryableError(error: unknown) {
@@ -104,34 +135,42 @@ function logRpc(message: string, metadata: Record<string, unknown>) {
   addBreadcrumb({ category: 'rpc', message, level: 'info', data: metadata });
 }
 
-function createClient(provider: RpcProvider, chainName: string) {
-  const chain = getChain(chainName);
-  const url = getProviderUrl(provider, chainName);
-  if (!url) throw new Error(`${provider} RPC is not configured for ${chainName}`);
+async function createClient(provider: RpcProvider, chainName: string) {
+  const normalizedChain = normalizeChainName(chainName);
+  const chain = getChain(normalizedChain);
+  const url = await getProviderUrl(provider, normalizedChain);
+  if (!url) throw new Error(`${provider} RPC is not configured for ${normalizedChain}`);
 
-  return createPublicClient({
+  const client = createPublicClient({
     chain,
     transport: http(url, { timeout: REQUEST_TIMEOUT_MS }),
   }) as RpcClient;
+
+  return { client, cacheKey: getClientCacheKey(provider, normalizedChain, url) };
 }
 
-function getProviderClient(provider: RpcProvider, chain: string) {
-  const key = `${provider}:${chain}`;
+async function getProviderClient(provider: RpcProvider, chain: string) {
+  const normalizedChain = normalizeChainName(chain);
+  const url = await getProviderUrl(provider, normalizedChain);
+  if (!url) throw new Error(`${provider} RPC is not configured for ${normalizedChain}`);
+
+  const key = getClientCacheKey(provider, normalizedChain, url);
   const existing = publicClients.get(key);
   if (existing) return existing;
 
-  const client = createClient(provider, chain);
+  const { client } = await createClient(provider, normalizedChain);
   client.__provider = provider;
   publicClients.set(key, client);
   return client;
 }
 
-function getProviderWalletClient(provider: RpcProvider, chainName: string, account: Account) {
-  const chain = getChain(chainName);
-  const url = getProviderUrl(provider, chainName);
-  if (!url) throw new Error(`${provider} RPC is not configured for ${chainName}`);
+async function getProviderWalletClient(provider: RpcProvider, chainName: string, account: Account) {
+  const normalizedChain = normalizeChainName(chainName);
+  const chain = getChain(normalizedChain);
+  const url = await getProviderUrl(provider, normalizedChain);
+  if (!url) throw new Error(`${provider} RPC is not configured for ${normalizedChain}`);
 
-  const key = `${provider}:${chainName}:${account.address}`;
+  const key = getClientCacheKey(provider, normalizedChain, url, account.address);
   const existing = walletClients.get(key);
   if (existing) return existing;
 
@@ -222,7 +261,8 @@ async function isCircuitOpen(provider: RpcProvider) {
   return Boolean(health.unhealthyUntil && health.unhealthyUntil > Date.now());
 }
 
-async function getProviderOrder() {
+async function getProviderOrder(options: RpcFailoverOptions = {}) {
+  if (options.providerOrder?.length) return options.providerOrder;
   if (await isCircuitOpen('alchemy')) return ['quicknode', 'alchemy'] as RpcProvider[];
   return PROVIDERS;
 }
@@ -254,8 +294,10 @@ export async function withRpcFailover<T>(
   chain: string,
   operationName: string,
   operation: (client: RpcClient, provider: RpcProvider) => Promise<T>,
+  options: RpcFailoverOptions = {},
 ) {
-  const providers = await getProviderOrder();
+  const normalizedChain = normalizeChainName(chain);
+  const providers = await getProviderOrder(options);
   let lastError: unknown;
 
   for (const provider of providers) {
@@ -265,9 +307,9 @@ export async function withRpcFailover<T>(
         if (health.unhealthyUntil && health.unhealthyUntil > Date.now()) continue;
       }
 
-      logRpc('provider selected', { provider, chain, operationName });
+      logRpc('provider selected', { provider, chain: normalizedChain, operationName });
       return await executeWithRetries(provider, async (selectedProvider) => {
-        const client = getProviderClient(selectedProvider, chain);
+        const client = await getProviderClient(selectedProvider, normalizedChain);
         return operation(client, selectedProvider);
       });
     } catch (error) {
@@ -275,14 +317,14 @@ export async function withRpcFailover<T>(
       logRpc('failover triggered', {
         provider,
         nextProvider: provider === 'alchemy' ? 'quicknode' : null,
-        chain,
+        chain: normalizedChain,
         operationName,
         error: error instanceof Error ? error.message : String(error),
       });
       await captureException(error, {
         area: 'rpc',
         level: 'warning',
-        context: { provider, chain, operationName },
+        context: { provider, chain: normalizedChain, operationName },
         fingerprint: ['rpc', provider, operationName],
       });
     }
@@ -292,11 +334,11 @@ export async function withRpcFailover<T>(
 }
 
 export function getPublicClient(chain: string): PublicClient {
-  getChain(chain);
+  const normalizedChain = normalizeChainName(chain);
 
   return new Proxy({} as PublicClient, {
     get(_target, prop) {
-      return (...args: unknown[]) => withRpcFailover(chain, String(prop), async (client) => {
+      return (...args: unknown[]) => withRpcFailover(normalizedChain, String(prop), async (client) => {
         const value = (client as unknown as Record<PropertyKey, unknown>)[prop];
         if (typeof value !== 'function') return value as never;
         return await (value as (...methodArgs: unknown[]) => unknown).apply(client, args) as never;
@@ -306,12 +348,12 @@ export function getPublicClient(chain: string): PublicClient {
 }
 
 export function getWalletClient(chain: string, account: Account): WalletClient {
-  getChain(chain);
+  const normalizedChain = normalizeChainName(chain);
 
   return new Proxy({} as WalletClient, {
     get(_target, prop) {
-      return (...args: unknown[]) => withRpcFailover(chain, String(prop), async (_client, provider) => {
-        const walletClient = getProviderWalletClient(provider, chain, account);
+      return (...args: unknown[]) => withRpcFailover(normalizedChain, String(prop), async (_client, provider) => {
+        const walletClient = await getProviderWalletClient(provider, normalizedChain, account);
         const value = (walletClient as unknown as Record<PropertyKey, unknown>)[prop];
         if (typeof value !== 'function') return value as never;
         return await (value as (...methodArgs: unknown[]) => unknown).apply(walletClient, args) as never;

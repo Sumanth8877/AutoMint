@@ -321,22 +321,22 @@ export async function requireRiskApproval(params: {
   const risk = await analyzeMintRisk(params.taskId);
   if (!isHighRisk(risk.riskScore)) return { approved: true, risk };
 
-  if (!isTelegramEnabled()) {
-    await logActivity(task.userId, 'mint_status_changed', 'Safe mode approval channel unavailable', {
-      taskId: params.taskId,
-      action: params.action,
-      riskScore: risk.riskScore,
-      riskReasons: risk.riskReasons,
-      approvalChannel: 'telegram_disabled',
-    });
-
-    return { approved: true, risk, approvalChannel: 'telegram_disabled' };
-  }
-
   await getDb()
     .update(mintTasks)
     .set({ safeModeEnabled: true, updatedAt: new Date() })
     .where(eq(mintTasks.id, params.taskId));
+
+  if (!isTelegramEnabled()) {
+    await logActivity(task.userId, 'mint_status_changed', 'Safe mode manual approval required', {
+      taskId: params.taskId,
+      action: params.action,
+      riskScore: risk.riskScore,
+      riskReasons: risk.riskReasons,
+      approvalChannel: 'manual_required',
+    });
+
+    return { approved: false, risk, approvalChannel: 'manual_required' };
+  }
 
   await sendSafeModePrompt({
     taskId: params.taskId,
