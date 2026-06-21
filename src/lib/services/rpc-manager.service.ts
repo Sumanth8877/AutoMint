@@ -135,6 +135,30 @@ function logRpc(message: string, metadata: Record<string, unknown>) {
   addBreadcrumb({ category: 'rpc', message, level: 'info', data: metadata });
 }
 
+async function trackRpcAnalytics(input: {
+  status: 'success' | 'failed' | 'failover';
+  provider: RpcProvider;
+  durationMs: number;
+  metadata?: Record<string, unknown>;
+}) {
+  try {
+    const { trackAnalyticsEvent } = await import('@/lib/services/analytics.service');
+    await trackAnalyticsEvent({
+      eventType: 'rpc',
+      status: input.status,
+      provider: input.provider,
+      durationMs: input.durationMs,
+      metadata: input.metadata,
+    });
+  } catch (error) {
+    logRpc('analytics tracking skipped', {
+      provider: input.provider,
+      status: input.status,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 async function createClient(provider: RpcProvider, chainName: string) {
   const normalizedChain = normalizeChainName(chainName);
   const chain = getChain(normalizedChain);
@@ -184,9 +208,7 @@ async function getProviderWalletClient(provider: RpcProvider, chainName: string,
 }
 
 async function recordSuccess(provider: RpcProvider, responseTime: number) {
-  const { trackAnalyticsEvent } = await import('@/lib/services/analytics.service');
-  await trackAnalyticsEvent({
-    eventType: 'rpc',
+  await trackRpcAnalytics({
     status: 'success',
     provider,
     durationMs: responseTime,
@@ -214,9 +236,7 @@ async function recordSuccess(provider: RpcProvider, responseTime: number) {
 }
 
 async function recordFailure(provider: RpcProvider, error: unknown, responseTime: number) {
-  const { trackAnalyticsEvent } = await import('@/lib/services/analytics.service');
-  await trackAnalyticsEvent({
-    eventType: 'rpc',
+  await trackRpcAnalytics({
     status: 'failed',
     provider,
     durationMs: responseTime,
@@ -238,8 +258,7 @@ async function recordFailure(provider: RpcProvider, error: unknown, responseTime
   await setHealth(health);
 
   if (consecutiveFailures === CIRCUIT_FAILURE_THRESHOLD) {
-    await trackAnalyticsEvent({
-      eventType: 'rpc',
+    await trackRpcAnalytics({
       status: 'failover',
       provider,
       durationMs: responseTime,

@@ -25,6 +25,13 @@ function maskSecret(value: string | null | undefined) {
   return `*****${suffix}`;
 }
 
+function redactSecrets(message: string, secrets: Array<string | null | undefined>) {
+  return secrets.reduce<string>((safeMessage, secret) => {
+    if (!secret || secret.length < 4) return safeMessage;
+    return safeMessage.split(secret).join(maskSecret(secret) ?? '[redacted]');
+  }, message);
+}
+
 function settingResponse(value: string | null | undefined) {
   return {
     configured: Boolean(value),
@@ -82,7 +89,7 @@ async function testSavedConnections() {
       results.alchemy = {
         status: 'FAIL',
         provider: 'alchemy',
-        error: getErrorMessage(error, 'Alchemy test failed'),
+        error: redactSecrets(getErrorMessage(error, 'Alchemy test failed'), [alchemy.value]),
       };
     }
   }
@@ -94,7 +101,7 @@ async function testSavedConnections() {
       results.quicknode = {
         status: 'FAIL',
         provider: 'quicknode',
-        error: getErrorMessage(error, 'QuickNode test failed'),
+        error: redactSecrets(getErrorMessage(error, 'QuickNode test failed'), [quicknode.value]),
       };
     }
   }

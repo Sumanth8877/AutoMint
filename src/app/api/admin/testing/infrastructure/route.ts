@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { requireAdminApiSession } from '@/lib/auth/require-auth';
+import { requireApiUser } from '@/lib/auth/require-auth';
+import { checkRateLimit } from '@/lib/redis';
 import { runInfrastructureTests, summarizeInfrastructureTestRun } from '@/lib/services/test-runner.service';
 import { getLatestInfrastructureTestResults } from '@/lib/services/test-results.service';
 import type {
@@ -24,7 +25,7 @@ function rowToResult(row: Awaited<ReturnType<typeof getLatestInfrastructureTestR
 }
 
 export async function GET() {
-  const authResult = await requireAdminApiSession();
+  const authResult = await requireApiUser();
   if ('error' in authResult) return authResult.error;
 
   const rows = await getLatestInfrastructureTestResults();
@@ -33,8 +34,16 @@ export async function GET() {
 }
 
 export async function POST() {
-  const authResult = await requireAdminApiSession();
+  const authResult = await requireApiUser();
   if ('error' in authResult) return authResult.error;
+
+  const allowed = await checkRateLimit(`infrastructure-test-run:${authResult.userId}`, 1, 300);
+  if (!allowed) {
+    return NextResponse.json(
+      { error: 'Rate limit exceeded. Please wait 5 minutes before running infrastructure tests again.' },
+      { status: 429 },
+    );
+  }
 
   const summary = await runInfrastructureTests();
   return NextResponse.json(summary);

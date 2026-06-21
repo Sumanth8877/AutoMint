@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
-import { requireAdminApiSession } from '@/lib/auth/require-auth';
+import { requireApiUser } from '@/lib/auth/require-auth';
 import { checkRedisHealth } from '@/lib/redis';
 import { getClient } from '@/lib/blockchain/client';
 import { getTaskCounts } from '@/lib/services/task.service';
@@ -12,7 +12,7 @@ function getErrorMessage(error: unknown) {
 }
 
 export async function GET() {
-  const authResult = await requireAdminApiSession();
+  const authResult = await requireApiUser();
   if ('error' in authResult) return authResult.error;
 
   // ─── Database Health ────────────────────────────
