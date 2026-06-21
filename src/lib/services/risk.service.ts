@@ -318,7 +318,25 @@ export async function requireRiskApproval(params: {
   if (params.userId && task.userId !== params.userId) throw new Error('Mint task not found');
   if (task.overrideRiskFlag) return { approved: true, risk: null };
 
-  const risk = await analyzeMintRisk(params.taskId);
+  const storedRisk = typeof task.riskScore === 'number'
+    ? {
+        riskScore: task.riskScore,
+        riskReasons: task.riskReasons ?? [],
+        safeModeEnabled: task.safeModeEnabled,
+        weights: {
+          contractAnalysis: 0,
+          trustedWalletActivity: 0,
+          socialAnalysis: 0,
+          domainAge: 0,
+        },
+      }
+    : null;
+
+  if (params.action === 'mint' && !storedRisk) {
+    return { approved: true, risk: null };
+  }
+
+  const risk = storedRisk ?? await analyzeMintRisk(params.taskId);
   if (!isHighRisk(risk.riskScore, task.riskThreshold)) return { approved: true, risk };
 
   await getDb()

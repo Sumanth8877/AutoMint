@@ -7,6 +7,7 @@ import { useClerk, useUser } from '@clerk/nextjs';
 import { ArrowLeft, KeyRound, Save, Trash2, User } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
+import { apiRequest } from '@/lib/api/client';
 
 type Notice = {
   type: 'success' | 'error';
@@ -127,7 +128,10 @@ export default function ProfileClient() {
     setNotice(null);
 
     try {
-      await user.delete();
+      await apiRequest<{ success: true }>('/api/settings/profile', {
+        method: 'DELETE',
+        cache: 'no-store',
+      });
       await signOut({ redirectUrl: '/' });
       router.refresh();
     } catch (error) {

@@ -42,6 +42,8 @@ type CollectionRecord = {
 
 type MintActionResponse = {
   task: MintTask;
+  collection?: CollectionRecord;
+  analyzerRequired?: boolean;
   result?: {
     success: boolean;
     txHash?: string;
@@ -66,13 +68,15 @@ export default function MintsClient() {
   const [collections, setCollections] = useState<CollectionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
-  const [form, setForm] = useState({ walletId: '', collectionId: '', quantity: '1' });
+  const [form, setForm] = useState({ walletId: '', collectionId: '', mintUrl: '', quantity: '1' });
+  const [analyzedUrl, setAnalyzedUrl] = useState<string | null>(null);
 
   const collectionById = useMemo(() => new Map(collections.map((collection) => [collection.id, collection])), [collections]);
   const walletById = useMemo(() => new Map(wallets.map((wallet) => [wallet.id, wallet])), [wallets]);
@@ -112,23 +116,67 @@ export default function MintsClient() {
     };
   }, []);
 
+  const handleMintUrlChange = (value: string) => {
+    setForm((current) => ({ ...current, mintUrl: value }));
+    setAnalyzedUrl((current) => (current === value.trim() ? current : null));
+  };
+
+  const analyzeMintUrl = async () => {
+    const mintUrl = form.mintUrl.trim();
+    if (!mintUrl) {
+      setFormError('Paste a mint URL before running analysis.');
+      return;
+    }
+
+    setAnalyzing(true);
+    setFormError(null);
+
+    try {
+      await apiRequest('/api/analyzer', {
+        method: 'POST',
+        body: { input: mintUrl },
+      });
+      setAnalyzedUrl(mintUrl);
+    } catch (requestError) {
+      setFormError(requestError instanceof Error ? requestError.message : 'Failed to analyze mint URL.');
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   const submitMint = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSaving(true);
     setFormError(null);
 
     try {
-      const payload = await apiRequest<{ task: MintTask }>('/api/mints', {
+      const mintUrl = form.mintUrl.trim();
+      const payload = await apiRequest<MintActionResponse>('/api/mints', {
         method: 'POST',
         body: {
           walletId: form.walletId,
-          collectionId: form.collectionId,
+          collectionId: mintUrl ? undefined : form.collectionId,
+          mintUrl: mintUrl || undefined,
+          analysisConfirmed: Boolean(mintUrl && analyzedUrl === mintUrl),
           quantity: form.quantity,
         },
       });
       setTasks((current) => [payload.task, ...current]);
-      setForm({ walletId: '', collectionId: '', quantity: '1' });
+      const returnedCollection = payload.collection;
+      if (returnedCollection) {
+        setCollections((current) => {
+          const exists = current.some((collection) => collection.id === returnedCollection.id);
+          return exists
+            ? current.map((collection) => (collection.id === returnedCollection.id ? returnedCollection : collection))
+            : [returnedCollection, ...current];
+        });
+      }
+      setForm({ walletId: '', collectionId: '', mintUrl: '', quantity: '1' });
+      setAnalyzedUrl(null);
       setModalOpen(false);
+      if (payload.analyzerRequired) {
+        setError('Mint task created from URL. Run analysis before scheduling this mint.');
+      }
     } catch (requestError) {
       setFormError(requestError instanceof Error ? requestError.message : 'Failed to create mint task.');
     } finally {
@@ -304,13 +352,28 @@ export default function MintsClient() {
               ))}
             </select>
           </label>
+          <div className="space-y-2">
+            <Input
+              label="Mint URL"
+              value={form.mintUrl}
+              onChange={(event) => handleMintUrlChange(event.target.value)}
+              placeholder="https://..."
+            />
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs text-muted">{analyzedUrl === form.mintUrl.trim() && form.mintUrl.trim() ? 'Analysis ready' : 'Paste a URL to create from a launchpad or explorer.'}</span>
+              <Button type="button" variant="secondary" onClick={analyzeMintUrl} loading={analyzing} disabled={!form.mintUrl.trim()}>
+                <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+                Analyze
+              </Button>
+            </div>
+          </div>
           <label className="block text-sm font-medium text-muted">
             Collection
             <select
               value={form.collectionId}
               onChange={(event) => setForm((current) => ({ ...current, collectionId: event.target.value }))}
               className="mt-2 h-11 w-full rounded-lg border border-border bg-background/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-              required
+              required={!form.mintUrl.trim()}
             >
               <option value="">Select collection</option>
               {collections.map((collection) => (
