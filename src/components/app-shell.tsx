@@ -17,7 +17,6 @@ import {
   Menu,
   Search,
   Settings,
-  ShieldCheck,
   Sparkles,
   Wallet,
   X,
@@ -167,17 +166,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
         <Logo />
         <div className="mt-8">
           <Navigation />
-        </div>
-        <div className="absolute bottom-5 left-4 right-4 rounded-lg border border-border bg-surface/80 p-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-success/10 text-success">
-              <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-text">Automation safe</p>
-              <p className="text-xs text-muted">Risk gates active</p>
-            </div>
-          </div>
         </div>
       </aside>
 

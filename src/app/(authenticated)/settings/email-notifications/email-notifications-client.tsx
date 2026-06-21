@@ -58,12 +58,14 @@ export default function EmailNotificationsClient() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
   async function saveSettings() {
     if (!draft) return;
     setSaving(true);
     setError(null);
+    setSuccess(null);
     try {
       const response = await apiRequest<EmailSettingsResponse>('/api/settings/email-notifications', {
         method: 'PATCH',
@@ -73,6 +75,7 @@ export default function EmailNotificationsClient() {
       setSettings(response);
       setDraft(response.preferences);
       setSavedAt(new Date().toISOString());
+      setSuccess('Preferences saved successfully');
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to save email notification settings.');
     } finally {
@@ -109,6 +112,13 @@ export default function EmailNotificationsClient() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!success) return;
+
+    const timeout = window.setTimeout(() => setSuccess(null), 3500);
+    return () => window.clearTimeout(timeout);
+  }, [success]);
+
   return (
     <div>
       <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -124,9 +134,15 @@ export default function EmailNotificationsClient() {
         </div>
         <Button type="button" onClick={saveSettings} loading={saving} disabled={loading || !draft}>
           <Save className="h-4 w-4" aria-hidden="true" />
-          Save Preferences
+          {saving ? 'Saving...' : 'Save Preferences'}
         </Button>
       </div>
+
+      {success ? (
+        <div className="mb-6 rounded-lg border border-success/25 bg-success/10 px-4 py-3 text-sm text-success" role="status">
+          {success}
+        </div>
+      ) : null}
 
       {error ? (
         <div className="mb-6 rounded-lg border border-danger/25 bg-danger/10 px-4 py-3 text-sm text-danger" role="alert">

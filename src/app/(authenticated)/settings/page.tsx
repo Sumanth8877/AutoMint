@@ -1,11 +1,11 @@
 import Link from 'next/link';
-import { Bell, ChevronRight, KeyRound, Lock, Palette, Radio, Settings, ShieldCheck, SlidersHorizontal, User, Wallet } from 'lucide-react';
+import { Bell, ChevronRight, KeyRound, Lock, Radio, Settings, SlidersHorizontal, User, Wallet } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Card from '@/components/ui/Card';
 import { PageHeader } from '@/components/ui/page-header';
 
 const groups = [
-  { title: 'General', icon: User, items: ['Profile', 'Appearance', 'Language'] },
+  { title: 'General', icon: User, items: ['Profile'] },
   { title: 'Wallets', icon: Wallet, items: ['Connected Wallets'] },
   { title: 'RPC Providers', icon: Radio, items: ['Provider Settings', 'Gas Optimization', 'Timeout Settings'] },
   { title: 'Execution', icon: SlidersHorizontal, items: ['Execution Settings'] },
@@ -13,9 +13,14 @@ const groups = [
   { title: 'Security', icon: Lock, items: ['API Keys'] },
 ];
 
-const icons = [Palette, Wallet, Radio, ShieldCheck, Bell, KeyRound];
+const icons = [User, Wallet, Radio, SlidersHorizontal, Bell, KeyRound];
+
+function formatItemCount(count: number) {
+  return `${count} ${count === 1 ? 'item' : 'items'}`;
+}
 
 function settingHref(groupTitle: string, item: string) {
+  if (groupTitle === 'General' && item === 'Profile') return '/settings/profile';
   if (groupTitle === 'Wallets' && item === 'Connected Wallets') return '/settings/connected-wallets';
   if (groupTitle === 'Execution' && item === 'Execution Settings') return '/settings/execution';
   if (groupTitle === 'Notifications' && item === 'Email Notifications') return '/settings/email-notifications';
@@ -46,7 +51,7 @@ export default function SettingsPage() {
                   </div>
                   <h2 className="font-semibold text-text">{group.title}</h2>
                 </div>
-                <Badge>{group.items.length} items</Badge>
+                <Badge>{formatItemCount(group.items.length)}</Badge>
               </div>
               <div className="divide-y divide-border">
                 {group.items.map((item) => {
