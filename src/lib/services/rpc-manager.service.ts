@@ -17,6 +17,8 @@ type RpcHealth = {
   successCount: number;
   consecutiveFailures: number;
   lastFailure: string | null;
+  lastFailureAt?: string | null;
+  lastSuccessAt?: string | null;
   unhealthyUntil: number | null;
   lastRestoredAt: string | null;
 };
@@ -66,6 +68,8 @@ function defaultHealth(provider: RpcProvider): RpcHealth {
     successCount: 0,
     consecutiveFailures: 0,
     lastFailure: null,
+    lastFailureAt: null,
+    lastSuccessAt: null,
     unhealthyUntil: null,
     lastRestoredAt: null,
   };
@@ -289,6 +293,7 @@ async function recordSuccess(provider: RpcProvider, responseTime: number) {
     responseTime,
     successCount: previous.successCount + 1,
     consecutiveFailures: 0,
+    lastSuccessAt: new Date().toISOString(),
     unhealthyUntil: null,
     lastRestoredAt: restored ? new Date().toISOString() : previous.lastRestoredAt,
   };
@@ -322,6 +327,7 @@ async function recordFailure(provider: RpcProvider, error: unknown, responseTime
     errorCount: previous.errorCount + 1,
     consecutiveFailures,
     lastFailure: error instanceof Error ? error.message : String(error),
+    lastFailureAt: new Date().toISOString(),
     unhealthyUntil,
   };
   await setHealth(health);

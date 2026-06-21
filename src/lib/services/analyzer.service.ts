@@ -1,14 +1,24 @@
 import 'server-only';
 
 import { getCollectionMetadata, type CollectionMetadata } from '@/lib/blockchain/collections';
-import { resolveMintIntent, type AnalyzerDebugLogEntry, type AnalyzerDebugLogLevel, type MintIntent } from '@/lib/resolve-mint-intent';
+import {
+  resolveMintIntent,
+  type AnalyzerDebugLogEntry,
+  type AnalyzerDebugLogLevel,
+  type AnalyzerProviderAttempt,
+  type AnalyzerResolutionTelemetry,
+  type AnalyzerTiming,
+  type MintIntent,
+} from '@/lib/resolve-mint-intent';
 import { addBreadcrumb } from '@/lib/observability/sentry';
 import { discoverContractABI, discoverMintFunction } from '@/lib/services/mint-abi-discovery.service';
 import { fetchMintRequirements, type MintRequirements } from '@/lib/services/mint-requirements.service';
 import { getMintState, type MintState } from '@/lib/services/mint-state.service';
 import { sendTelegramNotification } from '@/lib/services/telegram.service';
 import { getEffectiveExecutionDefaults } from '@/lib/services/execution-settings.service';
-import { getRpcRoutingSnapshot } from '@/lib/services/rpc-manager.service';
+import { refreshRpcProviderLatency } from '@/lib/services/rpc-manager.service';
+import { analyzerHistory } from '@/drizzle/schema';
+import { getDb } from '@/lib/db';
 
 type AnalyzerSettings = Awaited<ReturnType<typeof getEffectiveExecutionDefaults>>;
 
@@ -29,6 +39,19 @@ export type AnalyzerResult = {
     riskAnalysisEnabled: boolean;
     aiSummaryEnabled: boolean;
   };
+  providerChain: AnalyzerProviderAttempt[];
+  providerUsed: string;
+  rpcProviderUsed: string | null;
+  rpcProviders: Array<{
+    provider: string;
+    selected: boolean;
+    configured: boolean;
+    healthy: boolean;
+    latencyMs: number | null;
+    status: string;
+  }>;
+  analysisDurationMs: number;
+  timingBreakdown: AnalyzerTiming[];
   logs: AnalyzerDebugLogEntry[];
   analyzedAt: string;
 };
@@ -42,6 +65,17 @@ export class AnalyzerResolutionError extends Error {
     super('Could not resolve a contract address from that URL yet.');
     this.name = 'AnalyzerResolutionError';
     this.intent = intent;
+    this.logs = logs;
+  }
+}
+
+export class AnalyzerExecutionError extends Error {
+  status = 500;
+  logs: AnalyzerDebugLogEntry[];
+
+  constructor(message: string, logs: AnalyzerDebugLogEntry[]) {
+    super(message);
+    this.name = 'AnalyzerExecutionError';
     this.logs = logs;
   }
 }
@@ -99,6 +133,19 @@ async function runLogged<T>(
   }
 }
 
+async function runTimed<T>(
+  timingBreakdown: AnalyzerTiming[],
+  stage: string,
+  task: () => Promise<T>,
+) {
+  const startedAt = Date.now();
+  try {
+    return await task();
+  } finally {
+    timingBreakdown.push({ stage, durationMs: Date.now() - startedAt });
+  }
+}
+
 function deriveAnalyzerScores(result: Pick<AnalyzerResult, 'intent' | 'mintFunction' | 'mintState'>) {
   const confidence = Math.round(result.intent.confidence * 100);
   const functionConfidence = Math.round(result.mintFunction.confidence * 100);
@@ -110,6 +157,53 @@ function deriveAnalyzerScores(result: Pick<AnalyzerResult, 'intent' | 'mintFunct
   return { opportunity: Math.round(opportunity), risk: Math.round(risk), readiness };
 }
 
+function selectedProviderFromChain(input: string, intent: MintIntent, providerChain: AnalyzerProviderAttempt[]) {
+  const trimmed = input.trim();
+  if (/^0x[a-f0-9]{40}$/i.test(trimmed)) return 'Direct Contract';
+  const successfulProvider = providerChain.find((entry) => entry.status === 'success');
+  if (successfulProvider) return successfulProvider.provider;
+  if (intent.sourcePlatform === 'contract') return 'Explorer';
+  if (intent.sourcePlatform === 'unknown') return 'Unknown';
+  return intent.sourcePlatform;
+}
+
+function rpcProviderLabel(provider: 'ALCHEMY' | 'QUICKNODE' | null) {
+  if (provider === 'ALCHEMY') return 'Alchemy';
+  if (provider === 'QUICKNODE') return 'QuickNode';
+  return null;
+}
+
+async function saveAnalyzerHistory(params: {
+  userId: string;
+  input: string;
+  result: AnalyzerResult;
+  scores: ReturnType<typeof deriveAnalyzerScores>;
+  analysisDurationMs: number;
+}) {
+  const [record] = await getDb()
+    .insert(analyzerHistory)
+    .values({
+      userId: params.userId,
+      input: params.input,
+      sourceUrl: params.result.intent.sourceUrl,
+      collectionName: params.result.metadata.name ?? params.result.intent.collectionName ?? params.result.intent.collectionSlug ?? null,
+      contractAddress: params.result.intent.contractAddress ?? null,
+      chain: params.result.intent.chain,
+      riskScore: params.scores.risk,
+      opportunityScore: params.scores.opportunity,
+      readinessScore: params.scores.readiness,
+      mintState: params.result.mintState.status,
+      providerUsed: params.result.providerUsed,
+      rpcProviderUsed: params.result.rpcProviderUsed,
+      providerChain: params.result.providerChain,
+      timingBreakdown: params.result.timingBreakdown,
+      analysisDurationMs: params.analysisDurationMs,
+    })
+    .returning({ id: analyzerHistory.id });
+
+  return record.id;
+}
+
 export async function runAnalyzer(params: {
   userId: string;
   input: string;
@@ -118,12 +212,15 @@ export async function runAnalyzer(params: {
 }): Promise<AnalyzerResult> {
   const logger = createAnalyzerLogger();
   const { log, logs } = logger;
-  const normalizedInput = normalizeAnalyzerInput(params.input);
-  const settings = params.settings ?? await getEffectiveExecutionDefaults(params.userId);
+  const startedAt = Date.now();
+  const telemetry: AnalyzerResolutionTelemetry = { providerChain: [], timingBreakdown: [] };
+  try {
+    const normalizedInput = normalizeAnalyzerInput(params.input);
+    const settings = params.settings ?? await getEffectiveExecutionDefaults(params.userId);
 
-  log('info', 'input', 'Analysis started');
-  log('info', 'input', `Input received: ${params.input}`);
-  log('success', 'input', `Input type detected: ${detectInputType(params.input)}`);
+    log('info', 'input', 'Analysis started');
+    log('info', 'input', `Input received: ${params.input}`);
+    log('success', 'input', `Input type detected: ${detectInputType(params.input)}`);
 
   addBreadcrumb({
     category: 'discovery',
@@ -132,7 +229,7 @@ export async function runAnalyzer(params: {
     data: { url: normalizedInput, userId: params.userId },
   });
 
-  const intent = await resolveMintIntent(normalizedInput, (entry) => log(entry.level, entry.stage, entry.message));
+  const intent = await resolveMintIntent(normalizedInput, (entry) => log(entry.level, entry.stage, entry.message), telemetry);
   if (!intent.contractAddress) {
     log('error', 'contract_resolution', 'Analysis failed: No contract found');
     throw new AnalyzerResolutionError(intent, logs);
@@ -140,7 +237,9 @@ export async function runAnalyzer(params: {
 
   if (!canUseEvmPipeline(intent)) {
     log('warning', 'rpc', `RPC Provider Selection skipped for non-EVM chain: ${intent.chain}`);
-    log('warning', 'contract_inspection', 'Contract inspection partially completed: non-EVM analyzer fallback used');
+    log('warning', 'contract_resolution', 'Contract inspection partially completed: non-EVM analyzer fallback used');
+    const analysisDurationMs = Date.now() - startedAt;
+    const providerUsed = selectedProviderFromChain(params.input, intent, telemetry.providerChain);
     const result = {
       intent,
       metadata: {
@@ -164,31 +263,66 @@ export async function runAnalyzer(params: {
         riskAnalysisEnabled: settings.riskAnalysisEnabled,
         aiSummaryEnabled: settings.aiSummaryEnabled,
       },
+      providerChain: telemetry.providerChain,
+      providerUsed,
+      rpcProviderUsed: null,
+      rpcProviders: [],
+      analysisDurationMs,
+      timingBreakdown: telemetry.timingBreakdown,
       logs,
       analyzedAt: new Date().toISOString(),
     };
-    const scores = deriveAnalyzerScores(result);
-    log('info', 'scoring', 'Running risk engine');
-    log('success', 'scoring', `Risk score: ${scores.risk}`);
-    log('info', 'scoring', 'Running opportunity engine');
-    log('success', 'scoring', `Opportunity score: ${scores.opportunity}`);
-    log('success', 'scoring', `Readiness: ${scores.readiness}%`);
-    log('warning', 'final_status', 'Analysis partially completed');
+    const scores = runTimed(telemetry.timingBreakdown, 'Score Calculation', async () => deriveAnalyzerScores(result));
+    const resolvedScores = await scores;
+    log('info', 'scoring', 'Calculating risk');
+    log('success', 'scoring', `Risk score: ${resolvedScores.risk}`);
+    log('info', 'scoring', 'Calculating opportunity');
+    log('success', 'scoring', `Opportunity score: ${resolvedScores.opportunity}`);
+    log('info', 'scoring', 'Calculating readiness');
+    log('success', 'scoring', `Readiness: ${resolvedScores.readiness}%`);
+    result.analysisDurationMs = Date.now() - startedAt;
+    result.timingBreakdown.push({ stage: 'Total Duration', durationMs: result.analysisDurationMs });
+    const historyId = await saveAnalyzerHistory({
+      userId: params.userId,
+      input: params.input,
+      result,
+      scores: resolvedScores,
+      analysisDurationMs: result.analysisDurationMs,
+    });
+    log('success', 'history', 'Analyzer history saved');
+    log('success', 'history', `History record id: ${historyId}`);
+    log('success', 'completion', `Total analysis duration: ${result.analysisDurationMs}ms`);
+    log('warning', 'completion', 'Analysis partially completed');
     return result;
   }
 
-  const rpcSnapshot = await getRpcRoutingSnapshot(params.userId, intent.chain);
+  log('info', 'rpc', 'Checking RPC provider latency');
+  const rpcSnapshot = await refreshRpcProviderLatency(params.userId, intent.chain);
   log('info', 'rpc', 'RPC Provider Selection');
+  const rpcProviderUsed = rpcProviderLabel(rpcSnapshot.currentActiveProvider);
   for (const provider of rpcSnapshot.providers) {
+    const providerName = provider.provider === 'ALCHEMY' ? 'Alchemy' : 'QuickNode';
     log(
       provider.configured && provider.healthy ? 'success' : 'warning',
       'rpc',
-      `${provider.provider} ${provider.configured ? provider.status.toLowerCase() : 'not configured'}${provider.latency !== null ? ` latency: ${provider.latency}ms` : ''}`,
+      provider.configured
+        ? `${providerName} ${provider.healthy ? 'succeeded' : 'failed'}${provider.latency !== null ? ` latency: ${provider.latency}ms` : ''}`
+        : `${providerName} not configured`,
     );
   }
   if (rpcSnapshot.currentActiveProvider) {
-    log('success', 'rpc', `Selected ${rpcSnapshot.currentActiveProvider}`);
+    const selectedProvider = rpcSnapshot.providers.find((provider) => provider.provider === rpcSnapshot.currentActiveProvider);
+    log('success', 'rpc', `Selected ${rpcProviderUsed}`);
+    log('success', 'rpc', `${rpcProviderUsed} selected${selectedProvider?.latency !== null && selectedProvider?.latency !== undefined ? ` (${selectedProvider.latency}ms latency)` : ''}`);
   }
+  const rpcProviders = rpcSnapshot.providers.map((provider) => ({
+    provider: provider.provider === 'ALCHEMY' ? 'Alchemy' : 'QuickNode',
+    selected: provider.provider === rpcSnapshot.currentActiveProvider,
+    configured: provider.configured,
+    healthy: provider.healthy,
+    latencyMs: provider.latency,
+    status: provider.status,
+  }));
 
   const contractAddress = intent.contractAddress;
   const chain = intent.chain;
@@ -197,10 +331,10 @@ export async function runAnalyzer(params: {
     settings.autoDetectContractInfo
       ? runLogged(
           log,
-          'contract_inspection',
+          'metadata',
           'Fetching collection metadata',
-          (value) => `${value.tokenStandard} detected`,
-          () => getCollectionMetadata(contractAddress, chain),
+          (value) => `Collection metadata loaded: ${value.name}`,
+          () => runTimed(telemetry.timingBreakdown, 'Metadata Fetch', () => getCollectionMetadata(contractAddress, chain)),
         )
       : Promise.resolve({
           name: 'Unknown Collection',
@@ -212,41 +346,44 @@ export async function runAnalyzer(params: {
     settings.autoDetectMintDetails
       ? runLogged(
           log,
-          'contract_inspection',
+          'metadata',
           'Inspecting contract mint state',
-          (value) => `Mint state detected: ${value.status}`,
-          () => getMintState(contractAddress, chain),
+          (value) => `Mint state loaded: ${value.status}`,
+          () => runTimed(telemetry.timingBreakdown, 'Mint State Detection', () => getMintState(contractAddress, chain)),
         )
       : Promise.resolve({ status: 'UNKNOWN' as const }),
     settings.autoDetectMintDetails
       ? runLogged(
           log,
-          'contract_inspection',
+          'mint_discovery',
           'Fetching mint requirements',
-          (value) => `Mint requirements fetched: ${value.mintFunction}`,
-          () => fetchMintRequirements(contractAddress, chain),
+          (value) => `Mint requirements loaded: ${value.mintFunction}`,
+          () => runTimed(telemetry.timingBreakdown, 'Mint Requirements', () => fetchMintRequirements(contractAddress, chain)),
         )
       : Promise.resolve({ mintFunction: 'mint', mintPrice: '0' }),
     settings.autoDetectContractInfo
       ? runLogged(
           log,
-          'contract_inspection',
+          'mint_discovery',
           'Inspecting contract ABI',
-          (value) => `Contract ABI discovery completed from ${value.source}`,
-          () => discoverContractABI(contractAddress, chain),
+          (value) => `ABI discovered from ${value.source}`,
+          () => runTimed(telemetry.timingBreakdown, 'ABI Discovery', () => discoverContractABI(contractAddress, chain)),
         )
       : Promise.resolve({ abi: [], source: 'fallback' as const, confidence: 0 }),
   ]);
 
   const mintFunction = settings.autoDetectContractInfo
-    ? discoverMintFunction(discoveredAbi.abi)
+    ? await runTimed(telemetry.timingBreakdown, 'Mint Function Discovery', async () => discoverMintFunction(discoveredAbi.abi))
     : { functionName: 'mint', selector: 'mint(uint256)', confidence: 0 };
-  log('success', 'contract_inspection', `Mint function selected: ${mintFunction.functionName}`);
+  log('success', 'metadata', `Owner detected: ${metadata.owner}`);
+  log('success', 'metadata', `Supply detected: ${metadata.totalSupply.toString()}`);
+  log('success', 'mint_discovery', `Mint function discovered: ${mintFunction.functionName}`);
 
   if (settings.autoDetectSocials) {
     log('warning', 'social_discovery', 'Social discovery skipped: no analyzer social provider executed');
   }
 
+  const providerUsed = selectedProviderFromChain(params.input, intent, telemetry.providerChain);
   const result = {
     intent,
     metadata: {
@@ -263,17 +400,36 @@ export async function runAnalyzer(params: {
       riskAnalysisEnabled: settings.riskAnalysisEnabled,
       aiSummaryEnabled: settings.aiSummaryEnabled,
     },
+    providerChain: telemetry.providerChain,
+    providerUsed,
+    rpcProviderUsed,
+    rpcProviders,
+    analysisDurationMs: 0,
+    timingBreakdown: telemetry.timingBreakdown,
     logs,
     analyzedAt: new Date().toISOString(),
   };
 
-  const scores = deriveAnalyzerScores(result);
-  log('info', 'scoring', 'Running risk engine');
-  log('success', 'scoring', `Risk score: ${scores.risk}`);
-  log('info', 'scoring', 'Running opportunity engine');
-  log('success', 'scoring', `Opportunity score: ${scores.opportunity}`);
+  const scores = await runTimed(telemetry.timingBreakdown, 'Score Calculation', async () => deriveAnalyzerScores(result));
   log('info', 'scoring', 'Calculating readiness');
   log('success', 'scoring', `Readiness: ${scores.readiness}%`);
+  log('info', 'scoring', 'Calculating risk');
+  log('success', 'scoring', `Risk score: ${scores.risk}`);
+  log('info', 'scoring', 'Calculating opportunity');
+  log('success', 'scoring', `Opportunity score: ${scores.opportunity}`);
+  result.analysisDurationMs = Date.now() - startedAt;
+  result.timingBreakdown.push({ stage: 'Total Duration', durationMs: result.analysisDurationMs });
+
+  const historyId = await saveAnalyzerHistory({
+    userId: params.userId,
+    input: params.input,
+    result,
+    scores,
+    analysisDurationMs: result.analysisDurationMs,
+  });
+  log('success', 'history', 'Analyzer history saved');
+  log('success', 'history', `History record id: ${historyId}`);
+  log('success', 'completion', `Total analysis duration: ${result.analysisDurationMs}ms`);
 
   if (settings.aiSummaryEnabled) {
     log('warning', 'ai_summary', 'AI summary skipped: no analyzer summary generator executed');
@@ -309,6 +465,11 @@ export async function runAnalyzer(params: {
     }
   }
 
-  log('success', 'final_status', 'Analysis completed successfully');
-  return result;
+  log('success', 'completion', 'Analysis completed');
+    return result;
+  } catch (error) {
+    if (error instanceof AnalyzerResolutionError || error instanceof AnalyzerExecutionError) throw error;
+    log('error', 'completion', `Analysis failed: ${error instanceof Error ? error.message : String(error)}`);
+    throw new AnalyzerExecutionError(error instanceof Error ? error.message : 'Analyzer request failed', logs);
+  }
 }

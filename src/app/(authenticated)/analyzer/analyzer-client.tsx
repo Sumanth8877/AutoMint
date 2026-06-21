@@ -65,6 +65,26 @@ interface AnalyzerResponse {
     selector: string;
     confidence: number;
   };
+  providerChain: Array<{
+    provider: string;
+    status: 'success' | 'failed';
+    durationMs: number;
+  }>;
+  providerUsed: string;
+  rpcProviderUsed: string | null;
+  rpcProviders: Array<{
+    provider: string;
+    selected: boolean;
+    configured: boolean;
+    healthy: boolean;
+    latencyMs: number | null;
+    status: string;
+  }>;
+  analysisDurationMs: number;
+  timingBreakdown: Array<{
+    stage: string;
+    durationMs: number;
+  }>;
   logs: AnalyzerDebugLog[];
   analyzedAt: string;
 }
@@ -74,6 +94,44 @@ type AnalyzerDebugLog = {
   level: 'info' | 'success' | 'warning' | 'error';
   stage: string;
   message: string;
+};
+
+type BadgeVariant = 'default' | 'success' | 'warning' | 'danger' | 'info';
+
+type AnalyzerObservability = {
+  analyzerMetrics: {
+    totalAnalyses: number;
+    successfulAnalyses: number;
+    failedAnalyses: number | null;
+    successRate: number | null;
+    averageAnalysisTimeMs: number | null;
+  };
+  serviceHealth: Array<{
+    service: string;
+    configured: boolean;
+    healthy: boolean | null;
+    lastSuccess: string | null;
+    lastFailure: string | null;
+    averageLatencyMs: number | null;
+  }>;
+  providerRates: Array<{
+    provider: string;
+    successPercent: number | null;
+    failurePercent: number | null;
+    successes: number;
+    failures: number;
+  }>;
+  rpcMonitoring: {
+    currentPrimaryProvider: string | null;
+    currentLatencyMs: number | null;
+    failoverCount: number;
+    lastFailover: string | null;
+  };
+  recentErrors: Array<{
+    service: string;
+    message: string;
+    createdAt: string;
+  }>;
 };
 
 const workflowSteps: Array<{
@@ -95,6 +153,31 @@ function formatNumber(value: string | number | undefined) {
   return number.toLocaleString();
 }
 
+function formatMilliseconds(value: number) {
+  if (value < 1000) return `${value}ms`;
+  return `${(value / 1000).toFixed(value < 10_000 ? 1 : 0)}s`;
+}
+
+function formatOptionalMilliseconds(value: number | null) {
+  return typeof value === 'number' ? formatMilliseconds(value) : 'Not tracked';
+}
+
+function formatRelativeTime(value: string | null) {
+  if (!value) return 'Not tracked';
+  const diffMs = Date.now() - new Date(value).getTime();
+  if (!Number.isFinite(diffMs)) return 'Not tracked';
+  const minutes = Math.max(0, Math.floor(diffMs / 60_000));
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+function formatPercent(value: number | null) {
+  return typeof value === 'number' ? `${value}%` : 'Not tracked';
+}
+
 function confidenceLabel(value: number) {
   if (value >= 0.85) return 'High';
   if (value >= 0.55) return 'Medium';
@@ -114,25 +197,6 @@ function deriveScores(result: AnalyzerResponse | null) {
   const opportunity = Math.min(98, Math.max(30, readiness - risk / 4));
 
   return { opportunity: Math.round(opportunity), risk: Math.round(risk), readiness };
-}
-
-function detectInputType(input: string) {
-  const lower = input.trim().toLowerCase();
-  if (/^0x[a-f0-9]{40}$/i.test(input.trim())) return 'Direct Contract';
-  if (lower.includes('opensea.io')) return 'OpenSea URL';
-  if (lower.includes('etherscan.io') || lower.includes('basescan.org') || lower.includes('polygonscan.com')) return 'Explorer URL';
-  if (lower.includes('solscan.io')) return 'Solscan URL';
-  if (lower.includes('magiceden.io')) return 'Magic Eden URL';
-  return 'Unknown URL';
-}
-
-function createClientLog(level: AnalyzerDebugLog['level'], stage: string, message: string): AnalyzerDebugLog {
-  return {
-    timestamp: new Date().toISOString(),
-    level,
-    stage,
-    message,
-  };
 }
 
 function formatLogTime(timestamp: string) {
@@ -202,6 +266,114 @@ function AnalyzerDebugConsole({
   );
 }
 
+function AnalyzerObservabilityDashboard({
+  data,
+  loading,
+}: {
+  data: AnalyzerObservability | null;
+  loading: boolean;
+}) {
+  const serviceTone = (healthy: boolean | null) => {
+    if (healthy === true) return 'success';
+    if (healthy === false) return 'danger';
+    return 'default';
+  };
+
+  return (
+    <Card tone="elevated" className="p-5">
+      <div className="mb-4 flex items-center gap-3">
+        <LineChart className="h-5 w-5 text-accent" aria-hidden="true" />
+        <h2 className="font-semibold text-text">Analyzer Health</h2>
+      </div>
+
+      {loading ? (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {[0, 1, 2, 3, 4, 5].map((item) => <Skeleton key={item} className="h-36 w-full" />)}
+        </div>
+      ) : data ? (
+        <div className="space-y-5">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            {[
+              ['Total Analyses', String(data.analyzerMetrics.totalAnalyses)],
+              ['Successful Analyses', String(data.analyzerMetrics.successfulAnalyses)],
+              ['Failed Analyses', data.analyzerMetrics.failedAnalyses === null ? 'Not tracked' : String(data.analyzerMetrics.failedAnalyses)],
+              ['Success Rate', formatPercent(data.analyzerMetrics.successRate)],
+              ['Average Analysis Time', formatOptionalMilliseconds(data.analyzerMetrics.averageAnalysisTimeMs)],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-lg border border-border bg-white/5 p-3">
+                <p className="text-xs uppercase text-muted">{label}</p>
+                <p className="mt-2 font-mono text-lg font-semibold text-text">{value}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {data.serviceHealth.map((service) => (
+              <div key={service.service} className="rounded-lg border border-border bg-white/5 p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="font-semibold text-text">{service.service}</h3>
+                  <Badge variant={serviceTone(service.healthy) as BadgeVariant}>
+                    {service.healthy === null ? 'No data' : service.healthy ? 'Healthy' : 'Unhealthy'}
+                  </Badge>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between gap-3"><span className="text-muted">Configured</span><span className="text-text">{service.configured ? 'YES' : 'NO'}</span></div>
+                  <div className="flex justify-between gap-3"><span className="text-muted">Average Latency</span><span className="font-mono text-text">{formatOptionalMilliseconds(service.averageLatencyMs)}</span></div>
+                  <div className="flex justify-between gap-3"><span className="text-muted">Last Success</span><span className="text-text">{formatRelativeTime(service.lastSuccess)}</span></div>
+                  <div className="flex justify-between gap-3"><span className="text-muted">Last Failure</span><span className="text-text">{formatRelativeTime(service.lastFailure)}</span></div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
+            <div className="rounded-lg border border-border bg-white/5 p-4">
+              <h3 className="mb-3 font-semibold text-text">Provider Success Rate</h3>
+              <div className="space-y-3">
+                {data.providerRates.map((provider) => (
+                  <div key={provider.provider} className="grid grid-cols-[1fr_auto_auto] items-center gap-3 text-sm">
+                    <span className="text-text">{provider.provider}</span>
+                    <span className="font-mono text-success">{formatPercent(provider.successPercent)}</span>
+                    <span className="font-mono text-warning">{formatPercent(provider.failurePercent)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-white/5 p-4">
+              <h3 className="mb-3 font-semibold text-text">RPC Monitoring</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between gap-3"><span className="text-muted">Current Primary Provider</span><span className="text-text">{data.rpcMonitoring.currentPrimaryProvider ?? 'Not selected'}</span></div>
+                <div className="flex justify-between gap-3"><span className="text-muted">Current Latency</span><span className="font-mono text-text">{formatOptionalMilliseconds(data.rpcMonitoring.currentLatencyMs)}</span></div>
+                <div className="flex justify-between gap-3"><span className="text-muted">Failover Count</span><span className="font-mono text-text">{data.rpcMonitoring.failoverCount}</span></div>
+                <div className="flex justify-between gap-3"><span className="text-muted">Last Failover</span><span className="text-text">{formatRelativeTime(data.rpcMonitoring.lastFailover)}</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-white/5 p-4">
+            <h3 className="mb-3 font-semibold text-text">Most Recent Errors</h3>
+            {data.recentErrors.length ? (
+              <div className="space-y-2">
+                {data.recentErrors.map((error) => (
+                  <div key={`${error.service}-${error.createdAt}-${error.message}`} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="text-warning">{error.service}: {error.message}</span>
+                    <span className="text-muted">{formatRelativeTime(error.createdAt)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted">No analyzer provider errors have been recorded yet.</p>
+            )}
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm text-muted">Analyzer observability is unavailable right now.</p>
+      )}
+    </Card>
+  );
+}
+
 export default function AnalyzerClient({ initialInput = '' }: { initialInput?: string }) {
   const [url, setUrl] = useState(initialInput);
   const [analyzing, setAnalyzing] = useState(false);
@@ -209,8 +381,29 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
   const [error, setError] = useState<string | null>(null);
   const [consoleOpen, setConsoleOpen] = useState(true);
   const [debugLogs, setDebugLogs] = useState<AnalyzerDebugLog[]>([]);
+  const [observability, setObservability] = useState<AnalyzerObservability | null>(null);
+  const [observabilityLoading, setObservabilityLoading] = useState(true);
 
   const scores = useMemo(() => deriveScores(result), [result]);
+
+  const loadObservability = async () => {
+    setObservabilityLoading(true);
+    try {
+      const payload = await apiRequest<AnalyzerObservability>('/api/analyzer/observability');
+      setObservability(payload);
+    } catch {
+      setObservability(null);
+    } finally {
+      setObservabilityLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      void loadObservability();
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, []);
 
   const analyze = async () => {
     const input = url.trim();
@@ -223,12 +416,7 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
     setAnalyzing(true);
     setError(null);
     setConsoleOpen(true);
-    setDebugLogs([
-      createClientLog('info', 'input', 'Analysis started'),
-      createClientLog('info', 'input', `Input received: ${input}`),
-      createClientLog('success', 'input', `Input type detected: ${detectInputType(input)}`),
-      createClientLog('info', 'input', 'Waiting for analyzer pipeline response'),
-    ]);
+    setDebugLogs([]);
 
     try {
       const payload = await apiRequest<AnalyzerResponse>('/api/analyzer', {
@@ -237,17 +425,14 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
       });
       setResult(payload);
       setDebugLogs(payload.logs ?? []);
+      void loadObservability();
     } catch (requestError) {
       setResult(null);
       if (requestError instanceof ApiClientError) {
         const payload = requestError.payload as { logs?: AnalyzerDebugLog[] } | null;
-        setDebugLogs((payload?.logs?.length ? payload.logs : [
-          createClientLog('error', 'final_status', requestError.message),
-        ]));
+        setDebugLogs(payload?.logs ?? []);
       } else {
-        setDebugLogs([
-          createClientLog('error', 'final_status', requestError instanceof Error ? requestError.message : 'Analyzer request failed.'),
-        ]);
+        setDebugLogs([]);
       }
       setError(requestError instanceof Error ? requestError.message : 'Analyzer request failed.');
     } finally {
@@ -324,9 +509,8 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
         }
       />
 
-      <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
-        <div className="space-y-6">
-          <Card tone="elevated" className="p-5">
+      <div className="space-y-6">
+        <Card tone="elevated" className="p-5">
             <div className="mb-5 flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-accent/20 bg-accent/10 text-accent">
                 <Radar className="h-5 w-5" aria-hidden="true" />
@@ -366,14 +550,18 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
                 </div>
               ) : null}
             </form>
-          </Card>
+        </Card>
 
-          <AnalyzerDebugConsole
-            logs={debugLogs}
-            open={consoleOpen}
-            onToggle={() => setConsoleOpen((value) => !value)}
-          />
+        <AnalyzerDebugConsole
+          logs={debugLogs}
+          open={consoleOpen}
+          onToggle={() => setConsoleOpen((value) => !value)}
+        />
 
+        <AnalyzerObservabilityDashboard data={observability} loading={observabilityLoading} />
+
+        <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
+          <div className="space-y-6">
           <Card className="p-5">
             <h2 className="mb-4 font-semibold text-text">Workflow</h2>
             <div className="space-y-3">
@@ -409,29 +597,95 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
               ))}
             </div>
           ) : result ? (
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35 }}
-              className="grid gap-4 lg:grid-cols-2"
-            >
-              {resultCards.map((card) => (
-                <Card key={card.title} tone="interactive" className="p-5">
-                  <div className="mb-4 flex items-center gap-3">
-                    <card.icon className="h-5 w-5 text-accent" aria-hidden="true" />
-                    <h2 className="font-semibold text-text">{card.title}</h2>
-                  </div>
+            <div className="space-y-4">
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35 }}
+                className="grid gap-4 lg:grid-cols-2"
+              >
+                {resultCards.map((card) => (
+                  <Card key={card.title} tone="interactive" className="p-5">
+                    <div className="mb-4 flex items-center gap-3">
+                      <card.icon className="h-5 w-5 text-accent" aria-hidden="true" />
+                      <h2 className="font-semibold text-text">{card.title}</h2>
+                    </div>
+                    <div className="space-y-3">
+                      {card.items.map(([label, value]) => (
+                        <div key={label} className="flex items-center justify-between gap-4 text-sm">
+                          <span className="text-muted">{label}</span>
+                          <span className="max-w-[60%] truncate text-right font-medium text-text">{value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                ))}
+              </motion.div>
+
+              <Card tone="elevated" className="p-5">
+                <div className="mb-4 flex items-center gap-3">
+                  <Code2 className="h-5 w-5 text-accent" aria-hidden="true" />
+                  <h2 className="font-semibold text-text">Analysis Details</h2>
+                </div>
+                <div className="grid gap-4 lg:grid-cols-2">
                   <div className="space-y-3">
-                    {card.items.map(([label, value]) => (
+                    {[
+                      ['Provider Used', result.providerUsed],
+                      ['RPC Provider', result.rpcProviderUsed ?? 'Not used'],
+                      ['Analysis Duration', formatMilliseconds(result.analysisDurationMs)],
+                    ].map(([label, value]) => (
                       <div key={label} className="flex items-center justify-between gap-4 text-sm">
                         <span className="text-muted">{label}</span>
                         <span className="max-w-[60%] truncate text-right font-medium text-text">{value}</span>
                       </div>
                     ))}
+                    <div className="pt-2">
+                      <p className="mb-2 text-xs uppercase text-muted">Provider Chain</p>
+                      <div className="space-y-2">
+                        {result.providerChain.length ? result.providerChain.map((provider) => (
+                          <div key={`${provider.provider}-${provider.durationMs}`} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-white/5 px-3 py-2 text-sm">
+                            <span className="text-text">{provider.provider}</span>
+                            <span className={provider.status === 'success' ? 'text-success' : 'text-warning'}>
+                              {provider.status === 'success' ? 'Success' : 'Failed'} - {formatMilliseconds(provider.durationMs)}
+                            </span>
+                          </div>
+                        )) : (
+                          <div className="rounded-lg border border-border bg-white/5 px-3 py-2 text-sm text-muted">No external provider chain recorded.</div>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </Card>
-              ))}
-            </motion.div>
+                  <div>
+                    <p className="mb-2 text-xs uppercase text-muted">RPC Visibility</p>
+                    <div className="mb-4 space-y-2">
+                      {result.rpcProviders.length ? result.rpcProviders.map((provider) => (
+                        <div key={provider.provider} className="rounded-lg border border-border bg-white/5 px-3 py-2 text-sm">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="font-medium text-text">{provider.provider}{provider.selected ? ' selected' : ' fallback'}</span>
+                            <span className={provider.healthy ? 'text-success' : 'text-warning'}>{provider.status}</span>
+                          </div>
+                          <div className="mt-1 flex items-center justify-between gap-3 text-xs text-muted">
+                            <span>{provider.configured ? 'Configured' : 'Not configured'}</span>
+                            <span>{provider.latencyMs !== null ? `${provider.latencyMs}ms latency` : 'No latency'}</span>
+                          </div>
+                        </div>
+                      )) : (
+                        <div className="rounded-lg border border-border bg-white/5 px-3 py-2 text-sm text-muted">RPC was not used for this analysis.</div>
+                      )}
+                    </div>
+                    <p className="mb-2 text-xs uppercase text-muted">Timing Breakdown</p>
+                    <div className="space-y-2">
+                      {result.timingBreakdown.map((timing) => (
+                        <div key={`${timing.stage}-${timing.durationMs}`} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-white/5 px-3 py-2 text-sm">
+                          <span className="text-text">{timing.stage}</span>
+                          <span className="font-mono text-muted">{formatMilliseconds(timing.durationMs)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            </div>
           ) : (
             <EmptyState
               icon={Radar}
@@ -487,6 +741,7 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
             </>
           ) : null}
         </div>
+      </div>
       </div>
     </div>
   );

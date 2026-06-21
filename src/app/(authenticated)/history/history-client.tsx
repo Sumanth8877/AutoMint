@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarClock, Copy, Eye, Gauge, Pencil, Plus, ReceiptText, RefreshCcw, Search, Trash2 } from 'lucide-react';
+import { CalendarClock, Copy, Eye, Gauge, Pencil, ReceiptText, RefreshCcw, Search, Trash2 } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -48,12 +48,19 @@ type ScheduledTaskRow = {
 
 type AnalyzerHistoryRow = {
   id: string;
-  collectionId: string | null;
+  input: string;
+  sourceUrl: string;
   collectionName: string | null;
   contractAddress: string | null;
+  chain: string;
   riskScore: number | null;
-  riskReasons: string[] | null;
-  analyzedAt: string;
+  opportunityScore: number;
+  readinessScore: number;
+  mintState: string;
+  providerUsed: string;
+  rpcProviderUsed: string | null;
+  analysisDurationMs: number;
+  createdAt: string;
 };
 
 type HistoryResponse<T> = {
@@ -78,7 +85,7 @@ const tabs: Array<{ key: TabKey; label: string; icon: typeof ReceiptText }> = [
 
 const mintStatusOptions = ['All', 'Success', 'Failed', 'Pending', 'Cancelled'];
 const scheduledStatusOptions = ['All', 'Scheduled', 'Waiting', 'Executing', 'Completed', 'Failed', 'Cancelled'];
-const riskOptions = ['All', 'Low Risk', 'Medium Risk', 'High Risk', 'Critical Risk'];
+const analyzerFilterOptions = ['All', 'Ethereum', 'Base', 'Polygon', 'Solana', 'Recent'];
 
 function shortAddress(address?: string | null) {
   return address ? `${address.slice(0, 6)}...${address.slice(-4)}` : 'Unassigned';
@@ -116,6 +123,11 @@ function formatDuration(start?: string | null, end?: string | null) {
   const minutes = Math.floor(seconds / 60);
   const remainder = seconds % 60;
   return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
+}
+
+function formatMilliseconds(value: number) {
+  if (value < 1000) return `${value}ms`;
+  return `${(value / 1000).toFixed(value < 10_000 ? 1 : 0)}s`;
 }
 
 function formatCountdown(value?: string | null) {
@@ -196,7 +208,7 @@ export default function HistoryClient() {
   const [activeTab, setActiveTab] = useState<TabKey>('mints');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
-  const [risk, setRisk] = useState('');
+  const [analyzerFilter, setAnalyzerFilter] = useState('');
   const [page, setPage] = useState(1);
   const [mintRows, setMintRows] = useState<MintHistoryRow[]>([]);
   const [scheduledRows, setScheduledRows] = useState<ScheduledTaskRow[]>([]);
@@ -210,7 +222,7 @@ export default function HistoryClient() {
   const [editing, setEditing] = useState<ScheduledTaskRow | null>(null);
   const [editForm, setEditForm] = useState({ scheduledTime: '', quantity: '1' });
 
-  const filterOptions = activeTab === 'mints' ? mintStatusOptions : activeTab === 'scheduled' ? scheduledStatusOptions : riskOptions;
+  const filterOptions = activeTab === 'mints' ? mintStatusOptions : activeTab === 'scheduled' ? scheduledStatusOptions : analyzerFilterOptions;
   const activeItems = useMemo(() => {
     if (activeTab === 'mints') return mintRows;
     if (activeTab === 'scheduled') return scheduledRows;
@@ -220,7 +232,7 @@ export default function HistoryClient() {
   useEffect(() => {
     const timeout = window.setTimeout(() => setPage(1), 250);
     return () => window.clearTimeout(timeout);
-  }, [activeTab, search, status, risk]);
+  }, [activeTab, analyzerFilter, search, status]);
 
   useEffect(() => {
     let active = true;
@@ -237,7 +249,7 @@ export default function HistoryClient() {
           limit: '20',
         });
         if (search.trim()) params.set('search', search.trim());
-        if (activeTab === 'analyzer' && risk) params.set('risk', risk);
+        if (activeTab === 'analyzer' && analyzerFilter) params.set('filter', analyzerFilter);
         if (activeTab !== 'analyzer' && status) params.set('status', status);
 
         if (activeTab === 'mints') {
@@ -251,7 +263,8 @@ export default function HistoryClient() {
           setScheduledRows(payload.items);
           setTotalPages(payload.totalPages);
         } else {
-          const payload = await apiRequest<HistoryResponse<AnalyzerHistoryRow>>(`/api/history?${params.toString()}`, { signal: controller.signal });
+          params.delete('tab');
+          const payload = await apiRequest<HistoryResponse<AnalyzerHistoryRow>>(`/api/analyzer/history?${params.toString()}`, { signal: controller.signal });
           if (!active) return;
           setAnalyzerRows(payload.items);
           setTotalPages(payload.totalPages);
@@ -270,7 +283,7 @@ export default function HistoryClient() {
       active = false;
       controller.abort();
     };
-  }, [activeTab, page, reloadVersion, risk, search, status]);
+  }, [activeTab, analyzerFilter, page, reloadVersion, search, status]);
 
   const refreshActiveTab = () => {
     setReloadVersion((current) => current + 1);
@@ -322,7 +335,7 @@ export default function HistoryClient() {
   };
 
   const reanalyze = async (item: AnalyzerHistoryRow) => {
-    const input = item.contractAddress;
+    const input = item.contractAddress ?? item.sourceUrl ?? item.input;
     if (!input) return;
     setUpdatingId(item.id);
     setError(null);
@@ -331,21 +344,6 @@ export default function HistoryClient() {
       refreshActiveTab();
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to reanalyze collection.');
-    } finally {
-      setUpdatingId(null);
-    }
-  };
-
-  const createMintTask = async (item: AnalyzerHistoryRow) => {
-    if (!item.collectionId) return;
-    setUpdatingId(item.id);
-    setError(null);
-    try {
-      await apiRequest('/api/mints', { method: 'POST', body: { collectionId: item.collectionId } });
-      setActiveTab('scheduled');
-      setPage(1);
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Failed to create mint task.');
     } finally {
       setUpdatingId(null);
     }
@@ -373,7 +371,7 @@ export default function HistoryClient() {
                     onClick={() => {
                       setActiveTab(tab.key);
                       setStatus('');
-                      setRisk('');
+                      setAnalyzerFilter('');
                       setPage(1);
                     }}
                     className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors ${selectedTab ? 'border-primary/40 bg-primary/15 text-text' : 'border-border bg-white/5 text-muted hover:text-text'}`}
@@ -384,11 +382,11 @@ export default function HistoryClient() {
                 );
               })}
             </div>
-            <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={activeTab === 'analyzer' ? 'Search collection' : 'Search collection or wallet'} icon={<Search className="h-4 w-4" aria-hidden="true" />} />
+            <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={activeTab === 'analyzer' ? 'Search collection or contract' : 'Search collection or wallet'} icon={<Search className="h-4 w-4" aria-hidden="true" />} />
             <select
-              value={activeTab === 'analyzer' ? risk : status}
+              value={activeTab === 'analyzer' ? analyzerFilter : status}
               onChange={(event) => {
-                if (activeTab === 'analyzer') setRisk(event.target.value);
+                if (activeTab === 'analyzer') setAnalyzerFilter(event.target.value);
                 else setStatus(event.target.value);
               }}
               className="h-11 rounded-lg border border-border bg-background/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
@@ -421,7 +419,7 @@ export default function HistoryClient() {
         ) : activeTab === 'scheduled' ? (
           <ScheduledTaskTable rows={scheduledRows} updatingId={updatingId} onSelect={(item) => setSelected({ type: 'scheduled', item })} onEdit={openEdit} onCancel={(item) => void runTaskAction(item, 'cancel')} onDuplicate={(item) => void runTaskAction(item, 'duplicate')} />
         ) : (
-          <AnalyzerHistoryTable rows={analyzerRows} updatingId={updatingId} onSelect={(item) => setSelected({ type: 'analyzer', item })} onReanalyze={(item) => void reanalyze(item)} onCreateMintTask={(item) => void createMintTask(item)} />
+          <AnalyzerHistoryTable rows={analyzerRows} updatingId={updatingId} onSelect={(item) => setSelected({ type: 'analyzer', item })} onReanalyze={(item) => void reanalyze(item)} />
         )}
 
         {!loading && activeItems.length > 0 ? <Pagination page={page} totalPages={totalPages} onPage={setPage} /> : null}
@@ -541,22 +539,27 @@ function AnalyzerHistoryTable({
   updatingId,
   onSelect,
   onReanalyze,
-  onCreateMintTask,
 }: {
   rows: AnalyzerHistoryRow[];
   updatingId: string | null;
   onSelect: (row: AnalyzerHistoryRow) => void;
   onReanalyze: (row: AnalyzerHistoryRow) => void;
-  onCreateMintTask: (row: AnalyzerHistoryRow) => void;
 }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[760px] text-left">
+      <table className="w-full min-w-[1180px] text-left">
         <thead className="border-b border-border text-xs uppercase text-muted">
           <tr>
             <th className="px-5 py-3 font-medium">Collection Name</th>
-            <th className="px-5 py-3 font-medium">Date & Time</th>
+            <th className="px-5 py-3 font-medium">Contract Address</th>
+            <th className="px-5 py-3 font-medium">Chain</th>
             <th className="px-5 py-3 font-medium">Risk Score</th>
+            <th className="px-5 py-3 font-medium">Opportunity Score</th>
+            <th className="px-5 py-3 font-medium">Readiness</th>
+            <th className="px-5 py-3 font-medium">Provider Used</th>
+            <th className="px-5 py-3 font-medium">RPC Provider</th>
+            <th className="px-5 py-3 font-medium">Analysis Duration</th>
+            <th className="px-5 py-3 font-medium">Date</th>
             <th className="px-5 py-3 font-medium">Actions</th>
           </tr>
         </thead>
@@ -566,15 +569,21 @@ function AnalyzerHistoryTable({
             return (
               <tr key={row.id} className="hover:bg-white/5">
                 <td className="px-5 py-4 font-medium text-text">{collectionLabel(row)}</td>
-                <td className="px-5 py-4 text-sm text-muted">{formatDate(row.analyzedAt)}</td>
+                <td className="px-5 py-4 font-mono text-sm text-muted">{shortAddress(row.contractAddress)}</td>
+                <td className="px-5 py-4 text-sm capitalize text-muted">{row.chain}</td>
                 <td className="px-5 py-4">
                   <Badge variant={risk.variant}>{typeof row.riskScore === 'number' ? `${row.riskScore} ${risk.label}` : risk.label}</Badge>
                 </td>
+                <td className="px-5 py-4 font-mono text-sm text-text">{row.opportunityScore}</td>
+                <td className="px-5 py-4 font-mono text-sm text-text">{row.readinessScore}%</td>
+                <td className="px-5 py-4 text-sm text-muted">{row.providerUsed}</td>
+                <td className="px-5 py-4 text-sm text-muted">{row.rpcProviderUsed ?? 'Not used'}</td>
+                <td className="px-5 py-4 font-mono text-sm text-muted">{formatMilliseconds(row.analysisDurationMs)}</td>
+                <td className="px-5 py-4 text-sm text-muted">{formatDate(row.createdAt)}</td>
                 <td className="px-5 py-4">
                   <div className="flex gap-1">
                     <IconButton label="View Analysis" icon={Eye} onClick={() => onSelect(row)} />
                     <IconButton label="Reanalyze" icon={RefreshCcw} onClick={() => onReanalyze(row)} disabled={updatingId === row.id || !row.contractAddress} />
-                    <IconButton label="Create Mint Task" icon={Plus} onClick={() => onCreateMintTask(row)} disabled={updatingId === row.id || !row.collectionId} />
                   </div>
                 </td>
               </tr>
@@ -645,22 +654,21 @@ function DetailsModal({ selected, onClose }: { selected: SelectedRow; onClose: (
   const risk = riskLevel(item.riskScore);
   return (
     <Modal open title="Analyzer Details" onClose={onClose}>
-      <div className="space-y-4">
-        <DetailGrid rows={[
-          ['Collection', collectionLabel(item)],
-          ['Date & Time', formatDate(item.analyzedAt)],
-          ['Risk Score', typeof item.riskScore === 'number' ? `${item.riskScore} ${risk.label}` : risk.label],
-          ['Contract', item.contractAddress || 'Not recorded'],
-        ]} />
-        {item.riskReasons?.length ? (
-          <div className="rounded-lg border border-border bg-white/5 p-3">
-            <p className="text-xs uppercase text-muted">Risk Reasons</p>
-            <ul className="mt-2 space-y-2 text-sm text-text">
-              {item.riskReasons.map((reason) => <li key={reason}>{reason}</li>)}
-            </ul>
-          </div>
-        ) : null}
-      </div>
+      <DetailGrid rows={[
+        ['Collection', collectionLabel(item)],
+        ['Contract', item.contractAddress || 'Not recorded'],
+        ['Chain', item.chain],
+        ['Risk Score', typeof item.riskScore === 'number' ? `${item.riskScore} ${risk.label}` : risk.label],
+        ['Opportunity Score', String(item.opportunityScore)],
+        ['Readiness', `${item.readinessScore}%`],
+        ['Mint State', item.mintState],
+        ['Provider Used', item.providerUsed],
+        ['RPC Provider', item.rpcProviderUsed ?? 'Not used'],
+        ['Analysis Duration', formatMilliseconds(item.analysisDurationMs)],
+        ['Date', formatDate(item.createdAt)],
+        ['Input', item.input],
+        ['Source URL', item.sourceUrl],
+      ]} />
     </Modal>
   );
 }

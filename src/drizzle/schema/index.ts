@@ -307,6 +307,31 @@ export const mintHistory = pgTable('mint_history', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+export const analyzerHistory = pgTable('analyzer_history', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  input: text('input').notNull(),
+  sourceUrl: text('source_url').notNull(),
+  collectionName: text('collection_name'),
+  contractAddress: text('contract_address'),
+  chain: text('chain').notNull(),
+  riskScore: integer('risk_score').notNull(),
+  opportunityScore: integer('opportunity_score').notNull(),
+  readinessScore: integer('readiness_score').notNull(),
+  mintState: text('mint_state').notNull(),
+  providerUsed: text('provider_used').notNull(),
+  rpcProviderUsed: text('rpc_provider_used'),
+  providerChain: json('provider_chain').$type<Array<{ provider: string; status: 'success' | 'failed'; durationMs: number }>>(),
+  timingBreakdown: json('timing_breakdown').$type<Array<{ stage: string; durationMs: number }>>(),
+  analysisDurationMs: integer('analysis_duration_ms').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index('idx_analyzer_history_user_id').on(table.userId),
+  userCreatedAtIdx: index('idx_analyzer_history_user_created_at').on(table.userId, table.createdAt),
+  chainIdx: index('idx_analyzer_history_chain').on(table.chain),
+  contractIdx: index('idx_analyzer_history_contract').on(table.contractAddress),
+}));
+
 // ─── Activities ──────────────────────────────────────
 export const activities = pgTable('activities', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -369,6 +394,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   collections: many(collections),
   mintTasks: many(mintTasks),
   mintHistory: many(mintHistory),
+  analyzerHistory: many(analyzerHistory),
   activities: many(activities),
   telegramAccounts: many(telegramAccounts),
   emailNotificationPreferences: many(emailNotificationPreferences),
@@ -420,6 +446,10 @@ export const mintHistoryRelations = relations(mintHistory, ({ one }) => ({
   user: one(users, { fields: [mintHistory.userId], references: [users.id] }),
   wallet: one(wallets, { fields: [mintHistory.walletId], references: [wallets.id] }),
   collection: one(collections, { fields: [mintHistory.collectionId], references: [collections.id] }),
+}));
+
+export const analyzerHistoryRelations = relations(analyzerHistory, ({ one }) => ({
+  user: one(users, { fields: [analyzerHistory.userId], references: [users.id] }),
 }));
 
 export const activitiesRelations = relations(activities, ({ one }) => ({

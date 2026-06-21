@@ -4,6 +4,7 @@ import { clerkClient } from '@clerk/nextjs/server';
 import { and, eq, inArray } from 'drizzle-orm';
 import {
   activities,
+  analyzerHistory,
   analyticsEvents,
   collections,
   collectionSyncs,
@@ -78,6 +79,7 @@ async function deleteAutoMintUserData(userId: string, clerkId: string) {
   await getDb().delete(watchedWallets).where(eq(watchedWallets.userId, userId));
   await getDb().delete(copyMintRules).where(eq(copyMintRules.userId, userId));
   await getDb().delete(analyticsEvents).where(eq(analyticsEvents.userId, userId));
+  await getDb().delete(analyzerHistory).where(eq(analyzerHistory.userId, userId));
   await getDb().delete(activities).where(eq(activities.userId, userId));
   await getDb().delete(mintHistory).where(eq(mintHistory.userId, userId));
   await getDb().delete(mintTasks).where(eq(mintTasks.userId, userId));

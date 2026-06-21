@@ -38,6 +38,22 @@ export type AnalyzerDebugLogEntry = {
 
 export type AnalyzerDebugLogger = (entry: Omit<AnalyzerDebugLogEntry, 'timestamp'>) => void;
 
+export interface AnalyzerProviderAttempt {
+  provider: string;
+  status: 'success' | 'failed';
+  durationMs: number;
+}
+
+export interface AnalyzerTiming {
+  stage: string;
+  durationMs: number;
+}
+
+export interface AnalyzerResolutionTelemetry {
+  providerChain: AnalyzerProviderAttempt[];
+  timingBreakdown: AnalyzerTiming[];
+}
+
 // ─── Chain detection ───────────────────────────────
 
 const CHAIN_DOMAINS: Record<string, string> = {
@@ -190,7 +206,7 @@ async function fetchOpenSeaCollectionMeta(slug: string, logger?: AnalyzerDebugLo
       if (!collection) continue;
       const meta = normalizeOpenSeaApiContract(collection, slug);
       if (meta) {
-        logDebug(logger, 'success', 'discovery', 'OpenSea API resolved collection');
+        logDebug(logger, 'success', 'discovery', 'OpenSea API succeeded');
         return meta;
       }
     }
@@ -235,7 +251,7 @@ async function fetchOpenSeaPageMeta(url: string, slug: string, logger?: Analyzer
     const title = html.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i)?.[1]
       ?? html.match(/<title>([^<]+)<\/title>/i)?.[1];
 
-    logDebug(logger, 'success', 'discovery', 'Direct Fetch resolved collection metadata');
+    logDebug(logger, 'success', 'discovery', 'Direct Fetch succeeded');
     return {
       name: title?.replace(/\s*[-|]\s*OpenSea.*$/i, '').trim() || slug,
       slug,
@@ -258,7 +274,7 @@ async function fetchFirecrawlOpenSeaMeta(url: string, slug: string, logger?: Ana
       return undefined;
     }
 
-    logDebug(logger, 'success', 'discovery', 'Firecrawl resolved collection');
+    logDebug(logger, 'success', 'discovery', 'Firecrawl succeeded');
     return {
       name: result.collectionName ?? slug,
       slug,
@@ -281,7 +297,7 @@ async function fetchJinaOpenSeaMeta(url: string, slug: string, logger?: Analyzer
       return undefined;
     }
 
-    logDebug(logger, 'success', 'discovery', 'Jina resolved collection');
+    logDebug(logger, 'success', 'discovery', 'Jina succeeded');
     return {
       name: result.collectionName ?? slug,
       slug,
@@ -296,14 +312,14 @@ async function fetchJinaOpenSeaMeta(url: string, slug: string, logger?: Analyzer
 
 async function fetchReservoirCollectionMeta(slug: string, logger?: AnalyzerDebugLogger): Promise<OpenSeaCollectionMeta | undefined> {
   try {
-    logDebug(logger, 'info', 'discovery', 'Using Reservoir API');
+    logDebug(logger, 'info', 'discovery', 'Using Reservoir');
     const url = `https://api.reservoir.tools/collections/v7?slug=${encodeURIComponent(slug)}&limit=1`;
     const res = await fetch(url, {
       headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(5_000),
     });
     if (!res.ok) {
-      logDebug(logger, 'warning', 'discovery', `Reservoir API returned ${res.status}`);
+      logDebug(logger, 'warning', 'discovery', `Reservoir failed: HTTP ${res.status}`);
       return undefined;
     }
 
@@ -312,11 +328,11 @@ async function fetchReservoirCollectionMeta(slug: string, logger?: AnalyzerDebug
     const id = typeof collection?.id === 'string' ? collection.id : undefined;
     const contract = id?.split(':')[0];
     if (!contract || !ETH_ADDRESS_RE.test(contract)) {
-      logDebug(logger, 'warning', 'discovery', 'Reservoir API returned empty contract metadata');
+      logDebug(logger, 'warning', 'discovery', 'Reservoir failed: empty contract metadata');
       return undefined;
     }
 
-    logDebug(logger, 'success', 'discovery', 'Reservoir API resolved collection');
+    logDebug(logger, 'success', 'discovery', 'Reservoir fallback succeeded');
     return {
       name: typeof collection.name === 'string' ? collection.name : slug,
       slug,
@@ -324,12 +340,12 @@ async function fetchReservoirCollectionMeta(slug: string, logger?: AnalyzerDebug
       chain: 'ethereum',
     };
   } catch (error) {
-    logDebug(logger, 'warning', 'discovery', `Reservoir API failed: ${error instanceof Error ? error.message : String(error)}`);
+    logDebug(logger, 'warning', 'discovery', `Reservoir failed: ${error instanceof Error ? error.message : String(error)}`);
     return undefined;
   }
 }
 
-async function resolveOpenSeaCollectionMeta(url: string, slug: string, logger?: AnalyzerDebugLogger) {
+async function resolveOpenSeaCollectionMeta(url: string, slug: string, logger?: AnalyzerDebugLogger, telemetry?: AnalyzerResolutionTelemetry) {
   const resolvers = [
     { name: 'OpenSea API', run: () => fetchOpenSeaCollectionMeta(slug, logger) },
     { name: 'Direct Fetch', run: () => fetchOpenSeaPageMeta(url, slug, logger) },
@@ -339,7 +355,13 @@ async function resolveOpenSeaCollectionMeta(url: string, slug: string, logger?: 
   ];
 
   for (const [index, resolver] of resolvers.entries()) {
+    const startedAt = Date.now();
     const result = await resolver.run();
+    const durationMs = Date.now() - startedAt;
+    const status = result?.primaryAssetContractAddress ? 'success' : 'failed';
+    telemetry?.providerChain.push({ provider: resolver.name === 'Reservoir API' ? 'Reservoir' : resolver.name, status, durationMs });
+    telemetry?.timingBreakdown.push({ stage: resolver.name === 'OpenSea API' ? 'OpenSea Resolution' : resolver.name, durationMs });
+    logDebug(logger, status === 'success' ? 'success' : 'warning', 'discovery', `${resolver.name === 'Reservoir API' ? 'Reservoir' : resolver.name} completed in ${durationMs}ms`);
     if (result?.primaryAssetContractAddress) return result;
     const next = resolvers[index + 1];
     if (next) logDebug(logger, 'info', 'discovery', `Switching to ${next.name}`);
@@ -399,7 +421,22 @@ async function resolveContractOnChain(contractAddress: string, chain: string): P
  * - isValid: true only when we have a contractAddress + chain + on-chain confirmation
  * - confidence: 1.0 = fully confirmed on-chain, 0.8 = inferred from URL, 0.5 = best-effort, 0.0 = unknown
  */
-export async function resolveMintIntent(url: string, logger?: AnalyzerDebugLogger): Promise<MintIntent> {
+async function resolveContractWithTiming(
+  contractAddress: string,
+  chain: string,
+  telemetry?: AnalyzerResolutionTelemetry,
+) {
+  const startedAt = Date.now();
+  const result = await resolveContractOnChain(contractAddress, chain);
+  telemetry?.timingBreakdown.push({ stage: 'Contract Validation', durationMs: Date.now() - startedAt });
+  return result;
+}
+
+export async function resolveMintIntent(
+  url: string,
+  logger?: AnalyzerDebugLogger,
+  telemetry?: AnalyzerResolutionTelemetry,
+): Promise<MintIntent> {
   if (!url || typeof url !== 'string') {
     return {
       sourceUrl: url,
@@ -435,7 +472,10 @@ export async function resolveMintIntent(url: string, logger?: AnalyzerDebugLogge
     if (asset) {
       logDebug(logger, 'success', 'contract_resolution', `Contract detected: ${asset.contractAddress}`);
       logDebug(logger, 'success', 'contract_resolution', `Chain detected: ${asset.chain}`);
-      const onChain = await resolveContractOnChain(asset.contractAddress, asset.chain);
+      const startedAt = Date.now();
+      const onChain = await resolveContractWithTiming(asset.contractAddress, asset.chain, telemetry);
+      telemetry?.providerChain.push({ provider: 'OpenSea Asset', status: 'success', durationMs: Date.now() - startedAt });
+      logDebug(logger, onChain.valid ? 'success' : 'warning', 'contract_resolution', onChain.valid ? 'On-chain validation passed' : 'On-chain validation failed');
 
       return {
         sourceUrl: url,
@@ -463,14 +503,15 @@ export async function resolveMintIntent(url: string, logger?: AnalyzerDebugLogge
 
     logDebug(logger, 'success', 'contract_resolution', `Collection slug detected: ${collectionSlug}`);
     logDebug(logger, 'info', 'contract_resolution', 'Resolving contract address');
-    const meta = await resolveOpenSeaCollectionMeta(url, collectionSlug, logger);
+    const meta = await resolveOpenSeaCollectionMeta(url, collectionSlug, logger, telemetry);
     const chain = meta?.chain ?? platform ?? 'ethereum';
 
     if (meta?.primaryAssetContractAddress) {
       logDebug(logger, 'success', 'contract_resolution', `Contract detected: ${meta.primaryAssetContractAddress}`);
       logDebug(logger, 'success', 'contract_resolution', `Chain detected: ${chain}`);
       // Confirm on-chain before returning as valid
-      const onChain = await resolveContractOnChain(meta.primaryAssetContractAddress, chain);
+      const onChain = await resolveContractWithTiming(meta.primaryAssetContractAddress, chain, telemetry);
+      logDebug(logger, onChain.valid ? 'success' : 'warning', 'contract_resolution', onChain.valid ? 'On-chain validation passed' : 'On-chain validation failed');
 
       return {
         sourceUrl: url,
@@ -519,6 +560,7 @@ export async function resolveMintIntent(url: string, logger?: AnalyzerDebugLogge
     }
 
     if (chain === 'solana') {
+      telemetry?.providerChain.push({ provider: 'Explorer', status: 'success', durationMs: 0 });
       logDebug(logger, 'success', 'contract_resolution', `Contract detected: ${address}`);
       logDebug(logger, 'success', 'contract_resolution', `Chain detected: ${chain}`);
       return {
@@ -534,7 +576,10 @@ export async function resolveMintIntent(url: string, logger?: AnalyzerDebugLogge
     // Confirm on-chain
     logDebug(logger, 'success', 'contract_resolution', `Contract detected: ${address.toLowerCase()}`);
     logDebug(logger, 'success', 'contract_resolution', `Chain detected: ${chain}`);
-    const onChain = await resolveContractOnChain(address, chain);
+    const startedAt = Date.now();
+    const onChain = await resolveContractWithTiming(address, chain, telemetry);
+    telemetry?.providerChain.push({ provider: 'Explorer', status: onChain.valid ? 'success' : 'failed', durationMs: Date.now() - startedAt });
+    logDebug(logger, onChain.valid ? 'success' : 'warning', 'contract_resolution', onChain.valid ? 'On-chain validation passed' : 'On-chain validation failed');
 
     return {
       sourceUrl: url,
@@ -554,7 +599,10 @@ export async function resolveMintIntent(url: string, logger?: AnalyzerDebugLogge
     const chain = platform ?? 'ethereum';
     logDebug(logger, 'success', 'contract_resolution', `Contract detected: ${directAddress.toLowerCase()}`);
     logDebug(logger, 'success', 'contract_resolution', `Chain detected: ${chain}`);
-    const onChain = await resolveContractOnChain(directAddress, chain);
+    const startedAt = Date.now();
+    const onChain = await resolveContractWithTiming(directAddress, chain, telemetry);
+    telemetry?.providerChain.push({ provider: 'Direct Contract', status: onChain.valid ? 'success' : 'failed', durationMs: Date.now() - startedAt });
+    logDebug(logger, onChain.valid ? 'success' : 'warning', 'contract_resolution', onChain.valid ? 'On-chain validation passed' : 'On-chain validation failed');
 
     return {
       sourceUrl: url,
