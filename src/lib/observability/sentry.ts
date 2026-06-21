@@ -39,7 +39,7 @@ const breadcrumbs: Breadcrumb[] = [];
 let initialized = false;
 
 function getDsn() {
-  return process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN;
+  return process.env.NEXT_PUBLIC_SENTRY_DSN;
 }
 
 function getEnvironment() {

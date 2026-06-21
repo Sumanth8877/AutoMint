@@ -6,8 +6,8 @@ let _redis: Redis | null = null;
 
 function getRedisConfig() {
   return {
-    url: process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL,
-    token: process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN,
+    url: process.env.KV_REST_API_URL,
+    token: process.env.KV_REST_API_TOKEN,
   };
 }
 
@@ -16,7 +16,7 @@ function getRedisClient(): Redis {
     const { url, token } = getRedisConfig();
 
     if (!url || !token) {
-      throw new Error('UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN or KV_REST_API_URL/KV_REST_API_TOKEN must be set');
+      throw new Error('KV_REST_API_URL and KV_REST_API_TOKEN must be set');
     }
     _redis = new Redis({
       url,

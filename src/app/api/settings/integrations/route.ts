@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
+import crypto from 'node:crypto';
 import { createPublicClient, http } from 'viem';
 import { sql } from 'drizzle-orm';
+import { Redis } from '@upstash/redis';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getChain } from '@/lib/blockchain/chains';
 import { getDb } from '@/lib/db';
-import { getRedisClient } from '@/lib/redis';
-import { captureMessage } from '@/lib/observability/sentry';
 
 type KnownService =
   | 'Alchemy'
@@ -45,23 +45,17 @@ const KNOWN_VARIABLES: Array<{ variableName: string; serviceName: KnownService }
   { variableName: 'QUICKNODE_RPC_URL', serviceName: 'QuickNode' },
   { variableName: 'QUICKNODE_WSS_URL', serviceName: 'QuickNode' },
   { variableName: 'JINA_API_KEY', serviceName: 'Jina' },
-  { variableName: 'JINA_READER_API_KEY', serviceName: 'Jina' },
   { variableName: 'FIRECRAWL_API_KEY', serviceName: 'Firecrawl' },
-  { variableName: 'FIRECRAWL_API_URL', serviceName: 'Firecrawl' },
   { variableName: 'BROWSERBASE_API_KEY', serviceName: 'Browserbase' },
   { variableName: 'BROWSERBASE_PROJECT_ID', serviceName: 'Browserbase' },
   { variableName: 'QSTASH_TOKEN', serviceName: 'QStash' },
-  { variableName: 'QSTASH_WEBHOOK_URL', serviceName: 'QStash' },
   { variableName: 'QSTASH_CURRENT_SIGNING_KEY', serviceName: 'QStash' },
   { variableName: 'QSTASH_NEXT_SIGNING_KEY', serviceName: 'QStash' },
-  { variableName: 'SENTRY_DSN', serviceName: 'Sentry' },
   { variableName: 'NEXT_PUBLIC_SENTRY_DSN', serviceName: 'Sentry' },
   { variableName: 'SENTRY_AUTH_TOKEN', serviceName: 'Sentry' },
   { variableName: 'DATABASE_URL', serviceName: 'Database' },
   { variableName: 'KV_REST_API_URL', serviceName: 'Redis' },
   { variableName: 'KV_REST_API_TOKEN', serviceName: 'Redis' },
-  { variableName: 'UPSTASH_REDIS_REST_URL', serviceName: 'Redis' },
-  { variableName: 'UPSTASH_REDIS_REST_TOKEN', serviceName: 'Redis' },
   { variableName: 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY', serviceName: 'Clerk' },
   { variableName: 'CLERK_SECRET_KEY', serviceName: 'Clerk' },
 ];
@@ -119,8 +113,14 @@ const IGNORED_NAMES = new Set([
   'USERPROFILE',
   'DATABASE_URL_UNPOOLED',
   'ENCRYPTION_KEY',
+  'FIRECRAWL_API_URL',
+  'JINA_READER_API_KEY',
   'KV_URL',
+  'QSTASH_WEBHOOK_URL',
   'REDIS_URL',
+  'SENTRY_DSN',
+  'UPSTASH_REDIS_REST_TOKEN',
+  'UPSTASH_REDIS_REST_URL',
   'WINDIR',
 ]);
 
@@ -257,7 +257,10 @@ async function testDatabase() {
 
 async function testRedis() {
   return runTest('Redis', async () => {
-    const client = getRedisClient();
+    const client = new Redis({
+      url: requireEnv('KV_REST_API_URL'),
+      token: requireEnv('KV_REST_API_TOKEN'),
+    });
     const key = `integration-status:${Date.now()}:${Math.random().toString(36).slice(2)}`;
     const value = `ok:${Date.now()}`;
 
@@ -284,9 +287,9 @@ async function testQuickNode() {
 
 async function testJina() {
   return runTest('Jina', async () => {
-    const token = process.env.JINA_API_KEY || process.env.JINA_READER_API_KEY;
+    const token = requireEnv('JINA_API_KEY');
     const headers: Record<string, string> = { Accept: 'text/plain' };
-    if (token) headers.Authorization = `Bearer ${token}`;
+    headers.Authorization = `Bearer ${token}`;
 
     const response = await fetch('https://r.jina.ai/http://example.com', {
       headers,
@@ -303,8 +306,7 @@ async function testJina() {
 async function testFirecrawl() {
   return runTest('Firecrawl', async () => {
     const apiKey = requireEnv('FIRECRAWL_API_KEY');
-    const baseUrl = (process.env.FIRECRAWL_API_URL || 'https://api.firecrawl.dev').replace(/\/$/, '');
-    const response = await fetch(`${baseUrl}/v1/scrape`, {
+    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -340,13 +342,34 @@ async function testQStash() {
 
 async function testSentry() {
   return runTest('Sentry', async () => {
-    requireEnv(process.env.SENTRY_DSN ? 'SENTRY_DSN' : 'NEXT_PUBLIC_SENTRY_DSN');
-    const eventId = await captureMessage('Integration status test event', {
-      area: 'integration-status',
-      tags: { integration: 'sentry' },
-      fingerprint: ['integration-status', 'sentry'],
+    const dsn = requireEnv('NEXT_PUBLIC_SENTRY_DSN');
+    const url = new URL(dsn);
+    const publicKey = url.username;
+    const projectId = url.pathname.replace(/^\//, '').split('/').pop();
+    if (!publicKey || !projectId) throw new Error('Invalid Sentry DSN');
+
+    const eventId = crypto.randomUUID().replace(/-/g, '');
+    const endpoint = `${url.protocol}//${url.host}/api/${projectId}/envelope/?sentry_key=${publicKey}&sentry_version=7`;
+    const event = {
+      event_id: eventId,
+      platform: 'javascript',
+      timestamp: Date.now() / 1000,
+      level: 'info',
+      message: 'Integration status test event',
+      tags: { area: 'integration-status', integration: 'sentry' },
+    };
+    const envelope = [
+      JSON.stringify({ event_id: eventId, sent_at: new Date().toISOString() }),
+      JSON.stringify({ type: 'event' }),
+      JSON.stringify(event),
+    ].join('\n');
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-sentry-envelope' },
+      body: envelope,
     });
-    if (!eventId) throw new Error('Sentry test event was not accepted');
+
+    if (!response.ok) throw new Error(`Sentry test event failed with status ${response.status}`);
   });
 }
 

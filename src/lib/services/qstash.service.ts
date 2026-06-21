@@ -41,16 +41,13 @@ function getQStashToken() {
 }
 
 function getWebhookUrl() {
-  const configured = process.env.QSTASH_WEBHOOK_URL;
-  if (configured) return configured;
-
   const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL;
   if (appUrl) return `${appUrl.replace(/\/$/, '')}/api/webhooks/qstash`;
 
   const vercelUrl = process.env.VERCEL_URL;
   if (vercelUrl) return `https://${vercelUrl.replace(/\/$/, '')}/api/webhooks/qstash`;
 
-  throw new Error('QSTASH_WEBHOOK_URL, APP_URL, NEXT_PUBLIC_APP_URL, or VERCEL_URL is required');
+  throw new Error('APP_URL, NEXT_PUBLIC_APP_URL, or VERCEL_URL is required');
 }
 
 function getSigningKeys() {

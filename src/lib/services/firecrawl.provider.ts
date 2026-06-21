@@ -19,7 +19,7 @@ function getFirecrawlApiKey() {
 }
 
 function getFirecrawlApiUrl() {
-  return (process.env.FIRECRAWL_API_URL || 'https://api.firecrawl.dev').replace(/\/$/, '');
+  return 'https://api.firecrawl.dev';
 }
 
 function metadataToText(metadata: Record<string, unknown> | undefined) {

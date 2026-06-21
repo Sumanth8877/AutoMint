@@ -56,7 +56,7 @@ function normalizeReaderUrl(targetUrl: string) {
 }
 
 function getJinaToken() {
-  return process.env.JINA_API_KEY || process.env.JINA_READER_API_KEY;
+  return process.env.JINA_API_KEY;
 }
 
 function normalizeChain(value: string | undefined) {
