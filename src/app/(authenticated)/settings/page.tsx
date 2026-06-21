@@ -9,13 +9,14 @@ const groups = [
   { title: 'Wallets', icon: Wallet, items: ['Connected Wallets', 'Default Wallet', 'Network Preferences'] },
   { title: 'RPC Providers', icon: Radio, items: ['Provider Settings', 'Gas Optimization', 'Timeout Settings'] },
   { title: 'Execution', icon: SlidersHorizontal, items: ['Mint Defaults', 'Retry Logic', 'Risk Gates'] },
-  { title: 'Notifications', icon: Bell, items: ['Alert Preferences', 'Email Notifications', 'Push Notifications'] },
+  { title: 'Notifications', icon: Bell, items: ['Email Notifications'] },
   { title: 'Security', icon: Lock, items: ['API Keys'] },
 ];
 
 const icons = [Palette, Wallet, Radio, ShieldCheck, Bell, KeyRound];
 
 function settingHref(groupTitle: string, item: string) {
+  if (groupTitle === 'Notifications' && item === 'Email Notifications') return '/settings/email-notifications';
   if (groupTitle === 'Security' && item === 'API Keys') return '/settings/api-keys';
   return null;
 }

@@ -47,6 +47,20 @@ export const telegramAccounts = pgTable('telegram_accounts', {
   chatIdIdx: uniqueIndex('idx_telegram_accounts_chat_id').on(table.chatId),
 }));
 
+export const emailNotificationPreferences = pgTable('email_notification_preferences', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  emailEnabled: boolean('email_enabled').default(false).notNull(),
+  mintScheduledEnabled: boolean('mint_scheduled_enabled').default(true).notNull(),
+  mintSuccessEnabled: boolean('mint_success_enabled').default(true).notNull(),
+  mintFailedEnabled: boolean('mint_failed_enabled').default(true).notNull(),
+  systemErrorsEnabled: boolean('system_errors_enabled').default(true).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: uniqueIndex('idx_email_notification_preferences_user_id').on(table.userId),
+}));
+
 // ─── Wallets ─────────────────────────────────────────
 export const wallets = pgTable('wallets', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -308,10 +322,15 @@ export const usersRelations = relations(users, ({ many }) => ({
   mintHistory: many(mintHistory),
   activities: many(activities),
   telegramAccounts: many(telegramAccounts),
+  emailNotificationPreferences: many(emailNotificationPreferences),
 }));
 
 export const telegramAccountsRelations = relations(telegramAccounts, ({ one }) => ({
   user: one(users, { fields: [telegramAccounts.userId], references: [users.id] }),
+}));
+
+export const emailNotificationPreferencesRelations = relations(emailNotificationPreferences, ({ one }) => ({
+  user: one(users, { fields: [emailNotificationPreferences.userId], references: [users.id] }),
 }));
 
 export const walletsRelations = relations(wallets, ({ one }) => ({

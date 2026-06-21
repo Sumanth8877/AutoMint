@@ -4,6 +4,7 @@ import { desc, eq, and, inArray } from 'drizzle-orm';
 import { simulateMint, estimateMintGas, executeMint, getMintMode, type MintParams } from '@/lib/blockchain/mint';
 import { logActivity } from '@/lib/monitoring';
 import { sendTelegramNotification } from '@/lib/services/telegram.service';
+import { sendMintFailedEmail, sendMintScheduledEmail, sendMintSuccessEmail, sendSystemErrorEmail } from '@/lib/services/email-notification.service';
 import { requireRiskApproval } from '@/lib/services/risk.service';
 import { addBreadcrumb, captureException, captureMessage, startSpan } from '@/lib/observability/sentry';
 import { acquireLock, releaseLock } from '@/lib/services/mint-lock.service';
@@ -41,6 +42,10 @@ export async function addMintTask(userId: string, data: { walletId: string; coll
   });
 
   await sendTelegramNotification(userId, 'mint_scheduled', {
+    taskId: task.id,
+    contractAddress: task.contractAddress || undefined,
+  });
+  await sendMintScheduledEmail(userId, {
     taskId: task.id,
     contractAddress: task.contractAddress || undefined,
   });
@@ -122,6 +127,15 @@ export async function executeMintTask(
       taskId,
       error: 'Mint task missing wallet or contract',
     });
+    await sendMintFailedEmail(claimed.userId, {
+      taskId,
+      error: 'Mint task missing wallet or contract',
+    });
+    await sendSystemErrorEmail(claimed.userId, {
+      taskId,
+      title: 'Mint Task Configuration Error',
+      error: 'Mint task missing wallet or contract',
+    });
     return { success: false, error: 'Mint task missing wallet or contract' };
   }
 
@@ -137,6 +151,16 @@ export async function executeMintTask(
     await sendTelegramNotification(claimed.userId, 'mint_failed', {
       taskId,
       contractAddress: claimed.contractAddress,
+      error: 'Wallet not found for mint task',
+    });
+    await sendMintFailedEmail(claimed.userId, {
+      taskId,
+      contractAddress: claimed.contractAddress,
+      error: 'Wallet not found for mint task',
+    });
+    await sendSystemErrorEmail(claimed.userId, {
+      taskId,
+      title: 'Wallet Execution Error',
       error: 'Wallet not found for mint task',
     });
     return { success: false, error: 'Wallet not found for mint task' };
@@ -167,6 +191,16 @@ export async function executeMintTask(
       contractAddress: claimed.contractAddress,
       error: gas.error,
     });
+    await sendMintFailedEmail(claimed.userId, {
+      taskId,
+      contractAddress: claimed.contractAddress,
+      error: gas.error,
+    });
+    await sendSystemErrorEmail(claimed.userId, {
+      taskId,
+      title: 'Wallet Execution Error',
+      error: gas.error,
+    });
     return { success: false, error: gas.error };
   }
 
@@ -183,6 +217,16 @@ export async function executeMintTask(
     await sendTelegramNotification(claimed.userId, 'mint_failed', {
       taskId,
       contractAddress: claimed.contractAddress,
+      error: sim.error,
+    });
+    await sendMintFailedEmail(claimed.userId, {
+      taskId,
+      contractAddress: claimed.contractAddress,
+      error: sim.error,
+    });
+    await sendSystemErrorEmail(claimed.userId, {
+      taskId,
+      title: 'Mint Simulation Error',
       error: sim.error,
     });
     return { success: false, error: sim.error };
@@ -215,6 +259,16 @@ export async function executeMintTask(
       await sendTelegramNotification(claimed.userId, 'mint_failed', {
         taskId,
         contractAddress: claimed.contractAddress,
+        error: result.error,
+      });
+      await sendMintFailedEmail(claimed.userId, {
+        taskId,
+        contractAddress: claimed.contractAddress,
+        error: result.error,
+      });
+      await sendSystemErrorEmail(claimed.userId, {
+        taskId,
+        title: 'Mint Transaction Error',
         error: result.error,
       });
       return { success: false, error: result.error };
@@ -253,6 +307,11 @@ export async function executeMintTask(
       contractAddress: claimed.contractAddress,
       txHash: result.txHash,
     });
+    await sendMintSuccessEmail(claimed.userId, {
+      taskId,
+      contractAddress: claimed.contractAddress,
+      txHash: result.txHash,
+    });
   }
 
   addBreadcrumb({
@@ -267,6 +326,13 @@ export async function executeMintTask(
     await releaseLock(taskId, mintLock.token);
   }
   }).catch(async (error) => {
+    if (userId) {
+      await sendSystemErrorEmail(userId, {
+        taskId,
+        title: 'Mint Execution Error',
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     await captureException(error, {
       area: 'minting',
       context: { userId, taskId },

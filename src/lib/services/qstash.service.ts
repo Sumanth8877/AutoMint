@@ -12,6 +12,7 @@ import { requireRiskApproval } from '@/lib/services/risk.service';
 import { addBreadcrumb, captureException, captureMessage } from '@/lib/observability/sentry';
 import { acquireLock, releaseLock } from '@/lib/services/mint-lock.service';
 import { executeScheduledRiskCheck, hasBlockingRiskChange, storeOriginalRiskSnapshot } from '@/lib/services/scheduled-risk-check.service';
+import { sendMintFailedEmail, sendMintScheduledEmail, sendSystemErrorEmail } from '@/lib/services/email-notification.service';
 
 const QSTASH_BASE_URL = 'https://qstash.upstash.io';
 const DEFAULT_SCHEDULE_DELAY_MS = 60_000;
@@ -270,6 +271,10 @@ export async function scheduleMint(params: {
     taskId: task.id,
     contractAddress: task.contractAddress || undefined,
   });
+  await sendMintScheduledEmail(task.userId, {
+    taskId: task.id,
+    contractAddress: task.contractAddress || undefined,
+  });
 
   return updated;
 }
@@ -359,6 +364,16 @@ export async function executeScheduledMint(taskId: string) {
         contractAddress: task.contractAddress || undefined,
         error: 'Scheduled mint missing wallet or contract',
       });
+      await sendMintFailedEmail(task.userId, {
+        taskId,
+        contractAddress: task.contractAddress || undefined,
+        error: 'Scheduled mint missing wallet or contract',
+      });
+      await sendSystemErrorEmail(task.userId, {
+        taskId,
+        title: 'Scheduled Mint Configuration Error',
+        error: 'Scheduled mint missing wallet or contract',
+      });
       return { success: false, error: 'Scheduled mint missing wallet or contract' };
     }
 
@@ -412,6 +427,11 @@ export async function executeScheduledMint(taskId: string) {
         contractAddress: task.contractAddress,
         error: 'Wallet balance is too low',
       });
+      await sendMintFailedEmail(task.userId, {
+        taskId,
+        contractAddress: task.contractAddress,
+        error: 'Wallet balance is too low',
+      });
       return { success: false, error: 'Wallet balance is too low' };
     }
 
@@ -440,6 +460,14 @@ export async function executeScheduledMint(taskId: string) {
     lockReleased = true;
     return executeMintTask(taskId, task.userId, { existingLockToken: mintLock.token });
   } catch (error) {
+    const row = await loadTaskWithWallet(taskId).catch(() => null);
+    if (row?.task?.userId) {
+      await sendSystemErrorEmail(row.task.userId, {
+        taskId,
+        title: 'Scheduled Mint Execution Error',
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     const { trackAnalyticsEvent } = await import('@/lib/services/analytics.service');
     await trackAnalyticsEvent({
       eventType: 'qstash',
