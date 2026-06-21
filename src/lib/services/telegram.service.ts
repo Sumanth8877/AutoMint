@@ -68,6 +68,7 @@ export type TelegramUpdate = {
 
 type SendMessageResult = {
   message_id: number;
+  disabled?: boolean;
 };
 
 type InlineKeyboardMarkup = {
@@ -93,6 +94,14 @@ type NotificationPayload = {
   confidence?: number;
 };
 
+export function isTelegramEnabled() {
+  return process.env.TELEGRAM_ENABLED === 'true';
+}
+
+function telegramDisabledResult(reason = 'telegram_disabled') {
+  return { sent: true, skipped: true, disabled: true, reason };
+}
+
 type SafeModePromptParams = {
   userId: string;
   taskId: string;
@@ -109,12 +118,14 @@ type RiskChangePromptParams = {
 };
 
 function getTelegramBotToken() {
+  if (!isTelegramEnabled()) throw new Error('Telegram disabled by configuration');
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) throw new Error('TELEGRAM_BOT_TOKEN is not configured');
   return token;
 }
 
 function getLinkSecret() {
+  if (!isTelegramEnabled()) return 'telegram-disabled';
   const secret = process.env.TELEGRAM_LINK_SECRET || process.env.CLERK_SECRET_KEY || process.env.TRIGGER_SECRET_KEY;
   if (!secret) throw new Error('TELEGRAM_LINK_SECRET, CLERK_SECRET_KEY, or TRIGGER_SECRET_KEY is required');
   return secret;
@@ -206,6 +217,10 @@ export async function sendTelegramMessage(
   text: string,
   options: SendMessageOptions = {},
 ) {
+  if (!isTelegramEnabled()) {
+    return { message_id: 0, disabled: true };
+  }
+
   return telegramRequest<SendMessageResult>('sendMessage', {
     chat_id: chatId,
     text,
@@ -215,6 +230,8 @@ export async function sendTelegramMessage(
 }
 
 export async function sendAdminTelegramAlert(text: string) {
+  if (!isTelegramEnabled()) return telegramDisabledResult();
+
   const chatIds = (process.env.ADMIN_TELEGRAM_CHAT_IDS || process.env.ADMIN_TELEGRAM_CHAT_ID || '')
     .split(',')
     .map((chatId) => chatId.trim())
@@ -230,6 +247,8 @@ export async function sendAdminTelegramAlert(text: string) {
 }
 
 async function answerCallbackQuery(callbackQueryId: string, text?: string) {
+  if (!isTelegramEnabled()) return true;
+
   return telegramRequest<boolean>('answerCallbackQuery', {
     callback_query_id: callbackQueryId,
     text,
@@ -241,6 +260,8 @@ function signTokenPayload(encodedPayload: string) {
 }
 
 export function createTelegramLinkToken(userId: string) {
+  if (!isTelegramEnabled()) return '';
+
   const payload = {
     userId,
     exp: Date.now() + LINK_TOKEN_TTL_MS,
@@ -282,6 +303,17 @@ export async function linkTelegramAccount(params: {
   username?: string | null;
   chatId: string;
 }) {
+  if (!isTelegramEnabled()) {
+    return {
+      id: 'telegram-disabled',
+      userId: '',
+      telegramId: params.telegramId,
+      username: params.username || null,
+      chatId: params.chatId,
+      createdAt: new Date(),
+    };
+  }
+
   const userId = verifyTelegramLinkToken(params.token);
 
   const [account] = await getDb()
@@ -306,6 +338,8 @@ export async function linkTelegramAccount(params: {
 }
 
 export async function getTelegramAccountByUserId(userId: string) {
+  if (!isTelegramEnabled()) return null;
+
   const [account] = await getDb()
     .select()
     .from(telegramAccounts)
@@ -316,6 +350,8 @@ export async function getTelegramAccountByUserId(userId: string) {
 }
 
 async function getTelegramAccountByTelegramId(telegramId: string) {
+  if (!isTelegramEnabled()) return null;
+
   const [account] = await getDb()
     .select()
     .from(telegramAccounts)
@@ -383,6 +419,8 @@ export async function sendTelegramNotification(
   type: TelegramNotificationType,
   payload: NotificationPayload = {},
 ) {
+  if (!isTelegramEnabled()) return telegramDisabledResult();
+
   try {
     const account = await getTelegramAccountByUserId(userId);
     if (!account) return { sent: false, reason: 'telegram_not_linked' };
@@ -399,6 +437,8 @@ export async function sendTelegramNotification(
 }
 
 export async function sendTelegramSafeModePrompt(params: SafeModePromptParams) {
+  if (!isTelegramEnabled()) return telegramDisabledResult('approval_channel_unavailable');
+
   try {
     const account = await getTelegramAccountByUserId(params.userId);
     if (!account) return { sent: false, reason: 'telegram_not_linked' };
@@ -431,6 +471,8 @@ export async function sendTelegramSafeModePrompt(params: SafeModePromptParams) {
 }
 
 export async function sendTelegramRiskChangePrompt(params: RiskChangePromptParams) {
+  if (!isTelegramEnabled()) return telegramDisabledResult('approval_channel_unavailable');
+
   try {
     const account = await getTelegramAccountByUserId(params.userId);
     if (!account) return { sent: false, reason: 'telegram_not_linked' };
@@ -465,6 +507,8 @@ export async function notifyWalletBalanceIfLow(params: {
   balance: string;
   symbol: string;
 }) {
+  if (!isTelegramEnabled()) return telegramDisabledResult();
+
   const threshold = Number(process.env.TELEGRAM_LOW_BALANCE_THRESHOLD ?? '0.01');
   const value = Number(params.balance);
 
@@ -861,6 +905,8 @@ async function handleConsensusCallback(callback: TelegramCallbackQuery) {
 }
 
 export async function handleTelegramUpdate(update: TelegramUpdate) {
+  if (!isTelegramEnabled()) return { handled: false, disabled: true };
+
   if (update.callback_query?.data) {
     const riskResult = await handleRiskCallback(update.callback_query);
     if (riskResult.handled) return riskResult;

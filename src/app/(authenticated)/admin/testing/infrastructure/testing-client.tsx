@@ -1,14 +1,14 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Clock3, Play, ShieldAlert, ShieldCheck, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock3, MinusCircle, Play, ShieldAlert, ShieldCheck, XCircle } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import { MetricCard } from '@/components/ui/metric-card';
 import { apiRequest } from '@/lib/api/client';
 
-type InfrastructureTestStatus = 'passed' | 'failed' | 'warning';
+type InfrastructureTestStatus = 'passed' | 'failed' | 'warning' | 'skipped';
 
 type InfrastructureTestResult = {
   service: string;
@@ -51,6 +51,12 @@ const statusMeta = {
     badge: 'danger',
     row: 'border-danger/20 bg-danger/5',
     icon: XCircle,
+  },
+  skipped: {
+    label: 'Disabled',
+    badge: 'default',
+    row: 'border-border bg-white/[0.03]',
+    icon: MinusCircle,
   },
 } as const;
 

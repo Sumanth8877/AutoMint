@@ -7,12 +7,12 @@ import { getDb } from '@/lib/db';
 import { getRedisClient } from '@/lib/redis';
 import { getChain } from '@/lib/blockchain/chains';
 import { withRpcFailover } from '@/lib/services/rpc-manager.service';
-import { sendTelegramMessage } from '@/lib/services/telegram.service';
+import { isTelegramEnabled, sendTelegramMessage } from '@/lib/services/telegram.service';
 import { discoverWithJina } from '@/lib/services/jina.provider';
 import { discoverWithFirecrawl } from '@/lib/services/firecrawl.provider';
 import { captureException } from '@/lib/observability/sentry';
 
-export type InfrastructureTestStatus = 'passed' | 'failed' | 'warning';
+export type InfrastructureTestStatus = 'passed' | 'failed' | 'warning' | 'skipped';
 export type InfrastructureService =
   | 'Telegram'
   | 'Redis'
@@ -43,6 +43,7 @@ const TEST_WALLET = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045';
 const QSTASH_BASE_URL = 'https://qstash.upstash.io';
 
 function serviceScore(status: InfrastructureTestStatus, latency: number) {
+  if (status === 'skipped') return 100;
   if (status === 'failed') return 20;
   if (status === 'warning') return latency > 15_000 ? 70 : 85;
   if (latency > 10_000) return 92;
@@ -194,6 +195,21 @@ async function testDirectRpc(provider: 'alchemy' | 'quicknode') {
 }
 
 export async function testTelegram() {
+  if (!isTelegramEnabled()) {
+    return {
+      service: 'Telegram',
+      status: 'skipped',
+      score: 100,
+      latency: 0,
+      summary: 'Telegram Status: Disabled',
+      reasoning: 'Telegram disabled by configuration',
+      rootCause: 'No issue detected. Telegram is optional and disabled.',
+      fixRecommendation: 'Set TELEGRAM_ENABLED=true, TELEGRAM_BOT_TOKEN, and ADMIN_TELEGRAM_CHAT_ID to enable Telegram.',
+      response: { enabled: false },
+      testedAt: new Date(),
+    } satisfies InfrastructureTestResult;
+  }
+
   return executeTest('Telegram', async () => {
     const result = await sendTelegramMessage(getAdminChatId(), 'Infrastructure Test - Telegram OK');
     if (!result.message_id) throw new Error('Telegram API succeeded but did not return message_id');

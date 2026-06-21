@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { parseJsonBody } from '@/lib/api/errors';
-import { handleTelegramUpdate, type TelegramUpdate } from '@/lib/services/telegram.service';
+import { handleTelegramUpdate, isTelegramEnabled, type TelegramUpdate } from '@/lib/services/telegram.service';
 import { captureException } from '@/lib/observability/sentry';
 
 export const dynamic = 'force-dynamic';
@@ -12,6 +12,10 @@ function isAuthorized(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (!isTelegramEnabled()) {
+    return NextResponse.json({ ok: true, disabled: true, reason: 'Telegram disabled by configuration' });
+  }
+
   if (!isAuthorized(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }

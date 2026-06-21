@@ -6,6 +6,7 @@ import { mintTasks } from '@/drizzle/schema';
 import { logActivity } from '@/lib/monitoring';
 import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
 import { analyzeMintRisk } from '@/lib/services/risk.service';
+import { isTelegramEnabled } from '@/lib/services/telegram.service';
 
 const RISK_CHANGE_THRESHOLD = 20;
 
@@ -85,6 +86,24 @@ export async function executeScheduledRiskCheck(taskId: string) {
     });
 
     if (delta >= RISK_CHANGE_THRESHOLD) {
+      if (!isTelegramEnabled()) {
+        await logActivity(task.userId, 'mint_status_changed', 'Risk approval channel unavailable', {
+          taskId,
+          previousScore,
+          latestRiskScore: risk.riskScore,
+          delta,
+          approvalChannel: 'telegram_disabled',
+        });
+
+        return {
+          continue: true,
+          previousScore,
+          latestRiskScore: risk.riskScore,
+          delta,
+          approvalChannel: 'telegram_disabled',
+        };
+      }
+
       const { sendTelegramRiskChangePrompt } = await import('@/lib/services/telegram.service');
       await getDb()
         .update(mintTasks)
@@ -117,6 +136,7 @@ export function hasBlockingRiskChange(task: {
   originalRiskScore: number | null;
   latestRiskScore: number | null;
 }) {
+  if (!isTelegramEnabled()) return false;
   if (task.overrideRiskFlag) return false;
   if (task.originalRiskScore === null || task.latestRiskScore === null) return false;
   return getRiskDelta(task.originalRiskScore, task.latestRiskScore) >= RISK_CHANGE_THRESHOLD;

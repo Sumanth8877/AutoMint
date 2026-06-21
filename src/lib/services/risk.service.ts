@@ -7,6 +7,7 @@ import { logActivity } from '@/lib/monitoring';
 import { getMintState } from '@/lib/services/mint-state.service';
 import { applyRiskWeights, getAdaptiveRiskWeights } from '@/lib/services/risk-learning.service';
 import { addBreadcrumb, captureException, startSpan } from '@/lib/observability/sentry';
+import { isTelegramEnabled } from '@/lib/services/telegram.service';
 
 const RISK_THRESHOLD = 50;
 
@@ -319,6 +320,18 @@ export async function requireRiskApproval(params: {
 
   const risk = await analyzeMintRisk(params.taskId);
   if (!isHighRisk(risk.riskScore)) return { approved: true, risk };
+
+  if (!isTelegramEnabled()) {
+    await logActivity(task.userId, 'mint_status_changed', 'Safe mode approval channel unavailable', {
+      taskId: params.taskId,
+      action: params.action,
+      riskScore: risk.riskScore,
+      riskReasons: risk.riskReasons,
+      approvalChannel: 'telegram_disabled',
+    });
+
+    return { approved: true, risk, approvalChannel: 'telegram_disabled' };
+  }
 
   await getDb()
     .update(mintTasks)

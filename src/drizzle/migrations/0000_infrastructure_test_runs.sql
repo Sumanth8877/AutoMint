@@ -1,4 +1,4 @@
-CREATE TYPE "public"."infrastructure_test_status" AS ENUM('passed', 'failed', 'warning');
+CREATE TYPE "public"."infrastructure_test_status" AS ENUM('passed', 'failed', 'warning', 'skipped');
 --> statement-breakpoint
 CREATE TABLE "infrastructure_test_runs" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
