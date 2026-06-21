@@ -7,7 +7,7 @@ import { getDb } from '@/lib/db';
 import { getRedisClient } from '@/lib/redis';
 import { captureMessage } from '@/lib/observability/sentry';
 
-type IntegrationName =
+type KnownService =
   | 'Alchemy'
   | 'QuickNode'
   | 'Jina'
@@ -21,8 +21,9 @@ type IntegrationName =
 
 type IntegrationStatus = 'UNKNOWN' | 'PASS' | 'FAIL';
 
-type IntegrationResult = {
-  name: IntegrationName;
+type IntegrationVariable = {
+  variableName: string;
+  serviceName: string;
   configured: boolean;
   source: 'Environment';
   status: IntegrationStatus;
@@ -31,59 +32,127 @@ type IntegrationResult = {
   lastTestedAt: string | null;
 };
 
-const INTEGRATIONS: Array<{
-  name: IntegrationName;
-  configured: () => boolean;
-}> = [
-  { name: 'Alchemy', configured: () => Boolean(process.env.ALCHEMY_API_KEY) },
-  { name: 'QuickNode', configured: () => Boolean(process.env.QUICKNODE_RPC_URL) },
-  { name: 'Jina', configured: () => Boolean(process.env.JINA_API_KEY || process.env.JINA_READER_API_KEY) },
-  { name: 'Firecrawl', configured: () => Boolean(process.env.FIRECRAWL_API_KEY) },
-  { name: 'Browserbase', configured: () => Boolean(process.env.BROWSERBASE_API_KEY && process.env.BROWSERBASE_PROJECT_ID) },
-  { name: 'QStash', configured: () => Boolean(process.env.QSTASH_TOKEN) },
-  { name: 'Sentry', configured: () => Boolean(process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN) },
-  { name: 'Database', configured: () => Boolean(process.env.DATABASE_URL) },
-  { name: 'Redis', configured: () => Boolean((process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) || (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN)) },
-  { name: 'Clerk', configured: () => Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY) },
+type ServiceTestResult = {
+  serviceName: KnownService;
+  status: 'PASS' | 'FAIL';
+  latency: number;
+  error: string | null;
+  lastTestedAt: string;
+};
+
+const KNOWN_VARIABLES: Array<{ variableName: string; serviceName: KnownService }> = [
+  { variableName: 'ALCHEMY_API_KEY', serviceName: 'Alchemy' },
+  { variableName: 'QUICKNODE_RPC_URL', serviceName: 'QuickNode' },
+  { variableName: 'QUICKNODE_WSS_URL', serviceName: 'QuickNode' },
+  { variableName: 'JINA_API_KEY', serviceName: 'Jina' },
+  { variableName: 'JINA_READER_API_KEY', serviceName: 'Jina' },
+  { variableName: 'FIRECRAWL_API_KEY', serviceName: 'Firecrawl' },
+  { variableName: 'FIRECRAWL_API_URL', serviceName: 'Firecrawl' },
+  { variableName: 'BROWSERBASE_API_KEY', serviceName: 'Browserbase' },
+  { variableName: 'BROWSERBASE_PROJECT_ID', serviceName: 'Browserbase' },
+  { variableName: 'QSTASH_TOKEN', serviceName: 'QStash' },
+  { variableName: 'QSTASH_WEBHOOK_URL', serviceName: 'QStash' },
+  { variableName: 'QSTASH_CURRENT_SIGNING_KEY', serviceName: 'QStash' },
+  { variableName: 'QSTASH_NEXT_SIGNING_KEY', serviceName: 'QStash' },
+  { variableName: 'SENTRY_DSN', serviceName: 'Sentry' },
+  { variableName: 'NEXT_PUBLIC_SENTRY_DSN', serviceName: 'Sentry' },
+  { variableName: 'SENTRY_AUTH_TOKEN', serviceName: 'Sentry' },
+  { variableName: 'DATABASE_URL', serviceName: 'Database' },
+  { variableName: 'KV_REST_API_URL', serviceName: 'Redis' },
+  { variableName: 'KV_REST_API_TOKEN', serviceName: 'Redis' },
+  { variableName: 'UPSTASH_REDIS_REST_URL', serviceName: 'Redis' },
+  { variableName: 'UPSTASH_REDIS_REST_TOKEN', serviceName: 'Redis' },
+  { variableName: 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY', serviceName: 'Clerk' },
+  { variableName: 'CLERK_SECRET_KEY', serviceName: 'Clerk' },
 ];
 
-function baseResult(name: IntegrationName): IntegrationResult {
-  const integration = INTEGRATIONS.find((item) => item.name === name);
+const SERVICE_KEYWORDS: Array<[string, KnownService]> = [
+  ['ALCHEMY', 'Alchemy'],
+  ['QUICKNODE', 'QuickNode'],
+  ['JINA', 'Jina'],
+  ['FIRECRAWL', 'Firecrawl'],
+  ['BROWSERBASE', 'Browserbase'],
+  ['QSTASH', 'QStash'],
+  ['SENTRY', 'Sentry'],
+  ['DATABASE', 'Database'],
+  ['POSTGRES', 'Database'],
+  ['NEON', 'Database'],
+  ['REDIS', 'Redis'],
+  ['KV_REST', 'Redis'],
+  ['CLERK', 'Clerk'],
+];
 
-  return {
-    name,
-    configured: integration?.configured() ?? false,
-    source: 'Environment',
-    status: 'UNKNOWN',
-    latency: null,
-    error: null,
-    lastTestedAt: null,
-  };
+const DISCOVERY_PATTERN = /(API|KEY|TOKEN|SECRET|URL|URI|DSN|RPC|WSS|WEBHOOK|DATABASE|REDIS|CLERK|SENTRY|QSTASH|FIRECRAWL|JINA|BROWSERBASE|ALCHEMY|QUICKNODE|NEON|POSTGRES)/;
+const IGNORED_PREFIXES = ['npm_', 'npm_config_', 'PROCESSOR_', 'ProgramFiles', 'CommonProgramFiles'];
+const IGNORED_NAMES = new Set([
+  'ALLUSERSPROFILE',
+  'APPDATA',
+  'COMPUTERNAME',
+  'COMSPEC',
+  'HOMEDRIVE',
+  'HOMEPATH',
+  'LOCALAPPDATA',
+  'NODE_ENV',
+  'NUMBER_OF_PROCESSORS',
+  'OS',
+  'PATH',
+  'PATHEXT',
+  'PWD',
+  'SYSTEMDRIVE',
+  'SYSTEMROOT',
+  'TEMP',
+  'TMP',
+  'USERDOMAIN',
+  'USERNAME',
+  'USERPROFILE',
+  'WINDIR',
+]);
+
+function inferServiceName(variableName: string) {
+  const upper = variableName.toUpperCase();
+  const known = KNOWN_VARIABLES.find((item) => item.variableName === variableName);
+  if (known) return known.serviceName;
+
+  const matched = SERVICE_KEYWORDS.find(([keyword]) => upper.includes(keyword));
+  if (matched) return matched[1];
+
+  const base = variableName
+    .replace(/^NEXT_PUBLIC_/, '')
+    .replace(/_(API|KEY|TOKEN|SECRET|URL|URI|DSN|RPC|WSS|WEBHOOK).*$/, '')
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
+    .join(' ');
+
+  return base || 'Environment';
+}
+
+function shouldSurfaceVariable(variableName: string) {
+  if (KNOWN_VARIABLES.some((item) => item.variableName === variableName)) return true;
+  if (IGNORED_NAMES.has(variableName)) return false;
+  if (IGNORED_PREFIXES.some((prefix) => variableName.startsWith(prefix))) return false;
+  return DISCOVERY_PATTERN.test(variableName.toUpperCase());
+}
+
+function getDiscoveredVariableNames() {
+  const names = new Set<string>();
+
+  for (const item of KNOWN_VARIABLES) {
+    names.add(item.variableName);
+  }
+
+  for (const name of Object.keys(process.env)) {
+    if (shouldSurfaceVariable(name)) names.add(name);
+  }
+
+  return Array.from(names).sort((left, right) => {
+    const serviceCompare = inferServiceName(left).localeCompare(inferServiceName(right));
+    return serviceCompare || left.localeCompare(right);
+  });
 }
 
 function getSecretValues() {
-  const names = [
-    'DATABASE_URL',
-    'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY',
-    'CLERK_SECRET_KEY',
-    'KV_REST_API_URL',
-    'KV_REST_API_TOKEN',
-    'UPSTASH_REDIS_REST_URL',
-    'UPSTASH_REDIS_REST_TOKEN',
-    'QSTASH_TOKEN',
-    'ALCHEMY_API_KEY',
-    'QUICKNODE_RPC_URL',
-    'QUICKNODE_WSS_URL',
-    'JINA_API_KEY',
-    'JINA_READER_API_KEY',
-    'FIRECRAWL_API_KEY',
-    'BROWSERBASE_API_KEY',
-    'BROWSERBASE_PROJECT_ID',
-    'SENTRY_DSN',
-    'NEXT_PUBLIC_SENTRY_DSN',
-  ];
-
-  return names
+  return getDiscoveredVariableNames()
     .map((name) => process.env[name])
     .filter((value): value is string => Boolean(value && value.length >= 4));
 }
@@ -111,40 +180,56 @@ function createEthereumClient(url: string) {
   });
 }
 
-async function runTest(name: IntegrationName, action: () => Promise<void>): Promise<IntegrationResult> {
+function getVariables(testResults = new Map<string, ServiceTestResult>()) {
+  return getDiscoveredVariableNames().map((variableName): IntegrationVariable => {
+    const serviceName = inferServiceName(variableName);
+    const result = testResults.get(serviceName);
+
+    return {
+      variableName,
+      serviceName,
+      configured: Boolean(process.env[variableName]),
+      source: 'Environment',
+      status: result?.status ?? 'UNKNOWN',
+      latency: result?.latency ?? null,
+      error: result?.error ?? null,
+      lastTestedAt: result?.lastTestedAt ?? null,
+    };
+  });
+}
+
+function buildSummary(integrations: IntegrationVariable[]) {
+  return {
+    totalIntegrationsDetected: integrations.length,
+    configuredIntegrations: integrations.filter((item) => item.configured).length,
+    testedIntegrations: integrations.filter((item) => item.status !== 'UNKNOWN').length,
+    passingIntegrations: integrations.filter((item) => item.status === 'PASS').length,
+    failingIntegrations: integrations.filter((item) => item.status === 'FAIL').length,
+  };
+}
+
+async function runTest(serviceName: KnownService, action: () => Promise<void>): Promise<ServiceTestResult> {
   const startedAt = Date.now();
-  const testedAt = new Date().toISOString();
-  const result = baseResult(name);
+  const lastTestedAt = new Date().toISOString();
 
   try {
     await action();
     return {
-      ...result,
+      serviceName,
       status: 'PASS',
       latency: Date.now() - startedAt,
-      lastTestedAt: testedAt,
+      error: null,
+      lastTestedAt,
     };
   } catch (error) {
     return {
-      ...result,
+      serviceName,
       status: 'FAIL',
       latency: Date.now() - startedAt,
       error: sanitizeError(error),
-      lastTestedAt: testedAt,
+      lastTestedAt,
     };
   }
-}
-
-function buildSummary(results: IntegrationResult[]) {
-  const healthy = results.filter((result) => result.status === 'PASS').length;
-  const failing = results.filter((result) => result.status === 'FAIL').length;
-  const score = results.length > 0 ? Math.round((healthy / results.length) * 100) : 0;
-
-  return {
-    healthyServices: healthy,
-    failingServices: failing,
-    overallInfrastructureScore: score,
-  };
 }
 
 async function testDatabase() {
@@ -268,15 +353,22 @@ async function testAllIntegrations() {
     testRedis(),
     testClerk(),
   ]);
+  const resultMap = new Map<string, ServiceTestResult>();
+
+  for (const result of results) {
+    resultMap.set(result.serviceName, result);
+  }
+
+  const integrations = getVariables(resultMap);
 
   return {
-    integrations: results,
-    summary: buildSummary(results),
+    integrations,
+    summary: buildSummary(integrations),
   };
 }
 
 function getUnknownIntegrations() {
-  const integrations = INTEGRATIONS.map((integration) => baseResult(integration.name));
+  const integrations = getVariables();
 
   return {
     integrations,
