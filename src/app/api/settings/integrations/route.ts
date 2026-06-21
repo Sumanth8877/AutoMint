@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createPublicClient, http } from 'viem';
-import { requireAdminApiSession } from '@/lib/auth/require-auth';
+import { requireApiUser } from '@/lib/auth/require-auth';
 import { getErrorMessage, parseJsonBody } from '@/lib/api/errors';
 import { getChain } from '@/lib/blockchain/chains';
 import {
@@ -113,7 +113,7 @@ async function loadMaskedSettings() {
 
 export async function GET() {
   try {
-    const authResult = await requireAdminApiSession();
+    const authResult = await requireApiUser();
     if ('error' in authResult) return authResult.error;
 
     return NextResponse.json({ settings: await loadMaskedSettings() });
@@ -124,7 +124,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const authResult = await requireAdminApiSession();
+    const authResult = await requireApiUser();
     if ('error' in authResult) return authResult.error;
 
     const body = await parseJsonBody<IntegrationBody>(req);
@@ -156,7 +156,7 @@ export async function POST(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    const authResult = await requireAdminApiSession();
+    const authResult = await requireApiUser();
     if ('error' in authResult) return authResult.error;
 
     const body = await parseJsonBody<IntegrationBody>(req);
