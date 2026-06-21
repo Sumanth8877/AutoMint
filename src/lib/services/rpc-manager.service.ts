@@ -6,8 +6,10 @@ import { getCache, setCache } from '@/lib/redis';
 import { getChain } from '@/lib/blockchain/chains';
 import { addBreadcrumb, captureException, captureMessage } from '@/lib/observability/sentry';
 import { getAllSettings } from '@/lib/services/integration-settings.service';
+import { getRpcProviderSettings } from '@/lib/services/rpc-provider-settings.service';
 
 export type RpcProvider = 'alchemy' | 'quicknode';
+export type RpcRoutingMode = 'SMART' | 'MANUAL';
 type RpcHealth = {
   provider: RpcProvider;
   responseTime: number;
@@ -26,7 +28,7 @@ type RpcClient = PublicClient & {
 const PROVIDERS: RpcProvider[] = ['alchemy', 'quicknode'];
 const MAX_RETRIES = 3;
 const BASE_BACKOFF_MS = 250;
-const REQUEST_TIMEOUT_MS = 12_000;
+const DEFAULT_REQUEST_TIMEOUT_SECONDS = 45;
 const CIRCUIT_FAILURE_THRESHOLD = 3;
 const CIRCUIT_OPEN_MS = 60_000;
 const HEALTH_TTL_SECONDS = 24 * 60 * 60;
@@ -35,6 +37,16 @@ const walletClients = new Map<string, WalletClient>();
 
 type RpcFailoverOptions = {
   providerOrder?: RpcProvider[];
+  userId?: string;
+  timeoutSeconds?: number;
+  chain?: string;
+};
+
+type RpcEffectiveSettings = {
+  routingMode: RpcRoutingMode;
+  preferredProvider: RpcProvider | null;
+  autoFailover: boolean;
+  rpcTimeoutSeconds: number;
 };
 
 function normalizeChainName(chain: string) {
@@ -92,9 +104,9 @@ async function getProviderUrl(provider: RpcProvider, chain: string) {
   return provider === 'alchemy' ? getAlchemyUrl(chain) : getQuickNodeUrl(chain);
 }
 
-function getClientCacheKey(provider: RpcProvider, chain: string, url: string, account?: string) {
+function getClientCacheKey(provider: RpcProvider, chain: string, url: string, timeoutSeconds: number, account?: string) {
   const urlHash = createHash('sha256').update(url).digest('hex').slice(0, 16);
-  return [provider, chain, urlHash, account].filter(Boolean).join(':');
+  return [provider, chain, urlHash, timeoutSeconds, account].filter(Boolean).join(':');
 }
 
 async function getStoredIntegrationSettings() {
@@ -159,7 +171,62 @@ async function trackRpcAnalytics(input: {
   }
 }
 
-async function createClient(provider: RpcProvider, chainName: string) {
+function normalizeTimeoutSeconds(value: number | null | undefined) {
+  if (typeof value !== 'number' || !Number.isInteger(value)) return DEFAULT_REQUEST_TIMEOUT_SECONDS;
+  return Math.min(120, Math.max(5, value));
+}
+
+function toRpcProvider(value: string | null | undefined): RpcProvider | null {
+  if (value === 'ALCHEMY') return 'alchemy';
+  if (value === 'QUICKNODE') return 'quicknode';
+  return null;
+}
+
+async function getEffectiveRpcSettings(userId?: string): Promise<RpcEffectiveSettings> {
+  if (!userId) {
+    return {
+      routingMode: 'SMART',
+      preferredProvider: null,
+      autoFailover: true,
+      rpcTimeoutSeconds: DEFAULT_REQUEST_TIMEOUT_SECONDS,
+    };
+  }
+
+  try {
+    const settings = await getRpcProviderSettings(userId);
+    return {
+      routingMode: settings.routingMode,
+      preferredProvider: toRpcProvider(settings.preferredProvider),
+      autoFailover: settings.autoFailover,
+      rpcTimeoutSeconds: normalizeTimeoutSeconds(settings.rpcTimeoutSeconds),
+    };
+  } catch (error) {
+    logRpc('rpc settings unavailable', {
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return {
+      routingMode: 'SMART',
+      preferredProvider: null,
+      autoFailover: true,
+      rpcTimeoutSeconds: DEFAULT_REQUEST_TIMEOUT_SECONDS,
+    };
+  }
+}
+
+async function isProviderConfigured(provider: RpcProvider, chain: string) {
+  return Boolean(await getProviderUrl(provider, chain));
+}
+
+function isHealthy(health: RpcHealth) {
+  return !health.unhealthyUntil || health.unhealthyUntil <= Date.now();
+}
+
+function latencySortValue(health: RpcHealth) {
+  return health.responseTime > 0 ? health.responseTime : Number.MAX_SAFE_INTEGER;
+}
+
+async function createClient(provider: RpcProvider, chainName: string, timeoutSeconds = DEFAULT_REQUEST_TIMEOUT_SECONDS) {
   const normalizedChain = normalizeChainName(chainName);
   const chain = getChain(normalizedChain);
   const url = await getProviderUrl(provider, normalizedChain);
@@ -167,41 +234,43 @@ async function createClient(provider: RpcProvider, chainName: string) {
 
   const client = createPublicClient({
     chain,
-    transport: http(url, { timeout: REQUEST_TIMEOUT_MS }),
+    transport: http(url, { timeout: normalizeTimeoutSeconds(timeoutSeconds) * 1000 }),
   }) as RpcClient;
 
-  return { client, cacheKey: getClientCacheKey(provider, normalizedChain, url) };
+  return { client, cacheKey: getClientCacheKey(provider, normalizedChain, url, normalizeTimeoutSeconds(timeoutSeconds)) };
 }
 
-async function getProviderClient(provider: RpcProvider, chain: string) {
+async function getProviderClient(provider: RpcProvider, chain: string, timeoutSeconds = DEFAULT_REQUEST_TIMEOUT_SECONDS) {
   const normalizedChain = normalizeChainName(chain);
+  const normalizedTimeout = normalizeTimeoutSeconds(timeoutSeconds);
   const url = await getProviderUrl(provider, normalizedChain);
   if (!url) throw new Error(`${provider} RPC is not configured for ${normalizedChain}`);
 
-  const key = getClientCacheKey(provider, normalizedChain, url);
+  const key = getClientCacheKey(provider, normalizedChain, url, normalizedTimeout);
   const existing = publicClients.get(key);
   if (existing) return existing;
 
-  const { client } = await createClient(provider, normalizedChain);
+  const { client } = await createClient(provider, normalizedChain, normalizedTimeout);
   client.__provider = provider;
   publicClients.set(key, client);
   return client;
 }
 
-async function getProviderWalletClient(provider: RpcProvider, chainName: string, account: Account) {
+async function getProviderWalletClient(provider: RpcProvider, chainName: string, account: Account, timeoutSeconds = DEFAULT_REQUEST_TIMEOUT_SECONDS) {
   const normalizedChain = normalizeChainName(chainName);
+  const normalizedTimeout = normalizeTimeoutSeconds(timeoutSeconds);
   const chain = getChain(normalizedChain);
   const url = await getProviderUrl(provider, normalizedChain);
   if (!url) throw new Error(`${provider} RPC is not configured for ${normalizedChain}`);
 
-  const key = getClientCacheKey(provider, normalizedChain, url, account.address);
+  const key = getClientCacheKey(provider, normalizedChain, url, normalizedTimeout, account.address);
   const existing = walletClients.get(key);
   if (existing) return existing;
 
   const client = createWalletClient({
     account,
     chain,
-    transport: http(url, { timeout: REQUEST_TIMEOUT_MS }),
+    transport: http(url, { timeout: normalizedTimeout * 1000 }),
   });
   walletClients.set(key, client);
   return client;
@@ -275,15 +344,34 @@ async function recordFailure(provider: RpcProvider, error: unknown, responseTime
   }
 }
 
-async function isCircuitOpen(provider: RpcProvider) {
-  const health = await getHealth(provider);
-  return Boolean(health.unhealthyUntil && health.unhealthyUntil > Date.now());
-}
-
 async function getProviderOrder(options: RpcFailoverOptions = {}) {
   if (options.providerOrder?.length) return options.providerOrder;
-  if (await isCircuitOpen('alchemy')) return ['quicknode', 'alchemy'] as RpcProvider[];
-  return PROVIDERS;
+  const normalizedChain = normalizeChainName(options.chain ?? 'ethereum');
+  const settings = await getEffectiveRpcSettings(options.userId);
+  const healthEntries = await Promise.all(PROVIDERS.map(async (provider) => ({
+    provider,
+    configured: await isProviderConfigured(provider, normalizedChain),
+    health: await getHealth(provider),
+  })));
+  const configured = healthEntries.filter((entry) => entry.configured);
+  const healthy = configured.filter((entry) => isHealthy(entry.health));
+
+  if (settings.routingMode === 'MANUAL' && settings.preferredProvider) {
+    const preferred = configured.find((entry) => entry.provider === settings.preferredProvider);
+    if (!settings.autoFailover) return preferred ? [preferred.provider] : [settings.preferredProvider];
+    const remaining = healthy
+      .filter((entry) => entry.provider !== settings.preferredProvider)
+      .sort((left, right) => latencySortValue(left.health) - latencySortValue(right.health))
+      .map((entry) => entry.provider);
+    return preferred ? [preferred.provider, ...remaining] : remaining;
+  }
+
+  const candidates = healthy.length > 0 ? healthy : configured;
+  const sorted = candidates
+    .sort((left, right) => latencySortValue(left.health) - latencySortValue(right.health))
+    .map((entry) => entry.provider);
+
+  return sorted.length > 0 ? sorted : PROVIDERS;
 }
 
 async function executeWithRetries<T>(
@@ -316,7 +404,9 @@ export async function withRpcFailover<T>(
   options: RpcFailoverOptions = {},
 ) {
   const normalizedChain = normalizeChainName(chain);
-  const providers = await getProviderOrder(options);
+  const providers = await getProviderOrder({ ...options, chain: normalizedChain });
+  const settings = await getEffectiveRpcSettings(options.userId);
+  const timeoutSeconds = normalizeTimeoutSeconds(options.timeoutSeconds ?? settings.rpcTimeoutSeconds);
   let lastError: unknown;
 
   for (const provider of providers) {
@@ -328,7 +418,7 @@ export async function withRpcFailover<T>(
 
       logRpc('provider selected', { provider, chain: normalizedChain, operationName });
       return await executeWithRetries(provider, async (selectedProvider) => {
-        const client = await getProviderClient(selectedProvider, normalizedChain);
+        const client = await getProviderClient(selectedProvider, normalizedChain, timeoutSeconds);
         return operation(client, selectedProvider);
       });
     } catch (error) {
@@ -346,13 +436,14 @@ export async function withRpcFailover<T>(
         context: { provider, chain: normalizedChain, operationName },
         fingerprint: ['rpc', provider, operationName],
       });
+      if (!settings.autoFailover) break;
     }
   }
 
   throw lastError instanceof Error ? lastError : new Error('All RPC providers failed');
 }
 
-export function getPublicClient(chain: string): PublicClient {
+export function getPublicClient(chain: string, options: RpcFailoverOptions = {}): PublicClient {
   const normalizedChain = normalizeChainName(chain);
 
   return new Proxy({} as PublicClient, {
@@ -361,22 +452,24 @@ export function getPublicClient(chain: string): PublicClient {
         const value = (client as unknown as Record<PropertyKey, unknown>)[prop];
         if (typeof value !== 'function') return value as never;
         return await (value as (...methodArgs: unknown[]) => unknown).apply(client, args) as never;
-      });
+      }, options);
     },
   });
 }
 
-export function getWalletClient(chain: string, account: Account): WalletClient {
+export function getWalletClient(chain: string, account: Account, options: RpcFailoverOptions = {}): WalletClient {
   const normalizedChain = normalizeChainName(chain);
 
   return new Proxy({} as WalletClient, {
     get(_target, prop) {
       return (...args: unknown[]) => withRpcFailover(normalizedChain, String(prop), async (_client, provider) => {
-        const walletClient = await getProviderWalletClient(provider, normalizedChain, account);
+        const settings = await getEffectiveRpcSettings(options.userId);
+        const timeoutSeconds = normalizeTimeoutSeconds(options.timeoutSeconds ?? settings.rpcTimeoutSeconds);
+        const walletClient = await getProviderWalletClient(provider, normalizedChain, account, timeoutSeconds);
         const value = (walletClient as unknown as Record<PropertyKey, unknown>)[prop];
         if (typeof value !== 'function') return value as never;
         return await (value as (...methodArgs: unknown[]) => unknown).apply(walletClient, args) as never;
-      });
+      }, options);
     },
   });
 }
@@ -388,4 +481,34 @@ export async function getRpcHealthSnapshot() {
   ]);
 
   return { alchemy, quicknode };
+}
+
+export async function getRpcRoutingSnapshot(userId?: string, chain = 'ethereum') {
+  const normalizedChain = normalizeChainName(chain);
+  const [settings, health] = await Promise.all([
+    getEffectiveRpcSettings(userId),
+    getRpcHealthSnapshot(),
+  ]);
+  const providerOrder = await getProviderOrder({ userId, chain: normalizedChain });
+  const providers = await Promise.all(PROVIDERS.map(async (provider) => {
+    const providerHealth = health[provider];
+    return {
+      provider: provider === 'alchemy' ? 'ALCHEMY' as const : 'QUICKNODE' as const,
+      configured: await isProviderConfigured(provider, normalizedChain),
+      healthy: isHealthy(providerHealth),
+      latency: providerHealth.responseTime > 0 ? providerHealth.responseTime : null,
+      status: isHealthy(providerHealth) ? 'Healthy' as const : 'Unavailable' as const,
+    };
+  }));
+
+  const active = providerOrder[0] ?? null;
+
+  return {
+    routingMode: settings.routingMode,
+    preferredProvider: settings.preferredProvider === 'alchemy' ? 'ALCHEMY' as const : settings.preferredProvider === 'quicknode' ? 'QUICKNODE' as const : null,
+    autoFailover: settings.autoFailover,
+    rpcTimeoutSeconds: settings.rpcTimeoutSeconds,
+    currentActiveProvider: active === 'alchemy' ? 'ALCHEMY' as const : active === 'quicknode' ? 'QUICKNODE' as const : null,
+    providers,
+  };
 }

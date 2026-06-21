@@ -82,9 +82,10 @@ export async function simulateMint(
   address: Hex,
   chain: string,
   params: MintParams,
+  userId?: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const client = getClient(chain);
+    const client = getClient(chain, userId);
     const mintData = buildMintData(params);
 
     await client.call({
@@ -114,9 +115,10 @@ export async function estimateMintGas(
   address: Hex,
   chain: string,
   params: MintParams,
+  userId?: string,
 ): Promise<{ gasLimit: bigint; error?: string }> {
   try {
-    const client = getClient(chain);
+    const client = getClient(chain, userId);
     const mintData = buildMintData(params);
 
     const estimate = await client.estimateGas({
@@ -192,6 +194,7 @@ export async function executeMint(
   address: Hex,
   chain: string,
   params: MintParams,
+  userId?: string,
 ): Promise<MintResult> {
   // ── Guard: must be in 'live' mode ──────────────────
   const mode = getMintMode();
@@ -206,7 +209,7 @@ export async function executeMint(
 
   try {
     // Simulate first to catch obvious failures
-    const sim = await simulateMint(address, chain, params);
+    const sim = await simulateMint(address, chain, params, userId);
     if (!sim.success) {
       return { success: false, error: sim.error };
     }
@@ -225,7 +228,7 @@ export async function executeMint(
     }
 
     const account = privateKeyToAccount(privateKey);
-    const walletClient = getWalletClient(chain, account);
+    const walletClient = getWalletClient(chain, account, { userId });
 
     const value = params.mintPrice ? parseEther(params.mintPrice) : BigInt(0);
 
@@ -239,7 +242,7 @@ export async function executeMint(
     });
 
     // Wait for 1 confirmation
-    const client = getClient(chain);
+    const client = getClient(chain, userId);
     const receipt = await client.waitForTransactionReceipt({ hash });
 
     if (receipt.status !== 'success') {

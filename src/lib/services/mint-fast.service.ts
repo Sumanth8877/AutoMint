@@ -137,12 +137,12 @@ export async function executeMintFast(
 
     const account = privateKeyToAccount(privateKey as `0x${string}`);
 
-    const walletClient = getWalletClient(intent.chain, account);
+    const walletClient = getWalletClient(intent.chain, account, { userId: wallet.userId });
 
     const mintParams = buildMintParams(intent);
 
     // ── 4. Estimate gas ───────────────────────────
-    const gasResult = await estimateMintGas(wallet.address as `0x${string}`, intent.chain, mintParams);
+    const gasResult = await estimateMintGas(wallet.address as `0x${string}`, intent.chain, mintParams, wallet.userId);
     if (gasResult.error) {
       return { success: false, error: `Gas estimation failed: ${gasResult.error}` };
     }
@@ -168,7 +168,7 @@ export async function executeMintFast(
 
     // ── 7. Wait for confirmation ───────────────────
     const { getClient } = await import('@/lib/blockchain/client');
-    const publicClient = getClient(intent.chain);
+    const publicClient = getClient(intent.chain, wallet.userId);
     const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
 
     if (receipt.status !== 'success') {

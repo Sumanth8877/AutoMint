@@ -190,7 +190,7 @@ export async function executeMintTask(
   };
 
   // Always simulate first to catch obvious failures
-  const gas = await estimateMintGas(wallet.address as Hex, chain, params);
+  const gas = await estimateMintGas(wallet.address as Hex, chain, params, claimed.userId);
   if (gas.error) {
     await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
     await captureMessage('Gas estimation failed', {
@@ -218,7 +218,7 @@ export async function executeMintTask(
     return { success: false, error: gas.error };
   }
 
-  const sim = await simulateMint(wallet.address as Hex, chain, params);
+  const sim = await simulateMint(wallet.address as Hex, chain, params, claimed.userId);
   if (!sim.success) {
     await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
     await captureMessage('Mint simulation failed', {
@@ -259,7 +259,7 @@ export async function executeMintTask(
     };
   } else {
     // ── LIVE: execute real transaction ──────────────
-    result = await executeMint(wallet.address as Hex, chain, params);
+    result = await executeMint(wallet.address as Hex, chain, params, claimed.userId);
 
     if (!result.success) {
       await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));

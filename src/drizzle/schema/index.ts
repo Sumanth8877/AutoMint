@@ -82,6 +82,19 @@ export const executionSettings = pgTable('execution_settings', {
   userIdIdx: uniqueIndex('idx_execution_settings_user_id').on(table.userId),
 }));
 
+export const rpcProviderSettings = pgTable('rpc_provider_settings', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  routingMode: text('routing_mode').default('SMART').notNull().$type<'SMART' | 'MANUAL'>(),
+  preferredProvider: text('preferred_provider').$type<'ALCHEMY' | 'QUICKNODE' | null>(),
+  autoFailover: boolean('auto_failover').default(true).notNull(),
+  rpcTimeoutSeconds: integer('rpc_timeout_seconds').default(45).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: uniqueIndex('idx_rpc_provider_settings_user_id').on(table.userId),
+}));
+
 export const wallets = pgTable('wallets', {
   id: uuid('id').defaultRandom().primaryKey(),
   userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
@@ -351,6 +364,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   telegramAccounts: many(telegramAccounts),
   emailNotificationPreferences: many(emailNotificationPreferences),
   executionSettings: many(executionSettings),
+  rpcProviderSettings: many(rpcProviderSettings),
 }));
 
 export const telegramAccountsRelations = relations(telegramAccounts, ({ one }) => ({
@@ -364,6 +378,10 @@ export const emailNotificationPreferencesRelations = relations(emailNotification
 export const executionSettingsRelations = relations(executionSettings, ({ one }) => ({
   user: one(users, { fields: [executionSettings.userId], references: [users.id] }),
   defaultWallet: one(wallets, { fields: [executionSettings.defaultWalletId], references: [wallets.id] }),
+}));
+
+export const rpcProviderSettingsRelations = relations(rpcProviderSettings, ({ one }) => ({
+  user: one(users, { fields: [rpcProviderSettings.userId], references: [users.id] }),
 }));
 
 export const walletsRelations = relations(wallets, ({ one }) => ({
