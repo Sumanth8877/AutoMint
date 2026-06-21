@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     const message = getErrorMessage(error);
     const status = error instanceof AnalyzerResolutionError ? error.status : message === 'Invalid JSON request body' ? 400 : 500;
     if (error instanceof AnalyzerResolutionError) {
-      return NextResponse.json({ error: message, intent: error.intent }, { status });
+      return NextResponse.json({ error: message, intent: error.intent, logs: error.logs }, { status });
     }
     if (status >= 500) {
       await captureException(error, {

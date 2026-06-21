@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -27,7 +27,7 @@ import Input from '@/components/ui/Input';
 import { MetricCard } from '@/components/ui/metric-card';
 import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
-import { apiRequest } from '@/lib/api/client';
+import { ApiClientError, apiRequest } from '@/lib/api/client';
 
 interface AnalyzerResponse {
   intent: {
@@ -65,8 +65,16 @@ interface AnalyzerResponse {
     selector: string;
     confidence: number;
   };
+  logs: AnalyzerDebugLog[];
   analyzedAt: string;
 }
+
+type AnalyzerDebugLog = {
+  timestamp: string;
+  level: 'info' | 'success' | 'warning' | 'error';
+  stage: string;
+  message: string;
+};
 
 const workflowSteps: Array<{
   label: string;
@@ -108,12 +116,99 @@ function deriveScores(result: AnalyzerResponse | null) {
   return { opportunity: Math.round(opportunity), risk: Math.round(risk), readiness };
 }
 
+function detectInputType(input: string) {
+  const lower = input.trim().toLowerCase();
+  if (/^0x[a-f0-9]{40}$/i.test(input.trim())) return 'Direct Contract';
+  if (lower.includes('opensea.io')) return 'OpenSea URL';
+  if (lower.includes('etherscan.io') || lower.includes('basescan.org') || lower.includes('polygonscan.com')) return 'Explorer URL';
+  if (lower.includes('solscan.io')) return 'Solscan URL';
+  if (lower.includes('magiceden.io')) return 'Magic Eden URL';
+  return 'Unknown URL';
+}
+
+function createClientLog(level: AnalyzerDebugLog['level'], stage: string, message: string): AnalyzerDebugLog {
+  return {
+    timestamp: new Date().toISOString(),
+    level,
+    stage,
+    message,
+  };
+}
+
+function formatLogTime(timestamp: string) {
+  return new Date(timestamp).toLocaleTimeString([], { hour12: false });
+}
+
+function AnalyzerDebugConsole({
+  logs,
+  open,
+  onToggle,
+}: {
+  logs: AnalyzerDebugLog[];
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+  }, [logs, open]);
+
+  const levelClass: Record<AnalyzerDebugLog['level'], string> = {
+    info: 'text-sky-200',
+    success: 'text-success',
+    warning: 'text-warning',
+    error: 'text-danger',
+  };
+
+  return (
+    <Card className="overflow-hidden border-accent/20 bg-black/40">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center justify-between gap-3 border-b border-border px-5 py-4 text-left"
+        aria-expanded={open}
+      >
+        <span className="flex items-center gap-3">
+          <Code2 className="h-5 w-5 text-accent" aria-hidden="true" />
+          <span className="font-semibold text-text">Analyzer Debug Console</span>
+          <Badge variant={logs.some((log) => log.level === 'error') ? 'danger' : logs.length > 0 ? 'info' : 'default'}>
+            {logs.length} logs
+          </Badge>
+        </span>
+        <ChevronDown className={`h-4 w-4 text-muted transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
+      </button>
+      {open ? (
+        <div
+          ref={scrollRef}
+          className="max-h-80 overflow-y-auto bg-[#05070d] p-4 font-mono text-xs leading-6 text-muted"
+          aria-live="polite"
+        >
+          {logs.length > 0 ? (
+            logs.map((log, index) => (
+              <div key={`${log.timestamp}-${index}`} className="whitespace-pre-wrap break-words">
+                <span className="text-muted/80">[{formatLogTime(log.timestamp)}]</span>{' '}
+                <span className={levelClass[log.level]}>{log.message}</span>
+                <span className="ml-2 text-muted/50">({log.stage})</span>
+              </div>
+            ))
+          ) : (
+            <div className="text-muted">Debug logs will appear here after Analyze starts.</div>
+          )}
+        </div>
+      ) : null}
+    </Card>
+  );
+}
+
 export default function AnalyzerClient({ initialInput = '' }: { initialInput?: string }) {
   const [url, setUrl] = useState(initialInput);
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<AnalyzerResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [logsOpen, setLogsOpen] = useState(false);
+  const [consoleOpen, setConsoleOpen] = useState(true);
+  const [debugLogs, setDebugLogs] = useState<AnalyzerDebugLog[]>([]);
 
   const scores = useMemo(() => deriveScores(result), [result]);
 
@@ -127,6 +222,13 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
 
     setAnalyzing(true);
     setError(null);
+    setConsoleOpen(true);
+    setDebugLogs([
+      createClientLog('info', 'input', 'Analysis started'),
+      createClientLog('info', 'input', `Input received: ${input}`),
+      createClientLog('success', 'input', `Input type detected: ${detectInputType(input)}`),
+      createClientLog('info', 'input', 'Waiting for analyzer pipeline response'),
+    ]);
 
     try {
       const payload = await apiRequest<AnalyzerResponse>('/api/analyzer', {
@@ -134,8 +236,19 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
         body: { input },
       });
       setResult(payload);
+      setDebugLogs(payload.logs ?? []);
     } catch (requestError) {
       setResult(null);
+      if (requestError instanceof ApiClientError) {
+        const payload = requestError.payload as { logs?: AnalyzerDebugLog[] } | null;
+        setDebugLogs((payload?.logs?.length ? payload.logs : [
+          createClientLog('error', 'final_status', requestError.message),
+        ]));
+      } else {
+        setDebugLogs([
+          createClientLog('error', 'final_status', requestError instanceof Error ? requestError.message : 'Analyzer request failed.'),
+        ]);
+      }
       setError(requestError instanceof Error ? requestError.message : 'Analyzer request failed.');
     } finally {
       setAnalyzing(false);
@@ -255,6 +368,12 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
             </form>
           </Card>
 
+          <AnalyzerDebugConsole
+            logs={debugLogs}
+            open={consoleOpen}
+            onToggle={() => setConsoleOpen((value) => !value)}
+          />
+
           <Card className="p-5">
             <h2 className="mb-4 font-semibold text-text">Workflow</h2>
             <div className="space-y-3">
@@ -365,28 +484,6 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
                 </Card>
               </div>
 
-              <Card className="overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => setLogsOpen((value) => !value)}
-                  className="flex w-full items-center justify-between gap-3 p-5 text-left"
-                  aria-expanded={logsOpen}
-                >
-                  <span className="flex items-center gap-3">
-                    <Code2 className="h-5 w-5 text-muted" aria-hidden="true" />
-                    <span className="font-semibold text-text">Debug Logs</span>
-                  </span>
-                  <ChevronDown className={`h-4 w-4 text-muted transition-transform ${logsOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
-                </button>
-                {logsOpen ? (
-                  <div className="border-t border-border bg-background/70 p-5 font-mono text-xs leading-6 text-muted">
-                    <p>[resolver] platform={result.intent.sourcePlatform} confidence={result.intent.confidence.toFixed(2)}</p>
-                    <p>[contract] address={result.intent.contractAddress} standard={result.metadata.tokenStandard}</p>
-                    <p>[mint] state={result.mintState.status} function={result.mintFunction.functionName}</p>
-                    <p>[strategy] opportunity={scores.opportunity} risk={scores.risk} readiness={scores.readiness}</p>
-                  </div>
-                ) : null}
-              </Card>
             </>
           ) : null}
         </div>

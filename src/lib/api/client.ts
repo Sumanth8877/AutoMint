@@ -1,5 +1,5 @@
 export class ApiClientError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(message: string, readonly status: number, readonly payload?: unknown) {
     super(message);
     this.name = 'ApiClientError';
   }
@@ -25,7 +25,7 @@ export async function apiRequest<T>(url: string, options: RequestOptions = {}): 
     const message = payload && typeof payload === 'object' && 'error' in payload && payload.error
       ? payload.error
       : 'Request failed';
-    throw new ApiClientError(message, response.status);
+    throw new ApiClientError(message, response.status, payload);
   }
 
   return payload as T;
