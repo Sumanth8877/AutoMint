@@ -10,7 +10,7 @@ const groups = [
   { title: 'RPC Providers', icon: Radio, items: ['Provider Settings', 'Gas Optimization', 'Timeout Settings'] },
   { title: 'Execution', icon: SlidersHorizontal, items: ['Mint Defaults', 'Retry Logic', 'Risk Gates'] },
   { title: 'Notifications', icon: Bell, items: ['Alert Preferences', 'Email Notifications', 'Push Notifications'] },
-  { title: 'Security', icon: Lock, items: ['Two-Factor Auth', 'Session Management', 'API Keys'] },
+  { title: 'Security', icon: Lock, items: ['API Keys'] },
 ];
 
 const icons = [Palette, Wallet, Radio, ShieldCheck, Bell, KeyRound];
