@@ -158,7 +158,10 @@ async function sendWalletTrackerNotification(
 
 export function verifyAlchemyWebhookSignature(headers: Headers, rawBody: string) {
   const signingKey = process.env.ALCHEMY_WEBHOOK_SIGNING_KEY;
-  if (!signingKey) return true;
+  if (!signingKey) {
+    console.error('[Security] ALCHEMY_WEBHOOK_SIGNING_KEY is not configured — rejecting webhook request. Set this env var to the signing key from your Alchemy dashboard.');
+    throw new Error('Webhook signature verification is not configured');
+  }
 
   const signature = headers.get('x-alchemy-signature');
   if (!signature) throw new Error('Missing Alchemy webhook signature');
