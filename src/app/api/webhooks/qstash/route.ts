@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import {
   executeScheduledMint,
   executeScheduledRiskRecheck,
+  executeReceiptRecheck,
   verifyQStashSignature,
   type ScheduledMintPayload,
 } from '@/lib/services/qstash.service';
@@ -26,9 +27,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'taskId is required' }, { status: 400 });
     }
 
-    const result = payload.type === 'risk_check'
-      ? await executeScheduledRiskRecheck(payload.taskId)
-      : await executeScheduledMint(payload.taskId);
+    let result;
+    if (payload.type === 'risk_check') {
+      result = await executeScheduledRiskRecheck(payload.taskId);
+    } else if (payload.type === 'receipt_check') {
+      // C-04: poll chain for known txHash — never calls sendTransaction
+      result = await executeReceiptRecheck(payload.taskId);
+    } else {
+      result = await executeScheduledMint(payload.taskId);
+    }
+
     return NextResponse.json({ ok: true, result });
   } catch (error) {
     console.error('QStash webhook error:', error);

@@ -113,11 +113,12 @@ export async function createMintTaskFromUrl(
     .returning();
 
   // 6. Schedule via QStash
-  //    For LIVE mints: schedule for near-immediate delivery (5 seconds)
-  //    For future mints: schedule for the known start time, or 60 s from now
+  //    For LIVE mints: new Date() → secondsFromDate() enforces Not-Before = now + 1s
+  //    (the minimum QStash supports). No artificial delay.
+  //    For future mints: use the known start time, or let scheduleMint default.
   const scheduledTime =
     mintState.status === 'LIVE'
-      ? new Date(Date.now() + 5_000)
+      ? new Date()
       : mintState.startTime && mintState.startTime.getTime() > Date.now()
         ? mintState.startTime
         : undefined;

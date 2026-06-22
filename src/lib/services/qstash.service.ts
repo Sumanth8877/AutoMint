@@ -13,6 +13,8 @@ import { addBreadcrumb, captureException, captureMessage } from '@/lib/observabi
 import { acquireLock, releaseLock } from '@/lib/services/mint-lock.service';
 import { executeScheduledRiskCheck, hasBlockingRiskChange, storeOriginalRiskSnapshot } from '@/lib/services/scheduled-risk-check.service';
 import { sendMintFailedEmail, sendMintScheduledEmail, sendSystemErrorEmail } from '@/lib/services/email-notification.service';
+import { getClient } from '@/lib/blockchain/client';
+import type { Hex } from 'viem';
 
 const QSTASH_BASE_URL = 'https://qstash.upstash.io';
 const DEFAULT_SCHEDULE_DELAY_MS = 60_000;
@@ -32,7 +34,7 @@ type QStashJwtPayload = {
 
 export type ScheduledMintPayload = {
   taskId: string;
-  type?: 'execute' | 'risk_check';
+  type?: 'execute' | 'risk_check' | 'receipt_check';
 };
 
 function getQStashToken() {
@@ -362,6 +364,13 @@ const TERMINAL_PATTERNS = [
   'wallet not linked',
   'cancelled',
   'access denied',
+  // C-04: receipt_timeout means the transaction IS on-chain — executeMintTask
+  // has already set status='unconfirmed' and scheduled a receipt recheck.
+  // This error must never be classified as retryable.
+  'receipt_timeout',
+  // 'unconfirmed' is the status string returned by executeMintTask when txHash
+  // exists. Treat as terminal at the retry layer for the same reason.
+  'unconfirmed',
 ];
 
 function isRetryableError(error: string | undefined): boolean {
@@ -515,7 +524,10 @@ export async function executeScheduledMint(taskId: string) {
     const mintResult = await executeMintTask(taskId, task.userId, { existingLockToken: mintLock.token });
 
     // ——— Retry on transient failure ——————————————————————————————
-    if (!mintResult.success && isRetryableError(mintResult.error)) {
+    // C-04: NEVER retry if a txHash is present — the transaction is already
+    // on-chain and executeMintTask has transitioned the task to 'unconfirmed'.
+    // Retrying here would call sendTransaction a second time.
+    if (!mintResult.success && !mintResult.txHash && isRetryableError(mintResult.error)) {
       const currentTask = (await getDb()
         .select({ maxRetries: mintTasks.maxRetries })
         .from(mintTasks)
@@ -579,4 +591,153 @@ export async function executeScheduledMint(taskId: string) {
 
 export async function executeScheduledRiskRecheck(taskId: string) {
   return executeScheduledRiskCheck(taskId);
+}
+
+// ── C-04: Receipt recheck ─────────────────────────────────────────────────
+//
+// When waitForTransactionReceipt times out after a successful broadcast,
+// executeMintTask sets status='unconfirmed' and calls scheduleReceiptRecheck.
+// QStash delivers to /api/webhooks/qstash with type='receipt_check'.
+// executeReceiptRecheck polls the chain for the known txHash and transitions
+// the task to 'completed' if confirmed — without ever calling sendTransaction.
+//
+// Retry budget: RECEIPT_RECHECK_MAX_ATTEMPTS checks, RECEIPT_RECHECK_DELAY_MS apart.
+// After exhaustion the task stays 'unconfirmed' for manual review.
+
+const RECEIPT_RECHECK_DELAY_MS = 30_000;     // 30 s between receipt checks
+const RECEIPT_RECHECK_MAX_ATTEMPTS = 40;      // ~20 min total window
+
+export async function scheduleReceiptRecheck(taskId: string, txHash: string) {
+  addBreadcrumb({
+    category: 'qstash',
+    message: 'receipt recheck scheduled',
+    level: 'info',
+    data: { taskId, txHash },
+  });
+  const recheckAt = new Date(Date.now() + RECEIPT_RECHECK_DELAY_MS);
+  await publishQStashMessage(taskId, recheckAt, 'receipt_check');
+}
+
+export async function executeReceiptRecheck(taskId: string) {
+  const [task] = await getDb()
+    .select()
+    .from(mintTasks)
+    .where(eq(mintTasks.id, taskId))
+    .limit(1);
+
+  if (!task) {
+    return { success: false, error: 'Task not found' };
+  }
+
+  // Guard: only process tasks that are actually unconfirmed with a known txHash
+  if (task.status !== 'unconfirmed') {
+    return { success: true, skipped: true, reason: `Task status is '${task.status}'; no receipt check needed` };
+  }
+
+  if (!task.txHash) {
+    // Defensive: should not happen — log and do nothing
+    await captureMessage('receipt_check fired for task with no txHash', {
+      area: 'qstash',
+      level: 'error',
+      context: { taskId },
+      fingerprint: ['qstash', 'receipt-check-no-hash'],
+    });
+    return { success: false, error: 'No txHash on unconfirmed task' };
+  }
+
+  const hash = task.txHash as Hex;
+
+  // Load the wallet to get the chain
+  const [wallet] = task.walletId
+    ? await getDb().select().from(wallets).where(eq(wallets.id, task.walletId)).limit(1)
+    : [];
+
+  if (!wallet) {
+    return { success: false, error: 'Wallet not found for receipt recheck' };
+  }
+
+  try {
+    const client = getClient(wallet.chain, task.userId);
+    const receipt = await client.waitForTransactionReceipt({ hash });
+
+    const now = new Date();
+    const confirmed = receipt.status === 'success';
+
+    await getDb()
+      .update(mintTasks)
+      .set({
+        status: 'completed',
+        txHash: hash,
+        confirmedAt: confirmed ? now : null,
+        updatedAt: now,
+      })
+      .where(
+        // Only update if still unconfirmed — prevents a race with any concurrent check
+        and(eq(mintTasks.id, taskId), eq(mintTasks.status, 'unconfirmed')),
+      );
+
+    if (!confirmed) {
+      await captureMessage('Unconfirmed mint transaction reverted on recheck', {
+        area: 'qstash',
+        level: 'error',
+        context: { taskId, transactionHash: hash },
+        fingerprint: ['qstash', 'receipt-reverted'],
+      });
+    }
+
+    await logActivity(task.userId, 'task_completed', 'Unconfirmed mint confirmed on recheck', {
+      taskId,
+      txHash: hash,
+    });
+
+    addBreadcrumb({
+      category: 'qstash',
+      message: 'receipt recheck: confirmed',
+      level: 'info',
+      data: { taskId, txHash: hash, status: receipt.status },
+    });
+
+    return { success: confirmed, txHash: hash };
+
+  } catch {
+    // Receipt still not available — reschedule if budget remains.
+    // maxRetries is repurposed here as the receipt-recheck attempt counter.
+    const recheckAttemptsRemaining = task.maxRetries ?? 0;
+
+    if (recheckAttemptsRemaining > 0) {
+      const delay = RECEIPT_RECHECK_DELAY_MS;
+      const recheckAt = new Date(Date.now() + delay);
+
+      await getDb()
+        .update(mintTasks)
+        .set({ maxRetries: recheckAttemptsRemaining - 1, updatedAt: new Date() })
+        .where(and(eq(mintTasks.id, taskId), eq(mintTasks.status, 'unconfirmed')));
+
+      await publishQStashMessage(taskId, recheckAt, 'receipt_check');
+
+      addBreadcrumb({
+        category: 'qstash',
+        message: 'receipt recheck: rescheduled',
+        level: 'warning',
+        data: { taskId, txHash: hash, recheckAttemptsRemaining: recheckAttemptsRemaining - 1 },
+      });
+
+      return {
+        success: false,
+        retrying: true,
+        txHash: hash,
+        recheckAttemptsRemaining: recheckAttemptsRemaining - 1,
+      };
+    }
+
+    // Budget exhausted — leave as 'unconfirmed' for manual review.
+    await captureMessage('Receipt recheck budget exhausted — task remains unconfirmed', {
+      area: 'qstash',
+      level: 'error',
+      context: { taskId, transactionHash: hash },
+      fingerprint: ['qstash', 'receipt-recheck-exhausted'],
+    });
+
+    return { success: false, txHash: hash, error: 'receipt_recheck_exhausted' };
+  }
 }

@@ -283,43 +283,84 @@ export async function executeMint(
     allocatedNonce = nonceResult?.nonce;
     const value = params.mintPrice ? parseEther(params.mintPrice) : BigInt(0);
 
-    const hash = await walletClient.sendTransaction({
-      account,
-      chain: getChain(chain),
-      to: params.contractAddress,
-      data: mintData,
-      value,
-      gas: params.gasLimit ? BigInt(params.gasLimit) : undefined,
-      // C-03: explicit nonce prevents concurrent workers from getting the same value
-      ...(allocatedNonce !== undefined && { nonce: allocatedNonce }),
-    });
+    // C-04: hoist hash before the receipt try so the catch block can always return it.
+    // If sendTransaction succeeds, hash is defined and must never be discarded —
+    // even when waitForTransactionReceipt subsequently times out.
+    let hash: Hex | undefined;
 
-    // Post-broadcast: release inflight tracking and scan for gaps
+    try {
+      hash = await walletClient.sendTransaction({
+        account,
+        chain: getChain(chain),
+        to: params.contractAddress,
+        data: mintData,
+        value,
+        gas: params.gasLimit ? BigInt(params.gasLimit) : undefined,
+        // C-03: explicit nonce prevents concurrent workers from getting the same value
+        ...(allocatedNonce !== undefined && { nonce: allocatedNonce }),
+      });
+    } catch (broadcastError) {
+      // sendTransaction itself failed — transaction was never broadcast.
+      // Safe to retry; no hash to preserve.
+      await captureException(broadcastError, {
+        area: 'minting',
+        context: { wallet: address, chain, collection: params.contractAddress },
+        fingerprint: ['mint', 'broadcast'],
+      });
+      return {
+        success: false,
+        error: getErrorMessage(broadcastError) || 'Transaction broadcast failed',
+      };
+    }
+
+    // Post-broadcast: release inflight tracking and scan for gaps.
+    // hash is guaranteed to be defined here.
     if (allocatedNonce !== undefined) {
       void releaseInflightNonce(account.address, chain, allocatedNonce).catch(() => undefined);
       void scanAndFillGaps(account.address, chain).catch(() => undefined);
     }
 
-    // ── Wait for 1 confirmation ───────────────────────────────────
-    const client = getClient(chain, userId);
-    const receipt = await client.waitForTransactionReceipt({ hash });
+    // ── Wait for 1 confirmation ─────────────────────────────────────────
+    // From this point the transaction is live on-chain. Any error MUST
+    // preserve hash so the caller can track the existing tx rather than
+    // broadcasting a second one.
+    try {
+      const client = getClient(chain, userId);
+      const receipt = await client.waitForTransactionReceipt({ hash });
 
-    if (receipt.status !== 'success') {
-      await captureMessage('Mint transaction reverted', {
+      if (receipt.status !== 'success') {
+        await captureMessage('Mint transaction reverted', {
+          area: 'minting',
+          level: 'error',
+          context: { wallet: address, chain, collection: params.contractAddress, transactionHash: hash },
+          fingerprint: ['mint', 'reverted'],
+        });
+      }
+
+      return {
+        success: receipt.status === 'success',
+        txHash: hash,
+        gasUsed: receipt.gasUsed?.toString(),
+        blockNumber: receipt.blockNumber,
+      };
+    } catch (receiptError) {
+      // waitForTransactionReceipt timed out or failed — but the transaction IS
+      // on-chain. Return txHash so the caller transitions to 'unconfirmed'
+      // and polls for the receipt without broadcasting a second transaction.
+      await captureException(receiptError, {
         area: 'minting',
-        level: 'error',
         context: { wallet: address, chain, collection: params.contractAddress, transactionHash: hash },
-        fingerprint: ['mint', 'reverted'],
+        fingerprint: ['mint', 'receipt-timeout'],
       });
+      return {
+        success: false,
+        txHash: hash,
+        error: 'receipt_timeout',
+      };
     }
-
-    return {
-      success: receipt.status === 'success',
-      txHash: hash,
-      gasUsed: receipt.gasUsed?.toString(),
-      blockNumber: receipt.blockNumber,
-    };
   } catch (error) {
+    // Catch-all for errors before sendTransaction (key decryption,
+    // gas estimation, nonce allocation). No hash exists at this stage.
     await captureException(error, {
       area: 'minting',
       context: { wallet: address, chain, collection: params.contractAddress },
