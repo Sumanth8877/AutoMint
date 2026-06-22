@@ -1,3 +1,5 @@
+import 'server-only';
+
 /**
  * executeMintFast(intent, wallet)
  *
@@ -13,6 +15,13 @@
  * - fail safely: no partial writes without txHash
  *
  * Does NOT use simulation mode. Executes real transactions only.
+ *
+ * Security invariants (C-1):
+ * - userId is derived from wallet.userId (always the owning user).
+ * - The optional `activityUserId` parameter only affects activity-log writes;
+ *   it does not affect key resolution or ownership validation.
+ * - getDecryptedPrivateKey() enforces ownership at the DB layer.
+ * - Error messages returned to callers are sanitised.
  */
 
 import { getDb } from '@/lib/db';
@@ -23,17 +32,18 @@ import { estimateMintGas, type MintParams } from '@/lib/blockchain/mint';
 import { getDecryptedPrivateKey } from './wallet.service';
 import { logActivity } from '@/lib/monitoring';
 import { getMintState } from './mint-state.service';
+import { captureException } from '@/lib/observability/sentry';
 import type { MintIntent } from '@/lib/resolve-mint-intent';
 import type { Hex } from 'viem';
 
-// ─── Types ─────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface FastMintWallet {
   id: string;
   address: string;
   chain: string;
   encryptedPrivateKey?: string | null;
-  userId: string;
+  userId: string;  // always required — this is the owning user
 }
 
 export interface FastMintResult {
@@ -42,7 +52,7 @@ export interface FastMintResult {
   error?: string;
 }
 
-// ─── Helpers ──────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function buildMintParams(intent: MintIntent): MintParams {
   return {
@@ -52,34 +62,31 @@ function buildMintParams(intent: MintIntent): MintParams {
   };
 }
 
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : 'Fast mint execution failed';
-}
-
 function buildIdempotencyKeyForIntent(intent: MintIntent, wallet: FastMintWallet): string {
   return `fast_mint:${wallet.id}:${intent.contractAddress}:${intent.chain}`;
 }
 
-// ─── Fast path executor ───────────────────────────
+// ─── Fast path executor ───────────────────────────────────────────────────────
 
 /**
  * Execute a mint immediately, bypassing the task queue.
  *
  * Preconditions:
- * - MINT_MODE must be 'live' (throws otherwise)
+ * - MINT_MODE must be 'live' (returns error otherwise)
  * - intent must be valid with contractAddress
  * - wallet must have an encryptedPrivateKey (imported wallet)
  *
  * Guarantees:
  * - Idempotency: returns existing txHash if already executed
  * - Fail-safe: if broadcast succeeds, DB writes always happen
+ * - Ownership: key resolved only for wallet.userId — no cross-user access
  */
 export async function executeMintFast(
   intent: MintIntent,
   wallet: FastMintWallet,
-  userId?: string,
+  activityUserId?: string,  // for activity log only; key resolution uses wallet.userId
 ): Promise<FastMintResult> {
-  // ── 0. Guard: must be in live mode ──────────────
+  // ── 0. Guard: must be in live mode ────────────────────────────────────────
   const mode = getMintMode();
   if (mode !== 'live') {
     return {
@@ -97,7 +104,7 @@ export async function executeMintFast(
   }
 
   try {
-    // ── 1. Idempotency check ──────────────────────
+    // ── 1. Idempotency check ──────────────────────────────────────────────
     const idempotencyKey = buildIdempotencyKeyForIntent(intent, wallet);
 
     const [existingHistory] = await getDb()
@@ -113,7 +120,7 @@ export async function executeMintFast(
       };
     }
 
-    // ── 2. Verify mint is LIVE on-chain ───────────
+    // ── 2. Verify mint is LIVE on-chain ───────────────────────────────────
     const mintState = await getMintState(intent.contractAddress, intent.chain);
     if (mintState.status !== 'LIVE') {
       return {
@@ -122,8 +129,29 @@ export async function executeMintFast(
       };
     }
 
-    // ── 3. Decrypt wallet + prepare ───────────────
-    const privateKey = await getDecryptedPrivateKey(wallet.id, wallet.userId);
+    // ── 3. Decrypt wallet key ─────────────────────────────────────────────
+    // Ownership is enforced by getDecryptedPrivateKey(walletId, userId):
+    // it only returns a key when wallets.id = wallet.id AND wallets.userId = wallet.userId.
+    let privateKey: string;
+    try {
+      privateKey = await getDecryptedPrivateKey(wallet.id, wallet.userId);
+    } catch (keyError) {
+      await captureException(keyError, {
+        area: 'minting',
+        context: { chain: intent.chain, collection: intent.contractAddress },
+        fingerprint: ['mint-fast', 'key-decryption'],
+      });
+      const isOwnershipError =
+        keyError instanceof Error &&
+        keyError.message.toLowerCase().includes('not found');
+      return {
+        success: false,
+        error: isOwnershipError
+          ? 'Wallet not found or access denied.'
+          : 'Wallet key unavailable.',
+      };
+    }
+
     const { parseAbi, encodeFunctionData } = await import('viem');
     const { SUPPORTED_CHAINS } = await import('@/lib/blockchain/chains');
     const { parseEther } = await import('viem');
@@ -136,18 +164,16 @@ export async function executeMintFast(
     }
 
     const account = privateKeyToAccount(privateKey as `0x${string}`);
-
     const walletClient = getWalletClient(intent.chain, account, { userId: wallet.userId });
-
     const mintParams = buildMintParams(intent);
 
-    // ── 4. Estimate gas ───────────────────────────
+    // ── 4. Estimate gas ───────────────────────────────────────────────────
     const gasResult = await estimateMintGas(wallet.address as `0x${string}`, intent.chain, mintParams, wallet.userId);
     if (gasResult.error) {
       return { success: false, error: `Gas estimation failed: ${gasResult.error}` };
     }
 
-    // ── 5. Build transaction data ──────────────────
+    // ── 5. Build transaction data ─────────────────────────────────────────
     const mintData = encodeFunctionData({
       abi: parseAbi(['function mint(uint256 quantity) payable']),
       functionName: 'mint',
@@ -156,7 +182,7 @@ export async function executeMintFast(
 
     const value = mintParams.mintPrice ? parseEther(mintParams.mintPrice) : BigInt(0);
 
-    // ── 6. Broadcast transaction ───────────────────
+    // ── 6. Broadcast transaction ──────────────────────────────────────────
     const txHash = await walletClient.sendTransaction({
       account,
       chain: chainObj,
@@ -166,7 +192,7 @@ export async function executeMintFast(
       gas: gasResult.gasLimit,
     });
 
-    // ── 7. Wait for confirmation ───────────────────
+    // ── 7. Wait for confirmation ──────────────────────────────────────────
     const { getClient } = await import('@/lib/blockchain/client');
     const publicClient = getClient(intent.chain, wallet.userId);
     const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
@@ -175,7 +201,7 @@ export async function executeMintFast(
       return { success: false, error: 'Transaction reverted on-chain', txHash };
     }
 
-    // ── 8. Persist mint history (idempotent key = txHash) ──
+    // ── 8. Persist mint history (idempotent key = txHash) ─────────────────
     const now = new Date();
     await getDb().insert(mintHistory).values({
       userId: wallet.userId,
@@ -187,19 +213,18 @@ export async function executeMintFast(
       confirmedAt: now,
     });
 
-    // ── 9. Activity log ───────────────────────────
-    if (userId) {
-      await logActivity(userId, 'task_completed', 'Mint executed (fast path)', {
-        taskId: undefined,
-        walletId: wallet.id,
-        collectionId: undefined,
-        txHash,
-        chain: intent.chain,
-        mode,
-        sourcePlatform: intent.sourcePlatform,
-        fastPath: true,
-      });
-    }
+    // ── 9. Activity log ───────────────────────────────────────────────────
+    const logUserId = activityUserId || wallet.userId;
+    await logActivity(logUserId, 'task_completed', 'Mint executed (fast path)', {
+      taskId: undefined,
+      walletId: wallet.id,
+      collectionId: undefined,
+      txHash,
+      chain: intent.chain,
+      mode,
+      sourcePlatform: intent.sourcePlatform,
+      fastPath: true,
+    });
 
     return {
       success: true,
@@ -209,7 +234,7 @@ export async function executeMintFast(
     // Fast-path failure: nothing was written to mint_history yet, so no partial state
     return {
       success: false,
-      error: getErrorMessage(error) || 'Fast mint execution failed',
+      error: error instanceof Error ? error.message : 'Fast mint execution failed',
     };
   }
 }

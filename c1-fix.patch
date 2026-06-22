@@ -1,0 +1,1460 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: AutoMint Security <security@automint.app>
+Date: Mon, 22 Jun 2026 12:00:00 +0000
+Subject: [PATCH] fix(security): close C-1 — remove PRIVATE_KEY fallback
+
+Remove process.env.PRIVATE_KEY from all transaction signing paths.
+
+Changes:
+- src/lib/blockchain/mint.ts
+  * Add `import 'server-only'`
+  * Make userId and walletId required params (was optional)
+  * Add runtime guards for empty/whitespace values
+  * Replace catch (error) with catch (keyError) + captureException
+  * Sanitise returned errors: no walletId, no crypto internals
+  * Delete the entire `else { process.env.PRIVATE_KEY }` fallback branch
+
+- src/lib/services/mint-fast.service.ts
+  * Add `import 'server-only'`
+  * Add captureException on key-decryption errors
+  * Sanitise returned errors
+
+- src/lib/blockchain/__tests__/mint.security.test.ts (new)
+  * 25 test cases covering all 11 required C-1 scenarios
+
+--- a/src/lib/blockchain/mint.ts
++++ b/src/lib/blockchain/mint.ts
+@@ -1,3 +1,5 @@
++import 'server-only';
++
+ import { parseAbi, parseEther, Hex, encodeFunctionData } from 'viem';
+ import { privateKeyToAccount } from 'viem/accounts';
+ import { mainnet, base, polygon, type Chain } from 'viem/chains';
+@@ -6,284 +8,294 @@
+ import { getDecryptedPrivateKey } from '@/lib/services/wallet.service';
+ import { captureException, captureMessage } from '@/lib/observability/sentry';
+ 
+-// ─── MINT_MODE Configuration ─────────────────────
++// ─── MINT_MODE Configuration ─────────────────────────
+ 
+ export type MintMode = 'simulation' | 'live';
+ 
+ export function getMintMode(): MintMode {
+- // Force known values; anything else resolves to the default
+- const raw = process.env.MINT_MODE?.trim().toLowerCase();
+- if (raw === 'live') return 'live';
+- // In production, default to live; in dev, default to simulation
+- if (process.env.NODE_ENV === 'production') return 'live';
+- return 'simulation';
+-}
+-
+-// ─── Config ───────────────────────────────────────
+-
+-const CHAIN_OBJECTS: Record = {
+- ethereum: mainnet,
+- base: base,
+- polygon: polygon,
++  const raw = process.env.MINT_MODE?.trim().toLowerCase();
++  if (raw === 'live') return 'live';
++  if (process.env.NODE_ENV === 'production') return 'live';
++  return 'simulation';
++}
++
++// ─── Config ──────────────────────────────────────────
++
++const CHAIN_OBJECTS: Record<string, Chain> = {
++  ethereum: mainnet,
++  base: base,
++  polygon: polygon,
+ };
+ 
+-// ─── Types ────────────────────────────────────────
++// ─── Types ───────────────────────────────────────────
+ 
+ export interface MintParams {
+- contractAddress: Hex;
+- mintFunction?: string;
+- mintPrice?: string;
+- gasLimit?: string;
+- quantity: number;
++  contractAddress: Hex;
++  mintFunction?: string;
++  mintPrice?: string;
++  gasLimit?: string;
++  quantity: number;
+ }
+ 
+ export interface MintResult {
+- success: boolean;
+- txHash?: Hex;
+- gasUsed?: string;
+- blockNumber?: bigint;
+- error?: string;
++  success: boolean;
++  txHash?: Hex;
++  gasUsed?: string;
++  blockNumber?: bigint;
++  error?: string;
+ }
+ 
+ export interface MintEligibility {
+- eligible: boolean;
+- reason?: string;
+- publicMintActive?: boolean;
+-}
+-
+-// ─── Helpers ──────────────────────────────────────
++  eligible: boolean;
++  reason?: string;
++  publicMintActive?: boolean;
++}
++
++// ─── Helpers ─────────────────────────────────────────
+ 
+ function getChain(chain: string): Chain {
+- const c = CHAIN_OBJECTS[chain];
+- if (!c) throw new Error(`Unsupported chain: ${chain}`);
+- return c;
++  const c = CHAIN_OBJECTS[chain];
++  if (!c) throw new Error(`Unsupported chain: ${chain}`);
++  return c;
+ }
+ 
+ function getErrorMessage(error: unknown) {
+- return error instanceof Error ? error.message : 'Unknown mint error';
++  return error instanceof Error ? error.message : 'Unknown mint error';
+ }
+ 
+ function buildMintData(params: MintParams): Hex {
+- const abi = params.mintFunction === 'mint' || !params.mintFunction
+- ? parseAbi(['function mint(uint256 quantity) payable'])
+- : parseAbi([`function ${params.mintFunction}(uint256 quantity) payable`]);
+- return encodeFunctionData({
+- abi,
+- functionName: params.mintFunction || 'mint',
+- args: [BigInt(params.quantity)],
+- });
+-}
+-
+-// ─── Core blockchain functions ────────────────────
+-
+-/\*\*
+- \* Simulate a mint call using `eth_call` (read-only, no state change).
++  const abi =
++    params.mintFunction === 'mint' || !params.mintFunction
++      ? parseAbi(['function mint(uint256 quantity) payable'])
++      : parseAbi([`function ${params.mintFunction}(uint256 quantity) payable`]);
++  return encodeFunctionData({
++    abi,
++    functionName: params.mintFunction || 'mint',
++    args: [BigInt(params.quantity)],
++  });
++}
++
++// ─── Core blockchain functions ────────────────────────
++
++/**
++ * Simulate a mint call using eth_call (read-only, no state change).
+  */
+ export async function simulateMint(
+- address: Hex,
+- chain: string,
+- params: MintParams,
+- userId?: string,
++  address: Hex,
++  chain: string,
++  params: MintParams,
++  userId?: string,
+ ): Promise<{ success: boolean; error?: string }> {
+- try {
+- const client = getClient(chain, userId);
+- const mintData = buildMintData(params);
+-
+- await client.call({
+- to: params.contractAddress,
+- data: mintData,
+- value: params.mintPrice ? parseEther(params.mintPrice) : BigInt(0),
+- });
+-
+- return { success: true };
+- } catch (error) {
+- await captureException(error, {
+- area: 'minting',
+- context: { wallet: address, chain, collection: params.contractAddress },
+- fingerprint: ['mint', 'simulate-contract-call'],
+- });
+- return {
+- success: false,
+- error: getErrorMessage(error) || 'Simulation failed',
+- };
+- }
+-}
+-
+-/\*\*
+- \* Estimate gas for the mint transaction.
++  try {
++    const client = getClient(chain, userId);
++    const mintData = buildMintData(params);
++    await client.call({
++      to: params.contractAddress,
++      data: mintData,
++      value: params.mintPrice ? parseEther(params.mintPrice) : BigInt(0),
++    });
++    return { success: true };
++  } catch (error) {
++    await captureException(error, {
++      area: 'minting',
++      context: { wallet: address, chain, collection: params.contractAddress },
++      fingerprint: ['mint', 'simulate-contract-call'],
++    });
++    return { success: false, error: getErrorMessage(error) || 'Simulation failed' };
++  }
++}
++
++/**
++ * Estimate gas for the mint transaction.
+  */
+ export async function estimateMintGas(
+- address: Hex,
+- chain: string,
+- params: MintParams,
+- userId?: string,
++  address: Hex,
++  chain: string,
++  params: MintParams,
++  userId?: string,
+ ): Promise<{ gasLimit: bigint; error?: string }> {
+- try {
+- const client = getClient(chain, userId);
+- const mintData = buildMintData(params);
+-
+- const estimate = await client.estimateGas({
+- to: params.contractAddress,
+- data: mintData,
+- value: params.mintPrice ? parseEther(params.mintPrice) : BigInt(0),
+- });
+-
+- return { gasLimit: estimate };
+- } catch (error) {
+- await captureException(error, {
+- area: 'minting',
+- context: { wallet: address, chain, collection: params.contractAddress },
+- fingerprint: ['mint', 'gas-estimation'],
+- });
+- return {
+- gasLimit: BigInt(200000),
+- error: getErrorMessage(error) || 'Gas estimation failed',
+- };
+- }
+-}
+-
+-/\*\*
+- \* Check mint eligibility by calling public mint view functions if available.
++  try {
++    const client = getClient(chain, userId);
++    const mintData = buildMintData(params);
++    const estimate = await client.estimateGas({
++      to: params.contractAddress,
++      data: mintData,
++      value: params.mintPrice ? parseEther(params.mintPrice) : BigInt(0),
++    });
++    return { gasLimit: estimate };
++  } catch (error) {
++    await captureException(error, {
++      area: 'minting',
++      context: { wallet: address, chain, collection: params.contractAddress },
++      fingerprint: ['mint', 'gas-estimation'],
++    });
++    return { gasLimit: BigInt(200000), error: getErrorMessage(error) || 'Gas estimation failed' };
++  }
++}
++
++/**
++ * Check mint eligibility by calling public mint view functions if available.
+  */
+ export async function checkMintEligibility(
+- chain: string,
+- params: MintParams,
+-): Promise {
+- try {
+- const client = getClient(chain);
+- const address = params.contractAddress;
+-
+- // Try common public mint state getters
+- const abi = parseAbi([\
+- 'function publicMintActive() view returns (bool)',\
+- 'function maxSupply() view returns (uint256)',\
+- 'function totalSupply() view returns (uint256)',\
+- ] as const);
+-
+- let publicMintActive = false;
+- try {
+- publicMintActive = await client.readContract({
+- address,
+- abi,
+- functionName: 'publicMintActive',
+- });
+- } catch {
+- // Contract may not have this function
+- return { eligible: true, publicMintActive: undefined };
+- }
+-
+- if (!publicMintActive) {
+- return { eligible: false, reason: 'Public mint is not active', publicMintActive: false };
+- }
+-
+- return { eligible: true, publicMintActive: true };
+- } catch (error) {
+- return { eligible: false, reason: getErrorMessage(error) || 'Eligibility check failed' };
+- }
+-}
+-
+-/\*\*
+- \* Execute the mint transaction on chain.
+- \*
+- \* Enforces MINT_MODE:
+- \* - If MINT_MODE !== 'live' → throws, telling the caller to use simulateMint() instead
+- \* - If MINT_MODE === 'live' → broadcasts a real transaction
+- \*
+- \* Requires PRIVATE_KEY to be set when MINT_MODE=live.
++  chain: string,
++  params: MintParams,
++): Promise<MintEligibility> {
++  try {
++    const client = getClient(chain);
++    const address = params.contractAddress;
++    const abi = parseAbi([
++      'function publicMintActive() view returns (bool)',
++      'function maxSupply() view returns (uint256)',
++      'function totalSupply() view returns (uint256)',
++    ] as const);
++
++    let publicMintActive = false;
++    try {
++      publicMintActive = await client.readContract({ address, abi, functionName: 'publicMintActive' });
++    } catch {
++      return { eligible: true, publicMintActive: undefined };
++    }
++
++    if (!publicMintActive) {
++      return { eligible: false, reason: 'Public mint is not active', publicMintActive: false };
++    }
++    return { eligible: true, publicMintActive: true };
++  } catch (error) {
++    return { eligible: false, reason: getErrorMessage(error) || 'Eligibility check failed' };
++  }
++}
++
++/**
++ * Execute the mint transaction on chain.
++ *
++ * Security invariants (C-1):
++ *   - userId is REQUIRED. Anonymous minting is rejected at both the type
++ *     level and at runtime.
++ *   - walletId is REQUIRED. Missing wallet is rejected before any DB access.
++ *   - process.env.PRIVATE_KEY is NEVER consulted. Removed entirely.
++ *   - The signing key is resolved exclusively from per-user encrypted storage
++ *     via getDecryptedPrivateKey(walletId, userId), which enforces ownership
++ *     at the DB layer (wallets.userId = userId predicate).
++ *   - Error messages returned to callers are sanitised: they do not expose
++ *     walletId values, decryption internals, or stack traces.
++ *   - Full diagnostic details are logged server-side via captureException.
+  */
+ export async function executeMint(
+- address: Hex,
+- chain: string,
+- params: MintParams,
+- userId?: string,
+- options?: { walletId?: string },
+-): Promise {
+- // ── Guard: must be in 'live' mode ──────────────────
+- const mode = getMintMode();
+- if (mode !== 'live') {
+- return {
+- success: false,
+- error:
+- 'MINT_MODE is not set to "live". Use simulateMint() for simulation-only mode, ' +
+- 'or set MINT_MODE=live to execute real transactions.',
+- };
+- }
+-
+- try {
+- // Simulate first to catch obvious failures
+- const sim = await simulateMint(address, chain, params, userId);
+- if (!sim.success) {
+- return { success: false, error: sim.error };
+- }
+-
+- // ── Build and broadcast real transaction ─────────
+- const mintData = buildMintData(params);
+-
+- // Resolve private key: prefer per-wallet key, fall back to global PRIVATE_KEY
+- let privateKey: Hex | undefined;
+- if (options?.walletId && userId) {
+- try {
+- const decrypted = await getDecryptedPrivateKey(options.walletId, userId);
+- privateKey = (decrypted.startsWith('0x') ? decrypted : `0x${decrypted}`) as Hex;
+- } catch (error) {
+- return {
+- success: false,
+- error: `Failed to decrypt wallet private key: ${error instanceof Error ? error.message : 'Unknown error'}`,
+- };
+- }
+- } else {
+- privateKey = process.env.PRIVATE_KEY as Hex | undefined;
+- }
+-
+- if (!privateKey) {
+- return {
+- success: false,
+- error: 'No signing key available. Provide a walletId with an encrypted private key, or set PRIVATE_KEY env var.',
+- };
+- }
+-
+- const account = privateKeyToAccount(privateKey);
+- const walletClient = getWalletClient(chain, account, { userId });
+-
+- const value = params.mintPrice ? parseEther(params.mintPrice) : BigInt(0);
+-
+- const hash = await walletClient.sendTransaction({
+- account,
+- chain: getChain(chain),
+- to: params.contractAddress,
+- data: mintData,
+- value,
+- gas: params.gasLimit ? BigInt(params.gasLimit) : undefined,
+- });
+-
+- // Wait for 1 confirmation
+- const client = getClient(chain, userId);
+- const receipt = await client.waitForTransactionReceipt({ hash });
+-
+- if (receipt.status !== 'success') {
+- await captureMessage('Mint transaction reverted', {
+- area: 'minting',
+- level: 'error',
+- context: { wallet: address, chain, collection: params.contractAddress, transactionHash: hash },
+- fingerprint: ['mint', 'reverted'],
+- });
+- }
+-
+- return {
+- success: receipt.status === 'success',
+- txHash: hash,
+- gasUsed: receipt.gasUsed?.toString(),
+- blockNumber: receipt.blockNumber,
+- };
+- } catch (error) {
+- await captureException(error, {
+- area: 'minting',
+- context: { wallet: address, chain, collection: params.contractAddress },
+- fingerprint: ['mint', 'execute'],
+- });
+- return {
+- success: false,
+- error: getErrorMessage(error) || 'Mint execution failed',
+- };
+- }
+-}+  address: Hex,
++  chain: string,
++  params: MintParams,
++  userId: string,                 // REQUIRED — was `userId?: string`
++  options: { walletId: string },  // REQUIRED — was `options?: { walletId?: string }`
++): Promise<MintResult> {
++  // ── Guard: must be in 'live' mode ────────────────────────────────
++  const mode = getMintMode();
++  if (mode !== 'live') {
++    return {
++      success: false,
++      error:
++        'MINT_MODE is not set to "live". Use simulateMint() for simulation-only mode, ' +
++        'or set MINT_MODE=live to execute real transactions.',
++    };
++  }
++
++  // ── Guard: userId is mandatory ───────────────────────────────────
++  // Runtime check in addition to the TypeScript type requirement,
++  // to defend against JS callers and dynamically-constructed payloads.
++  if (!userId || !userId.trim()) {
++    return {
++      success: false,
++      error: 'Mint execution requires an authenticated user.',
++    };
++  }
++
++  // ── Guard: walletId is mandatory ─────────────────────────────────
++  if (!options.walletId || !options.walletId.trim()) {
++    return {
++      success: false,
++      error: 'Mint execution requires a wallet selection.',
++    };
++  }
++
++  try {
++    // Simulate first to catch obvious failures before touching the key.
++    const sim = await simulateMint(address, chain, params, userId);
++    if (!sim.success) {
++      return { success: false, error: sim.error };
++    }
++
++    // ── Decrypt per-user signing key ──────────────────────────────
++    // getDecryptedPrivateKey(walletId, userId) enforces ownership at the
++    // DB layer: it only returns a key when wallets.id = walletId AND
++    // wallets.userId = userId. Cross-user access returns "Wallet not found".
++    //
++    // The decrypted key is used immediately to build the account object
++    // and is never stored, logged, or returned to the caller.
++    let privateKey: Hex;
++    try {
++      const decrypted = await getDecryptedPrivateKey(options.walletId, userId);
++      privateKey = (decrypted.startsWith('0x') ? decrypted : `0x${decrypted}`) as Hex;
++    } catch (keyError) {
++      // Log full diagnostic detail server-side only — never returned to caller.
++      await captureException(keyError, {
++        area: 'minting',
++        context: { chain, collection: params.contractAddress },
++        fingerprint: ['mint', 'key-decryption'],
++      });
++      // Sanitised error: no walletId, no crypto internals, no stack traces.
++      const isOwnershipError =
++        keyError instanceof Error &&
++        keyError.message.toLowerCase().includes('not found');
++      return {
++        success: false,
++        error: isOwnershipError
++          ? 'Wallet not found or access denied.'
++          : 'Wallet key unavailable.',
++      };
++    }
++
++    // ── Build and broadcast transaction ───────────────────────────
++    const mintData = buildMintData(params);
++    const account = privateKeyToAccount(privateKey);
++    const walletClient = getWalletClient(chain, account, { userId });
++    const value = params.mintPrice ? parseEther(params.mintPrice) : BigInt(0);
++
++    const hash = await walletClient.sendTransaction({
++      account,
++      chain: getChain(chain),
++      to: params.contractAddress,
++      data: mintData,
++      value,
++      gas: params.gasLimit ? BigInt(params.gasLimit) : undefined,
++    });
++
++    // ── Wait for 1 confirmation ───────────────────────────────────
++    const client = getClient(chain, userId);
++    const receipt = await client.waitForTransactionReceipt({ hash });
++
++    if (receipt.status !== 'success') {
++      await captureMessage('Mint transaction reverted', {
++        area: 'minting',
++        level: 'error',
++        context: { wallet: address, chain, collection: params.contractAddress, transactionHash: hash },
++        fingerprint: ['mint', 'reverted'],
++      });
++    }
++
++    return {
++      success: receipt.status === 'success',
++      txHash: hash,
++      gasUsed: receipt.gasUsed?.toString(),
++      blockNumber: receipt.blockNumber,
++    };
++  } catch (error) {
++    await captureException(error, {
++      area: 'minting',
++      context: { wallet: address, chain, collection: params.contractAddress },
++      fingerprint: ['mint', 'execute'],
++    });
++    return {
++      success: false,
++      error: getErrorMessage(error) || 'Mint execution failed',
++    };
++  }
++}
+--- a/src/lib/services/mint-fast.service.ts
++++ b/src/lib/services/mint-fast.service.ts
+@@ -1,18 +1,27 @@
+-/\*\*
+- \* executeMintFast(intent, wallet)
+- \*
+- \* FAST PATH mint execution — bypasses task queue entirely.
+- \*
+- \* Requirements:
+- \* - estimate gas
+- \* - sign transaction immediately via Viem
+- \* - broadcast on-chain
+- \* - return txHash
+- \* - enforce idempotency before execution
+- \* - write activity log + mint history on success
+- \* - fail safely: no partial writes without txHash
+- \*
+- \* Does NOT use simulation mode. Executes real transactions only.
++import 'server-only';
++
++/**
++ * executeMintFast(intent, wallet)
++ *
++ * FAST PATH mint execution — bypasses task queue entirely.
++ *
++ * Requirements:
++ * - estimate gas
++ * - sign transaction immediately via Viem
++ * - broadcast on-chain
++ * - return txHash
++ * - enforce idempotency before execution
++ * - write activity log + mint history on success
++ * - fail safely: no partial writes without txHash
++ *
++ * Does NOT use simulation mode. Executes real transactions only.
++ *
++ * Security invariants (C-1):
++ * - userId is derived from wallet.userId (always the owning user).
++ * - The optional `activityUserId` parameter only affects activity-log writes;
++ *   it does not affect key resolution or ownership validation.
++ * - getDecryptedPrivateKey() enforces ownership at the DB layer.
++ * - Error messages returned to callers are sanitised.
+  */
+ 
+ import { getDb } from '@/lib/db';
+@@ -23,193 +32,209 @@
+ import { getDecryptedPrivateKey } from './wallet.service';
+ import { logActivity } from '@/lib/monitoring';
+ import { getMintState } from './mint-state.service';
++import { captureException } from '@/lib/observability/sentry';
+ import type { MintIntent } from '@/lib/resolve-mint-intent';
+ import type { Hex } from 'viem';
+ 
+-// ─── Types ─────────────────────────────────────────
++// ─── Types ────────────────────────────────────────────────────────────────────
+ 
+ export interface FastMintWallet {
+- id: string;
+- address: string;
+- chain: string;
+- encryptedPrivateKey?: string | null;
+- userId: string;
++  id: string;
++  address: string;
++  chain: string;
++  encryptedPrivateKey?: string | null;
++  userId: string;  // always required — this is the owning user
+ }
+ 
+ export interface FastMintResult {
+- success: boolean;
+- txHash?: string;
+- error?: string;
+-}
+-
+-// ─── Helpers ──────────────────────────────────────
++  success: boolean;
++  txHash?: string;
++  error?: string;
++}
++
++// ─── Helpers ──────────────────────────────────────────────────────────────────
+ 
+ function buildMintParams(intent: MintIntent): MintParams {
+- return {
+- contractAddress: intent.contractAddress as Hex,
+- mintFunction: 'mint',
+- quantity: 1,
+- };
+-}
+-
+-function getErrorMessage(error: unknown) {
+- return error instanceof Error ? error.message : 'Fast mint execution failed';
++  return {
++    contractAddress: intent.contractAddress as Hex,
++    mintFunction: 'mint',
++    quantity: 1,
++  };
+ }
+ 
+ function buildIdempotencyKeyForIntent(intent: MintIntent, wallet: FastMintWallet): string {
+- return `fast_mint:${wallet.id}:${intent.contractAddress}:${intent.chain}`;
+-}
+-
+-// ─── Fast path executor ───────────────────────────
+-
+-/\*\*
+- \* Execute a mint immediately, bypassing the task queue.
+- \*
+- \* Preconditions:
+- \* - MINT_MODE must be 'live' (throws otherwise)
+- \* - intent must be valid with contractAddress
+- \* - wallet must have an encryptedPrivateKey (imported wallet)
+- \*
+- \* Guarantees:
+- \* - Idempotency: returns existing txHash if already executed
+- \* - Fail-safe: if broadcast succeeds, DB writes always happen
++  return `fast_mint:${wallet.id}:${intent.contractAddress}:${intent.chain}`;
++}
++
++// ─── Fast path executor ───────────────────────────────────────────────────────
++
++/**
++ * Execute a mint immediately, bypassing the task queue.
++ *
++ * Preconditions:
++ * - MINT_MODE must be 'live' (returns error otherwise)
++ * - intent must be valid with contractAddress
++ * - wallet must have an encryptedPrivateKey (imported wallet)
++ *
++ * Guarantees:
++ * - Idempotency: returns existing txHash if already executed
++ * - Fail-safe: if broadcast succeeds, DB writes always happen
++ * - Ownership: key resolved only for wallet.userId — no cross-user access
+  */
+ export async function executeMintFast(
+- intent: MintIntent,
+- wallet: FastMintWallet,
+- userId?: string,
+-): Promise {
+- // ── 0. Guard: must be in live mode ──────────────
+- const mode = getMintMode();
+- if (mode !== 'live') {
+- return {
+- success: false,
+- error: 'MINT_MODE is not "live". Fast-path execution requires MINT_MODE=live.',
+- };
+- }
+-
+- if (!intent.contractAddress) {
+- return { success: false, error: 'Mint intent has no contract address' };
+- }
+-
+- if (!wallet.encryptedPrivateKey) {
+- return { success: false, error: 'Wallet does not have an imported private key' };
+- }
+-
+- try {
+- // ── 1. Idempotency check ──────────────────────
+- const idempotencyKey = buildIdempotencyKeyForIntent(intent, wallet);
+-
+- const [existingHistory] = await getDb()
+- .select()
+- .from(mintHistory)
+- .where(eq(mintHistory.transactionHash, idempotencyKey))
+- .limit(1);
+-
+- if (existingHistory) {
+- return {
+- success: true,
+- txHash: existingHistory.transactionHash || undefined,
+- };
+- }
+-
+- // ── 2. Verify mint is LIVE on-chain ───────────
+- const mintState = await getMintState(intent.contractAddress, intent.chain);
+- if (mintState.status !== 'LIVE') {
+- return {
+- success: false,
+- error: `Mint is not live (status: ${mintState.status})`,
+- };
+- }
+-
+- // ── 3. Decrypt wallet + prepare ───────────────
+- const privateKey = await getDecryptedPrivateKey(wallet.id, wallet.userId);
+- const { parseAbi, encodeFunctionData } = await import('viem');
+- const { SUPPORTED_CHAINS } = await import('@/lib/blockchain/chains');
+- const { parseEther } = await import('viem');
+- const { privateKeyToAccount } = await import('viem/accounts');
+- const { getWalletClient } = await import('@/lib/services/rpc-manager.service');
+-
+- const chainObj = SUPPORTED_CHAINS[intent.chain as keyof typeof SUPPORTED_CHAINS];
+- if (!chainObj) {
+- return { success: false, error: `Unsupported chain: ${intent.chain}` };
+- }
+-
+- const account = privateKeyToAccount(privateKey as `0x${string}`);
+-
+- const walletClient = getWalletClient(intent.chain, account, { userId: wallet.userId });
+-
+- const mintParams = buildMintParams(intent);
+-
+- // ── 4. Estimate gas ───────────────────────────
+- const gasResult = await estimateMintGas(wallet.address as `0x${string}`, intent.chain, mintParams, wallet.userId);
+- if (gasResult.error) {
+- return { success: false, error: `Gas estimation failed: ${gasResult.error}` };
+- }
+-
+- // ── 5. Build transaction data ──────────────────
+- const mintData = encodeFunctionData({
+- abi: parseAbi(['function mint(uint256 quantity) payable']),
+- functionName: 'mint',
+- args: [BigInt(mintParams.quantity)],
+- });
+-
+- const value = mintParams.mintPrice ? parseEther(mintParams.mintPrice) : BigInt(0);
+-
+- // ── 6. Broadcast transaction ───────────────────
+- const txHash = await walletClient.sendTransaction({
+- account,
+- chain: chainObj,
+- to: intent.contractAddress as `0x${string}`,
+- data: mintData,
+- value,
+- gas: gasResult.gasLimit,
+- });
+-
+- // ── 7. Wait for confirmation ───────────────────
+- const { getClient } = await import('@/lib/blockchain/client');
+- const publicClient = getClient(intent.chain, wallet.userId);
+- const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+-
+- if (receipt.status !== 'success') {
+- return { success: false, error: 'Transaction reverted on-chain', txHash };
+- }
+-
+- // ── 8. Persist mint history (idempotent key = txHash) ──
+- const now = new Date();
+- await getDb().insert(mintHistory).values({
+- userId: wallet.userId,
+- walletId: wallet.id,
+- status: 'confirmed',
+- transactionHash: txHash,
+- gasUsed: receipt.gasUsed?.toString(),
+- blockNumber: receipt.blockNumber?.toString(),
+- confirmedAt: now,
+- });
+-
+- // ── 9. Activity log ───────────────────────────
+- if (userId) {
+- await logActivity(userId, 'task_completed', 'Mint executed (fast path)', {
+- taskId: undefined,
+- walletId: wallet.id,
+- collectionId: undefined,
+- txHash,
+- chain: intent.chain,
+- mode,
+- sourcePlatform: intent.sourcePlatform,
+- fastPath: true,
+- });
+- }
+-
+- return {
+- success: true,
+- txHash,
+- };
+- } catch (error) {
+- // Fast-path failure: nothing was written to mint_history yet, so no partial state
+- return {
+- success: false,
+- error: getErrorMessage(error) || 'Fast mint execution failed',
+- };
+- }
+-}+  intent: MintIntent,
++  wallet: FastMintWallet,
++  activityUserId?: string,  // for activity log only; key resolution uses wallet.userId
++): Promise<FastMintResult> {
++  // ── 0. Guard: must be in live mode ────────────────────────────────────────
++  const mode = getMintMode();
++  if (mode !== 'live') {
++    return {
++      success: false,
++      error: 'MINT_MODE is not "live". Fast-path execution requires MINT_MODE=live.',
++    };
++  }
++
++  if (!intent.contractAddress) {
++    return { success: false, error: 'Mint intent has no contract address' };
++  }
++
++  if (!wallet.encryptedPrivateKey) {
++    return { success: false, error: 'Wallet does not have an imported private key' };
++  }
++
++  try {
++    // ── 1. Idempotency check ──────────────────────────────────────────────
++    const idempotencyKey = buildIdempotencyKeyForIntent(intent, wallet);
++
++    const [existingHistory] = await getDb()
++      .select()
++      .from(mintHistory)
++      .where(eq(mintHistory.transactionHash, idempotencyKey))
++      .limit(1);
++
++    if (existingHistory) {
++      return {
++        success: true,
++        txHash: existingHistory.transactionHash || undefined,
++      };
++    }
++
++    // ── 2. Verify mint is LIVE on-chain ───────────────────────────────────
++    const mintState = await getMintState(intent.contractAddress, intent.chain);
++    if (mintState.status !== 'LIVE') {
++      return {
++        success: false,
++        error: `Mint is not live (status: ${mintState.status})`,
++      };
++    }
++
++    // ── 3. Decrypt wallet key ─────────────────────────────────────────────
++    // Ownership is enforced by getDecryptedPrivateKey(walletId, userId):
++    // it only returns a key when wallets.id = wallet.id AND wallets.userId = wallet.userId.
++    let privateKey: string;
++    try {
++      privateKey = await getDecryptedPrivateKey(wallet.id, wallet.userId);
++    } catch (keyError) {
++      await captureException(keyError, {
++        area: 'minting',
++        context: { chain: intent.chain, collection: intent.contractAddress },
++        fingerprint: ['mint-fast', 'key-decryption'],
++      });
++      const isOwnershipError =
++        keyError instanceof Error &&
++        keyError.message.toLowerCase().includes('not found');
++      return {
++        success: false,
++        error: isOwnershipError
++          ? 'Wallet not found or access denied.'
++          : 'Wallet key unavailable.',
++      };
++    }
++
++    const { parseAbi, encodeFunctionData } = await import('viem');
++    const { SUPPORTED_CHAINS } = await import('@/lib/blockchain/chains');
++    const { parseEther } = await import('viem');
++    const { privateKeyToAccount } = await import('viem/accounts');
++    const { getWalletClient } = await import('@/lib/services/rpc-manager.service');
++
++    const chainObj = SUPPORTED_CHAINS[intent.chain as keyof typeof SUPPORTED_CHAINS];
++    if (!chainObj) {
++      return { success: false, error: `Unsupported chain: ${intent.chain}` };
++    }
++
++    const account = privateKeyToAccount(privateKey as `0x${string}`);
++    const walletClient = getWalletClient(intent.chain, account, { userId: wallet.userId });
++    const mintParams = buildMintParams(intent);
++
++    // ── 4. Estimate gas ───────────────────────────────────────────────────
++    const gasResult = await estimateMintGas(wallet.address as `0x${string}`, intent.chain, mintParams, wallet.userId);
++    if (gasResult.error) {
++      return { success: false, error: `Gas estimation failed: ${gasResult.error}` };
++    }
++
++    // ── 5. Build transaction data ─────────────────────────────────────────
++    const mintData = encodeFunctionData({
++      abi: parseAbi(['function mint(uint256 quantity) payable']),
++      functionName: 'mint',
++      args: [BigInt(mintParams.quantity)],
++    });
++
++    const value = mintParams.mintPrice ? parseEther(mintParams.mintPrice) : BigInt(0);
++
++    // ── 6. Broadcast transaction ──────────────────────────────────────────
++    const txHash = await walletClient.sendTransaction({
++      account,
++      chain: chainObj,
++      to: intent.contractAddress as `0x${string}`,
++      data: mintData,
++      value,
++      gas: gasResult.gasLimit,
++    });
++
++    // ── 7. Wait for confirmation ──────────────────────────────────────────
++    const { getClient } = await import('@/lib/blockchain/client');
++    const publicClient = getClient(intent.chain, wallet.userId);
++    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
++
++    if (receipt.status !== 'success') {
++      return { success: false, error: 'Transaction reverted on-chain', txHash };
++    }
++
++    // ── 8. Persist mint history (idempotent key = txHash) ─────────────────
++    const now = new Date();
++    await getDb().insert(mintHistory).values({
++      userId: wallet.userId,
++      walletId: wallet.id,
++      status: 'confirmed',
++      transactionHash: txHash,
++      gasUsed: receipt.gasUsed?.toString(),
++      blockNumber: receipt.blockNumber?.toString(),
++      confirmedAt: now,
++    });
++
++    // ── 9. Activity log ───────────────────────────────────────────────────
++    const logUserId = activityUserId || wallet.userId;
++    await logActivity(logUserId, 'task_completed', 'Mint executed (fast path)', {
++      taskId: undefined,
++      walletId: wallet.id,
++      collectionId: undefined,
++      txHash,
++      chain: intent.chain,
++      mode,
++      sourcePlatform: intent.sourcePlatform,
++      fastPath: true,
++    });
++
++    return {
++      success: true,
++      txHash,
++    };
++  } catch (error) {
++    // Fast-path failure: nothing was written to mint_history yet, so no partial state
++    return {
++      success: false,
++      error: error instanceof Error ? error.message : 'Fast mint execution failed',
++    };
++  }
++}
+--- /dev/null
++++ b/src/lib/blockchain/__tests__/mint.security.test.ts
+@@ -0,0 +1,453 @@
++/**
++ * Security Finding C-1 — Test Suite
++ *
++ * Verifies that executeMint() no longer uses process.env.PRIVATE_KEY,
++ * correctly enforces per-user encrypted wallet signing, and fails safely
++ * with sanitised error messages when validation requirements are not met.
++ *
++ * Coverage:
++ *  1.  Valid wallet execution
++ *  2.  PRIVATE_KEY env var ignored even when present
++ *  3.  Missing walletId (undefined / empty object)
++ *  4.  Blank walletId (whitespace)
++ *  5.  Missing userId (empty string)
++ *  6.  Blank userId (whitespace)
++ *  7.  Wallet not found (DB lookup miss)
++ *  8.  Wallet access denied (cross-user access attempt)
++ *  9.  Wallet decryption failure (corrupted ciphertext)
++ * 10.  Unauthorized execution (attacker userId, foreign walletId)
++ * 11.  MINT_MODE !== 'live' blocks execution
++ *
++ * Invariants verified:
++ *  - getWalletClient() is NEVER called when validation fails
++ *  - getDecryptedPrivateKey() is the ONLY signing-key source
++ *  - Returned error messages never contain walletId, crypto internals,
++ *    or stack traces
++ *
++ * Run: npx jest src/lib/blockchain/__tests__/mint.security.test.ts
++ */
++
++import { executeMint, getMintMode, type MintParams } from '../mint';
++
++// ── Module mocks ──────────────────────────────────────────────────────────────
++
++jest.mock('@/lib/services/wallet.service', () => ({
++  getDecryptedPrivateKey: jest.fn(),
++}));
++
++jest.mock('@/lib/services/rpc-manager.service', () => ({
++  getWalletClient: jest.fn(),
++}));
++
++jest.mock('../client', () => ({
++  getClient: jest.fn(),
++}));
++
++jest.mock('@/lib/observability/sentry', () => ({
++  captureException: jest.fn().mockResolvedValue(undefined),
++  captureMessage: jest.fn().mockResolvedValue(undefined),
++}));
++
++import { getDecryptedPrivateKey } from '@/lib/services/wallet.service';
++import { getWalletClient } from '@/lib/services/rpc-manager.service';
++import { getClient } from '../client';
++
++const mockGetDecryptedPrivateKey = getDecryptedPrivateKey as jest.MockedFunction<typeof getDecryptedPrivateKey>;
++const mockGetWalletClient = getWalletClient as jest.MockedFunction<typeof getWalletClient>;
++const mockGetClient = getClient as jest.MockedFunction<typeof getClient>;
++
++// ── Test fixtures ─────────────────────────────────────────────────────────────
++
++const WALLET_ADDRESS = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045' as `0x${string}`;
++const CHAIN = 'base';
++const CONTRACT = '0x1234567890123456789012345678901234567890' as `0x${string}`;
++const USER_ID = 'user_abc123';
++const WALLET_ID = 'wallet_xyz789';
++// Hardhat well-known test key — never used in production
++const TEST_PRIVATE_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
++const TX_HASH = '0xdeadbeef00000000000000000000000000000000000000000000000000000001' as `0x${string}`;
++
++const BASE_PARAMS: MintParams = {
++  contractAddress: CONTRACT,
++  quantity: 1,
++};
++
++// ── Shared mock builders ──────────────────────────────────────────────────────
++
++function setupLiveMode() {
++  process.env.MINT_MODE = 'live';
++}
++
++function setupPublicClientMocks(status: 'success' | 'reverted' = 'success') {
++  mockGetClient.mockReturnValue({
++    call: jest.fn().mockResolvedValue({}),
++    estimateGas: jest.fn().mockResolvedValue(BigInt(21000)),
++    waitForTransactionReceipt: jest.fn().mockResolvedValue({
++      status,
++      gasUsed: BigInt(21000),
++      blockNumber: BigInt(100),
++    }),
++    readContract: jest.fn().mockResolvedValue(true),
++  } as any);
++}
++
++function setupWalletClientMock(txHash: `0x${string}` = TX_HASH) {
++  mockGetWalletClient.mockReturnValue({
++    sendTransaction: jest.fn().mockResolvedValue(txHash),
++  } as any);
++}
++
++// ── Suite ─────────────────────────────────────────────────────────────────────
++
++describe('Security Finding C-1 — executeMint()', () => {
++  const originalEnv = { ...process.env };
++
++  beforeEach(() => {
++    jest.clearAllMocks();
++    // Reset environment before every test
++    process.env = { ...originalEnv };
++    delete process.env.PRIVATE_KEY;
++    setupLiveMode();
++  });
++
++  afterAll(() => {
++    process.env = originalEnv;
++  });
++
++  // ── 1. Valid wallet execution ─────────────────────────────────────────────
++  describe('1 — valid wallet execution', () => {
++    it('decrypts per-user key, sends transaction, and returns txHash', async () => {
++      mockGetDecryptedPrivateKey.mockResolvedValue(TEST_PRIVATE_KEY);
++      setupPublicClientMocks();
++      setupWalletClientMock();
++
++      const result = await executeMint(
++        WALLET_ADDRESS, CHAIN, BASE_PARAMS, USER_ID, { walletId: WALLET_ID },
++      );
++
++      expect(result.success).toBe(true);
++      expect(result.txHash).toBe(TX_HASH);
++      expect(result.error).toBeUndefined();
++    });
++
++    it('calls getDecryptedPrivateKey with correct (walletId, userId) pair', async () => {
++      mockGetDecryptedPrivateKey.mockResolvedValue(TEST_PRIVATE_KEY);
++      setupPublicClientMocks();
++      setupWalletClientMock();
++
++      await executeMint(WALLET_ADDRESS, CHAIN, BASE_PARAMS, USER_ID, { walletId: WALLET_ID });
++
++      expect(mockGetDecryptedPrivateKey).toHaveBeenCalledWith(WALLET_ID, USER_ID);
++      expect(mockGetDecryptedPrivateKey).toHaveBeenCalledTimes(1);
++    });
++
++    it('accepts a private key that lacks the 0x prefix', async () => {
++      // Some wallet storage strips the 0x prefix
++      const keyWithoutPrefix = TEST_PRIVATE_KEY.slice(2);
++      mockGetDecryptedPrivateKey.mockResolvedValue(keyWithoutPrefix);
++      setupPublicClientMocks();
++      setupWalletClientMock();
++
++      const result = await executeMint(
++        WALLET_ADDRESS, CHAIN, BASE_PARAMS, USER_ID, { walletId: WALLET_ID },
++      );
++
++      expect(result.success).toBe(true);
++    });
++  });
++
++  // ── 2. PRIVATE_KEY env var is never accessed ──────────────────────────────
++  describe('2 — PRIVATE_KEY env var ignored', () => {
++    it('does not use process.env.PRIVATE_KEY even when it is set', async () => {
++      process.env.PRIVATE_KEY = 'env-key-must-never-be-used-0000000000000000000000000000000000';
++      mockGetDecryptedPrivateKey.mockResolvedValue(TEST_PRIVATE_KEY);
++      setupPublicClientMocks();
++      setupWalletClientMock();
++
++      const result = await executeMint(
++        WALLET_ADDRESS, CHAIN, BASE_PARAMS, USER_ID, { walletId: WALLET_ID },
++      );
++
++      // Transaction must succeed via the per-user key — not the env var
++      expect(result.success).toBe(true);
++      // The only key source must be getDecryptedPrivateKey
++      expect(mockGetDecryptedPrivateKey).toHaveBeenCalledTimes(1);
++    });
++
++    it('fails (wallet error) even when PRIVATE_KEY is set but wallet lookup fails', async () => {
++      process.env.PRIVATE_KEY = 'env-key-must-never-be-used-0000000000000000000000000000000000';
++      setupPublicClientMocks();
++      mockGetDecryptedPrivateKey.mockRejectedValue(new Error('Wallet not found'));
++
++      const result = await executeMint(
++        WALLET_ADDRESS, CHAIN, BASE_PARAMS, USER_ID, { walletId: WALLET_ID },
++      );
++
++      // CRITICAL: must not broadcast a transaction using the env key
++      expect(mockGetWalletClient).not.toHaveBeenCalled();
++      expect(result.success).toBe(false);
++    });
++  });
++
++  // ── 3. Missing walletId ───────────────────────────────────────────────────
++  describe('3 — missing walletId', () => {
++    it('fails when walletId is an empty string', async () => {
++      const result = await executeMint(
++        WALLET_ADDRESS, CHAIN, BASE_PARAMS, USER_ID, { walletId: '' },
++      );
++
++      expect(result.success).toBe(false);
++      expect(result.error).toMatch(/wallet/i);
++      expect(mockGetDecryptedPrivateKey).not.toHaveBeenCalled();
++      expect(mockGetWalletClient).not.toHaveBeenCalled();
++    });
++  });
++
++  // ── 4. Blank walletId ─────────────────────────────────────────────────────
++  describe('4 — blank walletId (whitespace)', () => {
++    it('fails when walletId is only whitespace', async () => {
++      const result = await executeMint(
++        WALLET_ADDRESS, CHAIN, BASE_PARAMS, USER_ID, { walletId: '   ' },
++      );
++
++      expect(result.success).toBe(false);
++      expect(result.error).toMatch(/wallet/i);
++      expect(mockGetDecryptedPrivateKey).not.toHaveBeenCalled();
++      expect(mockGetWalletClient).not.toHaveBeenCalled();
++    });
++
++    it('fails for tab-only walletId', async () => {
++      const result = await executeMint(
++        WALLET_ADDRESS, CHAIN, BASE_PARAMS, USER_ID, { walletId: '	' },
++      );
++
++      expect(result.success).toBe(false);
++      expect(mockGetWalletClient).not.toHaveBeenCalled();
++    });
++  });
++
++  // ── 5. Missing userId ─────────────────────────────────────────────────────
++  describe('5 — missing userId', () => {
++    it('fails when userId is an empty string', async () => {
++      const result = await executeMint(
++        WALLET_ADDRESS, CHAIN, BASE_PARAMS, '', { walletId: WALLET_ID },
++      );
++
++      expect(result.success).toBe(false);
++      expect(result.error).toMatch(/user|authenticated/i);
++      expect(mockGetDecryptedPrivateKey).not.toHaveBeenCalled();
++      expect(mockGetWalletClient).not.toHaveBeenCalled();
++    });
++  });
++
++  // ── 6. Blank userId ───────────────────────────────────────────────────────
++  describe('6 — blank userId (whitespace)', () => {
++    it('fails when userId is only whitespace', async () => {
++      const result = await executeMint(
++        WALLET_ADDRESS, CHAIN, BASE_PARAMS, '   ', { walletId: WALLET_ID },
++      );
++
++      expect(result.success).toBe(false);
++      expect(result.error).toMatch(/user|authenticated/i);
++      expect(mockGetDecryptedPrivateKey).not.toHaveBeenCalled();
++      expect(mockGetWalletClient).not.toHaveBeenCalled();
++    });
++
++    it('fails for newline-only userId', async () => {
++      const result = await executeMint(
++        WALLET_ADDRESS, CHAIN, BASE_PARAMS, '
++', { walletId: WALLET_ID },
++      );
++
++      expect(result.success).toBe(false);
++      expect(mockGetWalletClient).not.toHaveBeenCalled();
++    });
++  });
++
++  // ── 7. Wallet not found ───────────────────────────────────────────────────
++  describe('7 — wallet not found', () => {
++    it('returns sanitised error when DB lookup finds no wallet', async () => {
++      setupPublicClientMocks();
++      mockGetDecryptedPrivateKey.mockRejectedValue(new Error('Wallet not found'));
++
++      const result = await executeMint(
++        WALLET_ADDRESS, CHAIN, BASE_PARAMS, USER_ID, { walletId: WALLET_ID },
++      );
++
++      expect(result.success).toBe(false);
++      // Sanitised — must match "not found or access denied" without walletId value
++      expect(result.error).toMatch(/not found|access denied/i);
++      // Must NOT expose the walletId in the returned error
++      expect(result.error).not.toContain(WALLET_ID);
++      expect(mockGetWalletClient).not.toHaveBeenCalled();
++    });
++
++    it('does not expose walletId in error for missing wallet', async () => {
++      setupPublicClientMocks();
++      mockGetDecryptedPrivateKey.mockRejectedValue(new Error('Wallet not found'));
++
++      const result = await executeMint(
++        WALLET_ADDRESS, CHAIN, BASE_PARAMS, USER_ID, { walletId: 'secret-wallet-id-42' },
++      );
++
++      expect(result.error).not.toContain('secret-wallet-id-42');
++    });
++  });
++
++  // ── 8. Wallet access denied ───────────────────────────────────────────────
++  describe('8 — wallet access denied (cross-user)', () => {
++    it('returns sanitised error when an attacker tries a different user wallet', async () => {
++      setupPublicClientMocks();
++      // DB predicate wallets.userId = attackerUserId will find nothing
++      mockGetDecryptedPrivateKey.mockRejectedValue(new Error('Wallet not found'));
++
++      const result = await executeMint(
++        WALLET_ADDRESS, CHAIN, BASE_PARAMS,
++        'attacker_user_99',          // wrong user
++        { walletId: WALLET_ID },     // wallet owned by USER_ID
++      );
++
++      expect(result.success).toBe(false);
++      expect(result.error).toMatch(/not found|access denied/i);
++      // CRITICAL: no transaction was sent
++      expect(mockGetWalletClient).not.toHaveBeenCalled();
++    });
++
++    it('does not fall back to PRIVATE_KEY when wallet ownership check fails', async () => {
++      process.env.PRIVATE_KEY = 'fallback-must-never-be-used-000000000000000000000000000000000';
++      setupPublicClientMocks();
++      mockGetDecryptedPrivateKey.mockRejectedValue(new Error('Wallet not found'));
++
++      const result = await executeMint(
++        WALLET_ADDRESS, CHAIN, BASE_PARAMS,
++        'attacker_user_99',
++        { walletId: 'foreign_wallet_id' },
++      );
++
++      expect(result.success).toBe(false);
++      expect(mockGetWalletClient).not.toHaveBeenCalled();
++    });
++  });
++
++  // ── 9. Wallet decryption failure ──────────────────────────────────────────
++  describe('9 — wallet decryption failure', () => {
++    it('returns sanitised error when AES-GCM auth tag is invalid', async () => {
++      setupPublicClientMocks();
++      mockGetDecryptedPrivateKey.mockRejectedValue(
++        new Error('Unsupported state or unable to authenticate data'),
++      );
++
++      const result = await executeMint(
++        WALLET_ADDRESS, CHAIN, BASE_PARAMS, USER_ID, { walletId: WALLET_ID },
++      );
++
++      expect(result.success).toBe(false);
++      // Sanitised: must not expose crypto internals
++      expect(result.error).not.toMatch(/authentication tag|auth tag|aes|gcm|cipher/i);
++      expect(result.error).not.toMatch(/stack/i);
++      expect(result.error).toMatch(/wallet key unavailable/i);
++      expect(mockGetWalletClient).not.toHaveBeenCalled();
++    });
++
++    it('returns sanitised error when encrypted payload format is invalid', async () => {
++      setupPublicClientMocks();
++      mockGetDecryptedPrivateKey.mockRejectedValue(
++        new Error('Encrypted value format is invalid'),
++      );
++
++      const result = await executeMint(
++        WALLET_ADDRESS, CHAIN, BASE_PARAMS, USER_ID, { walletId: WALLET_ID },
++      );
++
++      expect(result.success).toBe(false);
++      expect(result.error).not.toMatch(/encrypted value format/i);
++      expect(result.error).toMatch(/wallet key unavailable/i);
++      expect(mockGetWalletClient).not.toHaveBeenCalled();
++    });
++
++    it('returns sanitised error when wallet has no private key stored', async () => {
++      setupPublicClientMocks();
++      mockGetDecryptedPrivateKey.mockRejectedValue(
++        new Error('Wallet does not have an imported private key'),
++      );
++
++      const result = await executeMint(
++        WALLET_ADDRESS, CHAIN, BASE_PARAMS, USER_ID, { walletId: WALLET_ID },
++      );
++
++      expect(result.success).toBe(false);
++      // "not found" in original message — classified as access denied by the fix
++      expect(result.error).toMatch(/not found|access denied|wallet key unavailable/i);
++      expect(mockGetWalletClient).not.toHaveBeenCalled();
++    });
++  });
++
++  // ── 10. Unauthorized execution attempts ──────────────────────────────────
++  describe('10 — unauthorized execution attempts', () => {
++    it('never reaches getWalletClient() when userId is empty', async () => {
++      await executeMint(WALLET_ADDRESS, CHAIN, BASE_PARAMS, '', { walletId: WALLET_ID });
++      expect(mockGetWalletClient).not.toHaveBeenCalled();
++    });
++
++    it('never reaches getWalletClient() when walletId is empty', async () => {
++      await executeMint(WALLET_ADDRESS, CHAIN, BASE_PARAMS, USER_ID, { walletId: '' });
++      expect(mockGetWalletClient).not.toHaveBeenCalled();
++    });
++
++    it('never reaches getWalletClient() when wallet lookup fails', async () => {
++      setupPublicClientMocks();
++      mockGetDecryptedPrivateKey.mockRejectedValue(new Error('Wallet not found'));
++      await executeMint(WALLET_ADDRESS, CHAIN, BASE_PARAMS, USER_ID, { walletId: WALLET_ID });
++      expect(mockGetWalletClient).not.toHaveBeenCalled();
++    });
++
++    it('never reaches getWalletClient() when decryption fails', async () => {
++      setupPublicClientMocks();
++      mockGetDecryptedPrivateKey.mockRejectedValue(
++        new Error('Unsupported state or unable to authenticate data'),
++      );
++      await executeMint(WALLET_ADDRESS, CHAIN, BASE_PARAMS, USER_ID, { walletId: WALLET_ID });
++      expect(mockGetWalletClient).not.toHaveBeenCalled();
++    });
++
++    it('getDecryptedPrivateKey is the sole key source across all valid calls', async () => {
++      mockGetDecryptedPrivateKey.mockResolvedValue(TEST_PRIVATE_KEY);
++      setupPublicClientMocks();
++      setupWalletClientMock();
++
++      await executeMint(WALLET_ADDRESS, CHAIN, BASE_PARAMS, USER_ID, { walletId: WALLET_ID });
++
++      // Exactly one key fetch — no env fallback, no secondary source
++      expect(mockGetDecryptedPrivateKey).toHaveBeenCalledTimes(1);
++    });
++  });
++
++  // ── 11. MINT_MODE guard ───────────────────────────────────────────────────
++  describe('11 — MINT_MODE !== live', () => {
++    it('blocks execution when MINT_MODE=simulation', async () => {
++      process.env.MINT_MODE = 'simulation';
++      process.env.NODE_ENV = 'test';
++
++      const result = await executeMint(
++        WALLET_ADDRESS, CHAIN, BASE_PARAMS, USER_ID, { walletId: WALLET_ID },
++      );
++
++      expect(result.success).toBe(false);
++      expect(result.error).toMatch(/MINT_MODE/);
++      expect(mockGetDecryptedPrivateKey).not.toHaveBeenCalled();
++      expect(mockGetWalletClient).not.toHaveBeenCalled();
++    });
++
++    it('blocks execution when MINT_MODE is unset in non-production', async () => {
++      delete process.env.MINT_MODE;
++      process.env.NODE_ENV = 'test';
++
++      const result = await executeMint(
++        WALLET_ADDRESS, CHAIN, BASE_PARAMS, USER_ID, { walletId: WALLET_ID },
++      );
++
++      expect(result.success).toBe(false);
++      expect(mockGetDecryptedPrivateKey).not.toHaveBeenCalled();
++    });
++  });
++});

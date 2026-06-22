@@ -1,3 +1,5 @@
+import 'server-only';
+
 import { parseAbi, parseEther, Hex, encodeFunctionData } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { mainnet, base, polygon, type Chain } from 'viem/chains';
@@ -6,20 +8,18 @@ import { getWalletClient } from '@/lib/services/rpc-manager.service';
 import { getDecryptedPrivateKey } from '@/lib/services/wallet.service';
 import { captureException, captureMessage } from '@/lib/observability/sentry';
 
-// ─── MINT_MODE Configuration ─────────────────────
+// ─── MINT_MODE Configuration ─────────────────────────
 
 export type MintMode = 'simulation' | 'live';
 
 export function getMintMode(): MintMode {
-  // Force known values; anything else resolves to the default
   const raw = process.env.MINT_MODE?.trim().toLowerCase();
   if (raw === 'live') return 'live';
-  // In production, default to live; in dev, default to simulation
   if (process.env.NODE_ENV === 'production') return 'live';
   return 'simulation';
 }
 
-// ─── Config ───────────────────────────────────────
+// ─── Config ──────────────────────────────────────────
 
 const CHAIN_OBJECTS: Record<string, Chain> = {
   ethereum: mainnet,
@@ -27,7 +27,7 @@ const CHAIN_OBJECTS: Record<string, Chain> = {
   polygon: polygon,
 };
 
-// ─── Types ────────────────────────────────────────
+// ─── Types ───────────────────────────────────────────
 
 export interface MintParams {
   contractAddress: Hex;
@@ -51,7 +51,7 @@ export interface MintEligibility {
   publicMintActive?: boolean;
 }
 
-// ─── Helpers ──────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────
 
 function getChain(chain: string): Chain {
   const c = CHAIN_OBJECTS[chain];
@@ -64,9 +64,10 @@ function getErrorMessage(error: unknown) {
 }
 
 function buildMintData(params: MintParams): Hex {
-  const abi = params.mintFunction === 'mint' || !params.mintFunction
-    ? parseAbi(['function mint(uint256 quantity) payable'])
-    : parseAbi([`function ${params.mintFunction}(uint256 quantity) payable`]);
+  const abi =
+    params.mintFunction === 'mint' || !params.mintFunction
+      ? parseAbi(['function mint(uint256 quantity) payable'])
+      : parseAbi([`function ${params.mintFunction}(uint256 quantity) payable`]);
   return encodeFunctionData({
     abi,
     functionName: params.mintFunction || 'mint',
@@ -74,10 +75,10 @@ function buildMintData(params: MintParams): Hex {
   });
 }
 
-// ─── Core blockchain functions ────────────────────
+// ─── Core blockchain functions ────────────────────────
 
 /**
- * Simulate a mint call using `eth_call` (read-only, no state change).
+ * Simulate a mint call using eth_call (read-only, no state change).
  */
 export async function simulateMint(
   address: Hex,
@@ -88,13 +89,11 @@ export async function simulateMint(
   try {
     const client = getClient(chain, userId);
     const mintData = buildMintData(params);
-
     await client.call({
       to: params.contractAddress,
       data: mintData,
       value: params.mintPrice ? parseEther(params.mintPrice) : BigInt(0),
     });
-
     return { success: true };
   } catch (error) {
     await captureException(error, {
@@ -102,10 +101,7 @@ export async function simulateMint(
       context: { wallet: address, chain, collection: params.contractAddress },
       fingerprint: ['mint', 'simulate-contract-call'],
     });
-    return {
-      success: false,
-      error: getErrorMessage(error) || 'Simulation failed',
-    };
+    return { success: false, error: getErrorMessage(error) || 'Simulation failed' };
   }
 }
 
@@ -121,24 +117,19 @@ export async function estimateMintGas(
   try {
     const client = getClient(chain, userId);
     const mintData = buildMintData(params);
-
     const estimate = await client.estimateGas({
       to: params.contractAddress,
       data: mintData,
       value: params.mintPrice ? parseEther(params.mintPrice) : BigInt(0),
     });
-
     return { gasLimit: estimate };
   } catch (error) {
-      await captureException(error, {
-        area: 'minting',
-        context: { wallet: address, chain, collection: params.contractAddress },
-        fingerprint: ['mint', 'gas-estimation'],
-      });
-      return {
-        gasLimit: BigInt(200000),
-        error: getErrorMessage(error) || 'Gas estimation failed',
-      };
+    await captureException(error, {
+      area: 'minting',
+      context: { wallet: address, chain, collection: params.contractAddress },
+      fingerprint: ['mint', 'gas-estimation'],
+    });
+    return { gasLimit: BigInt(200000), error: getErrorMessage(error) || 'Gas estimation failed' };
   }
 }
 
@@ -152,8 +143,6 @@ export async function checkMintEligibility(
   try {
     const client = getClient(chain);
     const address = params.contractAddress;
-
-    // Try common public mint state getters
     const abi = parseAbi([
       'function publicMintActive() view returns (bool)',
       'function maxSupply() view returns (uint256)',
@@ -162,20 +151,14 @@ export async function checkMintEligibility(
 
     let publicMintActive = false;
     try {
-      publicMintActive = await client.readContract({
-        address,
-        abi,
-        functionName: 'publicMintActive',
-      });
+      publicMintActive = await client.readContract({ address, abi, functionName: 'publicMintActive' });
     } catch {
-      // Contract may not have this function
       return { eligible: true, publicMintActive: undefined };
     }
 
     if (!publicMintActive) {
       return { eligible: false, reason: 'Public mint is not active', publicMintActive: false };
     }
-
     return { eligible: true, publicMintActive: true };
   } catch (error) {
     return { eligible: false, reason: getErrorMessage(error) || 'Eligibility check failed' };
@@ -185,20 +168,26 @@ export async function checkMintEligibility(
 /**
  * Execute the mint transaction on chain.
  *
- * Enforces MINT_MODE:
- * - If MINT_MODE !== 'live' → throws, telling the caller to use simulateMint() instead
- * - If MINT_MODE === 'live'  → broadcasts a real transaction
- *
- * Requires PRIVATE_KEY to be set when MINT_MODE=live.
+ * Security invariants (C-1):
+ *   - userId is REQUIRED. Anonymous minting is rejected at both the type
+ *     level and at runtime.
+ *   - walletId is REQUIRED. Missing wallet is rejected before any DB access.
+ *   - process.env.PRIVATE_KEY is NEVER consulted. Removed entirely.
+ *   - The signing key is resolved exclusively from per-user encrypted storage
+ *     via getDecryptedPrivateKey(walletId, userId), which enforces ownership
+ *     at the DB layer (wallets.userId = userId predicate).
+ *   - Error messages returned to callers are sanitised: they do not expose
+ *     walletId values, decryption internals, or stack traces.
+ *   - Full diagnostic details are logged server-side via captureException.
  */
 export async function executeMint(
   address: Hex,
   chain: string,
   params: MintParams,
-  userId?: string,
-  options?: { walletId?: string },
+  userId: string,                 // REQUIRED — was `userId?: string`
+  options: { walletId: string },  // REQUIRED — was `options?: { walletId?: string }`
 ): Promise<MintResult> {
-  // ── Guard: must be in 'live' mode ──────────────────
+  // ── Guard: must be in 'live' mode ────────────────────────────────
   const mode = getMintMode();
   if (mode !== 'live') {
     return {
@@ -209,42 +198,65 @@ export async function executeMint(
     };
   }
 
+  // ── Guard: userId is mandatory ───────────────────────────────────
+  // Runtime check in addition to the TypeScript type requirement,
+  // to defend against JS callers and dynamically-constructed payloads.
+  if (!userId || !userId.trim()) {
+    return {
+      success: false,
+      error: 'Mint execution requires an authenticated user.',
+    };
+  }
+
+  // ── Guard: walletId is mandatory ─────────────────────────────────
+  if (!options.walletId || !options.walletId.trim()) {
+    return {
+      success: false,
+      error: 'Mint execution requires a wallet selection.',
+    };
+  }
+
   try {
-    // Simulate first to catch obvious failures
+    // Simulate first to catch obvious failures before touching the key.
     const sim = await simulateMint(address, chain, params, userId);
     if (!sim.success) {
       return { success: false, error: sim.error };
     }
 
-    // ── Build and broadcast real transaction ─────────
-    const mintData = buildMintData(params);
-
-    // Resolve private key: prefer per-wallet key, fall back to global PRIVATE_KEY
-    let privateKey: Hex | undefined;
-    if (options?.walletId && userId) {
-      try {
-        const decrypted = await getDecryptedPrivateKey(options.walletId, userId);
-        privateKey = (decrypted.startsWith('0x') ? decrypted : `0x${decrypted}`) as Hex;
-      } catch (error) {
-        return {
-          success: false,
-          error: `Failed to decrypt wallet private key: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        };
-      }
-    } else {
-      privateKey = process.env.PRIVATE_KEY as Hex | undefined;
-    }
-
-    if (!privateKey) {
+    // ── Decrypt per-user signing key ──────────────────────────────
+    // getDecryptedPrivateKey(walletId, userId) enforces ownership at the
+    // DB layer: it only returns a key when wallets.id = walletId AND
+    // wallets.userId = userId. Cross-user access returns "Wallet not found".
+    //
+    // The decrypted key is used immediately to build the account object
+    // and is never stored, logged, or returned to the caller.
+    let privateKey: Hex;
+    try {
+      const decrypted = await getDecryptedPrivateKey(options.walletId, userId);
+      privateKey = (decrypted.startsWith('0x') ? decrypted : `0x${decrypted}`) as Hex;
+    } catch (keyError) {
+      // Log full diagnostic detail server-side only — never returned to caller.
+      await captureException(keyError, {
+        area: 'minting',
+        context: { chain, collection: params.contractAddress },
+        fingerprint: ['mint', 'key-decryption'],
+      });
+      // Sanitised error: no walletId, no crypto internals, no stack traces.
+      const isOwnershipError =
+        keyError instanceof Error &&
+        keyError.message.toLowerCase().includes('not found');
       return {
         success: false,
-        error: 'No signing key available. Provide a walletId with an encrypted private key, or set PRIVATE_KEY env var.',
+        error: isOwnershipError
+          ? 'Wallet not found or access denied.'
+          : 'Wallet key unavailable.',
       };
     }
 
+    // ── Build and broadcast transaction ───────────────────────────
+    const mintData = buildMintData(params);
     const account = privateKeyToAccount(privateKey);
     const walletClient = getWalletClient(chain, account, { userId });
-
     const value = params.mintPrice ? parseEther(params.mintPrice) : BigInt(0);
 
     const hash = await walletClient.sendTransaction({
@@ -256,7 +268,7 @@ export async function executeMint(
       gas: params.gasLimit ? BigInt(params.gasLimit) : undefined,
     });
 
-    // Wait for 1 confirmation
+    // ── Wait for 1 confirmation ───────────────────────────────────
     const client = getClient(chain, userId);
     const receipt = await client.waitForTransactionReceipt({ hash });
 
