@@ -101,12 +101,24 @@ export function verifyQStashSignature(headers: Headers, rawBody: string) {
   const now = Math.floor(Date.now() / 1000);
   const bodyHash = crypto.createHash('sha256').update(rawBody).digest('base64url');
 
+  // C-7 fix: resolve expected webhook URL for sub claim validation.
+  // Skips sub check gracefully if APP_URL / VERCEL_URL is not set.
+  let expectedWebhookUrl: string | null = null;
+  try {
+    expectedWebhookUrl = getWebhookUrl();
+  } catch {
+    expectedWebhookUrl = null;
+  }
+
   for (const key of keys) {
     const payload = verifyJwtSignature(signature, key);
     if (!payload) continue;
     if (payload.exp && payload.exp < now) continue;
     if (payload.nbf && payload.nbf > now) continue;
     if (payload.body && payload.body !== bodyHash) continue;
+    // C-7 fix: reject JWT whose sub does not match this endpoint's URL.
+    // Prevents cross-endpoint replay of a valid QStash signature.
+    if (payload.sub && expectedWebhookUrl && payload.sub !== expectedWebhookUrl) continue;
     return payload;
   }
 

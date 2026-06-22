@@ -1,6 +1,6 @@
 {
   "framework": "nextjs",
-  "buildCommand": "npm run db:push && next build",
+  "buildCommand": "npm run db:migrate && next build",
   "outputDirectory": ".next",
   "installCommand": "npm install"
 }

@@ -44,3 +44,7 @@ next-env.d.ts
 /.clerk/
 
 .vercel
+
+# C-6 fix: Never commit patch or diff files - they expose vulnerability history
+*.patch
+*.diff
