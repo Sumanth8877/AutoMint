@@ -242,9 +242,22 @@ export async function executeMint(
         fingerprint: ['mint', 'key-decryption'],
       });
       // Sanitised error: no walletId, no crypto internals, no stack traces.
+      // Classify error safely: check for ownership/access-related messages.
+      // This set covers messages from wallet DB lookup, access control, and
+      // any middleware that enforces per-user ownership.
+      // All other errors (crypto failures, format errors) fall to the generic path.
+      const OWNERSHIP_ERROR_PATTERNS = [
+        'not found',
+        'access denied',
+        'unauthorized',
+        'permission denied',
+        'belongs to another user',
+      ];
       const isOwnershipError =
         keyError instanceof Error &&
-        keyError.message.toLowerCase().includes('not found');
+        OWNERSHIP_ERROR_PATTERNS.some((pattern) =>
+          keyError.message.toLowerCase().includes(pattern),
+        );
       return {
         success: false,
         error: isOwnershipError

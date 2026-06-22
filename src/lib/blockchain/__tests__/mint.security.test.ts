@@ -218,7 +218,7 @@ describe('Security Finding C-1 — executeMint()', () => {
 
     it('fails for tab-only walletId', async () => {
       const result = await executeMint(
-        WALLET_ADDRESS, CHAIN, BASE_PARAMS, USER_ID, { walletId: '	' },
+        WALLET_ADDRESS, CHAIN, BASE_PARAMS, USER_ID, { walletId: '\t' },
       );
 
       expect(result.success).toBe(false);
@@ -255,8 +255,7 @@ describe('Security Finding C-1 — executeMint()', () => {
 
     it('fails for newline-only userId', async () => {
       const result = await executeMint(
-        WALLET_ADDRESS, CHAIN, BASE_PARAMS, '
-', { walletId: WALLET_ID },
+        WALLET_ADDRESS, CHAIN, BASE_PARAMS, '\n', { walletId: WALLET_ID },
       );
 
       expect(result.success).toBe(false);

@@ -141,9 +141,19 @@ export async function executeMintFast(
         context: { chain: intent.chain, collection: intent.contractAddress },
         fingerprint: ['mint-fast', 'key-decryption'],
       });
+      // Classify error safely: check for ownership/access-related messages.
+      const OWNERSHIP_ERROR_PATTERNS = [
+        'not found',
+        'access denied',
+        'unauthorized',
+        'permission denied',
+        'belongs to another user',
+      ];
       const isOwnershipError =
         keyError instanceof Error &&
-        keyError.message.toLowerCase().includes('not found');
+        OWNERSHIP_ERROR_PATTERNS.some((pattern) =>
+          keyError.message.toLowerCase().includes(pattern),
+        );
       return {
         success: false,
         error: isOwnershipError
@@ -231,10 +241,16 @@ export async function executeMintFast(
       txHash,
     };
   } catch (error) {
-    // Fast-path failure: nothing was written to mint_history yet, so no partial state
+    // Fast-path failure: nothing was written to mint_history yet, so no partial state.
+    // Capture full diagnostic server-side; return only a sanitised message to the caller.
+    await captureException(error, {
+      area: 'minting',
+      context: { chain: intent.chain, collection: intent.contractAddress },
+      fingerprint: ['mint-fast', 'execute'],
+    });
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Fast mint execution failed',
+      error: 'Fast mint execution failed.',
     };
   }
 }
