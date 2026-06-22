@@ -259,7 +259,7 @@ export async function executeMintTask(
     };
   } else {
     // ── LIVE: execute real transaction ──────────────
-    result = await executeMint(wallet.address as Hex, chain, params, claimed.userId);
+    result = await executeMint(wallet.address as Hex, chain, params, claimed.userId, { walletId: wallet.id });
 
     if (!result.success) {
       await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));

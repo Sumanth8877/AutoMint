@@ -3,6 +3,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { mainnet, base, polygon, type Chain } from 'viem/chains';
 import { getClient } from './client';
 import { getWalletClient } from '@/lib/services/rpc-manager.service';
+import { getDecryptedPrivateKey } from '@/lib/services/wallet.service';
 import { captureException, captureMessage } from '@/lib/observability/sentry';
 
 // ─── MINT_MODE Configuration ─────────────────────
@@ -195,6 +196,7 @@ export async function executeMint(
   chain: string,
   params: MintParams,
   userId?: string,
+  options?: { walletId?: string },
 ): Promise<MintResult> {
   // ── Guard: must be in 'live' mode ──────────────────
   const mode = getMintMode();
@@ -217,13 +219,26 @@ export async function executeMint(
     // ── Build and broadcast real transaction ─────────
     const mintData = buildMintData(params);
 
-    const privateKey = process.env.PRIVATE_KEY as Hex | undefined;
+    // Resolve private key: prefer per-wallet key, fall back to global PRIVATE_KEY
+    let privateKey: Hex | undefined;
+    if (options?.walletId && userId) {
+      try {
+        const decrypted = await getDecryptedPrivateKey(options.walletId, userId);
+        privateKey = (decrypted.startsWith('0x') ? decrypted : `0x${decrypted}`) as Hex;
+      } catch (error) {
+        return {
+          success: false,
+          error: `Failed to decrypt wallet private key: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        };
+      }
+    } else {
+      privateKey = process.env.PRIVATE_KEY as Hex | undefined;
+    }
+
     if (!privateKey) {
       return {
         success: false,
-        error:
-          'PRIVATE_KEY environment variable is required when MINT_MODE=live. ' +
-          'Set PRIVATE_KEY to the wallet private key that will sign transactions.',
+        error: 'No signing key available. Provide a walletId with an encrypted private key, or set PRIVATE_KEY env var.',
       };
     }
 

@@ -206,7 +206,10 @@ export async function watchWallet(userId: string, data: { walletAddress: string;
     .returning();
 
   if (networkType === 'EVM') {
-    await updateAlchemyWebhookAddresses({ chain, add: [walletAddress] });
+    const registration = await updateAlchemyWebhookAddresses({ chain, add: [walletAddress] });
+    if (!registration.synced) {
+      console.warn(`[WalletTracker] Alchemy webhook registration failed for ${walletAddress} on ${chain}: ${registration.reason}`);
+    }
   }
   await logActivity(userId, 'wallet_added', 'Wallet tracker enabled', { walletAddress, chain });
 

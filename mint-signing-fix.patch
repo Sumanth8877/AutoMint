@@ -1,0 +1,116 @@
+From d88111cead6d6c63e2188875cddb93e39a6b3dbc Mon Sep 17 00:00:00 2001
+From: AutoMint Audit <audit@local>
+Date: Mon, 22 Jun 2026 09:45:15 +0000
+Subject: [PATCH] fix: use per-wallet private key for mint signing + surface
+ Alchemy registration failures
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Critical fix: executeMint() was signing ALL transactions with a single
+global process.env.PRIVATE_KEY instead of each user's per-wallet
+decrypted key. This broke multi-user copy-mint — only one wallet could
+ever sign successfully.
+
+Now executeMint() accepts an optional walletId, decrypts the per-user
+key via getDecryptedPrivateKey() (matching what mint-fast.service.ts
+already does correctly), and falls back to PRIVATE_KEY only when no
+walletId is provided.
+
+Also: watchWallet() now checks the return value of
+updateAlchemyWebhookAddresses() and logs a warning when Alchemy
+webhook registration fails silently.
+
+Files changed:
+- src/lib/blockchain/mint.ts (per-wallet key resolution)
+- src/lib/services/mint.service.ts (pass walletId through)
+- src/lib/services/wallet-tracker.service.ts (surface registration failure)
+---
+ src/lib/blockchain/mint.ts                 | 23 ++++++++++++++++++----
+ src/lib/services/mint.service.ts           |  2 +-
+ src/lib/services/wallet-tracker.service.ts |  5 ++++-
+ 3 files changed, 24 insertions(+), 6 deletions(-)
+
+diff --git a/src/lib/blockchain/mint.ts b/src/lib/blockchain/mint.ts
+index e205547..937074c 100644
+--- a/src/lib/blockchain/mint.ts
++++ b/src/lib/blockchain/mint.ts
+@@ -3,6 +3,7 @@ import { privateKeyToAccount } from 'viem/accounts';
+ import { mainnet, base, polygon, type Chain } from 'viem/chains';
+ import { getClient } from './client';
+ import { getWalletClient } from '@/lib/services/rpc-manager.service';
++import { getDecryptedPrivateKey } from '@/lib/services/wallet.service';
+ import { captureException, captureMessage } from '@/lib/observability/sentry';
+ 
+ // ─── MINT_MODE Configuration ─────────────────────
+@@ -195,6 +196,7 @@ export async function executeMint(
+   chain: string,
+   params: MintParams,
+   userId?: string,
++  options?: { walletId?: string },
+ ): Promise<MintResult> {
+   // ── Guard: must be in 'live' mode ──────────────────
+   const mode = getMintMode();
+@@ -217,13 +219,26 @@ export async function executeMint(
+     // ── Build and broadcast real transaction ─────────
+     const mintData = buildMintData(params);
+ 
+-    const privateKey = process.env.PRIVATE_KEY as Hex | undefined;
++    // Resolve private key: prefer per-wallet key, fall back to global PRIVATE_KEY
++    let privateKey: Hex | undefined;
++    if (options?.walletId && userId) {
++      try {
++        const decrypted = await getDecryptedPrivateKey(options.walletId, userId);
++        privateKey = (decrypted.startsWith('0x') ? decrypted : `0x${decrypted}`) as Hex;
++      } catch (error) {
++        return {
++          success: false,
++          error: `Failed to decrypt wallet private key: ${error instanceof Error ? error.message : 'Unknown error'}`,
++        };
++      }
++    } else {
++      privateKey = process.env.PRIVATE_KEY as Hex | undefined;
++    }
++
+     if (!privateKey) {
+       return {
+         success: false,
+-        error:
+-          'PRIVATE_KEY environment variable is required when MINT_MODE=live. ' +
+-          'Set PRIVATE_KEY to the wallet private key that will sign transactions.',
++        error: 'No signing key available. Provide a walletId with an encrypted private key, or set PRIVATE_KEY env var.',
+       };
+     }
+ 
+diff --git a/src/lib/services/mint.service.ts b/src/lib/services/mint.service.ts
+index 7916e50..859862a 100644
+--- a/src/lib/services/mint.service.ts
++++ b/src/lib/services/mint.service.ts
+@@ -259,7 +259,7 @@ export async function executeMintTask(
+     };
+   } else {
+     // ── LIVE: execute real transaction ──────────────
+-    result = await executeMint(wallet.address as Hex, chain, params, claimed.userId);
++    result = await executeMint(wallet.address as Hex, chain, params, claimed.userId, { walletId: wallet.id });
+ 
+     if (!result.success) {
+       await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
+diff --git a/src/lib/services/wallet-tracker.service.ts b/src/lib/services/wallet-tracker.service.ts
+index 8d53947..81748f9 100644
+--- a/src/lib/services/wallet-tracker.service.ts
++++ b/src/lib/services/wallet-tracker.service.ts
+@@ -206,7 +206,10 @@ export async function watchWallet(userId: string, data: { walletAddress: string;
+     .returning();
+ 
+   if (networkType === 'EVM') {
+-    await updateAlchemyWebhookAddresses({ chain, add: [walletAddress] });
++    const registration = await updateAlchemyWebhookAddresses({ chain, add: [walletAddress] });
++    if (!registration.synced) {
++      console.warn(`[WalletTracker] Alchemy webhook registration failed for ${walletAddress} on ${chain}: ${registration.reason}`);
++    }
+   }
+   await logActivity(userId, 'wallet_added', 'Wallet tracker enabled', { walletAddress, chain });
+ 
+-- 
+2.47.3
+
