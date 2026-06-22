@@ -1,0 +1,36 @@
+From 8c26b59ab555972e8bdc970acddf7f984997675a Mon Sep 17 00:00:00 2001
+From: AutoMint Audit <audit@local>
+Date: Mon, 22 Jun 2026 09:12:42 +0000
+Subject: [PATCH] security: fail closed when Alchemy webhook signing key is
+ missing
+
+Previously, verifyAlchemyWebhookSignature() returned true (pass) when
+ALCHEMY_WEBHOOK_SIGNING_KEY was unset, silently disabling signature
+verification and accepting any forged webhook payload.
+
+Now throws a descriptive error and logs a console.error so the
+misconfiguration is immediately visible in logs and the request is
+rejected with 401.
+---
+ src/lib/services/wallet-tracker.service.ts | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/lib/services/wallet-tracker.service.ts b/src/lib/services/wallet-tracker.service.ts
+index e851452..8d53947 100644
+--- a/src/lib/services/wallet-tracker.service.ts
++++ b/src/lib/services/wallet-tracker.service.ts
+@@ -158,7 +158,10 @@ async function sendWalletTrackerNotification(
+ 
+ export function verifyAlchemyWebhookSignature(headers: Headers, rawBody: string) {
+   const signingKey = process.env.ALCHEMY_WEBHOOK_SIGNING_KEY;
+-  if (!signingKey) return true;
++  if (!signingKey) {
++    console.error('[Security] ALCHEMY_WEBHOOK_SIGNING_KEY is not configured — rejecting webhook request. Set this env var to the signing key from your Alchemy dashboard.');
++    throw new Error('Webhook signature verification is not configured');
++  }
+ 
+   const signature = headers.get('x-alchemy-signature');
+   if (!signature) throw new Error('Missing Alchemy webhook signature');
+-- 
+2.47.3
+

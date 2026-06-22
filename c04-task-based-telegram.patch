@@ -1,0 +1,339 @@
+diff --git a/src/lib/services/mint-orchestrator.service.ts b/src/lib/services/mint-orchestrator.service.ts
+index 2f4d5e1..bdc5458 100644
+--- a/src/lib/services/mint-orchestrator.service.ts
++++ b/src/lib/services/mint-orchestrator.service.ts
+@@ -1,51 +1,131 @@
++import 'server-only';
++
+ import { getDb } from '@/lib/db';
+ import { wallets, mintTasks } from '@/drizzle/schema';
+ import { eq, and } from 'drizzle-orm';
+ import { resolveMintIntent } from '@/lib/resolve-mint-intent';
+ import { getMintState } from './mint-state.service';
+ import { fetchMintRequirements } from './mint-requirements.service';
+-import type { FastMintWallet } from './mint-fast.service';
+-import { preArmMint } from './mint-prearm.service';
+-import { startMintRace } from './mint-race.service';
++import { scheduleMint } from './qstash.service';
++
++// ——— Result types ——————————————————————————————————————————————————
++
++export type OrchestratorAction = 'TASK_CREATED' | 'MONITORING' | 'FAILED';
++
++export interface OrchestratorResult {
++  action: OrchestratorAction;
++  taskId?: string;
++  error?: string;
++}
+ 
+-export type OrchestratorAction = 'EXECUTED' | 'SCHEDULED' | 'FAILED';
+-export interface OrchestratorResult { action: OrchestratorAction; txHash?: string; taskId?: string; error?: string; }
++// ——— Internal helpers —————————————————————————————————————————————
+ 
+ async function loadWallet(walletId: string, userId: string) {
+-  const [wallet] = await getDb().select().from(wallets).where(and(eq(wallets.id, walletId), eq(wallets.userId, userId))).limit(1);
+-  return wallet;
++  const [wallet] = await getDb()
++    .select()
++    .from(wallets)
++    .where(and(eq(wallets.id, walletId), eq(wallets.userId, userId)))
++    .limit(1);
++  return wallet ?? null;
+ }
+ 
+-export async function handleMintUrl(url: string, walletId: string, userId: string, quantity = 1): Promise<OrchestratorResult> {
++// ——— Public API ——————————————————————————————————————————————————
++
++/**
++ * createMintTaskFromUrl
++ *
++ * Creates a mint task from a URL and enqueues it via QStash.
++ * Never executes a blockchain transaction. Never waits for a receipt.
++ * Safe to call from a Telegram webhook handler.
++ *
++ * Returns immediately once the task is persisted and scheduled.
++ * All execution, monitoring, retry, and confirmation happens through
++ * the QStash → /api/webhooks/qstash → executeScheduledMint pipeline.
++ */
++export async function createMintTaskFromUrl(
++  url: string,
++  walletId: string,
++  userId: string,
++  quantity = 1,
++): Promise<OrchestratorResult> {
++  // 1. Resolve the mint intent from the URL
+   const intent = await resolveMintIntent(url);
+   if (!intent.isValid || !intent.contractAddress) {
+-    return { action: 'FAILED' as const, error: 'Could not resolve mint contract from URL: ' + url };
++    return {
++      action: 'FAILED',
++      error: 'Could not resolve mint contract from URL: ' + url,
++    };
+   }
++
++  // 2. Validate wallet ownership
+   const wallet = await loadWallet(walletId, userId);
+   if (!wallet) {
+-    return { action: 'FAILED' as const, error: 'Wallet not found' };
++    return { action: 'FAILED', error: 'Wallet not found' };
+   }
+-  const [existing] = await getDb().select().from(mintTasks).where(and(eq(mintTasks.contractAddress, intent.contractAddress), eq(mintTasks.status, 'completed'))).limit(1);
++
++  // 3. Deduplication: return the existing completed task if the user
++  //    already minted this contract successfully
++  const [existing] = await getDb()
++    .select()
++    .from(mintTasks)
++    .where(
++      and(
++        eq(mintTasks.contractAddress, intent.contractAddress),
++        eq(mintTasks.userId, userId),
++        eq(mintTasks.status, 'completed'),
++      ),
++    )
++    .limit(1);
+   if (existing?.txHash) {
+-    return { action: 'EXECUTED', txHash: existing.txHash, taskId: existing.id };
+-  }
+-  const state = await getMintState(intent.contractAddress, intent.chain);
+-  const requirements = await fetchMintRequirements(intent.contractAddress, intent.chain);
+-  const fastWallet: FastMintWallet = { id: wallet.id, address: wallet.address, chain: wallet.chain, encryptedPrivateKey: wallet.encryptedPrivateKey, userId: wallet.userId };
+-  if (state.status === 'LIVE') {
+-    const race = await startMintRace(fastWallet, intent.contractAddress, intent.chain, quantity, userId);
+-    if (race.success && race.txHash) {
+-      return { action: 'EXECUTED', txHash: race.txHash };
+-    }
+-    return { action: 'FAILED' as const, error: race.error };
++    return { action: 'TASK_CREATED', taskId: existing.id };
+   }
+-  if (state.status === 'NOT_STARTED') {
+-    const task = await preArmMint({ userId, walletId: wallet.id, contractAddress: intent.contractAddress, chain: intent.chain, quantity, requirements, mintState: state });
+-    return { action: 'SCHEDULED', taskId: task.id };
+-  }
+-  if (state.status === 'ENDED') {
+-    return { action: 'FAILED' as const, error: 'This mint has already ended' };
++
++  // 4. Resolve mint state and requirements in parallel
++  const [mintState, requirements] = await Promise.all([
++    getMintState(intent.contractAddress, intent.chain),
++    fetchMintRequirements(intent.contractAddress, intent.chain),
++  ]);
++
++  if (mintState.status === 'ENDED') {
++    return { action: 'FAILED', error: 'This mint has already ended' };
+   }
+-  const [task] = await getDb().insert(mintTasks).values({ userId, walletId: wallet.id, quantity, status: 'pending' as const, contractAddress: intent.contractAddress }).returning();
+-  return { action: 'SCHEDULED', taskId: task.id };
++
++  // 5. Create the task record
++  //    status 'pending': mint is not live yet — monitoring engine will wait
++  //    status 'ready':   mint is live now — execution engine will start soon
++  const initialStatus = mintState.status === 'LIVE' ? 'ready' : 'pending';
++  const [task] = await getDb()
++    .insert(mintTasks)
++    .values({
++      userId,
++      walletId: wallet.id,
++      quantity,
++      status: initialStatus,
++      contractAddress: intent.contractAddress,
++      mintFunction: requirements.mintFunction,
++      mintPrice: requirements.mintPrice,
++      scheduledTime:
++        mintState.status !== 'LIVE' && mintState.startTime
++          ? mintState.startTime
++          : undefined,
++      maxRetries: 20,
++    })
++    .returning();
++
++  // 6. Schedule via QStash
++  //    For LIVE mints: schedule for near-immediate delivery (5 seconds)
++  //    For future mints: schedule for the known start time, or 60 s from now
++  const scheduledTime =
++    mintState.status === 'LIVE'
++      ? new Date(Date.now() + 5_000)
++      : mintState.startTime && mintState.startTime.getTime() > Date.now()
++        ? mintState.startTime
++        : undefined;
++
++  await scheduleMint({ taskId: task.id, userId, scheduledTime });
++
++  const action: OrchestratorAction =
++    mintState.status === 'LIVE' ? 'TASK_CREATED' : 'MONITORING';
++
++  return { action, taskId: task.id };
+ }
+diff --git a/src/lib/services/qstash.service.ts b/src/lib/services/qstash.service.ts
+index 7f990b6..49db787 100644
+--- a/src/lib/services/qstash.service.ts
++++ b/src/lib/services/qstash.service.ts
+@@ -324,6 +324,60 @@ function hasEnoughBalance(balance: string, mintPrice: string | null, quantity: n
+   return balanceValue >= priceValue;
+ }
+ 
++// ——— Retry classification ———————————————————————————————————————————————
++//
++// Only transient infrastructure failures are retried.
++// Terminal errors (sold out, mint closed, insufficient funds, bad contract,
++// missing wallet, user-cancelled) must not be retried — they will always fail.
++
++const RETRYABLE_PATTERNS = [
++  'rpc',
++  'timeout',
++  'network',
++  'econnreset',
++  'econnrefused',
++  'fetch failed',
++  'socket',
++  'rate limit',
++  '429',
++  '503',
++  '502',
++  'temporary',
++  'nonce',
++  'underpriced',
++  'gas estimation',
++];
++
++const TERMINAL_PATTERNS = [
++  'sold out',
++  'max supply',
++  'mint ended',
++  'mint closed',
++  'not started',
++  'already ended',
++  'insufficient funds',
++  'invalid contract',
++  'wallet not found',
++  'wallet key unavailable',
++  'wallet not linked',
++  'cancelled',
++  'access denied',
++];
++
++function isRetryableError(error: string | undefined): boolean {
++  if (!error) return false;
++  const lower = error.toLowerCase();
++  if (TERMINAL_PATTERNS.some((p) => lower.includes(p))) return false;
++  return RETRYABLE_PATTERNS.some((p) => lower.includes(p));
++}
++
++const RETRY_BASE_DELAY_MS = 30_000; // 30s base, doubles each attempt
++
++function retryDelayMs(retriesRemaining: number, maxRetries: number): number {
++  const attempt = maxRetries - retriesRemaining + 1;
++  return Math.min(RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1), 10 * 60 * 1000); // cap at 10 min
++}
++
+ export async function executeScheduledMint(taskId: string) {
+   const mintLock = await acquireLock(taskId);
+   if (!mintLock.acquired) {
+@@ -458,7 +512,49 @@ export async function executeScheduledMint(taskId: string) {
+       metadata: { taskId },
+     });
+     lockReleased = true;
+-    return executeMintTask(taskId, task.userId, { existingLockToken: mintLock.token });
++    const mintResult = await executeMintTask(taskId, task.userId, { existingLockToken: mintLock.token });
++
++    // ——— Retry on transient failure ——————————————————————————————
++    if (!mintResult.success && isRetryableError(mintResult.error)) {
++      const currentTask = (await getDb()
++        .select({ maxRetries: mintTasks.maxRetries })
++        .from(mintTasks)
++        .where(eq(mintTasks.id, taskId))
++        .limit(1))[0];
++
++      const retriesRemaining = currentTask?.maxRetries ?? 0;
++
++      if (retriesRemaining > 0) {
++        const delay = retryDelayMs(retriesRemaining, task.maxRetries);
++        const retryAt = new Date(Date.now() + delay);
++
++        await getDb()
++          .update(mintTasks)
++          .set({ maxRetries: retriesRemaining - 1, status: 'pending', updatedAt: new Date() })
++          .where(eq(mintTasks.id, taskId));
++
++        await publishQStashMessage(taskId, retryAt, 'execute');
++
++        addBreadcrumb({
++          category: 'qstash',
++          message: 'mint retry scheduled',
++          level: 'warning',
++          data: { taskId, retriesRemaining: retriesRemaining - 1, retryAt: retryAt.toISOString(), error: mintResult.error },
++        });
++
++        return { success: false, retrying: true, retriesRemaining: retriesRemaining - 1, error: mintResult.error };
++      }
++
++      // Retries exhausted — already failed by executeMintTask, nothing more to do
++      addBreadcrumb({
++        category: 'qstash',
++        message: 'mint retries exhausted',
++        level: 'error',
++        data: { taskId, error: mintResult.error },
++      });
++    }
++
++    return mintResult;
+   } catch (error) {
+     const row = await loadTaskWithWallet(taskId).catch(() => null);
+     if (row?.task?.userId) {
+diff --git a/src/lib/services/telegram.service.ts b/src/lib/services/telegram.service.ts
+index 56fed30..1dcc061 100644
+--- a/src/lib/services/telegram.service.ts
++++ b/src/lib/services/telegram.service.ts
+@@ -8,7 +8,7 @@ import { mintTasks, telegramAccounts, wallets } from '@/drizzle/schema';
+ import { resolveMintIntent } from '@/lib/resolve-mint-intent';
+ import { getMintState } from '@/lib/services/mint-state.service';
+ import { fetchMintRequirements } from '@/lib/services/mint-requirements.service';
+-import { handleMintUrl } from '@/lib/services/mint-orchestrator.service';
++import { createMintTaskFromUrl } from '@/lib/services/mint-orchestrator.service';
+ import { cancelScheduledMint, scheduleMint } from '@/lib/services/qstash.service';
+ import { watchWallet } from '@/lib/services/wallet-tracker.service';
+ import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
+@@ -592,25 +592,32 @@ async function handleMintCommand(message: TelegramMessage, userId: string, url:
+     return;
+   }
+ 
+-  await sendTelegramNotification(userId, 'copy_mint_triggered', { url });
+-  await sendTelegramNotification(userId, 'mint_started', { url });
++  // C-04 Fix: create a task and schedule via QStash — never execute inline.
++  // The webhook returns immediately. All blockchain execution happens in the
++  // QStash → /api/webhooks/qstash → executeScheduledMint pipeline.
++  const result = await createMintTaskFromUrl(url, wallet.id, userId, 1);
+ 
+-  const result = await handleMintUrl(url, wallet.id, userId, 1);
+-
+-  if (result.action === 'EXECUTED') {
+-    await sendTelegramNotification(userId, 'mint_success', { url, txHash: result.txHash, taskId: result.taskId });
+-    await reply(message, result.txHash ? `Mint executed.\nTx: ${result.txHash}` : 'Mint execution completed.');
++  if (result.action === 'FAILED') {
++    await sendTelegramNotification(userId, 'mint_failed', { url, error: result.error });
++    await reply(message, `Mint failed: ${result.error || 'Unknown error'}`);
+     return;
+   }
+ 
+-  if (result.action === 'SCHEDULED') {
++  if (result.action === 'MONITORING') {
+     await sendTelegramNotification(userId, 'mint_scheduled', { url, taskId: result.taskId });
+-    await reply(message, `Mint scheduled.\nTask: ${result.taskId}`);
++    await reply(
++      message,
++      `Monitoring started.\nTask: ${result.taskId}\nYou\'ll be notified when execution begins.`,
++    );
+     return;
+   }
+ 
+-  await sendTelegramNotification(userId, 'mint_failed', { url, error: result.error });
+-  await reply(message, `Mint failed: ${result.error || 'Unknown error'}`);
++  // TASK_CREATED: mint is live — task queued for near-immediate execution via QStash.
++  await sendTelegramNotification(userId, 'mint_scheduled', { url, taskId: result.taskId });
++  await reply(
++    message,
++    `Mint task created.\nTask: ${result.taskId}\nExecution starting shortly — you\'ll be notified on completion.`,
++  );
+ }
+ 
+ async function handleScheduleCommand(message: TelegramMessage, userId: string, url: string) {

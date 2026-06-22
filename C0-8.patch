@@ -1,0 +1,222 @@
+From automint-critical-fixes Mon Sep 17 00:00:00 2001
+From: AutoMint Security Fixes <fixes@automint>
+Date: 2026-06-22
+Subject: [PATCH] Fix C-2, C-4, C-5, C-6, C-7, C-8 — Critical security and reliability fixes
+
+- C-2: Atomic mint-lock release/extend via Lua scripts (eliminates TOCTOU double-mint race)
+- C-4: Replace db:push with db:migrate in vercel.json + add db:migrate script to package.json
+- C-5: ALREADY FIXED in codebase — normalizeDestinationWalletId() validates ownership (lines 108-119 of copy-mint.service.ts)
+- C-6: Add *.patch and *.diff to .gitignore
+- C-7: Add sub claim validation to QStash JWT verification
+- C-8: Add centralised Clerk middleware (src/middleware.ts — new file)
+
+NOTE after applying:
+  git rm --cached *.patch *.diff
+  git commit -m "chore: remove committed patch files"
+---
+
+diff --git a/src/lib/services/mint-lock.service.ts b/src/lib/services/mint-lock.service.ts
+--- a/src/lib/services/mint-lock.service.ts
++++ b/src/lib/services/mint-lock.service.ts
+@@ -1,6 +1,6 @@
+ import 'server-only';
+ 
+ import crypto from 'crypto';
+ import { getRedisClient } from '@/lib/redis';
+ import { addBreadcrumb, captureException, captureMessage } from '@/lib/observability/sentry';
+ 
+@@ -52,36 +52,62 @@ export async function acquireLock(mintId: string, ttlSeconds = LOCK_TTL_SECONDS)
+   }
+ }
+ 
++// C-2 FIX: Atomic Lua compare-and-delete.
++// OLD: redis.get(key) → compare → redis.del(key)  ← 3 separate commands, TOCTOU gap between GET and DEL
++// NEW: single Lua script executed atomically on the Redis server — zero race window
++const RELEASE_LUA = `
++  if redis.call('get', KEYS[1]) == ARGV[1] then
++    return redis.call('del', KEYS[1])
++  else
++    return 0
++  end
++`;
++
+ export async function releaseLock(mintId: string, token?: string) {
+   const key = lockKey(mintId);
+ 
+   try {
+     if (token) {
+-      const existing = await getRedisClient().get(key);
+-      if (existing !== token) {
++      // Atomic: get + compare + del in one server-side script
++      const result = await getRedisClient().eval(RELEASE_LUA, [key], [token]);
++      if (result === 0) {
+         console.warn('[MintLock] Release skipped; token mismatch', { mintId, key });
++        addBreadcrumb({ category: 'mint-lock', message: 'Release skipped — token mismatch', level: 'warning', data: { mintId, key } });
+         return false;
+       }
++    } else {
++      // No token supplied — unconditional delete (used in error recovery paths)
++      await getRedisClient().del(key);
+     }
+-
+-    await getRedisClient().del(key);
+     console.log('[MintLock] Lock released', { mintId, key });
+     addBreadcrumb({ category: 'mint-lock', message: 'Lock released', level: 'info', data: { mintId, key } });
+     return true;
+   } catch (error) {
+     await captureException(error, {
+       area: 'mint-lock',
+       context: { taskId: mintId, key },
+       fingerprint: ['mint-lock', 'release'],
+     });
+     return false;
+   }
+ }
+ 
++// C-2 FIX: Atomic Lua compare-and-expire.
++// OLD: redis.get(key) → compare → redis.expire(key)  ← 3 separate commands, TOCTOU gap
++// NEW: single Lua script, atomic
++const EXTEND_LUA = `
++  if redis.call('get', KEYS[1]) == ARGV[1] then
++    return redis.call('expire', KEYS[1], ARGV[2])
++  else
++    return 0
++  end
++`;
++
+ export async function extendLock(mintId: string, token: string, ttlSeconds = LOCK_TTL_SECONDS) {
+   const key = lockKey(mintId);
+ 
+   try {
+-    const existing = await getRedisClient().get(key);
+-    if (existing !== token) {
++    // Atomic: get + compare + expire in one server-side script
++    const result = await getRedisClient().eval(EXTEND_LUA, [key], [token, String(ttlSeconds)]);
++    if (result === 0) {
+       console.warn('[MintLock] Extend skipped; token mismatch or missing lock', { mintId, key });
++      addBreadcrumb({ category: 'mint-lock', message: 'Extend skipped — token mismatch', level: 'warning', data: { mintId, key } });
+       return false;
+     }
+-
+-    await getRedisClient().expire(key, ttlSeconds);
+     console.log('[MintLock] Lock extended', { mintId, key, ttlSeconds });
+     addBreadcrumb({ category: 'mint-lock', message: 'Lock extended', level: 'info', data: { mintId, key, ttlSeconds } });
+     return true;
+   } catch (error) {
+     await captureException(error, {
+       area: 'mint-lock',
+       context: { taskId: mintId, key },
+       fingerprint: ['mint-lock', 'extend'],
+     });
+     throw error;
+   }
+ }
+
+diff --git a/vercel.json b/vercel.json
+--- a/vercel.json
++++ b/vercel.json
+@@ -1,6 +1,6 @@
+ {
+-  "buildCommand": "npm run db:push && next build",
++  "buildCommand": "npm run db:migrate && next build",
+   "framework": "nextjs",
+   "installCommand": "npm install",
+   "outputDirectory": ".next"
+ }
+
+diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -5,6 +5,7 @@
+     "build": "next build",
+     "start": "next start",
+     "lint": "eslint",
+     "typecheck": "tsc --noEmit",
+     "db:generate": "drizzle-kit generate",
++    "db:migrate": "drizzle-kit migrate",
+     "db:push": "drizzle-kit push",
+     "db:studio": "drizzle-kit studio",
+     "audit:deps": "npm audit"
+
+diff --git a/.gitignore b/.gitignore
+--- a/.gitignore
++++ b/.gitignore
+@@ -36,3 +36,7 @@
+ /.clerk/
+ 
+ .vercel
++
++# C-6 fix: Never commit patch or diff files — they expose vulnerability history publicly
++*.patch
++*.diff
+
+diff --git a/src/lib/services/qstash.service.ts b/src/lib/services/qstash.service.ts
+--- a/src/lib/services/qstash.service.ts
++++ b/src/lib/services/qstash.service.ts
+@@ -92,18 +92,32 @@ export function verifyQStashSignature(headers: Headers, rawBody: string) {
+   const now = Math.floor(Date.now() / 1000);
+   const bodyHash = crypto.createHash('sha256').update(rawBody).digest('base64url');
+ 
++  // C-7 fix: resolve expected webhook URL once for sub claim validation.
++  // Gracefully skips sub check if APP_URL / VERCEL_URL is not determinable.
++  let expectedWebhookUrl: string | null = null;
++  try {
++    expectedWebhookUrl = getWebhookUrl();
++  } catch {
++    expectedWebhookUrl = null;
++  }
++
+   for (const key of keys) {
+     const payload = verifyJwtSignature(signature, key);
+     if (!payload) continue;
+     if (payload.exp && payload.exp < now) continue;
+     if (payload.nbf && payload.nbf > now) continue;
+     if (payload.body && payload.body !== bodyHash) continue;
++    // C-7 fix: validate sub claim — must match our own webhook URL.
++    // Prevents a valid QStash JWT addressed to a different endpoint
++    // from being replayed against this webhook.
++    if (payload.sub && expectedWebhookUrl && payload.sub !== expectedWebhookUrl) continue;
+     return payload;
+   }
+ 
+   throw new Error('Invalid QStash signature');
+ }
+
+diff --git a/src/middleware.ts b/src/middleware.ts
+new file mode 100644
+--- /dev/null
++++ b/src/middleware.ts
+@@ -0,0 +1,30 @@
++// C-8 fix: Centralised Clerk authentication via Next.js edge middleware.
++//
++// Previously: auth enforced per-route by manually calling requireApiUser().
++//             One missed call = publicly accessible endpoint.
++// Now:        Clerk middleware runs at the edge BEFORE any route handler executes.
++//             Every route is protected by default. Public routes explicitly opted out.
++//
++// Public routes (no Clerk auth — these use their own verification):
++//   /sign-in, /sign-up        → Clerk auth pages
++//   /api/webhooks/*           → Alchemy + QStash use signature verification
++//   /api/telegram/webhook     → uses TELEGRAM_WEBHOOK_SECRET timing-safe check
++
++import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
++
++const isPublicRoute = createRouteMatcher([
++  '/sign-in(.*)',
++  '/sign-up(.*)',
++  '/api/webhooks/(.*)',
++  '/api/telegram/webhook',
++]);
++
++export default clerkMiddleware(async (auth, request) => {
++  if (!isPublicRoute(request)) {
++    await auth.protect();
++  }
++});
++
++export const config = {
++  matcher: [
++    '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
++    '/(api|trpc)(.*)',
++  ],
++};
