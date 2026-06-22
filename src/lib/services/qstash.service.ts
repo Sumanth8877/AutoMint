@@ -324,6 +324,60 @@ function hasEnoughBalance(balance: string, mintPrice: string | null, quantity: n
   return balanceValue >= priceValue;
 }
 
+// ——— Retry classification ———————————————————————————————————————————————
+//
+// Only transient infrastructure failures are retried.
+// Terminal errors (sold out, mint closed, insufficient funds, bad contract,
+// missing wallet, user-cancelled) must not be retried — they will always fail.
+
+const RETRYABLE_PATTERNS = [
+  'rpc',
+  'timeout',
+  'network',
+  'econnreset',
+  'econnrefused',
+  'fetch failed',
+  'socket',
+  'rate limit',
+  '429',
+  '503',
+  '502',
+  'temporary',
+  'nonce',
+  'underpriced',
+  'gas estimation',
+];
+
+const TERMINAL_PATTERNS = [
+  'sold out',
+  'max supply',
+  'mint ended',
+  'mint closed',
+  'not started',
+  'already ended',
+  'insufficient funds',
+  'invalid contract',
+  'wallet not found',
+  'wallet key unavailable',
+  'wallet not linked',
+  'cancelled',
+  'access denied',
+];
+
+function isRetryableError(error: string | undefined): boolean {
+  if (!error) return false;
+  const lower = error.toLowerCase();
+  if (TERMINAL_PATTERNS.some((p) => lower.includes(p))) return false;
+  return RETRYABLE_PATTERNS.some((p) => lower.includes(p));
+}
+
+const RETRY_BASE_DELAY_MS = 30_000; // 30s base, doubles each attempt
+
+function retryDelayMs(retriesRemaining: number, maxRetries: number): number {
+  const attempt = maxRetries - retriesRemaining + 1;
+  return Math.min(RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1), 10 * 60 * 1000); // cap at 10 min
+}
+
 export async function executeScheduledMint(taskId: string) {
   const mintLock = await acquireLock(taskId);
   if (!mintLock.acquired) {
@@ -458,7 +512,49 @@ export async function executeScheduledMint(taskId: string) {
       metadata: { taskId },
     });
     lockReleased = true;
-    return executeMintTask(taskId, task.userId, { existingLockToken: mintLock.token });
+    const mintResult = await executeMintTask(taskId, task.userId, { existingLockToken: mintLock.token });
+
+    // ——— Retry on transient failure ——————————————————————————————
+    if (!mintResult.success && isRetryableError(mintResult.error)) {
+      const currentTask = (await getDb()
+        .select({ maxRetries: mintTasks.maxRetries })
+        .from(mintTasks)
+        .where(eq(mintTasks.id, taskId))
+        .limit(1))[0];
+
+      const retriesRemaining = currentTask?.maxRetries ?? 0;
+
+      if (retriesRemaining > 0) {
+        const delay = retryDelayMs(retriesRemaining, task.maxRetries);
+        const retryAt = new Date(Date.now() + delay);
+
+        await getDb()
+          .update(mintTasks)
+          .set({ maxRetries: retriesRemaining - 1, status: 'pending', updatedAt: new Date() })
+          .where(eq(mintTasks.id, taskId));
+
+        await publishQStashMessage(taskId, retryAt, 'execute');
+
+        addBreadcrumb({
+          category: 'qstash',
+          message: 'mint retry scheduled',
+          level: 'warning',
+          data: { taskId, retriesRemaining: retriesRemaining - 1, retryAt: retryAt.toISOString(), error: mintResult.error },
+        });
+
+        return { success: false, retrying: true, retriesRemaining: retriesRemaining - 1, error: mintResult.error };
+      }
+
+      // Retries exhausted — already failed by executeMintTask, nothing more to do
+      addBreadcrumb({
+        category: 'qstash',
+        message: 'mint retries exhausted',
+        level: 'error',
+        data: { taskId, error: mintResult.error },
+      });
+    }
+
+    return mintResult;
   } catch (error) {
     const row = await loadTaskWithWallet(taskId).catch(() => null);
     if (row?.task?.userId) {

@@ -1,51 +1,131 @@
+import 'server-only';
+
 import { getDb } from '@/lib/db';
 import { wallets, mintTasks } from '@/drizzle/schema';
 import { eq, and } from 'drizzle-orm';
 import { resolveMintIntent } from '@/lib/resolve-mint-intent';
 import { getMintState } from './mint-state.service';
 import { fetchMintRequirements } from './mint-requirements.service';
-import type { FastMintWallet } from './mint-fast.service';
-import { preArmMint } from './mint-prearm.service';
-import { startMintRace } from './mint-race.service';
+import { scheduleMint } from './qstash.service';
 
-export type OrchestratorAction = 'EXECUTED' | 'SCHEDULED' | 'FAILED';
-export interface OrchestratorResult { action: OrchestratorAction; txHash?: string; taskId?: string; error?: string; }
+// ——— Result types ——————————————————————————————————————————————————
 
-async function loadWallet(walletId: string, userId: string) {
-  const [wallet] = await getDb().select().from(wallets).where(and(eq(wallets.id, walletId), eq(wallets.userId, userId))).limit(1);
-  return wallet;
+export type OrchestratorAction = 'TASK_CREATED' | 'MONITORING' | 'FAILED';
+
+export interface OrchestratorResult {
+  action: OrchestratorAction;
+  taskId?: string;
+  error?: string;
 }
 
-export async function handleMintUrl(url: string, walletId: string, userId: string, quantity = 1): Promise<OrchestratorResult> {
+// ——— Internal helpers —————————————————————————————————————————————
+
+async function loadWallet(walletId: string, userId: string) {
+  const [wallet] = await getDb()
+    .select()
+    .from(wallets)
+    .where(and(eq(wallets.id, walletId), eq(wallets.userId, userId)))
+    .limit(1);
+  return wallet ?? null;
+}
+
+// ——— Public API ——————————————————————————————————————————————————
+
+/**
+ * createMintTaskFromUrl
+ *
+ * Creates a mint task from a URL and enqueues it via QStash.
+ * Never executes a blockchain transaction. Never waits for a receipt.
+ * Safe to call from a Telegram webhook handler.
+ *
+ * Returns immediately once the task is persisted and scheduled.
+ * All execution, monitoring, retry, and confirmation happens through
+ * the QStash → /api/webhooks/qstash → executeScheduledMint pipeline.
+ */
+export async function createMintTaskFromUrl(
+  url: string,
+  walletId: string,
+  userId: string,
+  quantity = 1,
+): Promise<OrchestratorResult> {
+  // 1. Resolve the mint intent from the URL
   const intent = await resolveMintIntent(url);
   if (!intent.isValid || !intent.contractAddress) {
-    return { action: 'FAILED' as const, error: 'Could not resolve mint contract from URL: ' + url };
+    return {
+      action: 'FAILED',
+      error: 'Could not resolve mint contract from URL: ' + url,
+    };
   }
+
+  // 2. Validate wallet ownership
   const wallet = await loadWallet(walletId, userId);
   if (!wallet) {
-    return { action: 'FAILED' as const, error: 'Wallet not found' };
+    return { action: 'FAILED', error: 'Wallet not found' };
   }
-  const [existing] = await getDb().select().from(mintTasks).where(and(eq(mintTasks.contractAddress, intent.contractAddress), eq(mintTasks.status, 'completed'))).limit(1);
+
+  // 3. Deduplication: return the existing completed task if the user
+  //    already minted this contract successfully
+  const [existing] = await getDb()
+    .select()
+    .from(mintTasks)
+    .where(
+      and(
+        eq(mintTasks.contractAddress, intent.contractAddress),
+        eq(mintTasks.userId, userId),
+        eq(mintTasks.status, 'completed'),
+      ),
+    )
+    .limit(1);
   if (existing?.txHash) {
-    return { action: 'EXECUTED', txHash: existing.txHash, taskId: existing.id };
+    return { action: 'TASK_CREATED', taskId: existing.id };
   }
-  const state = await getMintState(intent.contractAddress, intent.chain);
-  const requirements = await fetchMintRequirements(intent.contractAddress, intent.chain);
-  const fastWallet: FastMintWallet = { id: wallet.id, address: wallet.address, chain: wallet.chain, encryptedPrivateKey: wallet.encryptedPrivateKey, userId: wallet.userId };
-  if (state.status === 'LIVE') {
-    const race = await startMintRace(fastWallet, intent.contractAddress, intent.chain, quantity, userId);
-    if (race.success && race.txHash) {
-      return { action: 'EXECUTED', txHash: race.txHash };
-    }
-    return { action: 'FAILED' as const, error: race.error };
+
+  // 4. Resolve mint state and requirements in parallel
+  const [mintState, requirements] = await Promise.all([
+    getMintState(intent.contractAddress, intent.chain),
+    fetchMintRequirements(intent.contractAddress, intent.chain),
+  ]);
+
+  if (mintState.status === 'ENDED') {
+    return { action: 'FAILED', error: 'This mint has already ended' };
   }
-  if (state.status === 'NOT_STARTED') {
-    const task = await preArmMint({ userId, walletId: wallet.id, contractAddress: intent.contractAddress, chain: intent.chain, quantity, requirements, mintState: state });
-    return { action: 'SCHEDULED', taskId: task.id };
-  }
-  if (state.status === 'ENDED') {
-    return { action: 'FAILED' as const, error: 'This mint has already ended' };
-  }
-  const [task] = await getDb().insert(mintTasks).values({ userId, walletId: wallet.id, quantity, status: 'pending' as const, contractAddress: intent.contractAddress }).returning();
-  return { action: 'SCHEDULED', taskId: task.id };
+
+  // 5. Create the task record
+  //    status 'pending': mint is not live yet — monitoring engine will wait
+  //    status 'ready':   mint is live now — execution engine will start soon
+  const initialStatus = mintState.status === 'LIVE' ? 'ready' : 'pending';
+  const [task] = await getDb()
+    .insert(mintTasks)
+    .values({
+      userId,
+      walletId: wallet.id,
+      quantity,
+      status: initialStatus,
+      contractAddress: intent.contractAddress,
+      mintFunction: requirements.mintFunction,
+      mintPrice: requirements.mintPrice,
+      scheduledTime:
+        mintState.status !== 'LIVE' && mintState.startTime
+          ? mintState.startTime
+          : undefined,
+      maxRetries: 20,
+    })
+    .returning();
+
+  // 6. Schedule via QStash
+  //    For LIVE mints: schedule for near-immediate delivery (5 seconds)
+  //    For future mints: schedule for the known start time, or 60 s from now
+  const scheduledTime =
+    mintState.status === 'LIVE'
+      ? new Date(Date.now() + 5_000)
+      : mintState.startTime && mintState.startTime.getTime() > Date.now()
+        ? mintState.startTime
+        : undefined;
+
+  await scheduleMint({ taskId: task.id, userId, scheduledTime });
+
+  const action: OrchestratorAction =
+    mintState.status === 'LIVE' ? 'TASK_CREATED' : 'MONITORING';
+
+  return { action, taskId: task.id };
 }

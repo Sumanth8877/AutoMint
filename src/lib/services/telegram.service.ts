@@ -8,7 +8,7 @@ import { mintTasks, telegramAccounts, wallets } from '@/drizzle/schema';
 import { resolveMintIntent } from '@/lib/resolve-mint-intent';
 import { getMintState } from '@/lib/services/mint-state.service';
 import { fetchMintRequirements } from '@/lib/services/mint-requirements.service';
-import { handleMintUrl } from '@/lib/services/mint-orchestrator.service';
+import { createMintTaskFromUrl } from '@/lib/services/mint-orchestrator.service';
 import { cancelScheduledMint, scheduleMint } from '@/lib/services/qstash.service';
 import { watchWallet } from '@/lib/services/wallet-tracker.service';
 import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
@@ -592,25 +592,32 @@ async function handleMintCommand(message: TelegramMessage, userId: string, url: 
     return;
   }
 
-  await sendTelegramNotification(userId, 'copy_mint_triggered', { url });
-  await sendTelegramNotification(userId, 'mint_started', { url });
+  // C-04 Fix: create a task and schedule via QStash — never execute inline.
+  // The webhook returns immediately. All blockchain execution happens in the
+  // QStash → /api/webhooks/qstash → executeScheduledMint pipeline.
+  const result = await createMintTaskFromUrl(url, wallet.id, userId, 1);
 
-  const result = await handleMintUrl(url, wallet.id, userId, 1);
-
-  if (result.action === 'EXECUTED') {
-    await sendTelegramNotification(userId, 'mint_success', { url, txHash: result.txHash, taskId: result.taskId });
-    await reply(message, result.txHash ? `Mint executed.\nTx: ${result.txHash}` : 'Mint execution completed.');
+  if (result.action === 'FAILED') {
+    await sendTelegramNotification(userId, 'mint_failed', { url, error: result.error });
+    await reply(message, `Mint failed: ${result.error || 'Unknown error'}`);
     return;
   }
 
-  if (result.action === 'SCHEDULED') {
+  if (result.action === 'MONITORING') {
     await sendTelegramNotification(userId, 'mint_scheduled', { url, taskId: result.taskId });
-    await reply(message, `Mint scheduled.\nTask: ${result.taskId}`);
+    await reply(
+      message,
+      `Monitoring started.\nTask: ${result.taskId}\nYou\'ll be notified when execution begins.`,
+    );
     return;
   }
 
-  await sendTelegramNotification(userId, 'mint_failed', { url, error: result.error });
-  await reply(message, `Mint failed: ${result.error || 'Unknown error'}`);
+  // TASK_CREATED: mint is live — task queued for near-immediate execution via QStash.
+  await sendTelegramNotification(userId, 'mint_scheduled', { url, taskId: result.taskId });
+  await reply(
+    message,
+    `Mint task created.\nTask: ${result.taskId}\nExecution starting shortly — you\'ll be notified on completion.`,
+  );
 }
 
 async function handleScheduleCommand(message: TelegramMessage, userId: string, url: string) {
