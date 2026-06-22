@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getErrorMessage, parseJsonBody } from '@/lib/api/errors';
+import { enforceRateLimit, RATE_LIMITS } from '@/lib/api/rate-limit';
 import { getUserWallets, importWallet, removeWallet } from '@/lib/services/wallet.service';
 import type { ImportWalletType } from '@/lib/wallets/private-key';
 
@@ -22,6 +23,9 @@ export async function POST(req: Request) {
   try {
     const authResult = await requireApiUser();
     if ('error' in authResult) return authResult.error;
+
+    const limited = await enforceRateLimit(`wallets:import:${authResult.userId}`, RATE_LIMITS.sensitive);
+    if (limited) return limited;
 
     const body = await parseJsonBody<{ walletType?: ImportWalletType; privateKey?: string; nickname?: string | null }>(req);
     const { walletType, privateKey, nickname } = body;

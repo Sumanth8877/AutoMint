@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { parseJsonBody } from '@/lib/api/errors';
+import { enforceRateLimit, RATE_LIMITS } from '@/lib/api/rate-limit';
 import { captureException } from '@/lib/observability/sentry';
 import { AnalyzerExecutionError, AnalyzerResolutionError, runAnalyzer } from '@/lib/services/analyzer.service';
 
@@ -12,6 +13,9 @@ export async function POST(req: Request) {
   try {
     const authResult = await requireApiUser();
     if ('error' in authResult) return authResult.error;
+
+    const limited = await enforceRateLimit(`analyzer:run:${authResult.userId}`, RATE_LIMITS.expensive);
+    if (limited) return limited;
 
     const body = await parseJsonBody<{ input?: string }>(req);
     const input = body.input?.trim();
