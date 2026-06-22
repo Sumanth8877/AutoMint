@@ -1,16 +1,62 @@
 import { NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { parseJsonBody } from '@/lib/api/errors';
 import { handleTelegramUpdate, isTelegramEnabled, type TelegramUpdate } from '@/lib/services/telegram.service';
 import { captureException } from '@/lib/observability/sentry';
 
 export const dynamic = 'force-dynamic';
 
-function isAuthorized(request: Request) {
-  const expected = process.env.TELEGRAM_WEBHOOK_SECRET;
-  if (!expected) return true;
-  return request.headers.get('x-telegram-bot-api-secret-token') === expected;
+// ── Startup validation ────────────────────────────────────────────────────────
+// TELEGRAM_WEBHOOK_SECRET must be set whenever Telegram is enabled.
+// Fail at module load time so the misconfiguration surfaces in deployment logs
+// before any request is processed, rather than silently allowing all requests.
+if (isTelegramEnabled() && !process.env.TELEGRAM_WEBHOOK_SECRET) {
+  throw new Error(
+    '[C-2] TELEGRAM_WEBHOOK_SECRET is required when TELEGRAM_ENABLED=true. ' +
+    'Generate a secret (openssl rand -hex 32) and set it in your environment. ' +
+    'The same value must be registered with the Telegram Bot API as the webhook secret token.',
+  );
 }
 
+// ── Auth ──────────────────────────────────────────────────────────────────────
+/**
+ * Verifies the X-Telegram-Bot-Api-Secret-Token header using a timing-safe
+ * comparison to prevent timing-oracle attacks on the secret.
+ *
+ * Rules:
+ *  - Missing TELEGRAM_WEBHOOK_SECRET → deny (never a default-allow).
+ *  - Missing / empty header          → deny.
+ *  - Length mismatch                 → deny (checked before timingSafeEqual
+ *                                      because timingSafeEqual throws on unequal
+ *                                      buffer lengths).
+ *  - Content mismatch                → deny.
+ *
+ * Returns exactly: true (authorized) | false (unauthorized).
+ * No fallback path exists.
+ */
+function isAuthorized(request: Request): boolean {
+  const expected = process.env.TELEGRAM_WEBHOOK_SECRET;
+
+  // Missing secret → always deny. Never fall back to allow.
+  if (!expected) return false;
+
+  const provided = request.headers.get('x-telegram-bot-api-secret-token');
+
+  // Missing or empty header → deny.
+  if (!provided) return false;
+
+  // Convert to fixed-length buffers for timing-safe comparison.
+  const providedBuf = Buffer.from(provided,  'utf8');
+  const expectedBuf = Buffer.from(expected,  'utf8');
+
+  // timingSafeEqual requires equal-length buffers; length mismatch → deny.
+  if (providedBuf.length !== expectedBuf.length) return false;
+
+  // Constant-time comparison — no timing oracle on the secret.
+  return crypto.timingSafeEqual(providedBuf, expectedBuf);
+}
+
+// ── Route ─────────────────────────────────────────────────────────────────────
 export async function POST(request: Request) {
   if (!isTelegramEnabled()) {
     return NextResponse.json({ ok: true, disabled: true, reason: 'Telegram disabled by configuration' });
