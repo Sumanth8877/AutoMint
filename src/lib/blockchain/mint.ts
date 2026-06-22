@@ -9,6 +9,12 @@ import { getDecryptedPrivateKey } from '@/lib/services/wallet.service';
 import { captureException, captureMessage } from '@/lib/observability/sentry';
 
 // ─── MINT_MODE Configuration ─────────────────────────
+import {
+  allocateNonce,
+  releaseInflightNonce,
+  scanAndFillGaps,
+} from '@/lib/services/nonce-allocator.service';
+
 
 export type MintMode = 'simulation' | 'live';
 
@@ -270,6 +276,11 @@ export async function executeMint(
     const mintData = buildMintData(params);
     const account = privateKeyToAccount(privateKey);
     const walletClient = getWalletClient(chain, account, { userId });
+
+    // ── C-03 Fix: allocate unique nonce ─────────────────────────────────────
+    let allocatedNonce: number | undefined;
+    const nonceResult = await allocateNonce(account.address, chain).catch(() => null);
+    allocatedNonce = nonceResult?.nonce;
     const value = params.mintPrice ? parseEther(params.mintPrice) : BigInt(0);
 
     const hash = await walletClient.sendTransaction({
@@ -279,7 +290,15 @@ export async function executeMint(
       data: mintData,
       value,
       gas: params.gasLimit ? BigInt(params.gasLimit) : undefined,
+      // C-03: explicit nonce prevents concurrent workers from getting the same value
+      ...(allocatedNonce !== undefined && { nonce: allocatedNonce }),
     });
+
+    // Post-broadcast: release inflight tracking and scan for gaps
+    if (allocatedNonce !== undefined) {
+      void releaseInflightNonce(account.address, chain, allocatedNonce).catch(() => undefined);
+      void scanAndFillGaps(account.address, chain).catch(() => undefined);
+    }
 
     // ── Wait for 1 confirmation ───────────────────────────────────
     const client = getClient(chain, userId);

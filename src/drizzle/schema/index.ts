@@ -288,6 +288,7 @@ export const mintTasks = pgTable('mint_tasks', {
   latestRiskReasons: json('latest_risk_reasons').$type<string[]>(),
   safeModeEnabled: boolean('safe_mode_enabled').default(false).notNull(),
   confirmedAt: timestamp('confirmed_at'),
+  idempotencyKey: text('idempotency_key').unique(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
