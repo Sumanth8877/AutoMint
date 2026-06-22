@@ -288,7 +288,6 @@ export const mintTasks = pgTable('mint_tasks', {
   latestRiskReasons: json('latest_risk_reasons').$type<string[]>(),
   safeModeEnabled: boolean('safe_mode_enabled').default(false).notNull(),
   confirmedAt: timestamp('confirmed_at'),
-  idempotencyKey: text('idempotency_key').unique(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -301,6 +300,7 @@ export const mintHistory = pgTable('mint_history', {
   collectionId: uuid('collection_id').references(() => collections.id, { onDelete: 'set null' }),
   status: mintHistoryStatusEnum('status').default('pending').notNull(),
   transactionHash: text('transaction_hash'),
+  idempotencyKey: text('idempotency_key').unique(),
   gasUsed: text('gas_used'),
   blockNumber: text('block_number'),
   confirmedAt: timestamp('confirmed_at'),
