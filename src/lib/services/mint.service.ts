@@ -281,7 +281,6 @@ export async function executeMintTask(
   });
 
   return { success: true, txHash: result.txHash };
-  }
   } finally {
     await releaseLock(taskId, mintLock.token);
   }
