@@ -13,6 +13,7 @@
 
 import { getClient } from '@/lib/blockchain/client';
 import type { Hex } from 'viem';
+import { addBreadcrumb } from '@/lib/observability/sentry';
 
 // ─── Types ─────────────────────────────────────────
 
