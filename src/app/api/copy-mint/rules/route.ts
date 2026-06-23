@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { parseJsonBody } from '@/lib/api/errors';
 import { requireApiUser } from '@/lib/auth/require-auth';
-import { enforceRateLimit, RATE_LIMITS } from '@/lib/api/rate-limit';
 import { getCopyMintRules, upsertCopyMintRule } from '@/lib/services/copy-mint.service';
 
 function getErrorMessage(error: unknown) {
@@ -12,9 +11,6 @@ export async function GET() {
   try {
     const authResult = await requireApiUser();
     if ('error' in authResult) return authResult.error;
-
-    const rateLimited = await enforceRateLimit(`copy-mint:rules:${authResult.userId}`, RATE_LIMITS.sensitive);
-    if (rateLimited) return rateLimited;
 
     const rules = await getCopyMintRules(authResult.userId);
     return NextResponse.json({ rules });

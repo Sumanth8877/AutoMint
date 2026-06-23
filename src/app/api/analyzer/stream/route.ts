@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/require-auth';
-import { enforceRateLimit, RATE_LIMITS } from '@/lib/api/rate-limit';
 import { getErrorMessage, parseJsonBody } from '@/lib/api/errors';
 import { captureException } from '@/lib/observability/sentry';
 import { AnalyzerExecutionError, AnalyzerResolutionError, runAnalyzer } from '@/lib/services/analyzer.service';
@@ -15,9 +14,6 @@ export async function POST(req: Request) {
   const authResult = await requireApiUser();
   if ('error' in authResult) return authResult.error;
 
-    // Rate limit: analyzer/stream fans out to AI + RPC — expensive per call
-    const rateLimited = await enforceRateLimit(`analyzer:stream:${authResult.userId}`, RATE_LIMITS.expensive);
-    if (rateLimited) return rateLimited;
 
   let input = '';
   try {

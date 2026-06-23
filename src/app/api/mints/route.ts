@@ -9,7 +9,6 @@ import { getDb } from '@/lib/db';
 import { collections, mintTasks } from '@/drizzle/schema';
 import { getEffectiveExecutionDefaults } from '@/lib/services/execution-settings.service';
 import { resolveMintIntent, type MintIntent } from '@/lib/resolve-mint-intent';
-import { enforceRateLimit, RATE_LIMITS } from '@/lib/api/rate-limit';
 import { AnalyzerResolutionError, normalizeAnalyzerInput, runAnalyzer, type AnalyzerResult } from '@/lib/services/analyzer.service';
 import { analyzeMintRisk } from '@/lib/services/risk.service';
 
@@ -108,10 +107,6 @@ export async function POST(req: Request) {
     const authResult = await requireApiUser();
     if ('error' in authResult) return authResult.error;
 
-    // Rate limit: max 10 mint submissions per minute per user.
-    // Even for internal use — prevents accidental loops from exhausting QStash quota.
-    const rateLimited = await enforceRateLimit(`mints:create:${authResult.userId}`, RATE_LIMITS.sensitive);
-    if (rateLimited) return rateLimited;
 
     const body = await parseJsonBody<{
       walletId?: string;
