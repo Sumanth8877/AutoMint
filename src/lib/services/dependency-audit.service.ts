@@ -182,6 +182,7 @@ async function fetchWeeklyDownloads(name: string): Promise<number | null> {
 
 interface NpmAuditAdvisory {
   id: number;
+  module_name?: string;
   title: string;
   severity: string;
   url: string;
@@ -232,7 +233,7 @@ async function fetchSecurityAdvisories(
       // The advisory doesn't directly expose the package name in older API versions;
       // match by vulnerable_versions against our package list.
       // We use the module_name field if present, otherwise iterate.
-      const pkgName = (advisory as Record<string, string>)['module_name'];
+      const pkgName = advisory.module_name;
       if (!pkgName) continue;
 
       const existing = result.get(pkgName) ?? [];
