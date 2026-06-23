@@ -70,7 +70,7 @@ export async function addMintTask(userId: string, data: {
 export async function executeMintTask(
   taskId: string,
   userId: string,
-  options: { existingLockToken?: string } = {},
+  options: { existingLockToken?: string; privateMempool?: boolean } = {},
 ): Promise<{ success: boolean; txHash?: string; error?: string }> {
   return startSpan('mint.execute_task', { area: 'minting', taskId, userId }, async (): Promise<{ success: boolean; txHash?: string; error?: string }> => {
   const mintLock = options.existingLockToken
@@ -185,7 +185,7 @@ export async function executeMintTask(
     quantity: claimed.quantity,
   };
 
-  const result = await executeMint(wallet.address as Hex, chain, params, claimed.userId, { walletId: wallet.id });
+  const result = await executeMint(wallet.address as Hex, chain, params, claimed.userId, { walletId: wallet.id, privateMempool: options.privateMempool ?? false });
 
   if (!result.success) {
       // C-04: If txHash is present the transaction was broadcast but receipt

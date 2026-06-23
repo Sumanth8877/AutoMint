@@ -173,7 +173,10 @@ export async function executeMint(
   chain: string,
   params: MintParams,
   userId: string,                 // REQUIRED — was `userId?: string`
-  options: { walletId: string },  // REQUIRED — was `options?: { walletId?: string }`
+  options: {
+    walletId: string;          // REQUIRED — wallet to sign with
+    privateMempool?: boolean;  // Optional — route via Flashbots/MEV Blocker (Ethereum only)
+  },
 ): Promise<MintResult> {
   // ── Guard: userId is mandatory ───────────────────────────────────
   // Runtime check in addition to the TypeScript type requirement,
@@ -301,7 +304,23 @@ export async function executeMint(
         // resolveGasParams returned {} (error fallback) — let viem estimate gas
         signedTx = await walletClient.signTransaction({ ...baseTxParams });
       }
-      hash = await broadcastRawTransaction(chain, signedTx, { userId });
+      // Feature: private mempool routing (Flashbots / MEV Blocker)
+      // When options.privateMempool is true and the chain supports it (Ethereum),
+      // route via Flashbots Protect → MEV Blocker → public fallback.
+      // This prevents frontrunning and sandwich attacks on high-value mints.
+      if (options.privateMempool) {
+        const { broadcastViaPrivateMempool } = await import('@/lib/services/private-mempool.service');
+        const result = await broadcastViaPrivateMempool(chain, signedTx);
+        hash = result.txHash;
+        addBreadcrumb({
+          category: 'mint',
+          message: result.isPrivate ? 'Transaction broadcast via private mempool' : 'Private mempool unavailable — used public broadcast',
+          level: 'info',
+          data: { chain, endpoint: result.endpoint, isPrivate: result.isPrivate },
+        });
+      } else {
+        hash = await broadcastRawTransaction(chain, signedTx, { userId });
+      }
     } catch (broadcastError) {
       // sendTransaction itself failed — transaction was never broadcast.
       // Safe to retry; no hash to preserve.
