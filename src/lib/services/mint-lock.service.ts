@@ -74,7 +74,7 @@ export async function releaseLock(mintId: string, token?: string) {
       `;
       const deleted = await getRedisClient().eval(luaRelease, [key], [token]) as number;
       if (deleted === 0) {
-        console.warn('[MintLock] Release skipped — token mismatch or lock already expired', { mintId, key });
+        addBreadcrumb({ category: 'mint-lock', message: 'Release skipped — token mismatch or lock already expired', level: 'warning', data: { mintId, key } });
         return false;
       }
     } else {
@@ -111,7 +111,7 @@ export async function extendLock(mintId: string, token: string, ttlSeconds = LOC
     const extended = await getRedisClient().eval(luaExtend, [key], [token, String(ttlSeconds)]) as number;
 
     if (extended === 0) {
-      console.warn('[MintLock] Extend skipped — token mismatch or lock already expired', { mintId, key });
+      addBreadcrumb({ category: 'mint-lock', message: 'Extend skipped — token mismatch or lock already expired', level: 'warning', data: { mintId, key } });
       return false;
     }
 

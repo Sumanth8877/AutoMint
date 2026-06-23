@@ -1,6 +1,6 @@
 import { getClient } from './client';
 import { CHAIN_NAMES } from './chains';
-import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
+import { captureException } from '@/lib/observability/sentry';
 
 export interface CollectionMetadata {
   name: string;

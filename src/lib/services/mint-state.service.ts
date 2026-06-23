@@ -163,11 +163,7 @@ export async function getMintState(contractAddress: string, chain: string): Prom
     // causing the function to fall through to UNKNOWN — missing live mints.
     // Set OPENSEA_API_KEY in your environment to avoid this.
     if (!process.env.OPENSEA_API_KEY) {
-      console.warn(
-        '[MintState] OPENSEA_API_KEY is not configured. ' +
-        'OpenSea enrichment is skipped to avoid unauthenticated rate limits (~5 req/min). ' +
-        'Set OPENSEA_API_KEY to enable accurate mint state detection on Ethereum.'
-      );
+      addBreadcrumb({ category: 'mint-state', message: 'OPENSEA_API_KEY not configured — skipping OpenSea state check', level: 'warning' });
       return { status: 'UNKNOWN', startTime, endTime, maxSupply, minted: totalMinted };
     }
 

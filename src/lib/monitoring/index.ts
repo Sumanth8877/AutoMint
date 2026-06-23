@@ -2,7 +2,7 @@ import { getDb } from '@/lib/db';
 import { activities } from '@/drizzle/schema';
 import { eq, desc } from 'drizzle-orm';
 import { getCollectionMetadata } from '@/lib/blockchain/collections';
-import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
+import { addBreadcrumb } from '@/lib/observability/sentry';
 
 export type ActivityType = 
   | 'wallet_added' 

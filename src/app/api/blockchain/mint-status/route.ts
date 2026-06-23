@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { requireApiUser } from '@/lib/auth/require-auth';
 import { requireApiSession } from '@/lib/auth/require-auth';
 
 export async function GET(req: Request) {

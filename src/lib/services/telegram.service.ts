@@ -437,7 +437,7 @@ export async function sendTelegramNotification(
     await sendTelegramMessage(account.chatId, formatNotification(type, payload));
     return { sent: true };
   } catch (error) {
-    console.error('Telegram notification failed:', error);
+    captureException(error instanceof Error ? error : new Error(String(error)), { area: 'telegram', fingerprint: ['telegram', 'notification-failed'] });
     return {
       sent: false,
       reason: error instanceof Error ? error.message : 'telegram_notification_failed',
@@ -471,7 +471,7 @@ export async function sendTelegramSafeModePrompt(params: SafeModePromptParams) {
 
     return { sent: true };
   } catch (error) {
-    console.error('Telegram safe mode prompt failed:', error);
+    captureException(error instanceof Error ? error : new Error(String(error)), { area: 'telegram', fingerprint: ['telegram', 'safe-mode-prompt-failed'] });
     return {
       sent: false,
       reason: error instanceof Error ? error.message : 'telegram_safe_mode_prompt_failed',
@@ -501,7 +501,7 @@ export async function sendTelegramRiskChangePrompt(params: RiskChangePromptParam
 
     return { sent: true };
   } catch (error) {
-    console.error('Telegram risk change prompt failed:', error);
+    captureException(error instanceof Error ? error : new Error(String(error)), { area: 'telegram', fingerprint: ['telegram', 'risk-change-prompt-failed'] });
     return {
       sent: false,
       reason: error instanceof Error ? error.message : 'telegram_risk_change_prompt_failed',

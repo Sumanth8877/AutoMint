@@ -1,5 +1,5 @@
 import { getClient } from './client';
-import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
+import { captureException } from '@/lib/observability/sentry';
 
 export interface GasEstimate {
   gasPrice: string;

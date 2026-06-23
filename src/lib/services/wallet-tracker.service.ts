@@ -159,7 +159,7 @@ async function sendWalletTrackerNotification(
 export function verifyAlchemyWebhookSignature(headers: Headers, rawBody: string) {
   const signingKey = process.env.ALCHEMY_WEBHOOK_SIGNING_KEY;
   if (!signingKey) {
-    console.error('[Security] ALCHEMY_WEBHOOK_SIGNING_KEY is not configured — rejecting webhook request. Set this env var to the signing key from your Alchemy dashboard.');
+    captureException(new Error('ALCHEMY_WEBHOOK_SIGNING_KEY is not configured — rejecting webhook request'), { area: 'wallet-tracker', fingerprint: ['wallet-tracker', 'missing-signing-key'] });
     throw new Error('Webhook signature verification is not configured');
   }
 
@@ -208,7 +208,7 @@ export async function watchWallet(userId: string, data: { walletAddress: string;
   if (networkType === 'EVM') {
     const registration = await updateAlchemyWebhookAddresses({ chain, add: [walletAddress] });
     if (!registration.synced) {
-      console.warn(`[WalletTracker] Alchemy webhook registration failed for ${walletAddress} on ${chain}: ${registration.reason}`);
+      addBreadcrumb({ category: 'wallet-tracker', message: `Alchemy webhook registration failed for ${walletAddress} on ${chain}: ${registration.reason}`, level: 'warning' });
     }
   }
   await logActivity(userId, 'wallet_added', 'Wallet tracker enabled', { walletAddress, chain });

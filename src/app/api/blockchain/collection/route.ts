@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { requireApiUser } from '@/lib/auth/require-auth';
 import { requireApiSession } from '@/lib/auth/require-auth';
 import { getCollectionMetadata } from '@/lib/blockchain/collections';
 import { captureException } from '@/lib/observability/sentry';

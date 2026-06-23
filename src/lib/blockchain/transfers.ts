@@ -1,7 +1,7 @@
 import { getClient } from './client';
 import { getCache, setCache, CACHE_KEYS, CACHE_TTL } from '@/lib/redis';
 import { parseAbiItem, type Hex } from 'viem';
-import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
+import { captureException } from '@/lib/observability/sentry';
 
 export interface NftTransfer {
   tokenId: string;

@@ -1,6 +1,6 @@
 import { getClient } from './client';
 import type { Hex } from 'viem';
-import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
+import { captureException } from '@/lib/observability/sentry';
 
 export type TxStatus = 'pending' | 'confirmed' | 'failed';
 

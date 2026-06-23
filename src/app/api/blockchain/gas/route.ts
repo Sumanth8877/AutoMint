@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { requireApiUser } from '@/lib/auth/require-auth';
 import { requireApiSession } from '@/lib/auth/require-auth';
 import { estimateGas } from '@/lib/blockchain/gas';
 import { captureException } from '@/lib/observability/sentry';
