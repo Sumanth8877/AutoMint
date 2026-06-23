@@ -155,6 +155,22 @@ export async function getMintState(contractAddress: string, chain: string): Prom
   }
 
   if (chain === 'ethereum') {
+    // M-9 fix: warn clearly when OPENSEA_API_KEY is not set.
+    // Unauthenticated OpenSea calls are rate-limited to ~5 req/min.
+    // During an active mint window getMintState is called frequently from the
+    // orchestrator, risk engine, QStash handler, and copy-mint service.
+    // Without an API key those calls get 429'd and osMeta returns undefined,
+    // causing the function to fall through to UNKNOWN — missing live mints.
+    // Set OPENSEA_API_KEY in your environment to avoid this.
+    if (!process.env.OPENSEA_API_KEY) {
+      console.warn(
+        '[MintState] OPENSEA_API_KEY is not configured. ' +
+        'OpenSea enrichment is skipped to avoid unauthenticated rate limits (~5 req/min). ' +
+        'Set OPENSEA_API_KEY to enable accurate mint state detection on Ethereum.'
+      );
+      return { status: 'UNKNOWN', startTime, endTime, maxSupply, minted: totalMinted };
+    }
+
     const osMeta = await fetchOpenSeaMintMeta(contractAddress);
     if (osMeta) {
       const osMax = osMeta.maxSupply ?? maxSupply;

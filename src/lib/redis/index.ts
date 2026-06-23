@@ -108,6 +108,16 @@ export async function invalidateCache(key: string): Promise<boolean> {
 
 /**
  * Get or set cache with a TTL. If miss, calls the fetch function to hydrate.
+ *
+ * M-6 fix: add a per-key mutex to prevent cache stampedes.
+ * Without this, N concurrent cold-cache misses all call fetchFn() simultaneously,
+ * fanning out to N upstream RPC/API calls at once. During a mint window this
+ * causes a burst of getWalletBalance / getMintState / collection calls.
+ *
+ * Fix: the first caller acquires a short-lived Redis lock (SET NX) before
+ * fetching. Subsequent callers wait briefly then re-read from cache.
+ * If the lock is unavailable (Redis hiccup) we fall through and fetch anyway
+ * rather than blocking — fail-open is safer than fail-closed for reads.
  */
 export async function cacheWithTTL<T>(
   key: string,
@@ -117,9 +127,37 @@ export async function cacheWithTTL<T>(
   const cached = await getCache<T>(key);
   if (cached !== null) return cached;
 
-  const fresh = await fetchFn();
-  await setCache(key, fresh, ttl);
-  return fresh;
+  const client = getRedisClient();
+  const lockKey = `stampede-lock:${key}`;
+  const lockToken = Math.random().toString(36).slice(2);
+
+  let lockAcquired = false;
+  try {
+    const result = await client.set(lockKey, lockToken, { nx: true, ex: Math.min(ttl, 10) });
+    lockAcquired = result !== null && result !== undefined;
+  } catch {
+    // Redis error acquiring lock — fall through and fetch directly (fail-open)
+  }
+
+  if (!lockAcquired) {
+    // Another worker is already fetching — wait 120ms then read from cache.
+    // If still empty (fetch hasn't finished) fall through and fetch ourselves.
+    await new Promise(r => setTimeout(r, 120));
+    const retried = await getCache<T>(key);
+    if (retried !== null) return retried;
+  }
+
+  try {
+    const fresh = await fetchFn();
+    await setCache(key, fresh, ttl);
+    return fresh;
+  } finally {
+    if (lockAcquired) {
+      // Release lock only if we still own it (atomic Lua CAS)
+      const lua = `if redis.call("GET",KEYS[1])==ARGV[1] then return redis.call("DEL",KEYS[1]) else return 0 end`;
+      await client.eval(lua, [lockKey], [lockToken]).catch(() => undefined);
+    }
+  }
 }
 
 /**

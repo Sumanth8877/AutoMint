@@ -16,24 +16,31 @@ export interface PreArmConfig {
 
 export async function preArmMint(config: PreArmConfig) {
   const { userId, walletId, contractAddress, quantity, requirements } = config;
-  // C-1 fix: scope the lookup to this user only.
-  // Without the userId predicate, any task for the same contractAddress across
-  // ALL users would be returned, causing cross-user wallet execution.
-  const [existing] = await getDb()
-    .select()
-    .from(mintTasks)
-    .where(and(eq(mintTasks.contractAddress, contractAddress), eq(mintTasks.userId, userId)))
-    .limit(1);
-  if (existing) return existing;
 
-  const [task] = await getDb().insert(mintTasks).values({
-    userId,
-    walletId,
-    quantity,
-    status: 'pending',
-    contractAddress,
-    mintFunction: requirements.mintFunction,
-    mintPrice: requirements.mintPrice,
-  }).returning();
-  return task;
+  // M-1 fix: wrap SELECT + INSERT in a DB transaction with a row-level lock.
+  // Without this, two concurrent calls (e.g. Telegram webhook + copy-mint)
+  // for the same (userId, contractAddress) both pass the existence check and
+  // both INSERT — producing duplicate tasks and a potential double-mint.
+  // FOR UPDATE on the SELECT serialises concurrent callers at the DB level.
+  return getDb().transaction(async (tx) => {
+    const existing = await tx
+      .select()
+      .from(mintTasks)
+      .where(and(eq(mintTasks.contractAddress, contractAddress), eq(mintTasks.userId, userId)))
+      .limit(1)
+      .for('update');
+
+    if (existing[0]) return existing[0];
+
+    const [task] = await tx.insert(mintTasks).values({
+      userId,
+      walletId,
+      quantity,
+      status: 'pending',
+      contractAddress,
+      mintFunction: requirements.mintFunction,
+      mintPrice: requirements.mintPrice,
+    }).returning();
+    return task;
+  });
 }

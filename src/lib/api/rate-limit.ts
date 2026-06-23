@@ -38,13 +38,22 @@ export async function checkRateLimit(
     const client = getRedisClient();
     const key = `${RATE_LIMIT_PREFIX}${identifier}`;
 
-    const count = await client.incr(key);
-    if (count === 1) {
-      await client.expire(key, windowSeconds);
-    }
+    // M-7 fix: use an atomic Lua script for INCR + EXPIRE.
+    // The old code did INCR then EXPIRE as two separate commands. If the process
+    // crashed between them the key would persist forever with no TTL, allowing
+    // the next request to bypass the rate limit entirely.
+    // This Lua script runs atomically: INCR and conditional EXPIRE in one op.
+    const luaRateLimit = `
+      local count = redis.call('INCR', KEYS[1])
+      if count == 1 then
+        redis.call('EXPIRE', KEYS[1], ARGV[1])
+      end
+      return count
+    `;
+    const count = await client.eval(luaRateLimit, [key], [String(windowSeconds)]) as number;
 
     let ttl = await client.ttl(key);
-    // -1 = key exists without TTL (lost expiry); reset it defensively.
+    // Defensive: if TTL is somehow missing (pre-existing key with no TTL), set it.
     if (ttl < 0) {
       await client.expire(key, windowSeconds);
       ttl = windowSeconds;

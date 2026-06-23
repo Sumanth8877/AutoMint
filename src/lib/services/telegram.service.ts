@@ -125,9 +125,18 @@ function getTelegramBotToken() {
 }
 
 function getLinkSecret() {
+  // M-3 fix: use a dedicated TELEGRAM_LINK_SECRET only.
+  // The old code fell back to CLERK_SECRET_KEY which reuses the same key material
+  // across two different security contexts (Clerk auth + Telegram HMAC).
+  // Key reuse is a security anti-pattern — if one context is compromised the other
+  // is too. TELEGRAM_LINK_SECRET must be a separate randomly-generated value.
+  // Generate one with: openssl rand -hex 32
   if (!isTelegramEnabled()) return 'telegram-disabled';
-  const secret = process.env.TELEGRAM_LINK_SECRET || process.env.CLERK_SECRET_KEY || process.env.TRIGGER_SECRET_KEY;
-  if (!secret) throw new Error('TELEGRAM_LINK_SECRET, CLERK_SECRET_KEY, or TRIGGER_SECRET_KEY is required');
+  const secret = process.env.TELEGRAM_LINK_SECRET;
+  if (!secret) throw new Error(
+    'TELEGRAM_LINK_SECRET is required when Telegram is enabled. ' +
+    'Generate a dedicated secret: openssl rand -hex 32'
+  );
   return secret;
 }
 

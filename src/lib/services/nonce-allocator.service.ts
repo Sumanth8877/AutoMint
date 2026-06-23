@@ -208,8 +208,16 @@ export async function allocateNonce(
   const lockToken = await acquireSlotLock(address, chain);
 
   if (!lockToken) {
-    // Fallback: all retries exhausted (800ms waited). Use RPC directly.
-    // This is the pre-fix behaviour — possible collision — but better than hard failure.
+    // M-2 fix: reduce collision probability in the fallback path.
+    // When two workers exhaust the lock retries simultaneously they both call
+    // getChainPendingNonce() and receive the same value — a nonce collision.
+    // A small random jitter (0–150 ms) desynchronises the two RPC calls so
+    // they are unlikely to both land on the same pending nonce value.
+    // This does not fully eliminate the race but reduces it significantly.
+    // The proper fix is to never exhaust the lock — tune SLOT_LOCK_MAX_RETRIES
+    // or SLOT_LOCK_TTL_MS if fallbacks are occurring frequently (watch Sentry).
+    await sleep(Math.floor(Math.random() * 150));
+
     const rpcNonce = await getChainPendingNonce(address, chain);
     await captureMessage('Nonce allocator: slot lock exhausted — falling back to RPC nonce', {
       area: 'nonce-allocator',

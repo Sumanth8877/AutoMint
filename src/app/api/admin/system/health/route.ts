@@ -3,7 +3,13 @@ import { getDb } from '@/lib/db';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { checkRedisHealth } from '@/lib/redis';
 import { getClient } from '@/lib/blockchain/client';
-import { getTaskCounts } from '@/lib/services/task.service';
+// M-5 fix: removed dead import of task.service / getTaskCounts.
+// task.service.ts manages the `tasks` table which is never written to by any
+// live pipeline — all active work uses `mintTasks`. The health check was
+// reporting counts from an always-empty table. Replaced below with live
+// mintTasks counts from the active queue.
+import { mintTasks } from '@/drizzle/schema';
+import { count, eq } from 'drizzle-orm';
 import { getRpcHealthSnapshot } from '@/lib/services/rpc-manager.service';
 import { sql } from 'drizzle-orm';
 

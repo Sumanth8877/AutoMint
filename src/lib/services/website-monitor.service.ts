@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { getDb } from '@/lib/db';
 import { monitoredWebsites, monitoringEvents } from '@/drizzle/schema/monitoring';
 import { eq } from 'drizzle-orm';
@@ -12,6 +13,16 @@ import {
 } from '@/lib/browserbase/client';
 
 const BROWSERBASE_PROJECT_ID = process.env.BROWSERBASE_PROJECT_ID || '';
+
+/**
+ * M-8 fix: define simpleHash — was called in createSnapshot but never defined.
+ * The missing function caused a ReferenceError on every HTTP snapshot check,
+ * silently crashing the entire website monitoring path at runtime.
+ * Uses SHA-256 truncated to 16 hex chars — stable, fast, collision-resistant.
+ */
+function simpleHash(input: string): string {
+  return createHash('sha256').update(input).digest('hex').slice(0, 16);
+}
 
 // ─── Snapshot shape ──────────────────────────────
 export interface WebsiteSnapshot {
