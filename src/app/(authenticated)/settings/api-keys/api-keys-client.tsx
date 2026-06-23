@@ -274,12 +274,7 @@ export default function ApiKeysClient() {
         </div>
       </Card>
 
-      {/* ── Free Tier Usage Dashboard ───────────────────────────────────── */}
-      <Card>
-        <div className="p-6">
-          <UsageDashboard />
-        </div>
-      </Card>
+      
     </div>
   );
 }
