@@ -56,6 +56,13 @@ export interface MintResult {
  *   - Full diagnostic details are logged server-side via captureException.
  */
 
+// ─── Helpers ──────────────────────────────────────────────────────────────
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Unknown mint error';
+}
+
+
 function getChain(chain: string): Chain {
   const c = CHAIN_OBJECTS[chain];
   if (!c) throw new Error(`Unsupported chain: ${chain}`);
