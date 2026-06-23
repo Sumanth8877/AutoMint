@@ -24,7 +24,7 @@ export const activityTypeEnum = pgEnum('activity_type', [
 // ─── Users ───────────────────────────────────────────
 export const users = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
-  clerkId: text('clerk_id').unique().notNull(),
+  clerkId: text('clerk_id').notNull(),
   email: text('email').notNull(),
   username: text('username'),
   consensusEnabled: boolean('consensus_enabled').default(false).notNull(),
@@ -32,7 +32,13 @@ export const users = pgTable('users', {
   consensusAutoMint: boolean('consensus_auto_mint').default(false).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  // C-2 fix: explicit unique index on clerkId — every auth request (requireApiUser
+  // → syncUser) queries this column. Drizzle's inline .unique() creates a
+  // constraint but does NOT generate a named index in migrations. This explicit
+  // index ensures the DB planner always uses an index scan, not a seq scan.
+  clerkIdIdx: uniqueIndex('idx_users_clerk_id').on(table.clerkId),
+}));
 
 export const telegramAccounts = pgTable('telegram_accounts', {
   id: uuid('id').defaultRandom().primaryKey(),
