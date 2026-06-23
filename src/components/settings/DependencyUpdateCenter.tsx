@@ -66,7 +66,6 @@ function StatTile({ label, value, tone }: { label: string; value: number; tone: 
     danger:  'bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300',
     info:    'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300',
   }[tone];
-
   return (
     <div className={`rounded-xl px-4 py-3 ${styles}`}>
       <div className="text-2xl font-black tabular-nums">{value}</div>
@@ -306,14 +305,14 @@ export function DependencyUpdateCenter() {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
-
   const showToast = useCallback((message: string, type: 'success' | 'error' | 'info') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 6000);
   }, []);
 
+  // ── Scan (SSE streaming) ─────────────────────────────────────────────────────
   const handleCheck = useCallback(async (force = false) => {
-    setCheckState('loading'); setError(null); setInstallResult(null); setBranchResult(null); setScanProgress(null);
+    setCheckState('loading'); setError(null); setScanProgress(null);
 
     const url = `/api/system/dependency-audit/stream${force ? '?force=true' : ''}`;
 
@@ -321,20 +320,17 @@ export function DependencyUpdateCenter() {
       const evtSource = new EventSource(url);
 
       evtSource.addEventListener('start', (e: Event) => {
-        const msg = e as MessageEvent;
-        const data = JSON.parse(msg.data as string) as { total: number };
+        const data = JSON.parse((e as MessageEvent).data as string) as { total: number };
         setScanProgress({ processed: 0, total: data.total, packageName: '' });
       });
 
       evtSource.addEventListener('progress', (e: Event) => {
-        const msg = e as MessageEvent;
-        const data = JSON.parse(msg.data as string) as { processed: number; total: number; packageName: string };
+        const data = JSON.parse((e as MessageEvent).data as string) as { processed: number; total: number; packageName: string };
         setScanProgress(data);
       });
 
       evtSource.addEventListener('complete', (e: Event) => {
-        const msg = e as MessageEvent;
-        const data = JSON.parse(msg.data as string) as { report: DependencyAuditReport; cached: boolean };
+        const data = JSON.parse((e as MessageEvent).data as string) as { report: DependencyAuditReport; cached: boolean };
         evtSource.close();
         setScanProgress(null);
         setReport(data.report);
@@ -344,42 +340,32 @@ export function DependencyUpdateCenter() {
         showToast(
           data.cached
             ? `Loaded from cache — ${data.report.totalPackages} packages (${data.report.durationMs}ms)`
-            : `Audit complete — ${data.report.totalPackages} packages checked in ${data.report.durationMs}ms`,
+            : `Audit complete — ${data.report.totalPackages} packages in ${data.report.durationMs}ms`,
           'success',
         );
         resolve();
       });
 
       evtSource.addEventListener('error', (e: Event) => {
-        const msg = e as MessageEvent;
         evtSource.close();
         setScanProgress(null);
         let errorMsg = 'Audit failed';
-        try {
-          const data = JSON.parse((msg as MessageEvent).data as string) as { message?: string };
-          errorMsg = data.message ?? errorMsg;
-        } catch { /* parse error — use default message */ }
-        setError(errorMsg);
-        setCheckState('error');
-        showToast(errorMsg, 'error');
+        try { errorMsg = (JSON.parse((e as MessageEvent).data as string) as { message?: string }).message ?? errorMsg; } catch { /* default */ }
+        setError(errorMsg); setCheckState('error'); showToast(errorMsg, 'error');
         resolve();
       });
 
-      // Fallback: if EventSource itself errors (network, auth)
       evtSource.onerror = () => {
-        if (evtSource.readyState === EventSource.CLOSED) return; // already handled
-        evtSource.close();
-        setScanProgress(null);
+        if (evtSource.readyState === EventSource.CLOSED) return;
+        evtSource.close(); setScanProgress(null);
         const msg = 'Connection to scan stream lost';
-        setError(msg);
-        setCheckState('error');
-        showToast(msg, 'error');
+        setError(msg); setCheckState('error'); showToast(msg, 'error');
         resolve();
       };
     });
   }, [showToast]);
 
-
+  // ── Download Report ───────────────────────────────────────────────────────────
   const handleReport = useCallback(async () => {
     setReportState('loading');
     try {
@@ -394,37 +380,26 @@ export function DependencyUpdateCenter() {
     } catch (err) { setReportState('error'); showToast(err instanceof Error ? err.message : 'Report failed', 'error'); }
   }, [showToast]);
 
+  // ── Copy install command ──────────────────────────────────────────────────────
+  const handleCopyInstall = useCallback(() => {
+    const safePkgs = report?.packages.filter(p =>
+      p.classification === 'SAFE' && p.updateType !== 'current' &&
+      (selectedPackages.size === 0 || selectedPackages.has(p.name))
+    ) ?? [];
+    const cmd = safePkgs.map(p => `${p.name}@${p.latestVersion}`).join(' ');
+    if (!cmd) return;
+    void navigator.clipboard.writeText(`npm install ${cmd}`).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 3000);
+    });
+  }, [report, selectedPackages]);
 
-
-  const handleReport = useCallback(async () => {
-    setReportState('loading');
-    try {
-      const res = await fetch('/api/system/upgrade-report?format=markdown');
-      if (!res.ok) { const d = await res.json() as { error?: string }; throw new Error(d.error ?? 'Report generation failed'); }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url;
-      a.download = `automint-upgrade-report-${new Date().toISOString().split('T')[0]}.md`;
-      a.click(); URL.revokeObjectURL(url);
-      setReportState('success'); showToast('Upgrade report downloaded.', 'success');
-    } catch (err) { setReportState('error'); showToast(err instanceof Error ? err.message : 'Report failed', 'error'); }
-  }, [showToast]);
-
-  const handleBranch = useCallback(async () => {
-    setBranchState('loading'); setBranchResult(null);
-    try {
-      const res = await fetch('/api/system/upgrade-branch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
-      const data = await res.json() as BranchResult & { error?: string };
-      if (!res.ok) throw new Error(data.error ?? 'Branch creation failed');
-      setBranchResult(data); setBranchState('success');
-      showToast(data.branchName ? `Branch \`${data.branchName}\` created with ${data.packagesUpdated.length} update(s).` : 'No packages to update.', 'success');
-    } catch (err) { setBranchState('error'); showToast(err instanceof Error ? err.message : 'Branch creation failed', 'error'); }
-  }, [showToast]);
-
+  // ── Toggle package selection ──────────────────────────────────────────────────
   const togglePackage = useCallback((name: string) => {
     setSelectedPackages(prev => { const n = new Set(prev); n.has(name) ? n.delete(name) : n.add(name); return n; });
   }, []);
 
+  // ── Derived values ────────────────────────────────────────────────────────────
   const filteredPackages = report?.packages.filter(p => {
     if (activeTab === 'all') return true;
     if (activeTab === 'safe') return p.classification === 'SAFE' && p.updateType !== 'current';
@@ -439,14 +414,15 @@ export function DependencyUpdateCenter() {
   const breakingCount = report?.breakingUpdates ?? 0;
   const securityCount = report?.packages.filter(p => p.securityRisk).length ?? 0;
   const modernCount = report?.modernizationOpportunities.length ?? 0;
+  const isScanning = checkState === 'loading';
 
   const tabs: { id: Tab; label: string; count: number; color: string }[] = [
-    { id: 'safe',           label: 'Safe',          count: safeCount,       color: 'green'  },
-    { id: 'minor',          label: 'Review',         count: minorCount,      color: 'yellow' },
-    { id: 'breaking',       label: 'Breaking',       count: breakingCount,   color: 'red'    },
-    { id: 'security',       label: 'Security',       count: securityCount,   color: 'red'    },
-    { id: 'modernization',  label: 'Modernization',  count: modernCount,     color: 'indigo' },
-    { id: 'all',            label: 'All',            count: report?.totalPackages ?? 0, color: 'gray' },
+    { id: 'safe',          label: 'Safe',         count: safeCount,             color: 'green'  },
+    { id: 'minor',         label: 'Review',        count: minorCount,            color: 'yellow' },
+    { id: 'breaking',      label: 'Breaking',      count: breakingCount,         color: 'red'    },
+    { id: 'security',      label: 'Security',      count: securityCount,         color: 'red'    },
+    { id: 'modernization', label: 'Modernization', count: modernCount,           color: 'indigo' },
+    { id: 'all',           label: 'All',           count: report?.totalPackages ?? 0, color: 'gray' },
   ];
 
   const tabActiveStyle: Record<string, string> = {
@@ -464,8 +440,6 @@ export function DependencyUpdateCenter() {
     indigo: 'bg-indigo-500/20 text-indigo-700 dark:text-indigo-300',
     gray:   'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300',
   };
-
-  const isScanning = checkState === 'loading';
 
   return (
     <section className="space-y-6">
@@ -487,14 +461,13 @@ export function DependencyUpdateCenter() {
           </p>
           <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-            <span><strong>Checking for updates never modifies files.</strong> Only &ldquo;Install Safe Updates&rdquo; may change package.json.</span>
+            <span><strong>Checking for updates never modifies files.</strong> Only the clipboard command changes packages.</span>
           </p>
         </div>
 
-        {/* Primary action */}
         <button
           type="button"
-          onClick={() => { void handleCheck(!!report); }} // force=true if already have a report
+          onClick={() => { void handleCheck(!!report); }}
           disabled={isScanning}
           className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all"
         >
@@ -524,14 +497,14 @@ export function DependencyUpdateCenter() {
           <p className="text-sm text-gray-400 dark:text-gray-500 mb-6">
             Click <strong>Scan Now</strong> to check all npm dependencies against the registry.
           </p>
-          <button onClick={() => void handleCheck()}
+          <button onClick={() => { void handleCheck(); }}
             className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 transition-all">
             <RefreshCw className="h-4 w-4" /> Scan Now
           </button>
         </div>
       )}
 
-      {/* ── Loading skeleton ───────────────────────────────────────────────── */}
+      {/* ── Loading state with progress bar ───────────────────────────────── */}
       {isScanning && !report && (
         <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 py-14 px-8 text-center space-y-5">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50 dark:bg-indigo-950/40">
@@ -567,16 +540,13 @@ export function DependencyUpdateCenter() {
       {report && (
         <>
           {/* Meta row */}
-          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-400 dark:text-gray-500">
-            <span>
-              Last scanned: <span className="font-medium text-gray-600 dark:text-gray-300">{new Date(report.auditedAt).toLocaleString()}</span>
-              {' · '}{report.durationMs}ms{' · '}Node {report.nodeVersion}
-            </span>
+          <div className="text-xs text-gray-400 dark:text-gray-500">
+            Last scanned: <span className="font-medium text-gray-600 dark:text-gray-300">{new Date(report.auditedAt).toLocaleString()}</span>
+            {' · '}{report.durationMs}ms{' · '}Node {report.nodeVersion}
           </div>
 
           {/* Score rings + stats */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Scores */}
             <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-5">
               <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4">Health Scores</p>
               <div className="flex gap-4 justify-around">
@@ -585,8 +555,6 @@ export function DependencyUpdateCenter() {
                 <ScoreRing score={report.technicalDebtScore} label="Tech Debt" />
               </div>
             </div>
-
-            {/* Stats */}
             <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-5">
               <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4">Package Summary</p>
               <div className="grid grid-cols-3 gap-2.5">
@@ -600,59 +568,48 @@ export function DependencyUpdateCenter() {
             </div>
           </div>
 
-          {/* ── Secondary action toolbar ──────────────────────────────────── */}
-          <div className="flex flex-wrap gap-2.5">
-            {/* Install Safe Updates — copies npm command (Vercel can't run npm install) */}
-            <button
-              type="button"
-              disabled={safeCount === 0 && selectedPackages.size === 0}
-              onClick={() => {
-                // Build the npm install command for the safe packages
-                const safePkgs = report?.packages.filter(p =>
-                  p.classification === 'SAFE' && p.updateType !== 'current' &&
-                  (selectedPackages.size === 0 || selectedPackages.has(p.name))
-                ) ?? [];
-                const cmd = safePkgs
-                  .map(p => `${p.name}@${p.latestVersion}`)
-                  .join(' ');
-                if (!cmd) return;
-                void navigator.clipboard.writeText(`npm install ${cmd}`).then(() => {
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 3000);
-                });
-              }}
-              className="inline-flex items-center gap-2 rounded-xl border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/30 px-4 py-2.5 text-sm font-semibold text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-950/60 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
-              {copied
-                ? <><CheckCircle2 className="h-4 w-4" /> Copied!</>
-                : <><ArrowUpCircle className="h-4 w-4" /> Copy Install Command
+          {/* ── Action toolbar ─────────────────────────────────────────────── */}
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2.5">
+              {/* Copy Install Command — clipboard only, no server-side npm */}
+              <button
+                type="button"
+                disabled={safeCount === 0 && selectedPackages.size === 0}
+                onClick={handleCopyInstall}
+                className="inline-flex items-center gap-2 rounded-xl border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/30 px-4 py-2.5 text-sm font-semibold text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-950/60 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              >
+                {copied ? (
+                  <><CheckCircle2 className="h-4 w-4" /> Copied!</>
+                ) : (
+                  <>
+                    <ArrowUpCircle className="h-4 w-4" /> Copy Install Command
                     {selectedPackages.size > 0 && (
                       <span className="rounded-full bg-green-600 text-white px-2 py-0.5 text-xs font-bold">{selectedPackages.size}</span>
                     )}
                   </>
-              }
-            </button>
+                )}
+              </button>
 
-            <button type="button" onClick={handleReport}
-              disabled={reportState === 'loading'}
-              className="inline-flex items-center gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 transition-all">
-              {reportState === 'loading' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-              {reportState === 'loading' ? 'Generating…' : 'Download Report'}
-            </button>
-
-          </div>
-
-
-
-          {/* Copy command helper note */}
-          {safeCount > 0 && (
-            <div className="flex items-start gap-2 rounded-xl border border-blue-100 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/30 px-4 py-3 text-xs text-blue-700 dark:text-blue-300">
-              <ArrowUpCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-              <span>
-                <strong>Install Safe Updates</strong> copies an <code className="font-mono">npm install</code> command to your clipboard.
-                Run it locally or in your CI pipeline — package installs are not executed on the server.
-              </span>
+              {/* Download Report */}
+              <button type="button" onClick={() => { void handleReport(); }}
+                disabled={reportState === 'loading'}
+                className="inline-flex items-center gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 transition-all">
+                {reportState === 'loading' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                {reportState === 'loading' ? 'Generating…' : 'Download Report'}
+              </button>
             </div>
-          )}
+
+            {/* Clipboard note */}
+            {safeCount > 0 && (
+              <div className="flex items-start gap-2 rounded-xl border border-blue-100 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/30 px-4 py-3 text-xs text-blue-700 dark:text-blue-300">
+                <ArrowUpCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Copy Install Command</strong> copies <code className="font-mono">npm install pkg@version …</code> to clipboard.
+                  Run it locally or in CI — package installs cannot execute on the server.
+                </span>
+              </div>
+            )}
+          </div>
 
           {/* ── Tabs ──────────────────────────────────────────────────────── */}
           <div className="space-y-4">
@@ -679,7 +636,6 @@ export function DependencyUpdateCenter() {
               })}
             </div>
 
-            {/* Tab content */}
             {activeTab === 'modernization' ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {report.modernizationOpportunities.length === 0 ? (
@@ -701,7 +657,7 @@ export function DependencyUpdateCenter() {
             {(activeTab === 'safe' || activeTab === 'all') && safeCount > 0 && (
               <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1.5">
                 <ShieldAlert className="h-3.5 w-3.5" />
-                Select individual packages to install a subset, or click <strong>Install Safe Updates</strong> to apply all {safeCount} patch update(s).
+                Select packages to copy a subset, or click <strong>Copy Install Command</strong> to copy all {safeCount} patch update(s).
               </p>
             )}
           </div>
