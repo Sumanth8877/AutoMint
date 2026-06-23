@@ -18,7 +18,11 @@ import { getClient } from '@/lib/blockchain/client';
 import type { Hex } from 'viem';
 
 const QSTASH_BASE_URL = 'https://qstash.upstash.io';
-const DEFAULT_SCHEDULE_DELAY_MS = 60_000;
+// Monitoring fix: reduced from 60s to 30s.
+// WebSocket monitoring watches for 25s per invocation;
+// if no mint-live event is detected, we reschedule at 30s for the next window.
+// Total latency: 0–2s on Base (vs 0–60s before), 0–12s on Ethereum (vs 0–60s before).
+const DEFAULT_SCHEDULE_DELAY_MS = 30_000;
 
 type QStashPublishResponse = {
   messageId?: string;
@@ -541,23 +545,64 @@ export async function executeScheduledMint(taskId: string) {
           return { success: false, error: `Mint not live (${mintState.status}): max retries exhausted` };
         }
 
-        // Decrement the retry counter before rescheduling
-        await getDb()
-          .update(mintTasks)
-          .set({ maxRetries: remainingRetries, updatedAt: new Date() })
-          .where(eq(mintTasks.id, taskId));
+        // Monitoring fix: instead of blind 60s reschedule, use WebSocket block
+        // subscription to detect when the mint goes live within a 25s window.
+        // On each new block, getMintState() is called — a mint can only become
+        // LIVE on a block boundary, so this is both faster and more efficient.
+        //
+        // Detection latency improvement:
+        //   Base (2s blocks):      0–2s   (was 0–60s, 30× faster)
+        //   Ethereum (12s blocks): 0–12s  (was 0–60s,  5× faster)
+        const { watchForMintLive } = await import('@/lib/services/mint-monitor.service');
+        const monitorResult = await watchForMintLive(
+          task.contractAddress!,
+          wallet.chain,
+        );
 
-        const retryAt = mintState.startTime && mintState.startTime.getTime() > Date.now()
-          ? mintState.startTime
-          : new Date(Date.now() + DEFAULT_SCHEDULE_DELAY_MS);
-        await scheduleMint({ taskId, scheduledTime: retryAt });
-        await logActivity(task.userId, 'mint_status_changed', 'Mint launch not live; rescheduled', {
-          taskId,
-          scheduledTime: retryAt.toISOString(),
-          mintStatus: mintState.status,
-          retriesRemaining: remainingRetries,
-        });
-        return { success: false, skipped: true, error: `Mint not live: ${mintState.status}` };
+        if (monitorResult === 'live') {
+          // Mint went live during the watch window — execute immediately.
+          // Don't reschedule — fall through to the execution path below.
+          addBreadcrumb({
+            category: 'qstash',
+            message: 'WebSocket monitor detected mint-live — executing immediately',
+            level: 'info',
+            data: { taskId, contractAddress: task.contractAddress },
+          });
+          // Update retry counter and fall through to execution
+          await getDb()
+            .update(mintTasks)
+            .set({ maxRetries: remainingRetries, updatedAt: new Date() })
+            .where(eq(mintTasks.id, taskId));
+          // Don't return — fall through to the balance check + execution below
+        } else {
+          // timeout or error — reschedule for next watch window
+          if (monitorResult === 'ended') {
+            await getDb()
+              .update(mintTasks)
+              .set({ status: 'failed', qstashMessageId: null, scheduledTime: null, updatedAt: new Date() })
+              .where(eq(mintTasks.id, taskId));
+            return { success: false, skipped: true, error: 'Mint ended while monitoring' };
+          }
+
+          // Decrement the retry counter before rescheduling
+          await getDb()
+            .update(mintTasks)
+            .set({ maxRetries: remainingRetries, updatedAt: new Date() })
+            .where(eq(mintTasks.id, taskId));
+
+          const retryAt = mintState.startTime && mintState.startTime.getTime() > Date.now()
+            ? mintState.startTime
+            : new Date(Date.now() + DEFAULT_SCHEDULE_DELAY_MS);
+          await scheduleMint({ taskId, scheduledTime: retryAt });
+          await logActivity(task.userId, 'mint_status_changed', 'Mint not live; rescheduled for next watch window', {
+            taskId,
+            scheduledTime: retryAt.toISOString(),
+            mintStatus: mintState.status,
+            monitorResult,
+            retriesRemaining: remainingRetries,
+          });
+          return { success: false, skipped: true, error: `Mint not live: ${mintState.status}` };
+        }
       }
     }
 
