@@ -35,7 +35,7 @@ type QStashJwtPayload = {
 
 export type ScheduledMintPayload = {
   taskId: string;
-  type?: 'execute' | 'risk_check' | 'receipt_check';
+  type?: 'execute' | 'risk_check' | 'receipt_check' | 'recovery';
 };
 
 function getQStashToken() {
@@ -753,6 +753,65 @@ export async function executeReceiptRecheck(taskId: string) {
     return { success: false, error: 'Wallet not found for receipt recheck' };
   }
 
+  // Reliability fix (R-4): check if the transaction is still in the mempool
+  // BEFORE waiting for a receipt.
+  //
+  // getTransaction(hash) returns the tx object if it's pending or confirmed.
+  // It returns null if the transaction was DROPPED from the mempool.
+  //
+  // getTransactionReceipt cannot distinguish "dropped" from "pending" — both
+  // return null. We need getTransaction to detect the dropped case.
+  //
+  // When a tx is dropped (gas too low, nonce replaced, RPC eviction):
+  //   - It will NEVER confirm on-chain
+  //   - Re-executing is safe — the original tx no longer exists
+  //   - We reset txHash to null and re-schedule for fresh execution
+  try {
+    const dropCheckClient = getClient(wallet.chain, task.userId);
+    const txRecord = await dropCheckClient.getTransaction({ hash }).catch(() => null);
+
+    if (!txRecord) {
+      // Transaction is not in the mempool — it was dropped.
+      // Safely reset to 'ready' and re-schedule for fresh execution.
+      await getDb()
+        .update(mintTasks)
+        .set({ status: 'ready', txHash: null, updatedAt: new Date() })
+        .where(and(eq(mintTasks.id, taskId), eq(mintTasks.status, 'unconfirmed')));
+
+      await captureMessage('Transaction dropped from mempool — resetting for re-execution', {
+        area: 'qstash',
+        level: 'warning',
+        context: { taskId, transactionHash: hash },
+        fingerprint: ['qstash', 'tx-dropped'],
+      });
+
+      await logActivity(task.userId, 'mint_status_changed', 'Dropped transaction detected — rescheduling', {
+        taskId, txHash: hash,
+      });
+
+      // Re-schedule immediately via QStash
+      await scheduleMint({ taskId, userId: task.userId });
+
+      addBreadcrumb({
+        category: 'qstash',
+        message: 'receipt recheck: dropped tx detected — rescheduled for execution',
+        level: 'warning',
+        data: { taskId, txHash: hash },
+      });
+
+      return { success: false, dropped: true, txHash: hash };
+    }
+  } catch (dropCheckError) {
+    // Drop-check failed — proceed with waitForTransactionReceipt anyway.
+    // Non-fatal: if the tx is truly dropped, future rechecks will catch it.
+    addBreadcrumb({
+      category: 'qstash',
+      message: 'receipt recheck: drop-check failed (non-fatal)',
+      level: 'warning',
+      data: { taskId, error: String(dropCheckError) },
+    });
+  }
+
   try {
     const client = getClient(wallet.chain, task.userId);
     const receipt = await client.waitForTransactionReceipt({ hash });
@@ -872,14 +931,98 @@ export async function executeReceiptRecheck(taskId: string) {
       };
     }
 
-    // Budget exhausted — leave as 'unconfirmed' for manual review.
-    await captureMessage('Receipt recheck budget exhausted — task remains unconfirmed', {
+    // Reliability fix (R-3): previously left the task as 'unconfirmed' forever
+    // when the receipt recheck budget was exhausted. This meant the task was
+    // silently stuck with no automatic resolution or user notification.
+    //
+    // Fix: mark as 'failed' and notify the user. The transaction has been
+    // pending for 10+ receipt checks (5+ minutes with gas bumps). At this
+    // point either:
+    //   a) The tx was dropped from the mempool (R-4 should have caught this)
+    //   b) The tx is stuck due to severe network congestion
+    //   c) The RPC is failing to return the receipt (rare)
+    //
+    // The user must be notified so they can decide whether to re-mint.
+    // The txHash is preserved in the failed task for manual investigation.
+    await getDb()
+      .update(mintTasks)
+      .set({ status: 'failed', updatedAt: new Date() })
+      .where(and(eq(mintTasks.id, taskId), eq(mintTasks.status, 'unconfirmed')));
+
+    await captureMessage('Receipt recheck budget exhausted — task marked failed', {
       area: 'qstash',
       level: 'error',
       context: { taskId, transactionHash: hash },
       fingerprint: ['qstash', 'receipt-recheck-exhausted'],
     });
 
+    await logActivity(task.userId, 'mint_status_changed', 'Receipt recheck exhausted — mint marked failed', {
+      taskId, txHash: hash,
+    });
+
+    // Notify user via Telegram + email
+    const { sendTelegramNotification } = await import('@/lib/services/telegram.service');
+    await sendTelegramNotification(task.userId, 'mint_failed', {
+      taskId,
+      contractAddress: task.contractAddress || undefined,
+      error: 'Transaction unconfirmed after maximum receipt checks. Check your wallet — the tx may still confirm.',
+    }).catch(() => undefined);
+
+    const { sendMintFailedEmail } = await import('@/lib/services/email-notification.service');
+    await sendMintFailedEmail(task.userId, {
+      taskId,
+      contractAddress: task.contractAddress || undefined,
+      error: 'Transaction unconfirmed after maximum receipt checks.',
+    }).catch(() => undefined);
+
     return { success: false, txHash: hash, error: 'receipt_recheck_exhausted' };
   }
+}
+// ─── Reliability: Stuck Task Recovery ────────────────────────────────────────
+//
+// Periodically scan for mint tasks stuck in 'running' status beyond a threshold.
+// Two failure modes are handled:
+//   Pre-broadcast (no txHash): reset to 'ready' and re-execute
+//   Post-broadcast (has txHash): transition to 'unconfirmed' and recheck receipt
+//
+// Trigger via:
+//   1. scheduleRecoveryCheck() — schedules an immediate QStash recovery message
+//   2. Vercel cron: POST /api/recovery/mint on a schedule (e.g. every 5 minutes)
+//   3. Automatic trigger from nonce gap detection
+
+/**
+ * Schedule an immediate recovery check via QStash.
+ * Fires a type='recovery' message that the webhook handler routes to executeRecoveryCheck().
+ */
+export async function scheduleRecoveryCheck(): Promise<void> {
+  try {
+    await publishQStashMessage('recovery', new Date(), 'recovery');
+  } catch (error) {
+    // Log but don't throw — recovery scheduling failure should not break the calling path
+    addBreadcrumb({
+      category: 'recovery',
+      message: 'Failed to schedule recovery check via QStash',
+      level: 'warning',
+      data: { error: String(error) },
+    });
+  }
+}
+
+/**
+ * Execute a full recovery scan.
+ * Called by the QStash webhook when type='recovery'.
+ * Also callable directly from an API route for Vercel cron integration.
+ */
+export async function executeRecoveryCheck() {
+  const { recoverStuckMintTasks } = await import('@/lib/services/mint-recovery.service');
+  const result = await recoverStuckMintTasks();
+
+  addBreadcrumb({
+    category: 'recovery',
+    message: 'Recovery check completed',
+    level: 'info',
+    data: result,
+  });
+
+  return result;
 }

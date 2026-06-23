@@ -399,11 +399,10 @@ async function investigateStaleNonce(
     }
 
     // Nonce is genuinely missing from mempool.
-    // Record for investigation. The dead-task recovery job
-    // (SELECT FROM mint_tasks WHERE status='running' AND tx_hash IS NULL AND
-    //  updated_at < NOW() - INTERVAL '10 minutes')
-    // will find the stuck task, re-sign, and rebroadcast.
-    await captureMessage('Nonce gap confirmed — wallet may be stuck', {
+    // Reliability fix (R-2): previously this only fired a Sentry alert with a hint
+    // to run a manual recovery query. Now we trigger the recovery job directly so
+    // the stuck task is found and re-executed automatically.
+    await captureMessage('Nonce gap confirmed — triggering automatic task recovery', {
       area: 'nonce-allocator',
       level: 'error',
       context: {
@@ -411,11 +410,22 @@ async function investigateStaleNonce(
         chain,
         gapNonce: nonce,
         chainPending,
-        recoveryHint:
-          'Query mint_tasks WHERE status=running AND tx_hash IS NULL, re-sign with this nonce.',
       },
       fingerprint: ['nonce-allocator', 'gap-confirmed', address, chain],
     });
+
+    // Trigger the recovery job immediately — best-effort, non-blocking.
+    // recoverStuckMintTasks() will find any task stuck in 'running' with no txHash
+    // for this wallet and re-schedule it via QStash.
+    void (async () => {
+      try {
+        const { recoverStuckMintTasks } = await import('@/lib/services/mint-recovery.service');
+        await recoverStuckMintTasks();
+      } catch {
+        // Non-fatal — Sentry alert above already notifies; recovery will
+        // also run on the next scheduled recovery check.
+      }
+    })();
   } catch (error) {
     await captureException(error, {
       area: 'nonce-allocator',
