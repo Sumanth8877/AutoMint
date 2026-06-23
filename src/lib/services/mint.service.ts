@@ -72,7 +72,7 @@ export async function executeMintTask(
   userId: string,
   options: { existingLockToken?: string } = {},
 ): Promise<{ success: boolean; txHash?: string; error?: string }> {
-  return startSpan('mint.execute_task', { area: 'minting', taskId, userId }, async () => {
+  return startSpan('mint.execute_task', { area: 'minting', taskId, userId }, async (): Promise<{ success: boolean; txHash?: string; error?: string }> => {
   const mintLock = options.existingLockToken
     ? { acquired: true, mintId: taskId, key: `mint-lock:${taskId}`, token: options.existingLockToken }
     : await acquireLock(taskId);
