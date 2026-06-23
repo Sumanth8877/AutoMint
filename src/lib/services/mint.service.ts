@@ -233,6 +233,7 @@ export async function executeMintTask(
         error: result.error,
       });
       return { success: false, error: result.error };
+  }
 
   const now = new Date();
   await getDb().update(mintTasks)
