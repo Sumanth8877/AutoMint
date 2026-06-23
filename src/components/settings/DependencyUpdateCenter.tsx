@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useCallback, useTransition } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   AlertTriangle, ArrowUpCircle, CheckCircle2, ChevronDown, ChevronUp,
-  Download, GitBranch, Package, RefreshCw, ShieldAlert, XCircle, Zap,
+  Download, Package, RefreshCw, ShieldAlert, XCircle, Zap,
 } from 'lucide-react';
 import type {
   DependencyAuditReport,
@@ -17,24 +17,6 @@ import type {
 
 type Tab = 'safe' | 'minor' | 'breaking' | 'security' | 'modernization' | 'all';
 type ActionState = 'idle' | 'loading' | 'success' | 'error';
-
-interface InstallResult {
-  updated: Array<{ name: string; from: string; to: string }>;
-  skipped: Array<{ name: string; reason: string }>;
-  failed: Array<{ name: string; error: string }>;
-  committed?: boolean;
-  commitHash?: string;
-  commitSkipReason?: string;
-}
-
-interface BranchResult {
-  branchName: string | null;
-  packagesUpdated: Array<{ name: string; from: string; to: string }>;
-  breakingChangesDetected: Array<{ name: string; currentVersion: string; latestVersion: string }>;
-  commitHash?: string;
-  pushed?: boolean;
-  pushError?: string;
-}
 
 // ─── Score Ring ───────────────────────────────────────────────────────────────
 
@@ -318,16 +300,12 @@ export function DependencyUpdateCenter() {
 
   const [checkState, setCheckState] = useState<ActionState>('idle');
   const [scanProgress, setScanProgress] = useState<{ processed: number; total: number; packageName: string } | null>(null);
-  const [installState, setInstallState] = useState<ActionState>('idle');
   const [reportState, setReportState] = useState<ActionState>('idle');
-  const [branchState, setBranchState] = useState<ActionState>('idle');
+  const [copied, setCopied] = useState(false);
 
-  const [installResult, setInstallResult] = useState<InstallResult | null>(null);
-  const [branchResult, setBranchResult] = useState<BranchResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
-  const [, startTransition] = useTransition();
 
   const showToast = useCallback((message: string, type: 'success' | 'error' | 'info') => {
     setToast({ message, type });
@@ -401,19 +379,22 @@ export function DependencyUpdateCenter() {
     });
   }, [showToast]);
 
-  const handleInstall = useCallback(async () => {
-    if (!report) return;
-    const pkgNames = selectedPackages.size > 0 ? Array.from(selectedPackages) : undefined;
-    setInstallState('loading');
+
+  const handleReport = useCallback(async () => {
+    setReportState('loading');
     try {
-      const res = await fetch('/api/system/install-safe-updates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ packageNames: pkgNames }) });
-      const data = await res.json() as InstallResult & { error?: string };
-      if (!res.ok) throw new Error(data.error ?? 'Install failed');
-      setInstallResult(data); setInstallState('success');
-      showToast(`Updated ${data.updated.length} package(s). ${data.failed.length} failed.`, data.failed.length > 0 ? 'error' : 'success');
-      startTransition(() => { void handleCheck(true); }); // force=true to bypass cache after install
-    } catch (err) { setInstallState('error'); showToast(err instanceof Error ? err.message : 'Install failed', 'error'); }
-  }, [report, selectedPackages, handleCheck, showToast, startTransition]);
+      const res = await fetch('/api/system/upgrade-report?format=markdown');
+      if (!res.ok) { const d = await res.json() as { error?: string }; throw new Error(d.error ?? 'Report generation failed'); }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url;
+      a.download = `automint-upgrade-report-${new Date().toISOString().split('T')[0]}.md`;
+      a.click(); URL.revokeObjectURL(url);
+      setReportState('success'); showToast('Upgrade report downloaded.', 'success');
+    } catch (err) { setReportState('error'); showToast(err instanceof Error ? err.message : 'Report failed', 'error'); }
+  }, [showToast]);
+
+
 
   const handleReport = useCallback(async () => {
     setReportState('loading');
@@ -621,16 +602,34 @@ export function DependencyUpdateCenter() {
 
           {/* ── Secondary action toolbar ──────────────────────────────────── */}
           <div className="flex flex-wrap gap-2.5">
-            <button type="button" onClick={handleInstall}
-              disabled={installState === 'loading' || (safeCount === 0 && selectedPackages.size === 0)}
+            {/* Install Safe Updates — copies npm command (Vercel can't run npm install) */}
+            <button
+              type="button"
+              disabled={safeCount === 0 && selectedPackages.size === 0}
+              onClick={() => {
+                // Build the npm install command for the safe packages
+                const safePkgs = report?.packages.filter(p =>
+                  p.classification === 'SAFE' && p.updateType !== 'current' &&
+                  (selectedPackages.size === 0 || selectedPackages.has(p.name))
+                ) ?? [];
+                const cmd = safePkgs
+                  .map(p => `${p.name}@${p.latestVersion}`)
+                  .join(' ');
+                if (!cmd) return;
+                void navigator.clipboard.writeText(`npm install ${cmd}`).then(() => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 3000);
+                });
+              }}
               className="inline-flex items-center gap-2 rounded-xl border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/30 px-4 py-2.5 text-sm font-semibold text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-950/60 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
-              {installState === 'loading'
-                ? <RefreshCw className="h-4 w-4 animate-spin" />
-                : <ArrowUpCircle className="h-4 w-4" />}
-              {installState === 'loading' ? 'Installing…' : 'Install Safe Updates'}
-              {selectedPackages.size > 0 && (
-                <span className="rounded-full bg-green-600 text-white px-2 py-0.5 text-xs font-bold">{selectedPackages.size}</span>
-              )}
+              {copied
+                ? <><CheckCircle2 className="h-4 w-4" /> Copied!</>
+                : <><ArrowUpCircle className="h-4 w-4" /> Copy Install Command
+                    {selectedPackages.size > 0 && (
+                      <span className="rounded-full bg-green-600 text-white px-2 py-0.5 text-xs font-bold">{selectedPackages.size}</span>
+                    )}
+                  </>
+              }
             </button>
 
             <button type="button" onClick={handleReport}
@@ -640,62 +639,18 @@ export function DependencyUpdateCenter() {
               {reportState === 'loading' ? 'Generating…' : 'Download Report'}
             </button>
 
-            <button type="button" onClick={handleBranch}
-              disabled={branchState === 'loading'}
-              className="inline-flex items-center gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 transition-all">
-              {branchState === 'loading' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <GitBranch className="h-4 w-4" />}
-              {branchState === 'loading' ? 'Creating Branch…' : 'Create Upgrade Branch'}
-            </button>
           </div>
 
-          {/* Install result */}
-          {installResult && (
-            <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4 space-y-3">
-              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-green-500" /> Install Results
-              </p>
-              {installResult.updated.length > 0 && (
-                <div className="space-y-1">
-                  <p className="text-xs font-semibold text-green-700 dark:text-green-300 uppercase tracking-wide">Updated ({installResult.updated.length})</p>
-                  {installResult.updated.map(u => (
-                    <div key={u.name} className="flex items-center gap-2 text-sm">
-                      <code className="font-mono text-gray-700 dark:text-gray-300">{u.name}</code>
-                      <span className="text-gray-400 font-mono text-xs">{u.from} → {u.to}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {installResult.failed.length > 0 && (
-                <div className="space-y-1">
-                  <p className="text-xs font-semibold text-red-700 dark:text-red-300 uppercase tracking-wide">Failed ({installResult.failed.length})</p>
-                  {installResult.failed.map(f => (
-                    <div key={f.name} className="text-sm text-red-600 dark:text-red-400">
-                      <code className="font-mono">{f.name}</code>: {f.error}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
 
-          {/* Branch result */}
-          {branchResult?.branchName && (
-            <div className="rounded-xl border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20 p-4">
-              <p className="text-sm font-semibold text-green-800 dark:text-green-200 flex items-center gap-2 mb-1">
-                <GitBranch className="h-4 w-4" />
-                Branch created: <code className="font-mono">{branchResult.branchName}</code>
-              </p>
-              {branchResult.commitHash && (
-                <p className="text-xs text-green-700 dark:text-green-300 font-mono">Commit: {branchResult.commitHash}</p>
-              )}
-              <p className="text-sm text-green-700 dark:text-green-300 mt-1">
-                {branchResult.packagesUpdated.length} package(s) updated.
-                {branchResult.breakingChangesDetected.length > 0 && (
-                  <span className="ml-1 text-orange-600 dark:text-orange-400">
-                    {branchResult.breakingChangesDetected.length} breaking change(s) not included.
-                  </span>
-                )}
-              </p>
+
+          {/* Copy command helper note */}
+          {safeCount > 0 && (
+            <div className="flex items-start gap-2 rounded-xl border border-blue-100 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/30 px-4 py-3 text-xs text-blue-700 dark:text-blue-300">
+              <ArrowUpCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>
+                <strong>Install Safe Updates</strong> copies an <code className="font-mono">npm install</code> command to your clipboard.
+                Run it locally or in your CI pipeline — package installs are not executed on the server.
+              </span>
             </div>
           )}
 
