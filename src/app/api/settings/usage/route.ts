@@ -240,7 +240,7 @@ async function fetchJinaUsage(): Promise<UsageStat> {
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json() as {
-      data?: { total_balance?: number; total_usage?: number };
+      data?: { total_balance?: number; total_usage?: number; balance?: number };
       total_balance?: number;
       total_usage?: number;
       balance?: number;
