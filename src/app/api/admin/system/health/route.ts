@@ -3,11 +3,7 @@ import { getDb } from '@/lib/db';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { checkRedisHealth } from '@/lib/redis';
 import { getClient } from '@/lib/blockchain/client';
-// M-5 fix: removed dead import of task.service / getTaskCounts.
-// task.service.ts manages the `tasks` table which is never written to by any
-// live pipeline — all active work uses `mintTasks`. The health check was
-// reporting counts from an always-empty table. Replaced below with live
-// mintTasks counts from the active queue.
+// M-5 fix: replaced dead task.service import with direct mintTasks queries.
 import { mintTasks } from '@/drizzle/schema';
 import { count, eq } from 'drizzle-orm';
 import { getRpcHealthSnapshot } from '@/lib/services/rpc-manager.service';
@@ -46,10 +42,23 @@ export async function GET() {
     rpc = { status: 'unhealthy', error: getErrorMessage(error), providers: await getRpcHealthSnapshot() };
   }
 
-  // ─── Task Counts ───────────────────────────────
+  // ─── Mint Task Counts (live mintTasks queue) ────────────
   let tasks: Record<string, number> = { pending: 0, running: 0, completed: 0, failed: 0, total: 0 };
   try {
-    tasks = await getTaskCounts();
+    const rows = await Promise.all([
+      getDb().select({ n: count() }).from(mintTasks).where(eq(mintTasks.status, 'pending')),
+      getDb().select({ n: count() }).from(mintTasks).where(eq(mintTasks.status, 'running')),
+      getDb().select({ n: count() }).from(mintTasks).where(eq(mintTasks.status, 'completed')),
+      getDb().select({ n: count() }).from(mintTasks).where(eq(mintTasks.status, 'failed')),
+      getDb().select({ n: count() }).from(mintTasks),
+    ]);
+    tasks = {
+      pending:   rows[0][0]?.n ?? 0,
+      running:   rows[1][0]?.n ?? 0,
+      completed: rows[2][0]?.n ?? 0,
+      failed:    rows[3][0]?.n ?? 0,
+      total:     rows[4][0]?.n ?? 0,
+    };
   } catch {
     tasks = { pending: 0, running: 0, completed: 0, failed: 0, total: 0 };
   }
