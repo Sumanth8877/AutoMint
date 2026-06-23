@@ -5,7 +5,7 @@ import { getDb } from '@/lib/db';
 import { collections, mintHistory, mintTasks, wallets } from '@/drizzle/schema';
 import { logActivity } from '@/lib/monitoring';
 import { getMintState } from '@/lib/services/mint-state.service';
-import { applyRiskWeights, getAdaptiveRiskWeights } from '@/lib/services/risk-learning.service';
+import { applyRiskWeights, getRiskWeights } from '@/lib/services/risk-learning.service';
 import { addBreadcrumb, captureException, startSpan } from '@/lib/observability/sentry';
 import { isTelegramEnabled } from '@/lib/services/telegram.service';
 
@@ -298,7 +298,7 @@ export async function analyzeAnalyzerRisk(params: {
   };
   let configuredWeights: Awaited<ReturnType<typeof getAdaptiveRiskWeights>>;
   try {
-    configuredWeights = await getAdaptiveRiskWeights();
+    configuredWeights = await getRiskWeights();
   } catch (weightsError) {
     addBreadcrumb({
       category: 'risk',
@@ -361,7 +361,7 @@ export async function analyzeMintRisk(taskId: string): Promise<RiskAnalysis> {
   };
   let configuredWeights: Awaited<ReturnType<typeof getAdaptiveRiskWeights>>;
   try {
-    configuredWeights = await getAdaptiveRiskWeights();
+    configuredWeights = await getRiskWeights();
   } catch (weightsError) {
     addBreadcrumb({
       category: 'risk',

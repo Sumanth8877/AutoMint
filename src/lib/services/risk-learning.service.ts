@@ -60,7 +60,18 @@ function percent(part: number, total: number) {
   return Math.round((part / total) * 1000) / 10;
 }
 
-export async function getAdaptiveRiskWeights(): Promise<RiskWeights> {
+/**
+ * Returns the current risk weights for scoring.
+ * Weights are configured via environment variables (RISK_WEIGHT_CONTRACT etc.)
+ * or fall back to defaults.
+ *
+ * NOTE: Despite the previous name "getAdaptiveRiskWeights", these weights
+ * are currently STATIC (env-var driven). The learning infrastructure
+ * (collection_outcomes, risk_weight_performance tables) exists but is not
+ * yet wired into weight computation. When the learning loop is complete,
+ * this function will query the DB for performance-adjusted weights.
+ */
+export async function getRiskWeights(): Promise<RiskWeights> {
   return {
     contractAnalysis: envWeight('RISK_WEIGHT_CONTRACT', DEFAULT_WEIGHTS.contractAnalysis),
     trustedWalletActivity: envWeight('RISK_WEIGHT_WALLET', DEFAULT_WEIGHTS.trustedWalletActivity),

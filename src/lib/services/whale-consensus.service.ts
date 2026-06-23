@@ -8,7 +8,7 @@ import { logActivity } from '@/lib/monitoring';
 import { getMintState } from '@/lib/services/mint-state.service';
 import { fetchMintRequirements } from '@/lib/services/mint-requirements.service';
 import { executeMintTask } from '@/lib/services/mint.service';
-import { getWalletReputationWeight, updateWalletReputation } from '@/lib/services/wallet-reputation.service';
+import { getBatchWalletReputationWeights, getWalletReputationWeight, updateWalletReputation } from '@/lib/services/wallet-reputation.service';
 import { addBreadcrumb, captureException, captureMessage } from '@/lib/observability/sentry';
 
 type Chain = 'ethereum' | 'base' | 'polygon';
@@ -89,10 +89,20 @@ async function loadWeightedConsensus(collection: string, chain: Chain) {
     .from(consensusEvents)
     .where(eq(consensusEvents.collection, normalizeAddress(collection)));
 
+  if (events.length === 0) {
+    return { walletCount: 0, weightedScore: 0, wallets: [] };
+  }
+
+  // HIGH-04 fix: batch-fetch all wallet reputations in one query
+  // instead of N sequential queries (one per event).
+  const addresses = events.map((e) => e.walletAddress);
+  const reputationMap = await getBatchWalletReputationWeights(addresses, chain);
+
   let weightedScore = 0;
   const wallets = [];
   for (const event of events) {
-    const reputation = await getWalletReputationWeight(event.walletAddress, chain);
+    const reputation = reputationMap.get(event.walletAddress.trim().toLowerCase())
+      ?? { reputationScore: 50, weight: 1 };
     weightedScore += reputation.weight;
     wallets.push({
       walletAddress: event.walletAddress,

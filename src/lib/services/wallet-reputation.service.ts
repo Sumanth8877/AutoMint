@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql , inArray} from 'drizzle-orm';
 import { getDb } from '@/lib/db';
 import { walletReputation } from '@/drizzle/schema';
 import { captureException, captureMessage } from '@/lib/observability/sentry';
@@ -179,3 +179,62 @@ export async function getMostSuccessfulCopyMintSources(limit = 10) {
     .orderBy(desc(walletReputation.successfulProjects), desc(walletReputation.reputationScore))
     .limit(limit);
 }
+
+/**
+ * Batch version of getWalletReputationWeight.
+ * Fetches reputation for all wallet addresses in a single DB query
+ * instead of N separate queries — eliminates the N+1 pattern in
+ * loadWeightedConsensus (whale-consensus.service.ts).
+ *
+ * Returns a Map keyed by normalised wallet address.
+ */
+export async function getBatchWalletReputationWeights(
+  walletAddresses: string[],
+  chain: string,
+): Promise<Map<string, { reputationScore: number; weight: number }>> {
+  const DEFAULT_WEIGHT = { reputationScore: 50, weight: 1 };
+
+  if (walletAddresses.length === 0) {
+    return new Map();
+  }
+
+  const normalised = walletAddresses.map((a) => a.trim().toLowerCase());
+
+  try {
+    const rows = await getDb()
+      .select()
+      .from(walletReputation)
+      .where(inArray(walletReputation.walletAddress, normalised));
+
+    const result = new Map<string, { reputationScore: number; weight: number }>();
+
+    // Pre-fill defaults so every address has an entry
+    for (const addr of normalised) {
+      result.set(addr, { ...DEFAULT_WEIGHT });
+    }
+
+    // Overwrite with actual DB data where available
+    for (const row of rows) {
+      const score = row.reputationScore ?? DEFAULT_WEIGHT.reputationScore;
+      result.set(row.walletAddress, {
+        reputationScore: score,
+        weight: score >= 80 ? 3 : score >= 60 ? 2 : 1,
+      });
+    }
+
+    return result;
+  } catch (error) {
+    await captureException(error, {
+      area: 'wallet-reputation',
+      context: { chain, count: walletAddresses.length },
+      fingerprint: ['wallet-reputation', 'batch-weight'],
+    });
+    // Fail open — return defaults for all addresses
+    const fallback = new Map<string, { reputationScore: number; weight: number }>();
+    for (const addr of normalised) {
+      fallback.set(addr, { ...DEFAULT_WEIGHT });
+    }
+    return fallback;
+  }
+}
+
