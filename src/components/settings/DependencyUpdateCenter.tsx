@@ -22,6 +22,9 @@ interface InstallResult {
   updated: Array<{ name: string; from: string; to: string }>;
   skipped: Array<{ name: string; reason: string }>;
   failed: Array<{ name: string; error: string }>;
+  committed?: boolean;
+  commitHash?: string;
+  commitSkipReason?: string;
 }
 
 interface BranchResult {
@@ -29,6 +32,8 @@ interface BranchResult {
   packagesUpdated: Array<{ name: string; from: string; to: string }>;
   breakingChangesDetected: Array<{ name: string; currentVersion: string; latestVersion: string }>;
   commitHash?: string;
+  pushed?: boolean;
+  pushError?: string;
 }
 
 // ─── Score Ring ───────────────────────────────────────────────────────────────
@@ -312,6 +317,7 @@ export function DependencyUpdateCenter() {
   const [selectedPackages, setSelectedPackages] = useState<Set<string>>(new Set());
 
   const [checkState, setCheckState] = useState<ActionState>('idle');
+  const [scanProgress, setScanProgress] = useState<{ processed: number; total: number; packageName: string } | null>(null);
   const [installState, setInstallState] = useState<ActionState>('idle');
   const [reportState, setReportState] = useState<ActionState>('idle');
   const [branchState, setBranchState] = useState<ActionState>('idle');
@@ -328,15 +334,71 @@ export function DependencyUpdateCenter() {
     setTimeout(() => setToast(null), 6000);
   }, []);
 
-  const handleCheck = useCallback(async () => {
-    setCheckState('loading'); setError(null); setInstallResult(null); setBranchResult(null);
-    try {
-      const res = await fetch('/api/system/dependency-audit');
-      if (!res.ok) { const d = await res.json() as { error?: string }; throw new Error(d.error ?? `Server error ${res.status}`); }
-      const data = await res.json() as { report: DependencyAuditReport };
-      setReport(data.report); setCheckState('success'); setActiveTab('safe'); setSelectedPackages(new Set());
-      showToast(`Audit complete — ${data.report.totalPackages} packages checked in ${data.report.durationMs}ms`, 'success');
-    } catch (err) { const msg = err instanceof Error ? err.message : 'Audit failed'; setError(msg); setCheckState('error'); showToast(msg, 'error'); }
+  const handleCheck = useCallback(async (force = false) => {
+    setCheckState('loading'); setError(null); setInstallResult(null); setBranchResult(null); setScanProgress(null);
+
+    const url = `/api/system/dependency-audit/stream${force ? '?force=true' : ''}`;
+
+    return new Promise<void>((resolve) => {
+      const evtSource = new EventSource(url);
+
+      evtSource.addEventListener('start', (e: Event) => {
+        const msg = e as MessageEvent;
+        const data = JSON.parse(msg.data as string) as { total: number };
+        setScanProgress({ processed: 0, total: data.total, packageName: '' });
+      });
+
+      evtSource.addEventListener('progress', (e: Event) => {
+        const msg = e as MessageEvent;
+        const data = JSON.parse(msg.data as string) as { processed: number; total: number; packageName: string };
+        setScanProgress(data);
+      });
+
+      evtSource.addEventListener('complete', (e: Event) => {
+        const msg = e as MessageEvent;
+        const data = JSON.parse(msg.data as string) as { report: DependencyAuditReport; cached: boolean };
+        evtSource.close();
+        setScanProgress(null);
+        setReport(data.report);
+        setCheckState('success');
+        setActiveTab('safe');
+        setSelectedPackages(new Set());
+        showToast(
+          data.cached
+            ? `Loaded from cache — ${data.report.totalPackages} packages (${data.report.durationMs}ms)`
+            : `Audit complete — ${data.report.totalPackages} packages checked in ${data.report.durationMs}ms`,
+          'success',
+        );
+        resolve();
+      });
+
+      evtSource.addEventListener('error', (e: Event) => {
+        const msg = e as MessageEvent;
+        evtSource.close();
+        setScanProgress(null);
+        let errorMsg = 'Audit failed';
+        try {
+          const data = JSON.parse((msg as MessageEvent).data as string) as { message?: string };
+          errorMsg = data.message ?? errorMsg;
+        } catch { /* parse error — use default message */ }
+        setError(errorMsg);
+        setCheckState('error');
+        showToast(errorMsg, 'error');
+        resolve();
+      });
+
+      // Fallback: if EventSource itself errors (network, auth)
+      evtSource.onerror = () => {
+        if (evtSource.readyState === EventSource.CLOSED) return; // already handled
+        evtSource.close();
+        setScanProgress(null);
+        const msg = 'Connection to scan stream lost';
+        setError(msg);
+        setCheckState('error');
+        showToast(msg, 'error');
+        resolve();
+      };
+    });
   }, [showToast]);
 
   const handleInstall = useCallback(async () => {
@@ -349,7 +411,7 @@ export function DependencyUpdateCenter() {
       if (!res.ok) throw new Error(data.error ?? 'Install failed');
       setInstallResult(data); setInstallState('success');
       showToast(`Updated ${data.updated.length} package(s). ${data.failed.length} failed.`, data.failed.length > 0 ? 'error' : 'success');
-      startTransition(() => { void handleCheck(); });
+      startTransition(() => { void handleCheck(true); }); // force=true to bypass cache after install
     } catch (err) { setInstallState('error'); showToast(err instanceof Error ? err.message : 'Install failed', 'error'); }
   }, [report, selectedPackages, handleCheck, showToast, startTransition]);
 
@@ -451,12 +513,12 @@ export function DependencyUpdateCenter() {
         {/* Primary action */}
         <button
           type="button"
-          onClick={handleCheck}
+          onClick={() => handleCheck(!!report)} // force=true if already have a report
           disabled={isScanning}
           className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all"
         >
           <RefreshCw className={`h-4 w-4 ${isScanning ? 'animate-spin' : ''}`} />
-          {isScanning ? 'Scanning…' : report ? 'Re-scan' : 'Scan Now'}
+          {isScanning ? 'Scanning…' : report ? 'Re-scan (force)' : 'Scan Now'}
         </button>
       </div>
 
@@ -490,12 +552,33 @@ export function DependencyUpdateCenter() {
 
       {/* ── Loading skeleton ───────────────────────────────────────────────── */}
       {isScanning && !report && (
-        <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 py-20 text-center space-y-3">
+        <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 py-14 px-8 text-center space-y-5">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50 dark:bg-indigo-950/40">
             <RefreshCw className="h-8 w-8 text-indigo-400 animate-spin" />
           </div>
-          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Scanning npm registry…</p>
-          <p className="text-xs text-gray-400 dark:text-gray-500">Fetching metadata for all packages. This usually takes 5–15 seconds.</p>
+          <div>
+            <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+              {scanProgress ? `Auditing ${scanProgress.packageName || '…'}` : 'Connecting to npm registry…'}
+            </p>
+            <p className="text-xs text-gray-400 dark:text-gray-500">
+              {scanProgress
+                ? `${scanProgress.processed} / ${scanProgress.total} packages checked`
+                : 'Fetching metadata for all packages. This usually takes 5–15 seconds.'}
+            </p>
+          </div>
+          {scanProgress && scanProgress.total > 0 && (
+            <div className="mx-auto max-w-sm space-y-1.5">
+              <div className="h-2 w-full rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-indigo-500 transition-all duration-300"
+                  style={{ width: `${Math.round((scanProgress.processed / scanProgress.total) * 100)}%` }}
+                />
+              </div>
+              <p className="text-right text-xs font-mono text-gray-400 dark:text-gray-500">
+                {Math.round((scanProgress.processed / scanProgress.total) * 100)}%
+              </p>
+            </div>
+          )}
         </div>
       )}
 

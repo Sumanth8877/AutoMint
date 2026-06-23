@@ -13,6 +13,13 @@ import 'server-only';
 import fs from 'node:fs';
 import path from 'node:path';
 import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
+import { getRedisClient } from '@/lib/redis';
+
+// Per-package Redis cache TTL: 24 hours
+// Key format: dep-pkg:${name}@${installedVersion}
+// Cache is automatically invalidated when the installed version changes.
+const PKG_CACHE_TTL_SECONDS = 86_400;
+const PKG_CACHE_PREFIX = 'dep-pkg:';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -363,9 +370,12 @@ function buildRecommendation(pkg: Omit<PackageAuditResult, 'recommendation'>): s
 export async function runDependencyAudit(options: {
   devPackages?: boolean;
   concurrency?: number;
+  /** Called after each package is processed — use for SSE progress streaming. */
+  onProgress?: (processed: number, total: number, packageName: string) => void;
 } = {}): Promise<DependencyAuditReport> {
   const startMs = Date.now();
-  const { devPackages = true, concurrency = 8 } = options;
+  const { devPackages = true, concurrency = 8, onProgress } = options;
+  let processedCount = 0;
 
   addBreadcrumb({ category: 'dependency-audit', message: 'audit started', level: 'info', data: { devPackages, concurrency } });
 
@@ -389,6 +399,20 @@ export async function runDependencyAudit(options: {
     if (!entry) return null;
     const { version: installedRange, isDev } = entry;
     const installedVersion = stripRange(installedRange);
+
+    // Improvement 1: per-package Redis cache (24h TTL).
+    // Cache key includes the installed version so it auto-invalidates
+    // when you install a new version of the package.
+    const cacheKey = `${PKG_CACHE_PREFIX}${name}@${installedVersion}`;
+    try {
+      const redis = getRedisClient();
+      const cached = await redis.get<PackageAuditResult>(cacheKey);
+      if (cached) {
+        processedCount++;
+        onProgress?.(processedCount, packageNames.length, name);
+        return cached;
+      }
+    } catch { /* Redis unavailable — fall through to live fetch */ }
 
     try {
       const [meta, weeklyDownloads] = await Promise.all([
@@ -431,13 +455,25 @@ export async function runDependencyAudit(options: {
         changelogUrl, homepage: meta?.homepage ?? null,
       };
 
-      return { ...partial, recommendation: buildRecommendation(partial) };
+      const result = { ...partial, recommendation: buildRecommendation(partial) };
+
+      // Write to Redis cache (best-effort, non-blocking)
+      try {
+        const redis = getRedisClient();
+        await redis.set(cacheKey, result, { ex: PKG_CACHE_TTL_SECONDS });
+      } catch { /* non-fatal */ }
+
+      processedCount++;
+      onProgress?.(processedCount, packageNames.length, name);
+      return result;
     } catch (error) {
       await captureException(error, {
         area: 'dependency-audit',
         context: { package: name },
         fingerprint: ['dependency-audit', 'package-fetch'],
       });
+      processedCount++;
+      onProgress?.(processedCount, packageNames.length, name);
       return null;
     }
   }

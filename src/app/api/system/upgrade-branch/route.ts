@@ -2,7 +2,13 @@
  * POST /api/system/upgrade-branch
  *
  * Create a git branch named upgrade/YYYY-MM-DD, bump selected packages,
- * commit, and return a summary.
+ * commit, and push to remote.
+ *
+ * Improvement 5: Push the branch to the remote after creating the commit.
+ * Previously the branch was created locally only — users had to push manually.
+ * Now `git push --set-upstream origin <branchName>` is attempted after the commit.
+ * If the remote push fails (no remote configured, no credentials) the response
+ * includes pushed: false and pushError so the UI can show a manual instruction.
  *
  * Requires: authenticated user session.
  *
@@ -24,6 +30,7 @@ import {
 } from '@/lib/services/dependency-audit.service';
 import { captureException, captureMessage } from '@/lib/observability/sentry';
 import { parseJsonBody } from '@/lib/api/errors';
+import { invalidateCache } from '@/lib/redis';
 
 const execAsync = promisify(exec);
 export const dynamic = 'force-dynamic';
@@ -80,6 +87,7 @@ export async function POST(request: Request) {
           .filter((p) => p.classification === 'BREAKING')
           .map((p) => ({ name: p.name, currentVersion: p.currentVersion, latestVersion: p.latestVersion })),
         message: 'No eligible packages to update.',
+        pushed: false,
       });
     }
 
@@ -125,11 +133,29 @@ export async function POST(request: Request) {
       commitHash = await git('rev-parse --short HEAD');
     }
 
+    // Improvement 5: push the branch to remote
+    let pushed = false;
+    let pushError: string | undefined;
+    try {
+      await git(`push --set-upstream origin ${branchName}`);
+      pushed = true;
+    } catch (err) {
+      // Push failure is non-fatal — local branch is still created
+      pushError = err instanceof Error ? err.message : String(err);
+    }
+
+    // Return to the previous branch (best-effort)
     try { await git('checkout -'); } catch { /* ignore */ }
+
+    // Invalidate the report cache so the next scan reflects the new versions
+    try {
+      await invalidateCache('dep-report:all');
+      await invalidateCache('dep-report:prod');
+    } catch { /* non-fatal */ }
 
     await captureMessage('Upgrade branch created', {
       area: 'dependency-audit', level: 'info',
-      context: { userId: auth.userId, branchName, packagesUpdated: updated.length, commitHash },
+      context: { userId: auth.userId, branchName, packagesUpdated: updated.length, commitHash, pushed },
       fingerprint: ['dependency-audit', 'upgrade-branch'],
     });
 
@@ -139,6 +165,8 @@ export async function POST(request: Request) {
         .filter((p) => p.classification === 'BREAKING')
         .map((p) => ({ name: p.name, currentVersion: p.currentVersion, latestVersion: p.latestVersion })),
       commitHash,
+      pushed,
+      pushError: pushed ? undefined : (pushError ?? 'Push failed — no remote configured or authentication required'),
     });
   } catch (error) {
     try { await git('checkout -'); } catch { /* ignore */ }
