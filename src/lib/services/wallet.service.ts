@@ -5,6 +5,7 @@ import { getWalletBalance } from '@/lib/blockchain/wallet';
 import { encryptPrivateKey, decryptPrivateKey } from '@/lib/security/encryption';
 import { logActivity } from '@/lib/monitoring';
 import { deriveWalletFromPrivateKey, type ImportWalletType } from '@/lib/wallets/private-key';
+import { addBreadcrumb } from '@/lib/observability/sentry';
 
 const DEFAULT_EVM_CHAIN = 'ethereum' as const;
 
