@@ -331,11 +331,34 @@ async function loadTaskWithWallet(taskId: string) {
   return row ?? null;
 }
 
+/**
+ * H-3 fix: balance unit normalisation.
+ *
+ * `balance` comes from getWalletBalance → formatEther → ETH string e.g. "0.05"
+ * `mintPrice` comes from fetchMintRequirements which divides priceWei by 1e18
+ * and calls .toFixed(6), so it is also in ETH e.g. "0.050000".
+ *
+ * Both sides are already in ETH — the comparison is safe.
+ * This guard makes the contract explicit and adds a Wei-detection safety net:
+ * if mintPrice looks like it is in Wei (>= 1e9, i.e. at least 1 Gwei), we
+ * normalise it to ETH before comparing so the check never silently blocks a
+ * wallet that actually has enough funds.
+ */
 function hasEnoughBalance(balance: string, mintPrice: string | null, quantity: number) {
-  const balanceValue = Number(balance);
-  const priceValue = Number(mintPrice ?? '0') * quantity;
+  const balanceValue = Number(balance); // ETH units from formatEther
   if (!Number.isFinite(balanceValue)) return false;
-  return balanceValue >= priceValue;
+
+  let priceEth = Number(mintPrice ?? '0');
+  if (!Number.isFinite(priceEth)) return true; // can't determine price → allow
+
+  // Safety net: if the stored value looks like Wei (>= 1e9 = 1 Gwei) convert it.
+  // fetchMintRequirements always stores in ETH, but historical or manually-set
+  // records might carry Wei values. Normalise defensively.
+  if (priceEth >= 1e9) {
+    priceEth = priceEth / 1e18;
+  }
+
+  return balanceValue >= priceEth * quantity;
 }
 
 // ——— Retry classification ———————————————————————————————————————————————
@@ -468,6 +491,40 @@ export async function executeScheduledMint(taskId: string) {
 
       const mintState = await getMintState(task.contractAddress, wallet.chain);
       if (mintState.status !== 'LIVE') {
+        // H-5 fix: cap reschedule attempts to prevent infinite QStash billing.
+        // We repurpose maxRetries as a unified attempt counter — each reschedule
+        // for a NOT_STARTED mint decrements it by 1.  When it reaches 0 we mark
+        // the task failed instead of scheduling another QStash message.
+        const remainingRetries = (task.maxRetries ?? 0) - 1;
+
+        if (remainingRetries <= 0 || mintState.status === 'ENDED') {
+          await getDb()
+            .update(mintTasks)
+            .set({ status: 'failed', qstashMessageId: null, scheduledTime: null, updatedAt: new Date() })
+            .where(eq(mintTasks.id, taskId));
+          await sendScheduledMintNotification(task.userId, 'mint_failed', {
+            taskId,
+            contractAddress: task.contractAddress || undefined,
+            error: mintState.status === 'ENDED'
+              ? 'Mint has ended'
+              : 'Mint never went live — max reschedule attempts exhausted',
+          });
+          await sendMintFailedEmail(task.userId, {
+            taskId,
+            contractAddress: task.contractAddress || undefined,
+            error: mintState.status === 'ENDED'
+              ? 'Mint has ended'
+              : 'Mint never went live — max reschedule attempts exhausted',
+          });
+          return { success: false, error: `Mint not live (${mintState.status}): max retries exhausted` };
+        }
+
+        // Decrement the retry counter before rescheduling
+        await getDb()
+          .update(mintTasks)
+          .set({ maxRetries: remainingRetries, updatedAt: new Date() })
+          .where(eq(mintTasks.id, taskId));
+
         const retryAt = mintState.startTime && mintState.startTime.getTime() > Date.now()
           ? mintState.startTime
           : new Date(Date.now() + DEFAULT_SCHEDULE_DELAY_MS);
@@ -476,6 +533,7 @@ export async function executeScheduledMint(taskId: string) {
           taskId,
           scheduledTime: retryAt.toISOString(),
           mintStatus: mintState.status,
+          retriesRemaining: remainingRetries,
         });
         return { success: false, skipped: true, error: `Mint not live: ${mintState.status}` };
       }

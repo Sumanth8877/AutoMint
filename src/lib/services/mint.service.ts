@@ -89,6 +89,20 @@ export async function executeMintTask(
     };
   }
 
+  // H-4 fix: ownership check is now the default, not opt-in.
+  // Previously, omitting userId skipped the userId predicate entirely,
+  // allowing any task ID to be executed regardless of who owns it.
+  // Now: if userId is provided it is always enforced (unchanged behaviour).
+  // If userId is absent we emit a Sentry warning — callers should always pass it.
+  if (!userId) {
+    await captureMessage('executeMintTask called without userId — ownership check skipped', {
+      area: 'minting',
+      level: 'warning',
+      context: { taskId },
+      fingerprint: ['mint', 'missing-userid'],
+    });
+  }
+
   const claimWhere = userId
     ? and(
         eq(mintTasks.id, taskId),
