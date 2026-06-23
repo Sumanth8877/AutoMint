@@ -268,20 +268,39 @@ export async function executeMint(
       // all providers return the same hash for the same signed bytes.
       // eth_sendRawTransaction is idempotent: duplicate submissions do NOT
       // create duplicate on-chain transactions.
-      const signedTx = await walletClient.signTransaction({
+      //
+      // TypeScript fix: viem's signTransaction uses a strict discriminated union —
+      // EIP-1559 transactions must NOT have a gasPrice key (even as undefined),
+      // and legacy transactions must NOT have maxFeePerGas/maxPriorityFeePerGas.
+      // We branch into two explicit calls so each path satisfies its union branch.
+      const baseTxParams = {
         account,
         chain: getChain(chain),
         to: params.contractAddress,
         data: mintData,
         value,
         gas: params.gasLimit ? BigInt(params.gasLimit) : undefined,
-        // Speed fix (EIP-1559): spread maxFeePerGas + maxPriorityFeePerGas resolved
-        // from the pending block's baseFee. Falls back to legacy gasPrice for
-        // non-EIP-1559 chains. Returns {} on error (viem uses its own estimation).
-        ...gasParams,
-        // C-03: explicit nonce prevents concurrent workers from getting the same value
         ...(allocatedNonce !== undefined && { nonce: allocatedNonce }),
-      });
+      };
+
+      let signedTx: `0x${string}`;
+      if (gasParams.maxFeePerGas !== undefined) {
+        // EIP-1559 path (Ethereum, Base) — no gasPrice key allowed
+        signedTx = await walletClient.signTransaction({
+          ...baseTxParams,
+          maxFeePerGas: gasParams.maxFeePerGas,
+          maxPriorityFeePerGas: gasParams.maxPriorityFeePerGas,
+        });
+      } else if (gasParams.gasPrice !== undefined) {
+        // Legacy path (Polygon PoS or non-EIP-1559 chains) — no EIP-1559 keys allowed
+        signedTx = await walletClient.signTransaction({
+          ...baseTxParams,
+          gasPrice: gasParams.gasPrice,
+        });
+      } else {
+        // resolveGasParams returned {} (error fallback) — let viem estimate gas
+        signedTx = await walletClient.signTransaction({ ...baseTxParams });
+      }
       hash = await broadcastRawTransaction(chain, signedTx, { userId });
     } catch (broadcastError) {
       // sendTransaction itself failed — transaction was never broadcast.
