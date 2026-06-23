@@ -1013,6 +1013,8 @@ export async function scheduleRecoveryCheck(): Promise<void> {
  * Called by the QStash webhook when type='recovery'.
  * Also callable directly from an API route for Vercel cron integration.
  */
+const RECOVERY_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
 export async function executeRecoveryCheck() {
   const { recoverStuckMintTasks } = await import('@/lib/services/mint-recovery.service');
   const result = await recoverStuckMintTasks();
@@ -1023,6 +1025,13 @@ export async function executeRecoveryCheck() {
     level: 'info',
     data: result,
   });
+
+  // Self-schedule the next recovery check via QStash in 5 minutes.
+  // This keeps the recovery loop running entirely within QStash —
+  // no Vercel cron or external scheduler needed.
+  // If this schedule fails, the next nonce gap event will restart the loop.
+  void publishQStashMessage('recovery', new Date(Date.now() + RECOVERY_INTERVAL_MS), 'recovery')
+    .catch(() => undefined); // best-effort — non-fatal
 
   return result;
 }
