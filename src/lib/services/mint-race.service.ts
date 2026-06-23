@@ -8,7 +8,7 @@ export interface RaceResult {
   stopped: boolean;
 }
 
-const MAX_RETRIES = 25;
+const MAX_RETRIES = 5; // Reduced: nonce/timeout retries risk duplicate broadcasts
 const BASE_DELAY_MS = 200;
 
 async function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
@@ -46,6 +46,12 @@ export async function startMintRace(wallet: FastMintWallet, contractAddress: str
 }
 
 function isRetryable(err: string): boolean {
-  const retryable = ['RPC', 'timeout', 'network', 'gas', 'nonce', 'underpriced', '429', '503'];
-  return retryable.some(k => err.toLowerCase().includes(k));
+  const lower = err.toLowerCase();
+  // Never retry on errors that suggest the tx was already submitted to the mempool.
+  // Retrying a nonce conflict or timeout could result in duplicate on-chain transactions.
+  if (lower.includes('nonce') || lower.includes('timeout') || lower.includes('already known')) {
+    return false;
+  }
+  const retryable = ['rpc', 'network', 'gas', 'underpriced', '429', '503'];
+  return retryable.some(k => lower.includes(k));
 }

@@ -25,6 +25,7 @@ import 'server-only';
  */
 
 import { getDb } from '@/lib/db';
+import { getRedisClient } from '@/lib/redis';
 import { mintHistory } from '@/drizzle/schema';
 import { eq } from 'drizzle-orm';
 import { getMintMode } from '@/lib/blockchain/mint';
