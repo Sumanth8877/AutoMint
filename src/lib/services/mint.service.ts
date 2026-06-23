@@ -1,7 +1,7 @@
 import { getDb } from '@/lib/db';
 import { mintTasks, wallets, collections, mintHistory } from '@/drizzle/schema';
 import { desc, eq, and, inArray } from 'drizzle-orm';
-import { estimateMintGas, executeMint, type MintParams } from '@/lib/blockchain/mint';
+import { executeMint, type MintParams } from '@/lib/blockchain/mint';
 import { logActivity } from '@/lib/monitoring';
 import { sendTelegramNotification } from '@/lib/services/telegram.service';
 import { sendMintFailedEmail, sendMintScheduledEmail, sendMintSuccessEmail, sendSystemErrorEmail } from '@/lib/services/email-notification.service';
@@ -184,35 +184,6 @@ export async function executeMintTask(
     gasLimit: claimed.gasLimit || undefined,
     quantity: claimed.quantity,
   };
-
-  // Always simulate first to catch obvious failures
-  const gas = await estimateMintGas(wallet.address as Hex, chain, params, claimed.userId);
-  if (gas.error) {
-    await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
-    await captureMessage('Gas estimation failed', {
-      area: 'minting',
-      level: 'error',
-      context: { userId: claimed.userId, taskId, walletId: claimed.walletId, wallet: wallet.address, collection: claimed.collectionId ?? undefined, chain },
-      extra: { error: gas.error, contractAddress: claimed.contractAddress },
-      fingerprint: ['mint', 'gas-estimation'],
-    });
-    await sendTelegramNotification(claimed.userId, 'mint_failed', {
-      taskId,
-      contractAddress: claimed.contractAddress,
-      error: gas.error,
-    });
-    await sendMintFailedEmail(claimed.userId, {
-      taskId,
-      contractAddress: claimed.contractAddress,
-      error: gas.error,
-    });
-    await sendSystemErrorEmail(claimed.userId, {
-      taskId,
-      title: 'Wallet Execution Error',
-      error: gas.error,
-    });
-    return { success: false, error: gas.error };
-  }
 
   const result = await executeMint(wallet.address as Hex, chain, params, claimed.userId, { walletId: wallet.id });
 
