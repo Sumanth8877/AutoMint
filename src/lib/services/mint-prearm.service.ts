@@ -1,6 +1,6 @@
 import { getDb } from '@/lib/db';
 import { mintTasks } from '@/drizzle/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { MintRequirements } from './mint-requirements.service';
 import type { MintState } from './mint-state.service';
 
@@ -16,7 +16,14 @@ export interface PreArmConfig {
 
 export async function preArmMint(config: PreArmConfig) {
   const { userId, walletId, contractAddress, quantity, requirements } = config;
-  const [existing] = await getDb().select().from(mintTasks).where(eq(mintTasks.contractAddress, contractAddress)).limit(1);
+  // C-1 fix: scope the lookup to this user only.
+  // Without the userId predicate, any task for the same contractAddress across
+  // ALL users would be returned, causing cross-user wallet execution.
+  const [existing] = await getDb()
+    .select()
+    .from(mintTasks)
+    .where(and(eq(mintTasks.contractAddress, contractAddress), eq(mintTasks.userId, userId)))
+    .limit(1);
   if (existing) return existing;
 
   const [task] = await getDb().insert(mintTasks).values({

@@ -15,26 +15,43 @@ export interface TransactionInfo {
 
 /**
  * Get transaction status by hash.
+ *
+ * C-2 fix: uses getTransactionReceipt instead of getTransaction.
+ *
+ * getTransaction only tells us whether a tx is in a block — it does NOT
+ * distinguish between a successful mint and a reverted one. Both have a
+ * blockNumber, so the old code returned 'confirmed' for reverts.
+ *
+ * getTransactionReceipt exposes receipt.status:
+ *   'success' → confirmed and executed successfully
+ *   'reverted' → included in a block but execution failed (out-of-gas, require())
+ *   null/undefined → not yet mined (still pending)
+ *
+ * This means 'failed' is now reachable, and waitForConfirmation will correctly
+ * exit early on reverted transactions instead of polling for the full timeout.
  */
 export async function getTransactionStatus(chain: string, txHash: string): Promise<TransactionInfo> {
   try {
     const client = getClient(chain);
-    const tx = await client.getTransaction({ hash: txHash as Hex });
+    const receipt = await client.getTransactionReceipt({ hash: txHash as Hex }).catch(() => null);
 
-    if (!tx) {
+    // Receipt not yet available → still pending (not mined)
+    if (!receipt) {
       return { hash: txHash, status: 'pending' };
     }
 
-    const blockNumber = tx.blockNumber ? Number(tx.blockNumber) : undefined;
-    const status = blockNumber ? 'confirmed' : 'pending';
+    const blockNumber = receipt.blockNumber ? Number(receipt.blockNumber) : undefined;
+
+    // receipt.status is 'success' | 'reverted' per EIP-658 (post-Byzantium)
+    const status: TxStatus = receipt.status === 'success' ? 'confirmed' : 'failed';
 
     return {
       hash: txHash,
       status,
       blockNumber,
-      from: tx.from,
-      to: tx.to ?? undefined,
-      gasUsed: tx.gas?.toString(),
+      from: receipt.from,
+      to: receipt.to ?? undefined,
+      gasUsed: receipt.gasUsed?.toString(),
     };
   } catch (error) {
     console.error(`getTransactionStatus error for ${txHash} on ${chain}:`, error);
