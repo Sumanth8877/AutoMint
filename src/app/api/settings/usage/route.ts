@@ -118,33 +118,26 @@ async function fetchQStashUsage(): Promise<UsageStat> {
   if (!token) return { ...base, error: 'QSTASH_TOKEN not configured' };
 
   try {
-    // QStash v2 stats endpoint
-    const res = await fetch('https://qstash.upstash.io/v2/stats', {
-      headers: { Authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(5_000),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json() as {
-      messagesSent?: number;
-      successRate?: number;
-      dailySent?: Array<{ time: string; sent: number; delivered: number; failed: number }>;
-    };
-
-    // Sum up the current month from dailySent
+    // QStash v2: use /v2/logs to count messages delivered this month
     const now = new Date();
-    const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const monthlyTotal = (data.dailySent ?? [])
-      .filter(d => d.time.startsWith(monthPrefix))
-      .reduce((sum, d) => sum + (d.sent ?? 0), 0);
-
-    const used = monthlyTotal > 0 ? monthlyTotal : (data.messagesSent ?? null);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const res = await fetch(
+      `https://qstash.upstash.io/v2/logs?fromDate=${monthStart}&count=1000`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(8_000),
+      },
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json() as { messages?: unknown[]; cursor?: string };
+    const used = Array.isArray(data.messages) ? data.messages.length : null;
 
     return {
       ...base,
       used,
       pct: used !== null ? pct(used, 500) : null,
       ok: true,
-      tip: `Free tier: 500 messages/month. Success rate: ${data.successRate !== undefined ? Math.round(data.successRate * 100) + '%' : 'unknown'}.`,
+      tip: `Free tier: 500 messages/month. ${used !== null ? `${used} message(s) this month.` : ''}`,
     };
   } catch (err) {
     addBreadcrumb({ category: 'usage', message: 'QStash usage fetch failed', level: 'warning', data: { error: String(err) } });
@@ -239,21 +232,32 @@ async function fetchJinaUsage(): Promise<UsageStat> {
   if (!key) return { ...base, error: 'Not configured' };
 
   try {
-    const res = await fetch('https://r.jina.ai/usage', {
+    // Jina AI usage endpoint — GET /v1/me returns account info including token balance
+    const res = await fetch('https://api.jina.ai/v1/me', {
+      method: 'GET',
       headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' },
       signal: AbortSignal.timeout(5_000),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json() as { balance?: number; total?: number; used?: number };
-    // Jina returns balance (tokens remaining)
-    const balance = data.balance ?? data.total ?? null;
-    const used = balance !== null ? Math.max(0, 1_000_000 - balance) : (data.used ?? null);
+    const data = await res.json() as {
+      data?: { total_balance?: number; total_usage?: number };
+      total_balance?: number;
+      total_usage?: number;
+      balance?: number;
+    };
+    const inner = data.data ?? data;
+    const balance = inner.total_balance ?? inner.balance ?? null;
+    const usedDirect = inner.total_usage ?? null;
+    const used = usedDirect ?? (balance !== null ? Math.max(0, 1_000_000 - balance) : null);
 
     return {
       ...base,
       used,
       pct: used !== null ? pct(used, 1_000_000) : null,
       ok: true,
+      tip: balance !== null
+        ? `Free tier: 1M tokens total. ${balance.toLocaleString()} tokens remaining.`
+        : base.tip,
     };
   } catch (err) {
     return { ...base, error: String(err) };
@@ -275,26 +279,32 @@ async function fetchFirecrawlUsage(): Promise<UsageStat> {
   if (!key) return { ...base, error: 'Not configured' };
 
   try {
-    const res = await fetch('https://api.firecrawl.dev/v1/team/usage', {
+    // Firecrawl v1 usage — GET /v1/usage/credits
+    const res = await fetch('https://api.firecrawl.dev/v1/usage/credits', {
       headers: { Authorization: `Bearer ${key}` },
       signal: AbortSignal.timeout(5_000),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json() as {
+      remaining_credits?: number;
+      used_credits?: number;
       credits_used?: number;
-      credits_limit?: number;
+      total_credits?: number;
+      limit?: number;
       plan?: string;
     };
-    const used = data.credits_used ?? null;
-    const limit = data.credits_limit ?? 500;
+    const used = data.credits_used ?? data.used_credits ?? null;
+    const remaining = data.remaining_credits ?? null;
+    const limit = data.total_credits ?? data.limit ?? 500;
+    const usedCalc = used ?? (remaining !== null ? Math.max(0, limit - remaining) : null);
 
     return {
       ...base,
-      used,
+      used: usedCalc,
       limit,
-      pct: used !== null ? pct(used, limit) : null,
+      pct: usedCalc !== null ? pct(usedCalc, limit) : null,
       ok: true,
-      tip: `Plan: ${data.plan ?? 'free'}. ${used ?? '?'} / ${limit} credits used this month.`,
+      tip: `Plan: ${data.plan ?? 'free'}. ${usedCalc ?? '?'} / ${limit} credits used this month.`,
     };
   } catch (err) {
     return { ...base, error: String(err) };
