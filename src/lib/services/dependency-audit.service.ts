@@ -183,6 +183,7 @@ async function fetchWeeklyDownloads(name: string): Promise<number | null> {
 interface NpmAuditAdvisory {
   id: number;
   module_name?: string;
+  module_name?: string;
   title: string;
   severity: string;
   url: string;
