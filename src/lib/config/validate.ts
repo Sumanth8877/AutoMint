@@ -1,72 +1,69 @@
-import { z } from 'zod';
-
-// ── Environment variable validation ──────────────────────────────
-// Validated at startup (called from instrumentation.ts).
+// ── Environment variable validation ─────────────────────────────
+// Called at app startup (instrumentation.ts / next.config.ts).
 // All critical env vars are checked here so misconfiguration is caught
-// at boot time, not at runtime when the first wallet is decrypted or
-// the first Redis call is made.
+// at boot time — not at runtime when the first wallet decrypt fails or
+// the first Redis connection times out.
 //
-// Add new required vars to the schema below. Optional vars (e.g.
-// ENCRYPTION_KEY_PREVIOUS for key rotation) are typed as z.string().optional().
-// ─────────────────────────────────────────────────────────────────
+// Add new required vars to REQUIRED_VARS below.
+// Optional vars (for key rotation, staging, etc.) are validated separately.
+// ────────────────────────────────────────────────────────────────
 
-const envSchema = z.object({
-  // Database
-  DATABASE_URL: z.string().url({ message: 'DATABASE_URL must be a valid URL' }),
+type EnvSpec = {
+  name: string;
+  /** Optional custom validation beyond presence check */
+  validate?: (value: string) => string | null; // returns error message or null
+};
 
-  // Clerk auth
-  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1, 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is required'),
-  CLERK_SECRET_KEY: z.string().min(1, 'CLERK_SECRET_KEY is required'),
+const REQUIRED_VARS: EnvSpec[] = [
+  // ── Database
+  { name: 'DATABASE_URL', validate: (v) => v.startsWith('http') || v.startsWith('postgres') ? null : 'Must be a valid URL' },
 
-  // Encryption (wallet private keys)
-  ENCRYPTION_KEY: z.string().regex(
-    /^[a-f0-9]{64}$/i,
-    'ENCRYPTION_KEY must be a 64-character hex string (32 bytes). Generate with: openssl rand -hex 64'
-  ),
-  ENCRYPTION_KEY_PREVIOUS: z.string().optional(), // for key rotation
+  // ── Clerk auth
+  { name: 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY' },
+  { name: 'CLERK_SECRET_KEY' },
 
-  // Upstash Redis
-  UPSTASH_REDIS_REST_URL: z.string().url({ message: 'UPSTASH_REDIS_REST_URL must be a valid URL' }),
-  UPSTASH_REDIS_REST_TOKEN: z.string().min(1, 'UPSTASH_REDIS_REST_TOKEN is required'),
+  // ── Wallet encryption
+  {
+    name: 'ENCRYPTION_KEY',
+    validate: (v) =>
+      /^[a-f0-9]{64}$/i.test(v.trim())
+        ? null
+        : 'Must be a 64-character hex string (32 bytes). Generate: openssl rand -hex 64',
+  },
 
-  // QStash (scheduled jobs)
-  QSTASH_TOKEN: z.string().min(1, 'QSTASH_TOKEN is required'),
-  QSTASH_CURRENT_SIGNING_KEY: z.string().min(1, 'QSTASH_CURRENT_SIGNING_KEY is required'),
-  QSTASH_NEXT_SIGNING_KEY: z.string().min(1, 'QSTASH_NEXT_SIGNING_KEY is required'),
+  // ── Upstash Redis
+  { name: 'UPSTASH_REDIS_REST_URL', validate: (v) => v.startsWith('https://') ? null : 'Must be a valid HTTPS URL' },
+  { name: 'UPSTASH_REDIS_REST_TOKEN' },
 
-  // Alchemy (RPC + webhooks)
-  ALCHEMY_API_KEY: z.string().min(1).optional(),
-  ALCHEMY_WEBHOOK_SIGNING_KEY: z.string().min(1).optional(),
+  // ── QStash (scheduled mint jobs)
+  { name: 'QSTASH_TOKEN' },
+  { name: 'QSTASH_CURRENT_SIGNING_KEY' },
+  { name: 'QSTASH_NEXT_SIGNING_KEY' },
+];
 
-  // Sentry (optional — app runs without it but errors won't be captured)
-  NEXT_PUBLIC_SENTRY_DSN: z.string().url().optional(),
-  SENTRY_AUTH_TOKEN: z.string().optional(),
-});
+export function validateEnv(): void {
+  const errors: string[] = [];
 
-type Env = z.infer<typeof envSchema>;
+  for (const spec of REQUIRED_VARS) {
+    const value = process.env[spec.name]?.trim();
 
-let _validatedEnv: Env | null = null;
+    if (!value) {
+      errors.push(`  • ${spec.name}: missing`);
+      continue;
+    }
 
-/**
- * Validate and return all critical environment variables.
- * Call this at app startup (instrumentation.ts).
- * Throws a detailed error listing all missing/invalid vars.
- */
-export function validateEnv(): Env {
-  if (_validatedEnv) return _validatedEnv;
-
-  const result = envSchema.safeParse(process.env);
-
-  if (!result.success) {
-    const issues = result.error.issues
-      .map((issue) => `  • ${issue.path.join('.')}: ${issue.message}`)
-      .join('\n');
-    throw new Error(
-      `\n\n❌ Environment configuration errors (${result.error.issues.length} issue(s)):\n${issues}\n\n` +
-      'Fix the above variables in your .env.local or Vercel environment settings.\n'
-    );
+    if (spec.validate) {
+      const error = spec.validate(value);
+      if (error) {
+        errors.push(`  • ${spec.name}: ${error}`);
+      }
+    }
   }
 
-  _validatedEnv = result.data;
-  return _validatedEnv;
+  if (errors.length > 0) {
+    throw new Error(
+      `\n\n❌ Environment configuration errors (${errors.length} issue(s)):\n${errors.join('\n')}\n\n` +
+      'Fix the above variables in your .env.local or Vercel environment settings.\n',
+    );
+  }
 }

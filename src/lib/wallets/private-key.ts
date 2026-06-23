@@ -2,6 +2,7 @@ import 'server-only';
 
 import { createHash, createPrivateKey, createPublicKey, createECDH } from 'node:crypto';
 import { privateKeyToAccount } from 'viem/accounts';
+import { decodeBase58OrThrow, encodeBase58 } from './base58';
 
 export type ImportWalletType = 'EVM' | 'SOLANA' | 'BITCOIN';
 
@@ -11,7 +12,6 @@ type DerivedWallet = {
   walletType: ImportWalletType;
 };
 
-const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 const BECH32_ALPHABET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
 const ED25519_PKCS8_PREFIX = Buffer.from('302e020100300506032b657004220420', 'hex');
 
@@ -20,68 +20,6 @@ function normalizeHexPrivateKey(value: string) {
   const withoutPrefix = trimmed.startsWith('0x') ? trimmed.slice(2) : trimmed;
   if (!/^[a-f0-9]{64}$/i.test(withoutPrefix)) throw new Error('Invalid private key format');
   return `0x${withoutPrefix.toLowerCase()}` as `0x${string}`;
-}
-
-function decodeBase58(value: string) {
-  if (!value) throw new Error('Invalid private key format');
-
-  const bytes = [0];
-
-  for (const char of value) {
-    const carryStart = BASE58_ALPHABET.indexOf(char);
-    if (carryStart === -1) throw new Error('Invalid private key format');
-
-    let carry = carryStart;
-    for (let index = 0; index < bytes.length; index += 1) {
-      carry += bytes[index] * 58;
-      bytes[index] = carry & 0xff;
-      carry >>= 8;
-    }
-
-    while (carry > 0) {
-      bytes.push(carry & 0xff);
-      carry >>= 8;
-    }
-  }
-
-  for (const char of value) {
-    if (char !== '1') break;
-    bytes.push(0);
-  }
-
-  return Buffer.from(bytes.reverse());
-}
-
-function encodeBase58(bytes: Buffer) {
-  if (bytes.length === 0) return '';
-
-  const digits = [0];
-
-  for (const byte of bytes) {
-    let carry = byte;
-    for (let index = 0; index < digits.length; index += 1) {
-      carry += digits[index] << 8;
-      digits[index] = carry % 58;
-      carry = Math.floor(carry / 58);
-    }
-
-    while (carry > 0) {
-      digits.push(carry % 58);
-      carry = Math.floor(carry / 58);
-    }
-  }
-
-  let encoded = '';
-  for (const byte of bytes) {
-    if (byte !== 0) break;
-    encoded += '1';
-  }
-
-  for (let index = digits.length - 1; index >= 0; index -= 1) {
-    encoded += BASE58_ALPHABET[digits[index]];
-  }
-
-  return encoded;
 }
 
 function parseSolanaSecretKey(value: string) {
@@ -97,7 +35,7 @@ function parseSolanaSecretKey(value: string) {
   } else if (/^[a-f0-9]{64}$/i.test(trimmed) || /^[a-f0-9]{128}$/i.test(trimmed)) {
     bytes = Buffer.from(trimmed, 'hex');
   } else {
-    bytes = decodeBase58(trimmed);
+    bytes = Buffer.from(decodeBase58OrThrow(trimmed));
   }
 
   if (bytes.length !== 32 && bytes.length !== 64) throw new Error('Invalid Solana private key');
@@ -142,7 +80,7 @@ function hash160(bytes: Buffer) {
 }
 
 function decodeBase58Check(value: string) {
-  const decoded = decodeBase58(value);
+  const decoded = decodeBase58OrThrow(value);
   if (decoded.length < 5) throw new Error('Invalid Bitcoin private key');
   const payload = decoded.subarray(0, -4);
   const checksum = decoded.subarray(-4);

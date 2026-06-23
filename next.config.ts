@@ -27,10 +27,10 @@ const scriptSrc = [
   'https://*.clerk.accounts.dev',
   'https://*.clerk.com',
   'https://clerk.com',
-  // Next.js dev HMR / eval (dev only)
-  ...(isDev ? ["'unsafe-inline'", "'unsafe-eval'"] : ["'unsafe-inline'"]),
-  // NOTE: 'unsafe-inline' is kept in prod because Clerk's hosted UI injects
-  // inline scripts that cannot be nonced in this Next.js + Tailwind setup.
+  // Next.js dev HMR needs eval and inline in dev mode.
+  // In production, 'unsafe-inline' is replaced by per-request CSP nonces
+  // injected by src/middleware.ts — see buildCsp() there.
+  ...(isDev ? ["'unsafe-inline'", "'unsafe-eval'"] : []),
 ].join(' ');
 
 // ── connect-src ───────────────────────────────────────────────────────────────
