@@ -233,61 +233,6 @@ export async function executeMintTask(
         error: result.error,
       });
       return { success: false, error: result.error };
-  } else {
-    // ── LIVE: execute real transaction ──────────────
-    result = await executeMint(wallet.address as Hex, chain, params, claimed.userId, { walletId: wallet.id });
-
-    if (!result.success) {
-      // C-04: If txHash is present the transaction was broadcast but receipt
-      // tracking failed (e.g. timeout). Transition to 'unconfirmed' and schedule
-      // a receipt recheck.  DO NOT mark as 'failed' — that would allow a retry
-      // to call sendTransaction again and broadcast a second transaction.
-      if (result.txHash) {
-        await getDb()
-          .update(mintTasks)
-          .set({ status: 'unconfirmed', txHash: result.txHash, updatedAt: new Date() })
-          .where(eq(mintTasks.id, taskId));
-        await captureMessage('Mint receipt tracking failed — task is unconfirmed', {
-          area: 'minting',
-          level: 'warning',
-          context: { userId: claimed.userId, taskId, walletId: claimed.walletId, wallet: wallet.address, chain, transactionHash: result.txHash },
-          extra: { error: result.error, contractAddress: claimed.contractAddress },
-          fingerprint: ['mint', 'receipt-timeout'],
-        });
-        // Schedule a receipt recheck via QStash so the task can transition to
-        // 'completed' once the chain confirms, without creating a new transaction.
-        const { scheduleReceiptRecheck } = await import('@/lib/services/qstash.service');
-        await scheduleReceiptRecheck(taskId, result.txHash);
-        return { success: false, txHash: result.txHash, error: 'unconfirmed' };
-      }
-
-      // No txHash means sendTransaction never succeeded — safe to fail and retry.
-      await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
-      await captureMessage('Mint transaction failed', {
-        area: 'minting',
-        level: 'error',
-        context: { userId: claimed.userId, taskId, walletId: claimed.walletId, wallet: wallet.address, collection: claimed.collectionId ?? undefined, chain },
-        extra: { error: result.error, contractAddress: claimed.contractAddress },
-        fingerprint: ['mint', 'transaction-failed'],
-      });
-      await sendTelegramNotification(claimed.userId, 'mint_failed', {
-        taskId,
-        contractAddress: claimed.contractAddress,
-        error: result.error,
-      });
-      await sendMintFailedEmail(claimed.userId, {
-        taskId,
-        contractAddress: claimed.contractAddress,
-        error: result.error,
-      });
-      await sendSystemErrorEmail(claimed.userId, {
-        taskId,
-        title: 'Mint Transaction Error',
-        error: result.error,
-      });
-      return { success: false, error: result.error };
-    }
-  }
 
   const now = new Date();
   await getDb().update(mintTasks)
