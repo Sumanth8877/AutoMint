@@ -1,29 +1,25 @@
 /**
  * GET /api/system/dependency-audit
  *
- * Trigger a full dependency audit and return the structured report.
+ * Run a full dependency audit and return the structured report.
  * READ-ONLY — never modifies files or installs packages.
  *
- * Admin-only endpoint.
+ * Requires: authenticated user session.
  *
  * Query params:
  *   ?dev=false    Skip devDependencies (default: include them)
- *
- * Response: DependencyAuditReport JSON
  */
 
 import { NextResponse } from 'next/server';
-import { requireAdmin } from '@/lib/auth/require-admin';
+import { requireApiUser } from '@/lib/auth/require-auth';
 import { runDependencyAudit } from '@/lib/services/dependency-audit.service';
 import { captureException } from '@/lib/observability/sentry';
 
 export const dynamic = 'force-dynamic';
-
-// Audits can take up to 60 seconds fetching npm registry data
 export const maxDuration = 60;
 
 export async function GET(request: Request) {
-  const auth = await requireAdmin();
+  const auth = await requireApiUser();
   if ('error' in auth) return auth.error;
 
   const { searchParams } = new URL(request.url);
