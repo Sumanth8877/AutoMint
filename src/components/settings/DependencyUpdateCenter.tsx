@@ -251,21 +251,30 @@ function PackageTable({ packages, selectedPackages, onToggle, showSelect }: {
 // ─── Modernization card ───────────────────────────────────────────────────────
 
 function ModernizationCard({ opp }: { opp: ModernizationOpportunity }) {
-  const effortStyle = { low: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300', medium: 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300', high: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300' }[opp.effort];
+  const resolved = opp.status === 'resolved';
+  const effortStyle = resolved
+    ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300'
+    : { low: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300', medium: 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300', high: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300' }[opp.effort];
   const typeIcon = { 'deprecated-api': '⚠️', 'better-alternative': '💡', 'performance': '⚡', 'security-hardening': '🔒' }[opp.type];
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4 space-y-2.5">
+    <div className={`rounded-xl border p-4 space-y-2.5 ${resolved ? 'border-green-200 dark:border-green-800/50 bg-green-50/50 dark:bg-green-950/10' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900'}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span>{typeIcon}</span>
+          {resolved
+            ? <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+            : <span>{typeIcon}</span>
+          }
           <code className="text-sm font-semibold text-gray-900 dark:text-gray-100 font-mono">{opp.package}</code>
         </div>
-        <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize shrink-0 ${effortStyle}`}>{opp.effort} effort</span>
+        {resolved
+          ? <span className="rounded-full px-2.5 py-0.5 text-xs font-semibold shrink-0 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300">✓ Resolved</span>
+          : <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize shrink-0 ${effortStyle}`}>{opp.effort} effort</span>
+        }
       </div>
       <p className="text-sm text-gray-600 dark:text-gray-400">{opp.description}</p>
-      <div className="rounded-lg bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-800 px-3 py-2">
-        <p className="text-xs font-semibold text-indigo-700 dark:text-indigo-300 mb-0.5">Recommendation</p>
-        <p className="text-xs text-indigo-600 dark:text-indigo-400">{opp.recommendation}</p>
+      <div className={`rounded-lg px-3 py-2 border ${resolved ? 'bg-green-50 dark:bg-green-950/20 border-green-100 dark:border-green-900' : 'bg-indigo-50 dark:bg-indigo-950/30 border-indigo-100 dark:border-indigo-800'}`}>
+        <p className={`text-xs font-semibold mb-0.5 ${resolved ? 'text-green-700 dark:text-green-300' : 'text-indigo-700 dark:text-indigo-300'}`}>{resolved ? 'Status' : 'Recommendation'}</p>
+        <p className={`text-xs ${resolved ? 'text-green-600 dark:text-green-400' : 'text-indigo-600 dark:text-indigo-400'}`}>{opp.recommendation}</p>
       </div>
       {opp.docsUrl && (
         <a href={opp.docsUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline">
@@ -448,7 +457,7 @@ export function DependencyUpdateCenter() {
   const minorCount = report?.minorReviewUpdates ?? 0;
   const breakingCount = report?.breakingUpdates ?? 0;
   const securityCount = report?.packages.filter(p => p.securityRisk).length ?? 0;
-  const modernCount = report?.modernizationOpportunities.length ?? 0;
+  const modernCount = report?.modernizationOpportunities.filter(o => o.status !== 'resolved').length ?? 0;
   const isScanning = checkState === 'loading';
 
   const tabs: { id: Tab; label: string; count: number; color: string }[] = [

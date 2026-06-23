@@ -257,15 +257,14 @@ export async function allocateNonce(
       nextNonce = redisCounter + 1;
     }
 
-    // Step 5: Persist the counter
-    await redis.set(counterKey, String(nextNonce));
-
-    // Step 6: Mark nonce as inflight (score = allocation epoch ms for gap detection)
+    // Steps 5+6: Persist counter and mark inflight in a single pipeline round-trip.
+    // @upstash/redis 1.30+ pipelines are atomic from the client's perspective —
+    // both commands are sent in one HTTP request, halving latency vs two awaits.
     const epochMs = Date.now();
-    await redis.zadd(inflightKey, {
-      score: epochMs,
-      member: String(nextNonce),
-    });
+    const pipeline = redis.pipeline();
+    pipeline.set(counterKey, String(nextNonce));
+    pipeline.zadd(inflightKey, { score: epochMs, member: String(nextNonce) });
+    await pipeline.exec();
 
     addBreadcrumb({
       category: 'nonce-allocator',
@@ -439,11 +438,11 @@ export async function resetNonceCounter(address: string, chain: string): Promise
   const redis = getRedisClient();
   const chainPendingNonce = await getChainPendingNonce(address, chain);
 
-  // Seed counter to (pending - 1) so that next INCR-equivalent produces pending
-  await redis.set(NONCE_KEYS.counter(address, chain), String(chainPendingNonce - 1));
-
-  // Clear inflight set — all previous allocations are now invalid
-  await redis.del(NONCE_KEYS.inflight(address, chain));
+  // Seed counter and clear inflight in one pipeline round-trip (@upstash/redis 1.30+)
+  const resetPipeline = redis.pipeline();
+  resetPipeline.set(NONCE_KEYS.counter(address, chain), String(chainPendingNonce - 1));
+  resetPipeline.del(NONCE_KEYS.inflight(address, chain));
+  await resetPipeline.exec();
 
   addBreadcrumb({
     category: 'nonce-allocator',
