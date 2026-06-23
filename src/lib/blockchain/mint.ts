@@ -8,23 +8,11 @@ import { getWalletClient } from '@/lib/services/rpc-manager.service';
 import { getDecryptedPrivateKey } from '@/lib/services/wallet.service';
 import { captureException, captureMessage } from '@/lib/observability/sentry';
 
-// ─── MINT_MODE Configuration ─────────────────────────
 import {
   allocateNonce,
   releaseInflightNonce,
   scanAndFillGaps,
 } from '@/lib/services/nonce-allocator.service';
-
-
-export type MintMode = 'simulation' | 'live';
-
-export function getMintMode(): MintMode {
-  const raw = process.env.MINT_MODE?.trim().toLowerCase();
-  if (raw === 'live') return 'live';
-  // Explicit opt-in only. Never auto-live based on NODE_ENV.
-  // Set MINT_MODE=live in your production env vars to enable live minting.
-  return 'simulation';
-}
 
 // ─── Config ──────────────────────────────────────────
 
@@ -52,126 +40,6 @@ export interface MintResult {
   error?: string;
 }
 
-export interface MintEligibility {
-  eligible: boolean;
-  reason?: string;
-  publicMintActive?: boolean;
-}
-
-// ─── Helpers ─────────────────────────────────────────
-
-function getChain(chain: string): Chain {
-  const c = CHAIN_OBJECTS[chain];
-  if (!c) throw new Error(`Unsupported chain: ${chain}`);
-  return c;
-}
-
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : 'Unknown mint error';
-}
-
-function buildMintData(params: MintParams): Hex {
-  const abi =
-    params.mintFunction === 'mint' || !params.mintFunction
-      ? parseAbi(['function mint(uint256 quantity) payable'])
-      : parseAbi([`function ${params.mintFunction}(uint256 quantity) payable`]);
-  return encodeFunctionData({
-    abi,
-    functionName: params.mintFunction || 'mint',
-    args: [BigInt(params.quantity)],
-  });
-}
-
-// ─── Core blockchain functions ────────────────────────
-
-/**
- * Simulate a mint call using eth_call (read-only, no state change).
- */
-export async function simulateMint(
-  address: Hex,
-  chain: string,
-  params: MintParams,
-  userId?: string,
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const client = getClient(chain, userId);
-    const mintData = buildMintData(params);
-    await client.call({
-      to: params.contractAddress,
-      data: mintData,
-      value: params.mintPrice ? parseEther(params.mintPrice) : BigInt(0),
-    });
-    return { success: true };
-  } catch (error) {
-    await captureException(error, {
-      area: 'minting',
-      context: { wallet: address, chain, collection: params.contractAddress },
-      fingerprint: ['mint', 'simulate-contract-call'],
-    });
-    return { success: false, error: getErrorMessage(error) || 'Simulation failed' };
-  }
-}
-
-/**
- * Estimate gas for the mint transaction.
- */
-export async function estimateMintGas(
-  address: Hex,
-  chain: string,
-  params: MintParams,
-  userId?: string,
-): Promise<{ gasLimit: bigint; error?: string }> {
-  try {
-    const client = getClient(chain, userId);
-    const mintData = buildMintData(params);
-    const estimate = await client.estimateGas({
-      to: params.contractAddress,
-      data: mintData,
-      value: params.mintPrice ? parseEther(params.mintPrice) : BigInt(0),
-    });
-    return { gasLimit: estimate };
-  } catch (error) {
-    await captureException(error, {
-      area: 'minting',
-      context: { wallet: address, chain, collection: params.contractAddress },
-      fingerprint: ['mint', 'gas-estimation'],
-    });
-    return { gasLimit: BigInt(200000), error: getErrorMessage(error) || 'Gas estimation failed' };
-  }
-}
-
-/**
- * Check mint eligibility by calling public mint view functions if available.
- */
-export async function checkMintEligibility(
-  chain: string,
-  params: MintParams,
-): Promise<MintEligibility> {
-  try {
-    const client = getClient(chain);
-    const address = params.contractAddress;
-    const abi = parseAbi([
-      'function publicMintActive() view returns (bool)',
-      'function maxSupply() view returns (uint256)',
-      'function totalSupply() view returns (uint256)',
-    ] as const);
-
-    let publicMintActive = false;
-    try {
-      publicMintActive = await client.readContract({ address, abi, functionName: 'publicMintActive' });
-    } catch {
-      return { eligible: true, publicMintActive: undefined };
-    }
-
-    if (!publicMintActive) {
-      return { eligible: false, reason: 'Public mint is not active', publicMintActive: false };
-    }
-    return { eligible: true, publicMintActive: true };
-  } catch (error) {
-    return { eligible: false, reason: getErrorMessage(error) || 'Eligibility check failed' };
-  }
-}
-
 /**
  * Execute the mint transaction on chain.
  *
@@ -194,17 +62,6 @@ export async function executeMint(
   userId: string,                 // REQUIRED — was `userId?: string`
   options: { walletId: string },  // REQUIRED — was `options?: { walletId?: string }`
 ): Promise<MintResult> {
-  // ── Guard: must be in 'live' mode ────────────────────────────────
-  const mode = getMintMode();
-  if (mode !== 'live') {
-    return {
-      success: false,
-      error:
-        'MINT_MODE is not set to "live". Use simulateMint() for simulation-only mode, ' +
-        'or set MINT_MODE=live to execute real transactions.',
-    };
-  }
-
   // ── Guard: userId is mandatory ───────────────────────────────────
   // Runtime check in addition to the TypeScript type requirement,
   // to defend against JS callers and dynamically-constructed payloads.
