@@ -6,7 +6,7 @@ import { mainnet, base, polygon, type Chain } from 'viem/chains';
 import { getClient } from './client';
 import { getWalletClient, broadcastRawTransaction } from '@/lib/services/rpc-manager.service';
 import { getDecryptedPrivateKey } from '@/lib/services/wallet.service';
-import { captureException, captureMessage } from '@/lib/observability/sentry';
+import { addBreadcrumb, captureException, captureMessage } from '@/lib/observability/sentry';
 
 import {
   allocateNonce,
