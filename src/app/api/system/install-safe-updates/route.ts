@@ -149,7 +149,7 @@ export async function POST(request: Request) {
     }
 
     // Improvement 4: commit the lockfile changes to git
-    let gitResult = { committed: false, commitHash: undefined as string | undefined, reason: undefined as string | undefined };
+    let gitResult: { committed: boolean; commitHash?: string; reason?: string } = { committed: false };
     if (updated.length > 0) {
       gitResult = await gitCommitUpdates(updated);
     }
