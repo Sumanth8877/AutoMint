@@ -95,12 +95,29 @@ async function loadDefaultMintWallet(userId: string, chain: string, destinationW
 
   if (sameChain) return sameChain;
 
+  // Fallback: use any EVM wallet — log warning so caller knows chain may mismatch
+  addBreadcrumb({
+    category: 'copy-mint',
+    message: `loadDefaultMintWallet: no wallet found for chain "${chain}" — falling back to first available EVM wallet`,
+    level: 'warning',
+    data: { userId, chain, destinationWalletId },
+  });
+
   const [fallback] = await getDb()
     .select()
     .from(wallets)
     .where(and(eq(wallets.userId, userId), eq(wallets.walletType, 'EVM')))
     .orderBy(wallets.createdAt)
     .limit(1);
+
+  if (fallback) {
+    addBreadcrumb({
+      category: 'copy-mint',
+      message: `loadDefaultMintWallet: using fallback wallet ${fallback.address} (chain: ${fallback.chain ?? 'unknown'}) — expected "${chain}"`,
+      level: 'warning',
+      data: { walletId: fallback.id, walletChain: fallback.chain, expectedChain: chain },
+    });
+  }
 
   return fallback ?? null;
 }

@@ -43,7 +43,6 @@ export async function acquireLock(mintId: string, ttlSeconds = LOCK_TTL_SECONDS)
       return { acquired: false, mintId, key };
     }
 
-    console.log('[MintLock] Lock acquired', { mintId, key });
     addBreadcrumb({ category: 'mint-lock', message: 'Lock acquired', level: 'info', data: { mintId, key } });
     return { acquired: true, mintId, key, token };
   } catch (error) {
@@ -78,10 +77,12 @@ export async function releaseLock(mintId: string, token?: string) {
         return false;
       }
     } else {
-      await getRedisClient().del(key);
+      // No token — cannot safely release without risking clobbering another holder's lock.
+      // Callers should only call releaseLock when acquired:true (which always provides a token).
+      addBreadcrumb({ category: 'mint-lock', message: 'releaseLock called without token — skipped to prevent unsafe DEL', level: 'warning', data: { mintId, key } });
+      return false;
     }
 
-    console.log('[MintLock] Lock released', { mintId, key });
     addBreadcrumb({ category: 'mint-lock', message: 'Lock released', level: 'info', data: { mintId, key } });
     return true;
   } catch (error) {
@@ -115,7 +116,6 @@ export async function extendLock(mintId: string, token: string, ttlSeconds = LOC
       return false;
     }
 
-    console.log('[MintLock] Lock extended', { mintId, key, ttlSeconds });
     addBreadcrumb({ category: 'mint-lock', message: 'Lock extended', level: 'info', data: { mintId, key, ttlSeconds } });
     return true;
   } catch (error) {

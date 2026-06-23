@@ -175,7 +175,7 @@ export async function discoverCollection(openseaUrl: string): Promise<DiscoveryR
       });
       result = toDiscoveryResult(mergeProviderResults(jinaResult, firecrawlResult));
     } catch (error) {
-      captureException(error, { area: 'discovery', context: {}, fingerprint: ['discovery', 'firecrawl-fallback-failed'] });
+      await captureException(error, { area: 'discovery', context: {}, fingerprint: ['discovery', 'firecrawl-fallback-failed'] });
       await trackAnalyticsEvent({
         eventType: 'discovery',
         status: 'failed',

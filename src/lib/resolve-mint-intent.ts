@@ -1,3 +1,6 @@
+// NOTE: Chain detection logic is also available as a standalone module at
+// src/lib/intent/chain-detector.ts — this file will be split further in IMP-05.
+
 /**
  * resolveMintIntent(url)
  *

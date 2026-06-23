@@ -138,8 +138,31 @@ export function decrypt(text: string): string {
   );
 }
 
+// Known private key formats
+const EVM_PK_RE = /^(0x)?[a-f0-9]{64}$/i;
+const SOLANA_B58_MIN_LEN = 32;
+const SOLANA_B58_MAX_LEN = 88; // 64-byte keypair in base58
+
+/**
+ * Encrypt a private key after basic format validation.
+ * Rejects obviously invalid keys before they reach the encryption layer.
+ */
 export function encryptPrivateKey(privateKey: string): string {
-  return encrypt(privateKey);
+  const trimmed = privateKey?.trim();
+  if (!trimmed) throw new Error('Private key must not be empty');
+
+  const isEvm = EVM_PK_RE.test(trimmed);
+  const couldBeSolanaOrBitcoin =
+    trimmed.length >= SOLANA_B58_MIN_LEN && trimmed.length <= SOLANA_B58_MAX_LEN + 10;
+  const couldBeJsonArray = trimmed.startsWith('[');
+
+  if (!isEvm && !couldBeSolanaOrBitcoin && !couldBeJsonArray) {
+    throw new Error(
+      'Private key format is invalid. Expected a 64-char hex EVM key, a Base58 Solana/Bitcoin key, or a Solana JSON keypair array.',
+    );
+  }
+
+  return encrypt(trimmed);
 }
 
 export function decryptPrivateKey(payload: string | { encrypted?: string; value?: string }): string {

@@ -5,6 +5,39 @@ import { sql, eq, and, desc, asc } from 'drizzle-orm';
 export type TaskType = 'wallet_monitoring' | 'nft_tracking' | 'collection_sync' | 'metadata_refresh' | 'mint_execution' | 'website_monitoring' | 'browser_automation';
 export type TaskStatus = 'pending' | 'running' | 'retrying' | 'completed' | 'failed' | 'dead_letter';
 
+// ─── State machine ────────────────────────────────────────────────
+// Defines valid transitions between task statuses.
+// Prevents bugs like a completed task being set back to running.
+const VALID_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
+  pending:     ['running', 'failed', 'dead_letter'],
+  running:     ['retrying', 'completed', 'failed', 'dead_letter'],
+  retrying:    ['running', 'failed', 'dead_letter'],
+  completed:   [],                            // terminal state — no further transitions
+  failed:      ['retrying', 'dead_letter'],   // can be retried externally
+  dead_letter: [],                            // terminal state — escalate manually
+};
+
+/**
+ * Assert that a status transition is valid.
+ * Throws if the transition is not permitted by the state machine.
+ */
+export function assertValidTransition(from: TaskStatus, to: TaskStatus): void {
+  const allowed = VALID_TRANSITIONS[from] ?? [];
+  if (!allowed.includes(to)) {
+    throw new Error(
+      `Invalid task status transition: ${from} → ${to}. ` +
+      `Allowed from ${from}: [${allowed.join(', ') || 'none (terminal state)'}]`
+    );
+  }
+}
+
+/**
+ * Check if a transition is valid without throwing.
+ */
+export function isValidTransition(from: TaskStatus, to: TaskStatus): boolean {
+  return (VALID_TRANSITIONS[from] ?? []).includes(to);
+}
+
 export interface CreateTaskParams {
   userId?: string | null;
   taskType: TaskType;
@@ -26,7 +59,7 @@ export interface UpdateTaskParams {
 }
 
 // ─── Backoff Schedule ─────────────────────────────
-const BACKOFF_MINUTES = [0, 1, 5, 15, 60];
+const BACKOFF_MINUTES = [0.5, 1, 5, 15, 60]; // Minimum 30s before first retry — prevents hammering RPC on immediate failure
 
 /**
  * Calculate the next retry time based on attempt count.
@@ -78,7 +111,9 @@ export async function createTask(params: CreateTaskParams) {
   // 1. Resolve or generate idempotency key (application-level enforcement)
   const idempotencyKey = buildIdempotencyKey(params);
 
-  // 2. Check for existing task with the same idempotency key
+  // 2. Check for existing task with the same idempotency key.
+  // Only reuse if the task is still active (pending/running/retrying).
+  // If it completed, failed, or was cancelled, allow a new task to be created.
   if (idempotencyKey) {
     const [existing] = await getDb()
       .select()
@@ -87,7 +122,14 @@ export async function createTask(params: CreateTaskParams) {
       .limit(1);
 
     if (existing) {
-      return existing;
+      const activeStatuses: TaskStatus[] = ['pending', 'running', 'retrying'];
+      if (activeStatuses.includes(existing.status as TaskStatus)) {
+        // Task is still in-progress — return it to prevent duplicate execution.
+        return existing;
+      }
+      // Task has reached a terminal state — delete the old idempotency key
+      // so a fresh task can be created (e.g. retry after failure).
+      await getDb().delete(tasks).where(eq(tasks.idempotencyKey, idempotencyKey));
     }
   }
 

@@ -296,7 +296,18 @@ export async function analyzeAnalyzerRisk(params: {
     socialAnalysis: social.score,
     domainAge: domainAge.score,
   };
-  const configuredWeights = await getAdaptiveRiskWeights();
+  let configuredWeights: Awaited<ReturnType<typeof getAdaptiveRiskWeights>>;
+  try {
+    configuredWeights = await getAdaptiveRiskWeights();
+  } catch (weightsError) {
+    addBreadcrumb({
+      category: 'risk',
+      message: 'getAdaptiveRiskWeights failed — using default weights',
+      level: 'warning',
+      data: { error: weightsError instanceof Error ? weightsError.message : String(weightsError) },
+    });
+    configuredWeights = { contractAnalysis: 1, trustedWalletActivity: 1, socialAnalysis: 1, domainAge: 1 };
+  }
   const riskScore = clampScore(applyRiskWeights(rawWeights, configuredWeights));
   const riskFactors = [
     ...contract.reasons,
@@ -348,7 +359,18 @@ export async function analyzeMintRisk(taskId: string): Promise<RiskAnalysis> {
     socialAnalysis: social.score,
     domainAge: domainAge.score,
   };
-  const configuredWeights = await getAdaptiveRiskWeights();
+  let configuredWeights: Awaited<ReturnType<typeof getAdaptiveRiskWeights>>;
+  try {
+    configuredWeights = await getAdaptiveRiskWeights();
+  } catch (weightsError) {
+    addBreadcrumb({
+      category: 'risk',
+      message: 'getAdaptiveRiskWeights failed — using default weights',
+      level: 'warning',
+      data: { error: weightsError instanceof Error ? weightsError.message : String(weightsError) },
+    });
+    configuredWeights = { contractAnalysis: 1, trustedWalletActivity: 1, socialAnalysis: 1, domainAge: 1 };
+  }
   const riskScore = clampScore(applyRiskWeights(rawWeights, configuredWeights));
   const riskReasons = [
     ...contract.reasons,

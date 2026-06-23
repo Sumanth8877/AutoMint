@@ -147,7 +147,6 @@ function sleep(ms: number) {
 }
 
 function logRpc(message: string, metadata: Record<string, unknown>) {
-  console.log(`[RPC] ${message}`, metadata);
   addBreadcrumb({ category: 'rpc', message, level: 'info', data: metadata });
 }
 

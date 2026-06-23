@@ -127,6 +127,13 @@
       "when": 1782218155779,
       "tag": "0017_c2_users_clerkid_index",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1782227236679,
+      "tag": "0018_performance_indexes",
+      "breakpoints": true
     }
   ]
 }
