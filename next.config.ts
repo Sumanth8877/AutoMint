@@ -2,69 +2,82 @@ import type { NextConfig } from 'next';
 
 // ── Security headers ──────────────────────────────────────────────────────────
 //
-// Applied to every response via the `headers()` hook. Clerk's hosted JS and
-// the Clerk Dashboard iframe require specific CSP allowances; everything else
-// is restricted to same-origin or named trusted sources.
+// C-1 fix: comprehensive HTTP security headers on every response.
 //
-// Adjust the `connectSrc` list if you add a new external API call from the
-// browser (server-to-server calls are unaffected by CSP).
+// CSP NOTE FOR CLERK:
+//   Clerk's browser SDK makes fetch() calls to two types of domains:
+//     1. The Frontend API — derived from the publishable key:
+//          pk_live_abc123... → https://abc123.clerk.accounts.dev  (prod)
+//          pk_test_abc123... → https://abc123.clerk.accounts.dev  (dev)
+//        We cannot predict this domain statically, so we allow the entire
+//        *.clerk.accounts.dev subdomain.
+//     2. Clerk's CDN/API — https://api.clerk.com, https://clerk.com
+//   Both must be in connect-src and script-src or auth will hang loading.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const isDev = process.env.NODE_ENV !== 'production';
 
-// Clerk requires: its own CDN (clerk.*.com / *.clerk.com), accounts.google.com
-// for social login, and 'unsafe-inline' + 'unsafe-eval' only in dev for HMR.
+// ── script-src ────────────────────────────────────────────────────────────────
+// Clerk's @clerk/nextjs package bundles its JS into the Next.js output, so
+// 'self' covers the main Clerk SDK. However Clerk also lazy-loads scripts from
+// its CDN for the hosted sign-in/sign-up UI and the account portal.
 const scriptSrc = [
   "'self'",
-  // Clerk hosted JS
-  'https://clerk.automint.app',
+  // Clerk lazy-loaded scripts (hosted sign-in modal, account portal)
+  'https://*.clerk.accounts.dev',
   'https://*.clerk.com',
-  'https://clerk.*.com',
+  'https://clerk.com',
   // Next.js dev HMR / eval (dev only)
-  ...(isDev ? ["'unsafe-inline'", "'unsafe-eval'"] : []),
+  ...(isDev ? ["'unsafe-inline'", "'unsafe-eval'"] : ["'unsafe-inline'"]),
+  // NOTE: 'unsafe-inline' is kept in prod because Clerk's hosted UI injects
+  // inline scripts that cannot be nonced in this Next.js + Tailwind setup.
 ].join(' ');
 
+// ── connect-src ───────────────────────────────────────────────────────────────
+// Every fetch() / XHR from the browser. Clerk's browser SDK calls its
+// Frontend API (*.clerk.accounts.dev) on every page load to hydrate session.
 const connectSrc = [
   "'self'",
-  // Clerk API
-  'https://clerk.automint.app',
+  // Clerk Frontend API (e.g. abc123.clerk.accounts.dev) — REQUIRED for auth
+  'https://*.clerk.accounts.dev',
   'https://*.clerk.com',
-  'https://clerk.*.com',
-  // Sentry
+  'https://clerk.com',
+  'https://api.clerk.com',
+  // Sentry error reporting
   'https://*.sentry.io',
   'https://sentry.io',
-  // Upstash (Redis) – server-side only, but include in case of client fetch
+  // Upstash Redis (server-side only, but included defensively)
   'https://*.upstash.io',
-  // Neon DB – server-side only
+  // Neon DB (server-side only)
   'https://*.neon.tech',
-  // External RPC providers accessed from the browser (infra test page)
+  // External RPC providers (used from browser on infra test page)
   'https://*.alchemy.com',
   'https://eth.llamarpc.com',
-  // Next.js dev HMR websocket
+  // Next.js dev HMR WebSocket
   ...(isDev ? ['ws://localhost:*', 'http://localhost:*'] : []),
 ].join(' ');
 
+// ── img-src ───────────────────────────────────────────────────────────────────
 const imgSrc = [
   "'self'",
   'data:',
   'blob:',
-  // Clerk avatar CDN
+  // Clerk user avatar CDN
   'https://img.clerk.com',
   'https://*.clerk.com',
-  // OpenSea / NFT image CDNs (used in collection and analyzer views)
+  // OpenSea / NFT image CDNs
   'https://*.seadn.io',
   'https://*.opensea.io',
   'https://ipfs.io',
   'https://*.ipfs.io',
 ].join(' ');
 
-const fontSrc = ["'self'", 'data:'].join(' ');
-
+// ── frame-src ─────────────────────────────────────────────────────────────────
+// Clerk renders the sign-in/account portal in an iframe from its own domain.
 const frameSrc = [
-  // Clerk hosted sign-in modal / Clerk Dashboard iframe
-  'https://clerk.automint.app',
+  'https://*.clerk.accounts.dev',
   'https://*.clerk.com',
-  'https://clerk.*.com',
+  'https://clerk.com',
   'https://accounts.google.com',
 ].join(' ');
 
@@ -73,56 +86,35 @@ const csp = [
   `script-src ${scriptSrc}`,
   `connect-src ${connectSrc}`,
   `img-src ${imgSrc}`,
-  `font-src ${fontSrc}`,
+  `font-src 'self' data:`,
   `frame-src ${frameSrc}`,
-  // style-src: 'unsafe-inline' is required by Tailwind CSS (inline styles
-  // generated at build time). Nonces are not yet viable with Tailwind v4.
+  // style-src: 'unsafe-inline' required by Tailwind CSS v4 (inline styles)
   `style-src 'self' 'unsafe-inline'`,
   `base-uri 'self'`,
   `form-action 'self'`,
   `frame-ancestors 'none'`,
   `object-src 'none'`,
-  // Upgrade HTTP to HTTPS in production
   ...(isDev ? [] : ['upgrade-insecure-requests']),
 ].join('; ');
 
 const securityHeaders = [
-  // Prevent clickjacking — no iframe embedding anywhere
-  { key: 'X-Frame-Options', value: 'DENY' },
-  // Prevent MIME-type sniffing
-  { key: 'X-Content-Type-Options', value: 'nosniff' },
-  // Control referrer info sent to third-party sites
-  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-  // Disable browser features not used by the app
+  { key: 'X-Frame-Options',          value: 'DENY' },
+  { key: 'X-Content-Type-Options',   value: 'nosniff' },
+  { key: 'Referrer-Policy',          value: 'strict-origin-when-cross-origin' },
   {
     key: 'Permissions-Policy',
-    value: [
-      'camera=()',
-      'microphone=()',
-      'geolocation=()',
-      'payment=()',
-      'usb=()',
-      'bluetooth=()',
-    ].join(', '),
+    value: 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), bluetooth=()',
   },
-  // HSTS — only in production (avoids breaking local dev HTTPS)
   ...(isDev ? [] : [{
-    key: 'Strict-Transport-Security',
+    key:   'Strict-Transport-Security',
     value: 'max-age=63072000; includeSubDomains; preload',
   }]),
-  // Content-Security-Policy
-  { key: 'Content-Security-Policy', value: csp },
+  { key: 'Content-Security-Policy',  value: csp },
 ];
 
 const nextConfig: NextConfig = {
   async headers() {
-    return [
-      {
-        // Apply to every route
-        source: '/(.*)',
-        headers: securityHeaders,
-      },
-    ];
+    return [{ source: '/(.*)', headers: securityHeaders }];
   },
 };
 
