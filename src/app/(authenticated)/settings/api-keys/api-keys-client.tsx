@@ -8,6 +8,7 @@ import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import { MetricCard } from '@/components/ui/metric-card';
 import { apiRequest } from '@/lib/api/client';
+import UsageDashboard from '@/components/settings/UsageDashboard';
 
 type IntegrationStatus = 'UNKNOWN' | 'PASS' | 'FAIL';
 
@@ -263,6 +264,13 @@ export default function ApiKeysClient() {
               )}
             </tbody>
           </table>
+        </div>
+      </Card>
+
+      {/* ── Free Tier Usage Dashboard ───────────────────────────────────── */}
+      <Card>
+        <div className="p-6">
+          <UsageDashboard />
         </div>
       </Card>
     </div>
