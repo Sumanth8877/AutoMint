@@ -826,7 +826,8 @@ export async function executeReceiptRecheck(taskId: string) {
             const { parseEther } = await import('viem');
 
             const walletId = task.walletId!; // guarded by outer `&& task.walletId` check
-            const rawKey = await getDecryptedPrivateKey(walletId, task.userId);
+            const _walletId = task.walletId as string; // narrowed: outer guard ensures non-null
+            const rawKey = await getDecryptedPrivateKey(_walletId, task.userId);
             const hexKey = (rawKey.startsWith('0x') ? rawKey : `0x${rawKey}`) as `0x${string}`;
             const account = privateKeyToAccount(hexKey);
 
