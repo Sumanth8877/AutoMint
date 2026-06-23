@@ -284,6 +284,7 @@ export async function executeMintTask(
   } finally {
     await releaseLock(taskId, mintLock.token);
   }
+  return { success: false, error: 'Mint execution did not complete' };
   }).catch(async (error) => {
     if (userId) {
       await sendSystemErrorEmail(userId, {
