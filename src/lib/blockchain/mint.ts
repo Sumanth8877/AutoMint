@@ -56,6 +56,13 @@ export interface MintResult {
  *   - Full diagnostic details are logged server-side via captureException.
  */
 
+function getChain(chain: string): Chain {
+  const c = CHAIN_OBJECTS[chain];
+  if (!c) throw new Error(`Unsupported chain: ${chain}`);
+  return c;
+}
+
+
 function buildMintData(params: MintParams): Hex {
   const abi =
     params.mintFunction === 'mint' || !params.mintFunction
