@@ -55,6 +55,19 @@ export interface MintResult {
  *     walletId values, decryption internals, or stack traces.
  *   - Full diagnostic details are logged server-side via captureException.
  */
+
+function buildMintData(params: MintParams): Hex {
+  const abi =
+    params.mintFunction === 'mint' || !params.mintFunction
+      ? parseAbi(['function mint(uint256 quantity) payable'])
+      : parseAbi([`function ${params.mintFunction}(uint256 quantity) payable`]);
+  return encodeFunctionData({
+    abi,
+    functionName: params.mintFunction || 'mint',
+    args: [BigInt(params.quantity)],
+  });
+}
+
 export async function executeMint(
   address: Hex,
   chain: string,
