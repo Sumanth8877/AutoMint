@@ -1,5 +1,6 @@
 import { getClient } from './client';
 import { CHAIN_NAMES } from './chains';
+import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
 
 export interface CollectionMetadata {
   name: string;
@@ -66,7 +67,7 @@ export async function getCollectionMetadata(contractAddress: string, chain: stri
       }
     }
   } catch (error) {
-    console.error(`Error fetching collection metadata for ${contractAddress} on ${chain}:`, error);
+    captureException(error, { area: 'collections', context: { contractAddress, chain }, fingerprint: ['collections', 'metadata-fetch-error'] });
     throw new Error('Failed to fetch collection metadata');
   }
 }

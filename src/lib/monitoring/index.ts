@@ -2,6 +2,7 @@ import { getDb } from '@/lib/db';
 import { activities } from '@/drizzle/schema';
 import { eq, desc } from 'drizzle-orm';
 import { getCollectionMetadata } from '@/lib/blockchain/collections';
+import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
 
 export type ActivityType = 
   | 'wallet_added' 
@@ -26,7 +27,7 @@ export async function logActivity(userId: string, type: ActivityType, title: str
       metadata: metadata || {},
     });
   } catch (error) {
-    console.error('Failed to log activity:', error);
+    addBreadcrumb({ category: 'monitoring', message: 'Failed to log activity', level: 'error', data: { error: String(error) } });
   }
 }
 
@@ -43,7 +44,7 @@ export async function syncCollectionMetadata(collectionId: string, contractAddre
     const metadata = await getCollectionMetadata(contractAddress, chain);
     return metadata;
   } catch (error) {
-    console.error(`Failed to sync collection ${collectionId}:`, error);
+    addBreadcrumb({ category: 'monitoring', message: `Failed to sync collection ${collectionId}`, level: 'error', data: { collectionId, error: String(error) } });
     throw error;
   }
 }

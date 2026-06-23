@@ -32,7 +32,7 @@ export async function acquireLock(mintId: string, ttlSeconds = LOCK_TTL_SECONDS)
     });
 
     if (result === null || result === undefined) {
-      console.warn('[MintLock] Lock exists', { mintId, key });
+      addBreadcrumb({ category: 'mint-lock', message: 'Lock already exists — deduplicate', level: 'warning', data: { mintId, key } });
       addBreadcrumb({ category: 'mint-lock', message: 'Lock exists', level: 'info', data: { mintId, key } });
       await captureMessage('Mint lock exists', {
         area: 'mint-lock',

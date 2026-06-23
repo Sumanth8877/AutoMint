@@ -71,7 +71,7 @@ export async function POST(request: Request) {
     await handleTelegramUpdate(update);
     return NextResponse.json({ ok: true });
   } catch (error) {
-    console.error('Telegram webhook error:', error);
+    captureException(error, { area: 'telegram', context: { route: 'telegram/webhook' }, fingerprint: ['telegram', 'webhook-error'] });
     const message = error instanceof Error ? error.message : 'Telegram webhook failed';
     const status = message === 'Invalid JSON request body' ? 400 : 500;
     if (status >= 500) {

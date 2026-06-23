@@ -2,6 +2,7 @@ import 'server-only';
 
 import { NextResponse } from 'next/server';
 import { getRedisClient } from '@/lib/redis';
+import { addBreadcrumb } from '@/lib/observability/sentry';
 
 export type RateLimitOptions = {
   /** Maximum number of requests allowed within the window. */
@@ -66,7 +67,7 @@ export async function checkRateLimit(
       reset: Date.now() + ttl * 1000,
     };
   } catch (error) {
-    console.error(`[RateLimit] check error for "${identifier}":`, error);
+    addBreadcrumb({ category: 'rate-limit', message: `Rate limit check error for "${identifier}"`, level: 'error', data: { identifier, error: String(error) } });
     // Fail open — never block traffic because the limiter is unavailable.
     return {
       success: true,

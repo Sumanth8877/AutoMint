@@ -1,4 +1,5 @@
 import { getRedisClient } from './index';
+import { addBreadcrumb } from '@/lib/observability/sentry';
 
 const DEFAULT_LOCK_TTL = 60; // seconds
 const LOCK_PREFIX = 'cron:lock:';
@@ -24,7 +25,7 @@ export async function acquireCronLock(
     });
     return result !== null && result !== undefined;
   } catch (error) {
-    console.error(`[Redis] Lock acquire error for "${lockName}":`, error);
+    addBreadcrumb({ category: 'redis-lock', message: `Lock acquire error for "${lockName}"`, level: 'error', data: { lockName, error: String(error) } });
     return false; // Fail open — allow execution rather than blocking
   }
 }
@@ -39,7 +40,7 @@ export async function releaseCronLock(lockName: string): Promise<void> {
     const key = `${LOCK_PREFIX}${lockName}`;
     await client.del(key);
   } catch (error) {
-    console.error(`[Redis] Lock release error for "${lockName}":`, error);
+    addBreadcrumb({ category: 'redis-lock', message: `Lock release error for "${lockName}"`, level: 'error', data: { lockName, error: String(error) } });
     // Non-fatal — TTL expiry handles crash recovery
   }
 }

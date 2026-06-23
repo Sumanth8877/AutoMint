@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db';
 import { monitoringEvents, monitoredWebsites } from '@/drizzle/schema/monitoring';
 import { eq, desc } from 'drizzle-orm';
 import { requireApiUser } from '@/lib/auth/require-auth';
+import { captureException } from '@/lib/observability/sentry';
 
 export async function GET(request: Request) {
   try {
@@ -42,7 +43,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(events);
   } catch (error) {
-    console.error('GET /api/monitoring/events error:', error);
+    captureException(error, { area: 'api', context: { route: 'monitoring/events' }, fingerprint: ['api', 'monitoring-events'] });
     return NextResponse.json({ error: 'Failed to fetch events' }, { status: 500 });
   }
 }

@@ -1,4 +1,5 @@
 import { getClient } from './client';
+import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
 
 export interface GasEstimate {
   gasPrice: string;
@@ -19,7 +20,7 @@ export async function estimateGas(chain: string): Promise<GasEstimate> {
       symbol,
     };
   } catch (error) {
-    console.error(`Error estimating gas for ${chain}:`, error);
+    captureException(error, { area: 'gas', context: { chain }, fingerprint: ['gas', 'estimate-error'] });
     return {
       gasPrice: '0',
       estimatedFee: '0',

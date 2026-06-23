@@ -3,6 +3,7 @@ import { collections } from '@/drizzle/schema';
 import { eq, and } from 'drizzle-orm';
 import { getCollectionMetadata } from '@/lib/blockchain/collections';
 import { logActivity } from '@/lib/monitoring';
+import { captureException } from '@/lib/observability/sentry';
 
 const SUPPORTED_CHAINS = ['ethereum', 'base', 'polygon'] as const;
 type SupportedChain = (typeof SUPPORTED_CHAINS)[number];
@@ -60,7 +61,7 @@ export async function addCollection(userId: string, data: { name: string; contra
 
     if (syncedCollection) collection = syncedCollection;
   } catch (error) {
-    console.error('Background metadata sync failed:', error);
+    captureException(error, { area: 'collection', context: {}, fingerprint: ['collection', 'metadata-sync-failed'] });
   }
 
   await logActivity(userId, 'collection_added', 'Collection added', {

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   ArrowUpCircle, CheckCircle2, ChevronDown, ChevronUp,
   ClipboardCheck, ClipboardCopy, Download, Package, RefreshCw, ShieldAlert, XCircle, Zap,
@@ -319,6 +319,14 @@ export function DependencyUpdateCenter() {
   const [reportState, setReportState] = useState<ActionState>('idle');
   const [copied, setCopied] = useState(false);
 
+  // H-4 fix: track the live EventSource so we can close it on unmount or re-scan
+  const evtSourceRef = useRef<EventSource | null>(null);
+
+  // Close the EventSource when the component unmounts to prevent connection leaks
+  useEffect(() => {
+    return () => { evtSourceRef.current?.close(); };
+  }, []);
+
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
@@ -333,8 +341,12 @@ export function DependencyUpdateCenter() {
 
     const url = '/api/system/dependency-audit/stream?force=true';
 
+    // Close any previous SSE connection before starting a new one
+    evtSourceRef.current?.close();
+
     return new Promise<void>((resolve) => {
       const evtSource = new EventSource(url);
+      evtSourceRef.current = evtSource;
 
       evtSource.addEventListener('start', (e: Event) => {
         const data = JSON.parse((e as MessageEvent).data as string) as { total: number };

@@ -1,5 +1,6 @@
 import { getClient } from './client';
 import type { Hex } from 'viem';
+import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
 
 export type TxStatus = 'pending' | 'confirmed' | 'failed';
 
@@ -54,7 +55,7 @@ export async function getTransactionStatus(chain: string, txHash: string): Promi
       gasUsed: receipt.gasUsed?.toString(),
     };
   } catch (error) {
-    console.error(`getTransactionStatus error for ${txHash} on ${chain}:`, error);
+    captureException(error, { area: 'transactions', context: { txHash, chain }, fingerprint: ['transactions', 'status-error'] });
     return { hash: txHash, status: 'pending' };
   }
 }

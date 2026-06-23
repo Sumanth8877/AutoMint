@@ -39,7 +39,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true, result });
   } catch (error) {
-    console.error('QStash webhook error:', error);
+    captureException(error, { area: 'webhooks', context: { route: 'webhooks/qstash' }, fingerprint: ['webhooks', 'qstash-error'] });
     const message = error instanceof Error ? error.message : 'QStash webhook failed';
     const status = message.toLowerCase().includes('signature') || message.includes('Signing') ? 401 : 500;
     if (status >= 500) {

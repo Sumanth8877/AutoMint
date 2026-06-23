@@ -1,6 +1,7 @@
 import { getClient } from './client';
 import { getCache, setCache, CACHE_KEYS, CACHE_TTL } from '@/lib/redis';
 import { parseAbiItem, type Hex } from 'viem';
+import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
 
 export interface NftTransfer {
   tokenId: string;
@@ -67,7 +68,7 @@ export async function getLatestOwner(params: { chain: string; contract: string; 
 
     return latest.to;
   } catch (error) {
-    console.error('getLatestOwner error:', error);
+    captureException(error, { area: 'transfers', context: {}, fingerprint: ['transfers', 'latest-owner-error'] });
     return null;
   }
 }
@@ -104,7 +105,7 @@ export async function getCollectionStats(params: { chain: string; contract: stri
 
     return stats;
   } catch (error) {
-    console.error('getCollectionStats error:', error);
+    captureException(error, { area: 'transfers', context: {}, fingerprint: ['transfers', 'collection-stats-error'] });
     return { holders: 0, volume: '0', transferCount: 0 };
   }
 }
