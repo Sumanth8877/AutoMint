@@ -56,37 +56,25 @@ export async function acquireLock(mintId: string, ttlSeconds = LOCK_TTL_SECONDS)
   }
 }
 
-// C-2 FIX: Atomic Lua compare-and-delete.
-// OLD: redis.get -> compare -> redis.del  (3 commands, TOCTOU gap)
-// NEW: single Lua script executed atomically on Redis -- zero race window
-const RELEASE_LUA = `
-  if redis.call('get', KEYS[1]) == ARGV[1] then
-    return redis.call('del', KEYS[1])
-  else
-    return 0
-  end
-`;
-
-// C-2 FIX: Atomic Lua compare-and-expire.
-// OLD: redis.get -> compare -> redis.expire  (3 commands, TOCTOU gap)
-// NEW: single Lua script, atomic
-const EXTEND_LUA = `
-  if redis.call('get', KEYS[1]) == ARGV[1] then
-    return redis.call('expire', KEYS[1], ARGV[2])
-  else
-    return 0
-  end
-`;
-
 export async function releaseLock(mintId: string, token?: string) {
   const key = lockKey(mintId);
 
   try {
     if (token) {
-      const result = await getRedisClient().eval(RELEASE_LUA, [key], [token]);
-      if (result === 0) {
-        console.warn('[MintLock] Release skipped; token mismatch', { mintId, key });
-        addBreadcrumb({ category: 'mint-lock', message: 'Release skipped: token mismatch', level: 'warning', data: { mintId, key } });
+      // C-5 FIX: Atomic Lua CAS — GET + DEL in a single Redis round-trip.
+      // Prevents TOCTOU: without this, a concurrent process could acquire the
+      // lock between our GET check and our DEL call, and we would delete
+      // their lock instead of ours.
+      const luaRelease = `
+        if redis.call("GET", KEYS[1]) == ARGV[1] then
+          return redis.call("DEL", KEYS[1])
+        else
+          return 0
+        end
+      `;
+      const deleted = await getRedisClient().eval(luaRelease, [key], [token]) as number;
+      if (deleted === 0) {
+        console.warn('[MintLock] Release skipped — token mismatch or lock already expired', { mintId, key });
         return false;
       }
     } else {
@@ -110,10 +98,20 @@ export async function extendLock(mintId: string, token: string, ttlSeconds = LOC
   const key = lockKey(mintId);
 
   try {
-    const result = await getRedisClient().eval(EXTEND_LUA, [key], [token, String(ttlSeconds)]);
-    if (result === 0) {
-      console.warn('[MintLock] Extend skipped; token mismatch or missing lock', { mintId, key });
-      addBreadcrumb({ category: 'mint-lock', message: 'Extend skipped: token mismatch', level: 'warning', data: { mintId, key } });
+    // C-5 FIX: Atomic Lua CAS — GET + EXPIRE in a single Redis round-trip.
+    // Prevents TOCTOU: without this, another process could acquire the lock
+    // between our GET check and our EXPIRE call, extending their lock instead.
+    const luaExtend = `
+      if redis.call("GET", KEYS[1]) == ARGV[1] then
+        return redis.call("EXPIRE", KEYS[1], ARGV[2])
+      else
+        return 0
+      end
+    `;
+    const extended = await getRedisClient().eval(luaExtend, [key], [token, String(ttlSeconds)]) as number;
+
+    if (extended === 0) {
+      console.warn('[MintLock] Extend skipped — token mismatch or lock already expired', { mintId, key });
       return false;
     }
 
