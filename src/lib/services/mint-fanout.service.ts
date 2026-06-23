@@ -149,7 +149,7 @@ export async function fanoutMintFromUrl(
   }
 
   // ── 7. Batch-insert all task records ─────────────────────────────────
-  const initialStatus = mintState.status === 'LIVE' ? 'ready' : 'pending';
+  const initialStatus = (mintState.status === 'LIVE' ? 'ready' : 'pending') as 'ready' | 'pending';
   const scheduledTime = mintState.status !== 'LIVE' && mintState.startTime
     ? mintState.startTime
     : undefined;
