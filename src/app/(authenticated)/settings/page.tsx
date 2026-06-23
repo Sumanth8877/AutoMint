@@ -1,26 +1,40 @@
 import Link from 'next/link';
-import { Bell, ChevronRight, KeyRound, Lock, Radio, Settings, SlidersHorizontal, User } from 'lucide-react';
+import { Bell, ChevronRight, KeyRound, Lock, Radio, Settings, SlidersHorizontal, User, Wrench } from 'lucide-react';
 import Card from '@/components/ui/Card';
 import { PageHeader } from '@/components/ui/page-header';
 
-const groups = [
-  { title: 'General', icon: User, items: ['Profile'] },
-  { title: 'RPC Providers', icon: Radio, items: ['Provider Settings'] },
-  { title: 'Execution', icon: SlidersHorizontal, items: ['Execution Settings'] },
-  { title: 'Notifications', icon: Bell, items: ['Email Notifications'] },
-  { title: 'Security', icon: Lock, items: ['API Keys'] },
+const groups: { title: string; icon: React.ElementType; items: { label: string; href: string; icon: React.ElementType; description: string }[] }[] = [
+  {
+    title: 'General',
+    icon: User,
+    items: [{ label: 'Profile', href: '/settings/profile', icon: User, description: 'Name, email and account details' }],
+  },
+  {
+    title: 'RPC Providers',
+    icon: Radio,
+    items: [{ label: 'Provider Settings', href: '/settings/rpc-providers', icon: Radio, description: 'Alchemy, QuickNode and failover' }],
+  },
+  {
+    title: 'Execution',
+    icon: SlidersHorizontal,
+    items: [{ label: 'Execution Settings', href: '/settings/execution', icon: SlidersHorizontal, description: 'Gas strategy, retries, risk threshold' }],
+  },
+  {
+    title: 'Notifications',
+    icon: Bell,
+    items: [{ label: 'Email Notifications', href: '/settings/email-notifications', icon: Bell, description: 'Mint alerts and system errors' }],
+  },
+  {
+    title: 'Security',
+    icon: Lock,
+    items: [{ label: 'API Keys', href: '/settings/api-keys', icon: KeyRound, description: 'Manage personal API tokens' }],
+  },
+  {
+    title: 'System',
+    icon: Wrench,
+    items: [{ label: 'System Maintenance', href: '/settings/system', icon: Wrench, description: 'Dependency audit and package updates' }],
+  },
 ];
-
-const icons = [User, Radio, SlidersHorizontal, Bell, KeyRound];
-
-function settingHref(groupTitle: string, item: string) {
-  if (groupTitle === 'General' && item === 'Profile') return '/settings/profile';
-  if (groupTitle === 'RPC Providers' && item === 'Provider Settings') return '/settings/rpc-providers';
-  if (groupTitle === 'Execution' && item === 'Execution Settings') return '/settings/execution';
-  if (groupTitle === 'Notifications' && item === 'Email Notifications') return '/settings/email-notifications';
-  if (groupTitle === 'Security' && item === 'API Keys') return '/settings/api-keys';
-  return null;
-}
 
 export default function SettingsPage() {
   return (
@@ -32,9 +46,8 @@ export default function SettingsPage() {
       />
 
       <div className="grid gap-4 lg:grid-cols-2">
-        {groups.map((group, index) => {
+        {groups.map((group) => {
           const GroupIcon = group.icon;
-          const ItemIcon = icons[index];
 
           return (
             <Card key={group.title} tone="interactive" className="overflow-hidden">
@@ -48,27 +61,20 @@ export default function SettingsPage() {
               </div>
               <div className="divide-y divide-border">
                 {group.items.map((item) => {
-                  const href = settingHref(group.title, item);
-                  const content = (
-                    <>
-                      <ItemIcon className="h-4 w-4 text-muted" aria-hidden="true" />
-                      <span className="text-sm font-medium text-text">{item}</span>
-                      {href ? <ChevronRight className="ml-auto h-4 w-4 text-muted" aria-hidden="true" /> : null}
-                    </>
-                  );
-
-                  return href ? (
+                  const ItemIcon = item.icon;
+                  return (
                     <Link
-                      key={item}
-                      href={href}
+                      key={item.label}
+                      href={item.href}
                       className="flex w-full items-center gap-3 px-5 py-4 text-left hover:bg-white/5"
                     >
-                      {content}
+                      <ItemIcon className="h-4 w-4 text-muted" aria-hidden="true" />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-medium text-text">{item.label}</span>
+                        <p className="text-xs text-muted truncate">{item.description}</p>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-muted shrink-0" aria-hidden="true" />
                     </Link>
-                  ) : (
-                    <div key={item} className="flex w-full items-center gap-3 px-5 py-4 text-left">
-                      {content}
-                    </div>
                   );
                 })}
               </div>
