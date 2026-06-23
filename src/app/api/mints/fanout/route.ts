@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/require-auth';
-import { parseJsonBody } from '@/lib/api/client';
 import { fanoutMintFromUrl } from '@/lib/services/mint-fanout.service';
 
 /**
@@ -33,14 +32,14 @@ export async function POST(req: Request) {
   const authResult = await requireApiUser();
   if ('error' in authResult) return authResult.error;
 
-  const body = await parseJsonBody<{
+  const body = await req.json() as {
     mintUrl?: string;
     walletIds?: string[];
     quantity?: number;
     privateMempool?: boolean;
     overrideRisk?: boolean;
     maxRetries?: number;
-  }>(req);
+  };
 
   const { mintUrl, walletIds, quantity, privateMempool, overrideRisk, maxRetries } = body;
 
