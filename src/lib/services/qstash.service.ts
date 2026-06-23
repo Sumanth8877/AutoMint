@@ -1023,7 +1023,7 @@ export async function executeRecoveryCheck() {
     category: 'recovery',
     message: 'Recovery check completed',
     level: 'info',
-    data: result,
+    data: { ...result },
   });
 
   // Self-schedule the next recovery check via QStash in 5 minutes.
