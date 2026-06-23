@@ -237,7 +237,6 @@ export async function executeMintFast(
       collectionId: undefined,
       txHash,
       chain: intent.chain,
-      mode,
       sourcePlatform: intent.sourcePlatform,
       fastPath: true,
     });
