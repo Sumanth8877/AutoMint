@@ -177,7 +177,7 @@ export async function getRiskLearningMetrics() {
 }
 
 export async function storeCurrentWeightPerformance() {
-  const weights = await getAdaptiveRiskWeights();
+  const weights = await getRiskWeights();
   const metrics = await getRiskLearningMetrics();
 
   await getDb().insert(riskWeightPerformance).values({
