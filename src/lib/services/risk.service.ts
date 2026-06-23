@@ -296,7 +296,7 @@ export async function analyzeAnalyzerRisk(params: {
     socialAnalysis: social.score,
     domainAge: domainAge.score,
   };
-  let configuredWeights: Awaited<ReturnType<typeof getAdaptiveRiskWeights>>;
+  let configuredWeights: Awaited<ReturnType<typeof getRiskWeights>>;
   try {
     configuredWeights = await getRiskWeights();
   } catch (weightsError) {
@@ -359,7 +359,7 @@ export async function analyzeMintRisk(taskId: string): Promise<RiskAnalysis> {
     socialAnalysis: social.score,
     domainAge: domainAge.score,
   };
-  let configuredWeights: Awaited<ReturnType<typeof getAdaptiveRiskWeights>>;
+  let configuredWeights: Awaited<ReturnType<typeof getRiskWeights>>;
   try {
     configuredWeights = await getRiskWeights();
   } catch (weightsError) {
