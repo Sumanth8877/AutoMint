@@ -113,7 +113,9 @@ function deriveSolanaWallet(privateKey: string): DerivedWallet {
       format: 'der',
       type: 'pkcs8',
     });
-    const publicDer = createPublicKey(keyObject).export({ format: 'der', type: 'spki' });
+    // @types/node@26 omits the KeyObject overload for createPublicKey; cast via unknown to satisfy stricter types.
+    // Node.js crypto accepts KeyObject directly at runtime — this is a types-only workaround.
+    const publicDer = createPublicKey(keyObject as unknown as Parameters<typeof createPublicKey>[0]).export({ format: 'der', type: 'spki' });
     const publicKey = Buffer.from(publicDer).subarray(-32);
 
     if (secret.length === 64 && !secret.subarray(32).equals(publicKey)) {

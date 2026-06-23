@@ -3,7 +3,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   AlertTriangle, ArrowUpCircle, CheckCircle2, ChevronDown, ChevronUp,
-  Download, Package, RefreshCw, ShieldAlert, XCircle, Zap,
+  ClipboardCheck, ClipboardCopy, Download, Package, RefreshCw, ShieldAlert, XCircle, Zap,
 } from 'lucide-react';
 import type {
   DependencyAuditReport,
@@ -420,15 +420,18 @@ export function DependencyUpdateCenter() {
     ) ?? [];
     const cmd = safePkgs.map(p => `${p.name}@${p.latestVersion}`).join(' ');
     if (!cmd) return;
-    void navigator.clipboard.writeText(`npm install ${cmd}`).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 3000);
-    });
+    navigator.clipboard.writeText(`npm install ${cmd}`)
+      .then(() => { setCopied(true); setTimeout(() => setCopied(false), 3000); })
+      .catch(() => undefined);
   }, [report, selectedPackages]);
 
   // ── Toggle package selection ──────────────────────────────────────────────────
   const togglePackage = useCallback((name: string) => {
-    setSelectedPackages(prev => { const n = new Set(prev); n.has(name) ? n.delete(name) : n.add(name); return n; });
+    setSelectedPackages(prev => {
+      const n = new Set(prev);
+      if (n.has(name)) { n.delete(name); } else { n.add(name); }
+      return n;
+    });
   }, []);
 
   // ── Derived values ────────────────────────────────────────────────────────────
@@ -619,6 +622,20 @@ export function DependencyUpdateCenter() {
                     </>
                 }
               </button>
+
+              {/* Copy Install Command */}
+              {safeCount > 0 && (
+                <button
+                  type="button"
+                  onClick={handleCopyInstall}
+                  className="inline-flex items-center gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all"
+                >
+                  {copied
+                    ? <><ClipboardCheck className="h-4 w-4 text-green-500" /> Copied!</>
+                    : <><ClipboardCopy className="h-4 w-4" /> Copy Install Command</>
+                  }
+                </button>
+              )}
 
               {/* Download Report */}
               <button type="button" onClick={() => { void handleReport(); }}

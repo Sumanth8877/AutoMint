@@ -64,28 +64,6 @@ function makeRequest(secret?: string | null): Request {
   });
 }
 
-async function callRoute(request: Request) {
-  // Re-import after env is set so the module picks up the new env var.
-  jest.resetModules();
-
-  // Re-apply mocks after resetModules
-  jest.mock('@/lib/services/telegram.service', () => ({
-    isTelegramEnabled: jest.fn(() => true),
-    handleTelegramUpdate: jest.fn().mockResolvedValue({ handled: true }),
-  }));
-  jest.mock('@/lib/api/errors', () => ({
-    parseJsonBody: jest.fn().mockResolvedValue({ update_id: 1 }),
-  }));
-  jest.mock('@/lib/observability/sentry', () => ({
-    captureException: jest.fn().mockResolvedValue(undefined),
-  }));
-
-  const { POST } = await import('../route');
-  return POST(request);
-}
-
-// ── Suite ─────────────────────────────────────────────────────────────────────
-
 describe('Security Finding C-2 — Telegram webhook authentication', () => {
   const originalEnv = { ...process.env };
 

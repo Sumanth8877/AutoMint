@@ -678,7 +678,6 @@ export async function executeScheduledRiskRecheck(taskId: string) {
 // After exhaustion the task stays 'unconfirmed' for manual review.
 
 const RECEIPT_RECHECK_DELAY_MS = 30_000;     // 30 s between receipt checks
-const RECEIPT_RECHECK_MAX_ATTEMPTS = 40;      // ~20 min total window
 
 export async function scheduleReceiptRecheck(taskId: string, txHash: string) {
   addBreadcrumb({

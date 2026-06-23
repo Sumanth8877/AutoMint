@@ -279,9 +279,8 @@ export async function executeMint(
     const walletClient = getWalletClient(chain, account, { userId });
 
     // ── C-03 Fix: allocate unique nonce ─────────────────────────────────────
-    let allocatedNonce: number | undefined;
     const nonceResult = await allocateNonce(account.address, chain).catch(() => null);
-    allocatedNonce = nonceResult?.nonce;
+    const allocatedNonce: number | undefined = nonceResult?.nonce;
     const value = params.mintPrice ? parseEther(params.mintPrice) : BigInt(0);
 
     // C-04: hoist hash before the receipt try so the catch block can always return it.

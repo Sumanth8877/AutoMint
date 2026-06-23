@@ -44,9 +44,8 @@ const createMockRedis = () => {
       store.delete(key);
       return 1;
     }),
-    eval: jest.fn(async (_script: string, _keys: string[], args: string[]) => {
+    eval: jest.fn(async () => {
       // Lua CAS delete: if value matches, delete and return 1
-      const key = args[0] ?? _keys?.[0];
       // For the lock release script
       return 1;
     }),

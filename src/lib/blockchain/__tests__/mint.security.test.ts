@@ -27,7 +27,7 @@
  * Run: npx jest src/lib/blockchain/__tests__/mint.security.test.ts
  */
 
-import { executeMint, getMintMode, type MintParams } from '../mint';
+import { executeMint, type MintParams } from '../mint';
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
@@ -88,13 +88,13 @@ function setupPublicClientMocks(status: 'success' | 'reverted' = 'success') {
       blockNumber: BigInt(100),
     }),
     readContract: jest.fn().mockResolvedValue(true),
-  } as any);
+  } as unknown as Parameters<typeof mockGetClient.mockReturnValue>[0]);
 }
 
 function setupWalletClientMock(txHash: `0x${string}` = TX_HASH) {
   mockGetWalletClient.mockReturnValue({
     sendTransaction: jest.fn().mockResolvedValue(txHash),
-  } as any);
+  } as unknown as Parameters<typeof mockGetWalletClient.mockReturnValue>[0]);
 }
 
 // ── Suite ─────────────────────────────────────────────────────────────────────

@@ -42,7 +42,6 @@ import {
   releaseInflightNonce,
   scanAndFillGaps,
 } from '@/lib/services/nonce-allocator.service';
-import { getRedisClient } from '@/lib/redis';
 
 
 export interface FastMintWallet {
@@ -184,9 +183,8 @@ export async function executeMintFast(
     const walletClient = getWalletClient(intent.chain, account, { userId: wallet.userId });
 
     // C-03 Fix: allocate unique nonce via Redis atomic INCR
-    let allocatedNonce: number | undefined;
     const nonceResult = await allocateNonce(account.address, intent.chain).catch(() => null);
-    allocatedNonce = nonceResult?.nonce;
+    const allocatedNonce: number | undefined = nonceResult?.nonce;
     const mintParams = buildMintParams(intent);
 
     // —— 4. Estimate gas ———————————————————————————————————————————

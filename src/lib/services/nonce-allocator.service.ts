@@ -153,7 +153,7 @@ async function releaseSlotLock(
   `;
 
   try {
-    await (redis as any).eval(luaScript, [key], [token]);
+    await (redis as unknown as { eval: (script: string, keys: string[], args: string[]) => Promise<unknown> }).eval(luaScript, [key], [token]);
   } catch (error) {
     // Non-fatal: the lock will expire on its own via TTL
     addBreadcrumb({
