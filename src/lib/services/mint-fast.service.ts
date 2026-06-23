@@ -14,7 +14,6 @@ import 'server-only';
  * - write activity log + mint history on success
  * - fail safely: no partial writes without txHash
  *
- * Does NOT use simulation mode. Executes real transactions only.
  *
  * Security invariants (C-1):
  * - userId is derived from wallet.userId (always the owning user).
@@ -27,7 +26,6 @@ import 'server-only';
 import { getDb } from '@/lib/db';
 import { mintHistory } from '@/drizzle/schema';
 import { eq } from 'drizzle-orm';
-import { getMintMode } from '@/lib/blockchain/mint';
 import { estimateMintGas, type MintParams } from '@/lib/blockchain/mint';
 import { getDecryptedPrivateKey } from './wallet.service';
 import { logActivity } from '@/lib/monitoring';
@@ -42,7 +40,6 @@ import {
   releaseInflightNonce,
   scanAndFillGaps,
 } from '@/lib/services/nonce-allocator.service';
-
 
 export interface FastMintWallet {
   id: string;
@@ -78,7 +75,6 @@ function buildIdempotencyKeyForIntent(intent: MintIntent, wallet: FastMintWallet
  * Execute a mint immediately, bypassing the task queue.
  *
  * Preconditions:
- * - MINT_MODE must be 'live' (returns error otherwise)
  * - intent must be valid with contractAddress
  * - wallet must have an encryptedPrivateKey (imported wallet)
  *
@@ -92,15 +88,6 @@ export async function executeMintFast(
   wallet: FastMintWallet,
   activityUserId?: string,  // for activity log only; key resolution uses wallet.userId
 ): Promise<FastMintResult> {
-  // —— 0. Guard: must be in live mode ————————————————————————————
-  const mode = getMintMode();
-  if (mode !== 'live') {
-    return {
-      success: false,
-      error: 'MINT_MODE is not "live". Fast-path execution requires MINT_MODE=live.',
-    };
-  }
-
   if (!intent.contractAddress) {
     return { success: false, error: 'Mint intent has no contract address' };
   }
