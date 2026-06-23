@@ -181,6 +181,13 @@ export default function ApiKeysClient() {
         </div>
       ) : null}
 
+      {/* ── Free Tier Usage Dashboard ─────────────────────────────────────────── */}
+      <Card className="mt-6">
+        <div className="p-6">
+          <UsageDashboard />
+        </div>
+      </Card>
+
       <Card className="mt-6 overflow-hidden">
         <div className="flex flex-col gap-3 border-b border-border px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
           <h2 className="font-semibold text-text">Integration Variables</h2>
