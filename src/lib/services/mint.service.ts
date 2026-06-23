@@ -1,7 +1,7 @@
 import { getDb } from '@/lib/db';
 import { mintTasks, wallets, collections, mintHistory } from '@/drizzle/schema';
 import { desc, eq, and, inArray } from 'drizzle-orm';
-import { simulateMint, estimateMintGas, executeMint, getMintMode, type MintParams } from '@/lib/blockchain/mint';
+import { simulateMint, estimateMintGas, executeMint, type MintParams } from '@/lib/blockchain/mint';
 import { logActivity } from '@/lib/monitoring';
 import { sendTelegramNotification } from '@/lib/services/telegram.service';
 import { sendMintFailedEmail, sendMintScheduledEmail, sendMintSuccessEmail, sendSystemErrorEmail } from '@/lib/services/email-notification.service';
@@ -242,17 +242,54 @@ export async function executeMintTask(
     return { success: false, error: sim.error };
   }
 
-  const mode = getMintMode();
-  let result;
+  const result = await executeMint(wallet.address as Hex, chain, params, claimed.userId, { walletId: wallet.id });
 
-  if (mode !== 'live') {
-    // ── SIMULATION ONLY ─────────────────────────────
-    result = {
-      success: true,
-      txHash: undefined as string | undefined,
-      gasUsed: undefined,
-      blockNumber: undefined,
-    };
+  if (!result.success) {
+      // C-04: If txHash is present the transaction was broadcast but receipt
+      // tracking failed (e.g. timeout). Transition to 'unconfirmed' and schedule
+      // a receipt recheck.  DO NOT mark as 'failed' — that would allow a retry
+      // to call sendTransaction again and broadcast a second transaction.
+      if (result.txHash) {
+        await getDb()
+          .update(mintTasks)
+          .set({ status: 'unconfirmed', txHash: result.txHash, updatedAt: new Date() })
+          .where(eq(mintTasks.id, taskId));
+        await captureMessage('Mint receipt tracking failed — task is unconfirmed', {
+          area: 'minting',
+          level: 'warning',
+          context: { userId: claimed.userId, taskId, walletId: claimed.walletId, wallet: wallet.address, chain, transactionHash: result.txHash },
+          extra: { error: result.error, contractAddress: claimed.contractAddress },
+          fingerprint: ['mint', 'receipt-timeout'],
+        });
+        const { scheduleReceiptRecheck } = await import('@/lib/services/qstash.service');
+        await scheduleReceiptRecheck(taskId, result.txHash);
+        return { success: false, txHash: result.txHash, error: 'unconfirmed' };
+      }
+
+      await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
+      await captureMessage('Mint transaction failed', {
+        area: 'minting',
+        level: 'error',
+        context: { userId: claimed.userId, taskId, walletId: claimed.walletId, wallet: wallet.address, collection: claimed.collectionId ?? undefined, chain },
+        extra: { error: result.error, contractAddress: claimed.contractAddress },
+        fingerprint: ['mint', 'transaction-failed'],
+      });
+      await sendTelegramNotification(claimed.userId, 'mint_failed', {
+        taskId,
+        contractAddress: claimed.contractAddress,
+        error: result.error,
+      });
+      await sendMintFailedEmail(claimed.userId, {
+        taskId,
+        contractAddress: claimed.contractAddress,
+        error: result.error,
+      });
+      await sendSystemErrorEmail(claimed.userId, {
+        taskId,
+        title: 'Mint Transaction Error',
+        error: result.error,
+      });
+      return { success: false, error: result.error };
   } else {
     // ── LIVE: execute real transaction ──────────────
     result = await executeMint(wallet.address as Hex, chain, params, claimed.userId, { walletId: wallet.id });
@@ -328,13 +365,12 @@ export async function executeMintTask(
   }
 
   if (claimed.userId) {
-    await logActivity(claimed.userId, 'task_completed', result.txHash ? 'Mint executed' : 'Mint simulated', {
+    await logActivity(claimed.userId, 'task_completed', 'Mint executed', {
       taskId,
       walletId: claimed.walletId,
       collectionId: claimed.collectionId,
       txHash: result.txHash,
       chain,
-      mode,
     });
     await sendTelegramNotification(claimed.userId, 'mint_success', {
       taskId,
@@ -352,7 +388,7 @@ export async function executeMintTask(
     category: 'mint',
     message: 'mint completed',
     level: 'info',
-    data: { taskId, userId: claimed.userId, txHash: result.txHash, chain, mode },
+    data: { taskId, userId: claimed.userId, txHash: result.txHash, chain },
   });
 
   return { success: true, txHash: result.txHash };
