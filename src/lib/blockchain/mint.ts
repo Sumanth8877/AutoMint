@@ -82,6 +82,36 @@ function buildMintData(params: MintParams): Hex {
   });
 }
 
+
+/**
+ * Estimate gas for the mint transaction.
+ */
+export async function estimateMintGas(
+  address: Hex,
+  chain: string,
+  params: MintParams,
+  userId?: string,
+): Promise<{ gasLimit: bigint; error?: string }> {
+  try {
+    const client = getClient(chain, userId);
+    const mintData = buildMintData(params);
+    const estimate = await client.estimateGas({
+      account: address,
+      to: params.contractAddress,
+      data: mintData,
+      value: params.mintPrice ? parseEther(params.mintPrice) : BigInt(0),
+    });
+    return { gasLimit: estimate };
+  } catch (error) {
+    await captureException(error, {
+      area: 'minting',
+      context: { wallet: address, chain, collection: params.contractAddress },
+      fingerprint: ['mint', 'gas-estimation'],
+    });
+    return { gasLimit: BigInt(0), error: getErrorMessage(error) || 'Gas estimation failed' };
+  }
+}
+
 export async function executeMint(
   address: Hex,
   chain: string,
