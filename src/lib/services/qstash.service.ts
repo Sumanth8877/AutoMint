@@ -133,6 +133,8 @@ async function publishQStashMessage(taskId: string, scheduledTime: Date, type: S
     data: { taskId, scheduledTime: scheduledTime.toISOString(), type },
   });
   const webhookUrl = getWebhookUrl();
+  // P-5 fix: add 30s timeout to prevent a hung QStash API from blocking
+  // the Telegram webhook handler or any other synchronous caller indefinitely.
   const response = await fetch(`${QSTASH_BASE_URL}/v2/publish/${encodePublishUrl(webhookUrl)}`, {
     method: 'POST',
     headers: {
@@ -140,6 +142,7 @@ async function publishQStashMessage(taskId: string, scheduledTime: Date, type: S
       'Content-Type': 'application/json',
       'Upstash-Not-Before': String(secondsFromDate(scheduledTime)),
     },
+    signal: AbortSignal.timeout(30_000),
     body: JSON.stringify({ taskId, type } satisfies ScheduledMintPayload),
   });
 

@@ -2,6 +2,10 @@ import type { Instrumentation } from 'next';
 import { captureException, initSentry } from '@/lib/observability/sentry';
 
 export function register() {
+  // M-2 fix: validate required env vars at startup so missing vars surface
+  // as a clear boot error rather than an obscure mid-request crash.
+  const { validateEnv } = require('@/lib/config/validate');
+  validateEnv();
   initSentry();
 }
 

@@ -21,7 +21,8 @@ export type MintMode = 'simulation' | 'live';
 export function getMintMode(): MintMode {
   const raw = process.env.MINT_MODE?.trim().toLowerCase();
   if (raw === 'live') return 'live';
-  if (process.env.NODE_ENV === 'production') return 'live';
+  // Explicit opt-in only. Never auto-live based on NODE_ENV.
+  // Set MINT_MODE=live in your production env vars to enable live minting.
   return 'simulation';
 }
 

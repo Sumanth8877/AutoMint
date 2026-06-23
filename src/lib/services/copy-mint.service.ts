@@ -249,7 +249,10 @@ export async function handleCopyMintEvent(event: CopyMintEvent) {
     return { action: 'skipped' as const, reason: 'no_enabled_rule' };
   }
 
-  const lockName = `copy-mint:${event.userId}:${rule.id}:${contractAddress}:${event.transactionHash || event.tokenId || 'latest'}`;
+  // H-5 fix: lock key uses only userId+ruleId+contractAddress.
+  // Including transactionHash caused different Alchemy webhook retries
+  // (same contract, different txHash) to bypass the lock and create duplicate tasks.
+  const lockName = `copy-mint:${event.userId}:${rule.id}:${contractAddress}`;
   const mintLock = await acquireLock(lockName);
   if (!mintLock.acquired) {
     return { action: 'skipped' as const, reason: 'locked' };

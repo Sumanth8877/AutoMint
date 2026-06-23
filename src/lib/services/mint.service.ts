@@ -69,7 +69,7 @@ export async function addMintTask(userId: string, data: {
 
 export async function executeMintTask(
   taskId: string,
-  userId?: string,
+  userId: string,
   options: { existingLockToken?: string } = {},
 ): Promise<{ success: boolean; txHash?: string; error?: string }> {
   return startSpan('mint.execute_task', { area: 'minting', taskId, userId }, async () => {
@@ -89,30 +89,12 @@ export async function executeMintTask(
     };
   }
 
-  // H-4 fix: ownership check is now the default, not opt-in.
-  // Previously, omitting userId skipped the userId predicate entirely,
-  // allowing any task ID to be executed regardless of who owns it.
-  // Now: if userId is provided it is always enforced (unchanged behaviour).
-  // If userId is absent we emit a Sentry warning — callers should always pass it.
-  if (!userId) {
-    await captureMessage('executeMintTask called without userId — ownership check skipped', {
-      area: 'minting',
-      level: 'warning',
-      context: { taskId },
-      fingerprint: ['mint', 'missing-userid'],
-    });
-  }
-
-  const claimWhere = userId
-    ? and(
-        eq(mintTasks.id, taskId),
-        eq(mintTasks.userId, userId),
-        inArray(mintTasks.status, ['pending', 'monitoring', 'ready', 'failed']),
-      )
-    : and(
-        eq(mintTasks.id, taskId),
-        inArray(mintTasks.status, ['pending', 'monitoring', 'ready', 'failed']),
-      );
+  // H-4 fix: userId is now required (not optional). Ownership check is always enforced.
+  const claimWhere = and(
+    eq(mintTasks.id, taskId),
+    eq(mintTasks.userId, userId),
+    inArray(mintTasks.status, ['pending', 'monitoring', 'ready', 'failed']),
+  );
   // ── Atomic claim: only a 'pending' task can be claimed ─────────
   const [claimed] = await getDb()
     .update(mintTasks)

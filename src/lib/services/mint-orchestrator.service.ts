@@ -2,7 +2,7 @@ import 'server-only';
 
 import { getDb } from '@/lib/db';
 import { wallets, mintTasks } from '@/drizzle/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { resolveMintIntent } from '@/lib/resolve-mint-intent';
 import { getMintState } from './mint-state.service';
 import { fetchMintRequirements } from './mint-requirements.service';
@@ -63,8 +63,11 @@ export async function createMintTaskFromUrl(
     return { action: 'FAILED', error: 'Wallet not found' };
   }
 
-  // 3. Deduplication: return the existing completed task if the user
-  //    already minted this contract successfully
+  // 3. Deduplication: return the existing task if any active or completed task
+  //    already exists for this user+contract pair.
+  //    M-5 fix: previously only checked 'completed' — a second call while a task
+  //    was 'pending' or 'running' would create a duplicate task and schedule
+  //    an extra QStash message, causing double Telegram notifications and extra cost.
   const [existing] = await getDb()
     .select()
     .from(mintTasks)
@@ -72,11 +75,11 @@ export async function createMintTaskFromUrl(
       and(
         eq(mintTasks.contractAddress, intent.contractAddress),
         eq(mintTasks.userId, userId),
-        eq(mintTasks.status, 'completed'),
+        inArray(mintTasks.status, ['pending', 'monitoring', 'ready', 'running', 'completed']),
       ),
     )
     .limit(1);
-  if (existing?.txHash) {
+  if (existing) {
     return { action: 'TASK_CREATED', taskId: existing.id };
   }
 
