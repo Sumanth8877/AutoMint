@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback } from 'react';
 import {
-  AlertTriangle, ArrowUpCircle, CheckCircle2, ChevronDown, ChevronUp,
+  ArrowUpCircle, CheckCircle2, ChevronDown, ChevronUp,
   ClipboardCheck, ClipboardCopy, Download, Package, RefreshCw, ShieldAlert, XCircle, Zap,
 } from 'lucide-react';
 import type {
@@ -328,10 +328,10 @@ export function DependencyUpdateCenter() {
   }, []);
 
   // ── Scan (SSE streaming) ─────────────────────────────────────────────────────
-  const handleCheck = useCallback(async (force = false) => {
+  const handleCheck = useCallback(async () => {
     setCheckState('loading'); setError(null); setScanProgress(null);
 
-    const url = `/api/system/dependency-audit/stream${force ? '?force=true' : ''}`;
+    const url = '/api/system/dependency-audit/stream?force=true';
 
     return new Promise<void>((resolve) => {
       const evtSource = new EventSource(url);
@@ -355,9 +355,7 @@ export function DependencyUpdateCenter() {
         setActiveTab('safe');
         setSelectedPackages(new Set());
         showToast(
-          data.cached
-            ? `Loaded from cache — ${data.report.totalPackages} packages (${data.report.durationMs}ms)`
-            : `Audit complete — ${data.report.totalPackages} packages in ${data.report.durationMs}ms`,
+          `Scan complete — ${data.report.totalPackages} packages checked in ${data.report.durationMs}ms`,
           'success',
         );
         resolve();
@@ -501,22 +499,19 @@ export function DependencyUpdateCenter() {
             )}
           </div>
           <p className="text-sm text-gray-500 dark:text-gray-400 max-w-xl">
-            Audit npm packages for outdated versions, security vulnerabilities, and modernization opportunities.
+            Keep your app healthy and up to date. Scan your packages to find available updates, security issues, and outdated dependencies.
           </p>
-          <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-            <span><strong>Checking for updates never modifies files.</strong> Only the clipboard command changes packages.</span>
-          </p>
+
         </div>
 
         <button
           type="button"
-          onClick={() => { void handleCheck(!!report); }}
+          onClick={() => { void handleCheck(); }}
           disabled={isScanning}
           className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all"
         >
           <RefreshCw className={`h-4 w-4 ${isScanning ? 'animate-spin' : ''}`} />
-          {isScanning ? 'Scanning…' : report ? 'Re-scan (force)' : 'Scan Now'}
+          {isScanning ? 'Scanning…' : 'Check for Updates'}
         </button>
       </div>
 
@@ -653,15 +648,6 @@ export function DependencyUpdateCenter() {
                 {reportState === 'loading' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                 {reportState === 'loading' ? 'Generating…' : 'Download Report'}
               </button>
-            </div>
-
-            {/* How it works note */}
-            <div className="flex items-start gap-2 rounded-xl border border-blue-100 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/30 px-4 py-3 text-xs text-blue-700 dark:text-blue-300">
-              <ArrowUpCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-              <span>
-                <strong>Install Safe Updates</strong> commits the updated <code className="font-mono">package.json</code> to GitHub.
-                Vercel detects the push, redeploys, and runs <code className="font-mono">npm install</code> during the build automatically.
-              </span>
             </div>
 
             {/* Install result */}
