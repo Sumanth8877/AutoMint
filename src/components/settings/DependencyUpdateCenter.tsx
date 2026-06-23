@@ -513,7 +513,7 @@ export function DependencyUpdateCenter() {
         {/* Primary action */}
         <button
           type="button"
-          onClick={() => void handleCheck(!!report)} // force=true if already have a report
+          onClick={() => { void handleCheck(!!report); }} // force=true if already have a report
           disabled={isScanning}
           className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all"
         >
@@ -543,7 +543,7 @@ export function DependencyUpdateCenter() {
           <p className="text-sm text-gray-400 dark:text-gray-500 mb-6">
             Click <strong>Scan Now</strong> to check all npm dependencies against the registry.
           </p>
-          <button onClick={handleCheck}
+          <button onClick={() => void handleCheck()}
             className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 transition-all">
             <RefreshCw className="h-4 w-4" /> Scan Now
           </button>
