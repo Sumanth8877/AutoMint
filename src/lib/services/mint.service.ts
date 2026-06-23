@@ -1,7 +1,7 @@
 import { getDb } from '@/lib/db';
 import { mintTasks, wallets, collections, mintHistory } from '@/drizzle/schema';
 import { desc, eq, and, inArray } from 'drizzle-orm';
-import { simulateMint, estimateMintGas, executeMint, type MintParams } from '@/lib/blockchain/mint';
+import { estimateMintGas, executeMint, type MintParams } from '@/lib/blockchain/mint';
 import { logActivity } from '@/lib/monitoring';
 import { sendTelegramNotification } from '@/lib/services/telegram.service';
 import { sendMintFailedEmail, sendMintScheduledEmail, sendMintSuccessEmail, sendSystemErrorEmail } from '@/lib/services/email-notification.service';
@@ -212,34 +212,6 @@ export async function executeMintTask(
       error: gas.error,
     });
     return { success: false, error: gas.error };
-  }
-
-  const sim = await simulateMint(wallet.address as Hex, chain, params, claimed.userId);
-  if (!sim.success) {
-    await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
-    await captureMessage('Mint simulation failed', {
-      area: 'minting',
-      level: 'error',
-      context: { userId: claimed.userId, taskId, walletId: claimed.walletId, wallet: wallet.address, collection: claimed.collectionId ?? undefined, chain },
-      extra: { error: sim.error, contractAddress: claimed.contractAddress },
-      fingerprint: ['mint', 'simulation'],
-    });
-    await sendTelegramNotification(claimed.userId, 'mint_failed', {
-      taskId,
-      contractAddress: claimed.contractAddress,
-      error: sim.error,
-    });
-    await sendMintFailedEmail(claimed.userId, {
-      taskId,
-      contractAddress: claimed.contractAddress,
-      error: sim.error,
-    });
-    await sendSystemErrorEmail(claimed.userId, {
-      taskId,
-      title: 'Mint Simulation Error',
-      error: sim.error,
-    });
-    return { success: false, error: sim.error };
   }
 
   const result = await executeMint(wallet.address as Hex, chain, params, claimed.userId, { walletId: wallet.id });
