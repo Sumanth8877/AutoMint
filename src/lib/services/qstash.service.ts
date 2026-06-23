@@ -825,9 +825,7 @@ export async function executeReceiptRecheck(taskId: string) {
             const { bumpTransactionGas } = await import('@/lib/services/rpc-manager.service');
             const { parseEther } = await import('viem');
 
-            const walletId = task.walletId!; // guarded by outer `&& task.walletId` check
-            const _walletId = task.walletId as string; // narrowed: outer guard ensures non-null
-            const rawKey = await getDecryptedPrivateKey(_walletId, task.userId);
+            const rawKey = await getDecryptedPrivateKey(task.walletId as string, task.userId);
             const hexKey = (rawKey.startsWith('0x') ? rawKey : `0x${rawKey}`) as `0x${string}`;
             const account = privateKeyToAccount(hexKey);
 
