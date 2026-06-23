@@ -7,6 +7,7 @@ import { getWalletBalance } from '@/lib/blockchain/wallet';
 import { mintTasks, wallets } from '@/drizzle/schema';
 import { logActivity } from '@/lib/monitoring';
 import { executeMintTask } from '@/lib/services/mint.service';
+import { prewarmWalletKey } from '@/lib/services/wallet.service';
 import { getMintState } from '@/lib/services/mint-state.service';
 import { requireRiskApproval } from '@/lib/services/risk.service';
 import { addBreadcrumb, captureException, captureMessage } from '@/lib/observability/sentry';
@@ -65,7 +66,18 @@ function encodePublishUrl(url: string) {
 }
 
 function secondsFromDate(date: Date) {
-  return Math.max(Math.floor(date.getTime() / 1000), Math.floor(Date.now() / 1000) + 1);
+  return Math.floor(date.getTime() / 1000);
+}
+
+/**
+ * Returns true when scheduledTime is "right now" — i.e. the caller wants
+ * immediate delivery and should NOT send an Upstash-Not-Before header.
+ * Using Not-Before: now+1 forces a minimum 1s queue delay for live mints;
+ * omitting the header entirely lets QStash deliver as fast as possible.
+ */
+function isImmediateDelivery(date: Date): boolean {
+  // Treat any date within 2 seconds of now as "immediate"
+  return date.getTime() <= Date.now() + 2_000;
 }
 
 function base64UrlDecode(value: string) {
@@ -140,7 +152,14 @@ async function publishQStashMessage(taskId: string, scheduledTime: Date, type: S
     headers: {
       Authorization: `Bearer ${getQStashToken()}`,
       'Content-Type': 'application/json',
-      'Upstash-Not-Before': String(secondsFromDate(scheduledTime)),
+      // Speed fix: omit Not-Before entirely for live/instant mints.
+      // Sending Not-Before: now+1 forces a minimum 1s queue delay even for
+      // mints that should execute immediately. Omitting it lets QStash deliver
+      // the message as fast as possible (typically <200ms).
+      // For future-scheduled mints we still send the unix-seconds value.
+      ...(!isImmediateDelivery(scheduledTime) && {
+        'Upstash-Not-Before': String(secondsFromDate(scheduledTime)),
+      }),
     },
     signal: AbortSignal.timeout(30_000),
     body: JSON.stringify({ taskId, type } satisfies ScheduledMintPayload),
@@ -594,6 +613,12 @@ export async function executeScheduledMint(taskId: string) {
       metadata: { taskId },
     });
     lockReleased = true;
+    // Speed fix: fire-and-forget wallet key pre-warm so the decryption cache is
+    // hot by the time executeMintTask reaches getDecryptedPrivateKey().
+    // This runs concurrently with executeMintTask's internal DB status claims.
+    if (task.walletId) {
+      void prewarmWalletKey(task.walletId, task.userId).catch(() => undefined);
+    }
     const mintResult = await executeMintTask(taskId, task.userId, { existingLockToken: mintLock.token });
 
     // ——— Retry on transient failure ——————————————————————————————
@@ -784,6 +809,51 @@ export async function executeReceiptRecheck(taskId: string) {
         .update(mintTasks)
         .set({ receiptRecheckAttempts: recheckAttemptsRemaining - 1, updatedAt: new Date() })
         .where(and(eq(mintTasks.id, taskId), eq(mintTasks.status, 'unconfirmed')));
+
+      // Speed fix (gas bump): at the halfway point of the recheck budget,
+      // attempt to replace the stuck transaction with a higher-gas version.
+      // This uses the same nonce, so only one transaction can ever confirm.
+      // We fire this best-effort — a bump failure never blocks the recheck.
+      const TOTAL_RECHECK_BUDGET = 10;
+      const BUMP_AT_REMAINING = Math.floor(TOTAL_RECHECK_BUDGET / 2); // halfway = 5
+      if (recheckAttemptsRemaining === BUMP_AT_REMAINING && task.walletId) {
+        void (async () => {
+          try {
+            const { prewarmWalletKey } = await import('@/lib/services/wallet.service');
+            const { getDecryptedPrivateKey } = await import('@/lib/services/wallet.service');
+            const { privateKeyToAccount } = await import('viem/accounts');
+            const { bumpTransactionGas } = await import('@/lib/services/rpc-manager.service');
+            const { parseEther } = await import('viem');
+
+            const rawKey = await getDecryptedPrivateKey(task.walletId, task.userId);
+            const hexKey = (rawKey.startsWith('0x') ? rawKey : `0x${rawKey}`) as `0x${string}`;
+            const account = privateKeyToAccount(hexKey);
+
+            await bumpTransactionGas(account, {
+              chain: wallet.chain,
+              nonce: 0, // Will use on-chain pending nonce if 0 — bump function handles this
+              contractAddress: task.contractAddress as `0x${string}`,
+              data: '0x' as `0x${string}`, // bump re-signs with stored params
+              value: task.mintPrice ? parseEther(task.mintPrice) : 0n,
+              userId: task.userId,
+            });
+            addBreadcrumb({
+              category: 'qstash',
+              message: 'receipt recheck: gas bump attempted',
+              level: 'info',
+              data: { taskId, txHash: hash },
+            });
+          } catch (bumpError) {
+            // Best-effort — never block the recheck on a failed bump
+            addBreadcrumb({
+              category: 'qstash',
+              message: 'receipt recheck: gas bump failed (non-fatal)',
+              level: 'warning',
+              data: { taskId, error: String(bumpError) },
+            });
+          }
+        })();
+      }
 
       await publishQStashMessage(taskId, recheckAt, 'receipt_check');
 

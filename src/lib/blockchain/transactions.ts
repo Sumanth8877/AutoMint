@@ -67,8 +67,11 @@ export async function getTransactionStatus(chain: string, txHash: string): Promi
 export async function waitForConfirmation(
   chain: string,
   txHash: string,
-  maxWaitMs = 120_000,
-  pollIntervalMs = 5000,
+  maxWaitMs = 90_000,        // Speed fix: reduced from 120s to 90s
+  pollIntervalMs = 500,      // Speed fix: reduced from 5000ms to 500ms
+  // 500ms polling detects confirmation within one poll cycle after the block lands.
+  // On Base (2s blocks): avg detection latency drops from ~5s to ~500-2500ms.
+  // On Ethereum (12s blocks): drops from ~5s to ~500-1000ms after inclusion.
 ): Promise<TransactionInfo> {
   const start = Date.now();
 
