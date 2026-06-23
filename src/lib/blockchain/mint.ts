@@ -81,12 +81,6 @@ export async function executeMint(
   }
 
   try {
-    // Simulate first to catch obvious failures before touching the key.
-    const sim = await simulateMint(address, chain, params, userId);
-    if (!sim.success) {
-      return { success: false, error: sim.error };
-    }
-
     // ── Decrypt per-user signing key ──────────────────────────────
     // getDecryptedPrivateKey(walletId, userId) enforces ownership at the
     // DB layer: it only returns a key when wallets.id = walletId AND
