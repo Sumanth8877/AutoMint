@@ -18,6 +18,12 @@ import type {
 type Tab = 'safe' | 'minor' | 'breaking' | 'security' | 'modernization' | 'all';
 type ActionState = 'idle' | 'loading' | 'success' | 'error';
 
+interface InstallResult {
+  updated: string[];
+  commitSha?: string;
+  message?: string;
+}
+
 // ─── Score Ring ───────────────────────────────────────────────────────────────
 
 function ScoreRing({ score, label }: { score: number; label: string }) {
@@ -298,6 +304,8 @@ export function DependencyUpdateCenter() {
   const [selectedPackages, setSelectedPackages] = useState<Set<string>>(new Set());
 
   const [checkState, setCheckState] = useState<ActionState>('idle');
+  const [installState, setInstallState] = useState<ActionState>('idle');
+  const [installResult, setInstallResult] = useState<InstallResult | null>(null);
   const [scanProgress, setScanProgress] = useState<{ processed: number; total: number; packageName: string } | null>(null);
   const [reportState, setReportState] = useState<ActionState>('idle');
   const [copied, setCopied] = useState(false);
@@ -379,6 +387,30 @@ export function DependencyUpdateCenter() {
       setReportState('success'); showToast('Upgrade report downloaded.', 'success');
     } catch (err) { setReportState('error'); showToast(err instanceof Error ? err.message : 'Report failed', 'error'); }
   }, [showToast]);
+
+  // ── Install Safe Updates → commits package.json to GitHub → Vercel redeploys ──
+  const handleInstall = useCallback(async () => {
+    setInstallState('loading');
+    setInstallResult(null);
+    const pkgNames = selectedPackages.size > 0 ? Array.from(selectedPackages) : undefined;
+
+    try {
+      const res = await fetch('/api/system/install-safe-updates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ packageNames: pkgNames }),
+      });
+      const data = await res.json() as InstallResult & { error?: string };
+      if (!res.ok) throw new Error(data.error ?? 'Install failed');
+
+      setInstallResult(data);
+      setInstallState('success');
+      showToast(data.message ?? `${data.updated.length} package(s) updated — Vercel redeploying…`, 'success');
+    } catch (err) {
+      setInstallState('error');
+      showToast(err instanceof Error ? err.message : 'Install failed', 'error');
+    }
+  }, [selectedPackages, showToast]);
 
   // ── Copy install command ──────────────────────────────────────────────────────
   const handleCopyInstall = useCallback(() => {
@@ -571,23 +603,21 @@ export function DependencyUpdateCenter() {
           {/* ── Action toolbar ─────────────────────────────────────────────── */}
           <div className="space-y-3">
             <div className="flex flex-wrap gap-2.5">
-              {/* Copy Install Command — clipboard only, no server-side npm */}
+              {/* Install Safe Updates — commits package.json to GitHub → Vercel auto-redeploys */}
               <button
                 type="button"
-                disabled={safeCount === 0 && selectedPackages.size === 0}
-                onClick={handleCopyInstall}
+                disabled={installState === 'loading' || (safeCount === 0 && selectedPackages.size === 0)}
+                onClick={() => { void handleInstall(); }}
                 className="inline-flex items-center gap-2 rounded-xl border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/30 px-4 py-2.5 text-sm font-semibold text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-950/60 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               >
-                {copied ? (
-                  <><CheckCircle2 className="h-4 w-4" /> Copied!</>
-                ) : (
-                  <>
-                    <ArrowUpCircle className="h-4 w-4" /> Copy Install Command
-                    {selectedPackages.size > 0 && (
-                      <span className="rounded-full bg-green-600 text-white px-2 py-0.5 text-xs font-bold">{selectedPackages.size}</span>
-                    )}
-                  </>
-                )}
+                {installState === 'loading'
+                  ? <><RefreshCw className="h-4 w-4 animate-spin" /> Installing…</>
+                  : <><ArrowUpCircle className="h-4 w-4" /> Install Safe Updates
+                      {selectedPackages.size > 0 && (
+                        <span className="rounded-full bg-green-600 text-white px-2 py-0.5 text-xs font-bold">{selectedPackages.size}</span>
+                      )}
+                    </>
+                }
               </button>
 
               {/* Download Report */}
@@ -599,14 +629,30 @@ export function DependencyUpdateCenter() {
               </button>
             </div>
 
-            {/* Clipboard note */}
-            {safeCount > 0 && (
-              <div className="flex items-start gap-2 rounded-xl border border-blue-100 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/30 px-4 py-3 text-xs text-blue-700 dark:text-blue-300">
-                <ArrowUpCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                <span>
-                  <strong>Copy Install Command</strong> copies <code className="font-mono">npm install pkg@version …</code> to clipboard.
-                  Run it locally or in CI — package installs cannot execute on the server.
-                </span>
+            {/* How it works note */}
+            <div className="flex items-start gap-2 rounded-xl border border-blue-100 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/30 px-4 py-3 text-xs text-blue-700 dark:text-blue-300">
+              <ArrowUpCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>
+                <strong>Install Safe Updates</strong> commits the updated <code className="font-mono">package.json</code> to GitHub.
+                Vercel detects the push, redeploys, and runs <code className="font-mono">npm install</code> during the build automatically.
+              </span>
+            </div>
+
+            {/* Install result */}
+            {installResult && installResult.updated.length > 0 && (
+              <div className="rounded-xl border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20 p-4 space-y-2">
+                <p className="text-sm font-semibold text-green-800 dark:text-green-200 flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4" />
+                  {installResult.updated.length} package(s) committed — Vercel is redeploying
+                  {installResult.commitSha && <code className="font-mono text-xs ml-1">({installResult.commitSha})</code>}
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {installResult.updated.map(pkg => (
+                    <span key={pkg} className="rounded-full bg-green-100 dark:bg-green-900/40 px-2.5 py-0.5 text-xs font-mono font-medium text-green-700 dark:text-green-300">
+                      {pkg}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
           </div>
