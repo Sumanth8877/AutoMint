@@ -18,7 +18,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@clerk/nextjs": "^7.5.6",
+    "@clerk/nextjs": "^7.5.7",
     "@neondatabase/serverless": "^1.1.0",
     "@upstash/redis": "^1.38.0",
     "drizzle-orm": "^0.45.2",
