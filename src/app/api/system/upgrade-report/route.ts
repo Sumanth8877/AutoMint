@@ -1,17 +1,18 @@
 /**
  * GET /api/system/upgrade-report
  *
- * Generate and download a Markdown upgrade report for the current dependency state.
+ * Generate and download a Markdown upgrade report.
+ * READ-ONLY — never modifies files.
  *
- * Admin-only endpoint. READ-ONLY — never modifies files.
+ * Requires: authenticated user session.
  *
  * Query params:
- *   ?format=markdown   (default) — returns text/markdown attachment
- *   ?format=json       — returns the raw DependencyAuditReport as JSON
+ *   ?format=markdown  (default) — returns text/markdown attachment
+ *   ?format=json      — returns raw DependencyAuditReport as JSON
  */
 
 import { NextResponse } from 'next/server';
-import { requireAdmin } from '@/lib/auth/require-admin';
+import { requireApiUser } from '@/lib/auth/require-auth';
 import {
   runDependencyAudit,
   generateUpgradeReportMarkdown,
@@ -22,7 +23,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 export async function GET(request: Request) {
-  const auth = await requireAdmin();
+  const auth = await requireApiUser();
   if ('error' in auth) return auth.error;
 
   const { searchParams } = new URL(request.url);
