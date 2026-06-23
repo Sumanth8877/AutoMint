@@ -1,28 +1,36 @@
 // ── Environment variable validation ─────────────────────────────
-// Called at app startup (instrumentation.ts / next.config.ts).
-// All critical env vars are checked here so misconfiguration is caught
-// at boot time — not at runtime when the first wallet decrypt fails or
-// the first Redis connection times out.
+// Called at app startup via instrumentation.ts → register().
+// All critical env vars are checked here so misconfiguration surfaces
+// at boot time, not at runtime when the first wallet decrypt or Redis
+// call fails with an opaque error.
 //
-// Add new required vars to REQUIRED_VARS below.
-// Optional vars (for key rotation, staging, etc.) are validated separately.
-// ────────────────────────────────────────────────────────────────
+// IMPORTANT: Redis uses KV_REST_API_URL / KV_REST_API_TOKEN
+// (Vercel KV naming convention). These are the actual keys read by
+// src/lib/redis/index.ts. Do NOT confuse with the UPSTASH_* aliases
+// — those are not used anywhere in this codebase.
+// ─────────────────────────────────────────────────────────────────
 
 type EnvSpec = {
   name: string;
-  /** Optional custom validation beyond presence check */
-  validate?: (value: string) => string | null; // returns error message or null
+  /** Returns an error string if invalid, or null if OK */
+  validate?: (value: string) => string | null;
 };
 
 const REQUIRED_VARS: EnvSpec[] = [
-  // ── Database
-  { name: 'DATABASE_URL', validate: (v) => v.startsWith('http') || v.startsWith('postgres') ? null : 'Must be a valid URL' },
+  // ── Database (Neon)
+  {
+    name: 'DATABASE_URL',
+    validate: (v) =>
+      v.startsWith('http') || v.startsWith('postgres')
+        ? null
+        : 'Must be a valid postgres:// or https:// URL',
+  },
 
   // ── Clerk auth
   { name: 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY' },
   { name: 'CLERK_SECRET_KEY' },
 
-  // ── Wallet encryption
+  // ── Wallet encryption (AES-256-GCM)
   {
     name: 'ENCRYPTION_KEY',
     validate: (v) =>
@@ -31,9 +39,14 @@ const REQUIRED_VARS: EnvSpec[] = [
         : 'Must be a 64-character hex string (32 bytes). Generate: openssl rand -hex 64',
   },
 
-  // ── Upstash Redis
-  { name: 'UPSTASH_REDIS_REST_URL', validate: (v) => v.startsWith('https://') ? null : 'Must be a valid HTTPS URL' },
-  { name: 'UPSTASH_REDIS_REST_TOKEN' },
+  // ── Upstash Redis / Vercel KV
+  // These are the actual env var names used by src/lib/redis/index.ts.
+  // Vercel KV provisions them as KV_REST_API_URL / KV_REST_API_TOKEN.
+  {
+    name: 'KV_REST_API_URL',
+    validate: (v) => v.startsWith('https://') ? null : 'Must be a valid HTTPS URL',
+  },
+  { name: 'KV_REST_API_TOKEN' },
 
   // ── QStash (scheduled mint jobs)
   { name: 'QSTASH_TOKEN' },
@@ -54,9 +67,7 @@ export function validateEnv(): void {
 
     if (spec.validate) {
       const error = spec.validate(value);
-      if (error) {
-        errors.push(`  • ${spec.name}: ${error}`);
-      }
+      if (error) errors.push(`  • ${spec.name}: ${error}`);
     }
   }
 

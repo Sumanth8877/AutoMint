@@ -1,4 +1,11 @@
 import { NextResponse } from 'next/server';
+
+// NOTE: Website monitoring check is currently MANUAL ONLY.
+// The website-monitor.service.ts service is not invoked by any scheduler.
+// To enable automatic monitoring, add a QStash cron job that calls
+// checkWebsite() for all enabled monitoredWebsites records.
+// Until then, monitoring events are only created on-demand.
+
 import { getDb } from '@/lib/db';
 import { monitoredWebsites } from '@/drizzle/schema/monitoring';
 import { eq } from 'drizzle-orm';

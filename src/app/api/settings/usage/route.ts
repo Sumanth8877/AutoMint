@@ -70,8 +70,8 @@ async function fetchRedisUsage(todayTasks: number): Promise<UsageStat> {
       const cmdMatch = info.match(/total_commands_processed:(\d+)/);
       const uptimeMatch = info.match(/uptime_in_seconds:(\d+)/);
 
-      const totalCmds = cmdMatch ? parseInt(cmdMatch[1]) : null;
-      const uptimeSec = uptimeMatch ? parseInt(uptimeMatch[1]) : null;
+      const totalCmds = cmdMatch ? parseInt(cmdMatch[1], 10) : null;
+      const uptimeSec = uptimeMatch ? parseInt(uptimeMatch[1], 10) : null;
 
       const isUpLessThanDay = uptimeSec !== null && uptimeSec < 86_400;
       if (isUpLessThanDay && totalCmds !== null) {
@@ -163,7 +163,7 @@ async function fetchNeonUsage(): Promise<UsageStat> {
     const row = result.rows?.[0] as { size_bytes: string; size_pretty: string } | undefined;
     if (!row) throw new Error('No result from size query');
 
-    const bytes = parseInt(row.size_bytes);
+    const bytes = parseInt(row.size_bytes, 10);
     const mb = Math.round(bytes / (1024 * 1024) * 10) / 10; // 1 decimal
 
     return {

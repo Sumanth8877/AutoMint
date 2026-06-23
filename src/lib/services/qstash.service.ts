@@ -773,8 +773,8 @@ export async function executeReceiptRecheck(taskId: string) {
 
   } catch {
     // Receipt still not available — reschedule if budget remains.
-    // maxRetries is repurposed here as the receipt-recheck attempt counter.
-    const recheckAttemptsRemaining = task.maxRetries ?? 0;
+    // CRIT-02: Dedicated column for receipt recheck budget (not maxRetries).
+    const recheckAttemptsRemaining = task.receiptRecheckAttempts ?? 10;
 
     if (recheckAttemptsRemaining > 0) {
       const delay = RECEIPT_RECHECK_DELAY_MS;
@@ -782,7 +782,7 @@ export async function executeReceiptRecheck(taskId: string) {
 
       await getDb()
         .update(mintTasks)
-        .set({ maxRetries: recheckAttemptsRemaining - 1, updatedAt: new Date() })
+        .set({ receiptRecheckAttempts: recheckAttemptsRemaining - 1, updatedAt: new Date() })
         .where(and(eq(mintTasks.id, taskId), eq(mintTasks.status, 'unconfirmed')));
 
       await publishQStashMessage(taskId, recheckAt, 'receipt_check');

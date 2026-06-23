@@ -159,7 +159,7 @@ async function sendWalletTrackerNotification(
 export function verifyAlchemyWebhookSignature(headers: Headers, rawBody: string) {
   const signingKey = process.env.ALCHEMY_WEBHOOK_SIGNING_KEY;
   if (!signingKey) {
-    captureException(new Error('ALCHEMY_WEBHOOK_SIGNING_KEY is not configured — rejecting webhook request'), { area: 'wallet-tracker', fingerprint: ['wallet-tracker', 'missing-signing-key'] });
+    await captureException(new Error('ALCHEMY_WEBHOOK_SIGNING_KEY is not configured — rejecting webhook request'), { area: 'wallet-tracker', fingerprint: ['wallet-tracker', 'missing-signing-key'] });
     throw new Error('Webhook signature verification is not configured');
   }
 

@@ -20,7 +20,7 @@ export async function estimateGas(chain: string): Promise<GasEstimate> {
       symbol,
     };
   } catch (error) {
-    captureException(error, { area: 'gas', context: { chain }, fingerprint: ['gas', 'estimate-error'] });
+    await captureException(error, { area: 'gas', context: { chain }, fingerprint: ['gas', 'estimate-error'] });
     return {
       gasPrice: '0',
       estimatedFee: '0',

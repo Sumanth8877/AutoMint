@@ -149,7 +149,7 @@ export async function executeMintTask(
     return { success: false, error: 'Mint task missing wallet or contract' };
   }
 
-  const [wallet] = await getDb().select().from(wallets).where(eq(wallets.id, claimed.walletId)).limit(1);
+  const [wallet] = await getDb().select().from(wallets).where(and(eq(wallets.id, claimed.walletId), eq(wallets.userId, claimed.userId))).limit(1);
   if (!wallet) {
     await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
     await captureMessage('Wallet not found for mint task', {

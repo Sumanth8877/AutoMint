@@ -356,3 +356,50 @@ export async function fetchBalance(address: string, chain: string) {
     return { success: false, balance: null, error: 'Failed to fetch balance' };
   }
 }
+
+// ─── Default mint wallet resolution ──────────────────────────────
+// Shared utility used by copy-mint and whale-consensus flows.
+// Tries chain-specific wallet first, then falls back to any EVM wallet.
+export async function getDefaultMintWallet(
+  userId: string,
+  chain: string,
+  destinationWalletId?: string | null,
+) {
+  const db = getDb();
+  const chainTyped = chain as 'ethereum' | 'base' | 'polygon';
+
+  if (destinationWalletId) {
+    const [dest] = await db
+      .select()
+      .from(wallets)
+      .where(and(eq(wallets.userId, userId), eq(wallets.id, destinationWalletId), eq(wallets.walletType, 'EVM')))
+      .limit(1);
+    if (dest) return dest;
+  }
+
+  const [sameChain] = await db
+    .select()
+    .from(wallets)
+    .where(and(eq(wallets.userId, userId), eq(wallets.chain, chainTyped), eq(wallets.walletType, 'EVM')))
+    .orderBy(wallets.createdAt)
+    .limit(1);
+
+  if (sameChain) return sameChain;
+
+  addBreadcrumb({
+    category: 'wallet',
+    message: `getDefaultMintWallet: no wallet on chain "${chain}" — falling back to first EVM wallet`,
+    level: 'warning',
+    data: { userId, chain },
+  });
+
+  const [fallback] = await db
+    .select()
+    .from(wallets)
+    .where(and(eq(wallets.userId, userId), eq(wallets.walletType, 'EVM')))
+    .orderBy(wallets.createdAt)
+    .limit(1);
+
+  return fallback ?? null;
+}
+
