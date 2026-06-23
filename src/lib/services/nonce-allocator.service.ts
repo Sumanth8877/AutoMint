@@ -341,7 +341,7 @@ export async function scanAndFillGaps(
     await redis.zremrangebyscore(inflightKey, 0, pruneThreshold);
 
     // Find entries that have been inflight longer than the gap threshold
-    const staleMembers = await redis.zrangebyscore(inflightKey, 0, gapThreshold);
+    const staleMembers = await redis.zrange(inflightKey, 0, gapThreshold, { byScore: true });
 
     if (staleMembers.length === 0) return;
 
@@ -465,7 +465,7 @@ export async function getNonceStatus(
   const [counterRaw, chainPending, inflightMembers] = await Promise.all([
     redis.get<string>(NONCE_KEYS.counter(address, chain)),
     getChainPendingNonce(address, chain),
-    redis.zrangebyscore(NONCE_KEYS.inflight(address, chain), 0, '+inf'),
+    redis.zrange(NONCE_KEYS.inflight(address, chain), 0, '+inf', { byScore: true }),
   ]);
 
   return {
