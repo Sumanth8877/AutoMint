@@ -3,6 +3,7 @@ import 'server-only';
 import type { CollectionMetadata } from '@/lib/blockchain/collections';
 import type { AnalyzerDebugLogLevel, AnalyzerTiming, MintIntent } from '@/lib/resolve-mint-intent';
 import { fetchNFTCollectionMetrics } from '@/lib/services/dune-analytics.service';
+import { getNFTCollection, getNFTTrades } from '@/lib/services/moralis.service';
 
 export type MarketStatus = 'Hot' | 'Active' | 'Stable' | 'Declining' | 'Inactive';
 
@@ -277,6 +278,34 @@ async function fetchDuneIntelligence(intent: MintIntent): Promise<MarketProvider
   };
 }
 
+async function fetchMoralisIntelligence(intent: MintIntent): Promise<MarketProviderResult | null> {
+  if (!intent.contractAddress) return null;
+
+  const [collection, trades] = await Promise.allSettled([
+    getNFTCollection({
+      contractAddress: intent.contractAddress,
+      chain: intent.chain,
+    }),
+    getNFTTrades({
+      contractAddress: intent.contractAddress,
+      chain: intent.chain,
+      limit: 100,
+    }),
+  ]);
+
+  const collectionData = collection.status === 'fulfilled' ? collection.value : null;
+  const tradesData = trades.status === 'fulfilled' ? trades.value : null;
+
+  if (!collectionData && !tradesData) return null;
+
+  return {
+    source: 'Moralis',
+    collectionName: collectionData?.name,
+    verified: collectionData ? true : null,
+    recentSalesCount: tradesData?.length,
+  };
+}
+
 export async function fetchCollectionIntelligence(params: {
   intent: MintIntent;
   metadata: Omit<CollectionMetadata, 'totalSupply'> & { totalSupply: string };
@@ -314,6 +343,7 @@ export async function fetchCollectionIntelligence(params: {
     fetchOpenSeaIntelligence(params.intent),
     fetchAlchemyIntelligence(params.intent),
     fetchDuneIntelligence(params.intent),
+    fetchMoralisIntelligence(params.intent),
   ]);
   params.timingBreakdown.push({ stage: 'Market Intelligence', durationMs: Date.now() - startedAt });
 

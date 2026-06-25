@@ -58,6 +58,9 @@ const REQUIRED_VARS: EnvSpec[] = [
 
   // ── Dune Analytics (optional - for blockchain data and analytics)
   // { name: 'DUNE_API_KEY' }, // Optional, not required
+
+  // ── Moralis Web3 API (optional - for blockchain data and analytics)
+  // { name: 'MORALIS_API_KEY' }, // Optional, not required
 ];
 
 export function validateEnv(): void {
