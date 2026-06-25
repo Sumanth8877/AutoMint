@@ -174,9 +174,8 @@ export async function watchForMintLive(
           });
           settle('error'); // Fall back to HTTP polling
         },
-        poll: false, // Use WebSocket push, not polling
         emitOnBegin: true, // Check immediately on subscription (no wait for next block)
-      });
+      } as any);
     } catch (err) {
       clearTimeout(timer);
       captureException(err, { area: 'mint-monitor', context: { chain }, fingerprint: ['mint-monitor', 'subscribe-error'] });
