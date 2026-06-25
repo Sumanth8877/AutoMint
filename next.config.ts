@@ -43,6 +43,8 @@ const connectSrc = [
   'https://*.clerk.com',
   'https://clerk.com',
   'https://api.clerk.com',
+  // Vercel Speed Insights
+  'https://*.vercel-insights.com',
   // Sentry error reporting
   'https://*.sentry.io',
   'https://sentry.io',
