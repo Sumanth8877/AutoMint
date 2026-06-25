@@ -10,9 +10,11 @@ export function QueryClientProviderWrapper({ children }: { children: React.React
         defaultOptions: {
           queries: {
             staleTime: 14400000, // 4 hours
+            gcTime: 14400000, // 4 hours
             refetchOnWindowFocus: false,
             refetchOnReconnect: false,
             retry: 1,
+            retryDelay: 1000,
           },
         },
       })
