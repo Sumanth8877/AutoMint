@@ -52,7 +52,7 @@ function formatCurrency(value: unknown, decimals = 4): string | null {
   return num.toFixed(num >= 10 ? 2 : decimals);
 }
 
-async function executeDuneQuery(queryId: string, parameters: Record<string, unknown> = {}): Promise<DuneQueryResult | null> {
+async function executeDuneSQL(sql: string): Promise<DuneQueryResult | null> {
   const apiKey = process.env.DUNE_API_KEY;
   if (!apiKey) {
     console.warn('Dune API key not found, skipping query');
@@ -60,15 +60,15 @@ async function executeDuneQuery(queryId: string, parameters: Record<string, unkn
   }
 
   try {
-    // Execute query
-    const executeResponse = await fetch(`https://api.dune.com/api/v1/query/${queryId}/execute`, {
+    // Execute SQL query
+    const executeResponse = await fetch('https://api.dune.com/api/v1/query/execute', {
       method: 'POST',
       headers: {
         'X-Dune-API-Key': apiKey,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        query_parameters: parameters,
+        query_sql: sql,
         performance: 'medium',
       }),
       signal: AbortSignal.timeout(30_000),
@@ -162,21 +162,24 @@ export async function fetchNFTCollectionMetrics(params: {
   };
 
   const duneChain = chainMap[params.chain.toLowerCase()] || params.chain.toLowerCase();
+  const contractLower = params.contractAddress.toLowerCase();
 
-  // Query NFT mints and trades from Dune's curated tables
-  // This is a custom query that would need to be created in Dune
-  // For now, we'll use a placeholder query ID
-  const queryId = process.env.DUNE_NFT_METRICS_QUERY_ID;
+  // Query Dune's curated nft.trades table directly
+  const sql = `
+    SELECT
+      COUNT(*) as total_trades,
+      SUM(amount) as total_volume,
+      COUNT(DISTINCT trader) as unique_traders,
+      AVG(amount) as avg_sale_price,
+      COUNT(CASE WHEN block_time >= NOW() - INTERVAL '24 hours' THEN 1 END) as recent_trades_24h,
+      SUM(CASE WHEN block_time >= NOW() - INTERVAL '24 hours' THEN amount ELSE 0 END) as recent_volume_24h
+    FROM nft.trades
+    WHERE nft_contract_address = '${contractLower}'
+      AND blockchain = '${duneChain}'
+    LIMIT 1
+  `;
 
-  if (!queryId) {
-    console.warn('Dune NFT metrics query ID not configured');
-    return null;
-  }
-
-  const result = await executeDuneQuery(queryId, {
-    contract_address: params.contractAddress,
-    blockchain: duneChain,
-  });
+  const result = await executeDuneSQL(sql);
 
   if (!result || result.rows.length === 0) {
     return null;
@@ -185,12 +188,12 @@ export async function fetchNFTCollectionMetrics(params: {
   const row = result.rows[0];
 
   return {
-    totalMints: numericValue(row.total_mints),
+    totalMints: null, // nft.trades doesn't have mint data
     totalTrades: numericValue(row.total_trades),
     totalVolume: formatCurrency(row.total_volume),
     uniqueTraders: numericValue(row.unique_traders),
     avgSalePrice: formatCurrency(row.avg_sale_price),
-    recentMints24h: numericValue(row.recent_mints_24h),
+    recentMints24h: null,
     recentTrades24h: numericValue(row.recent_trades_24h),
     recentVolume24h: formatCurrency(row.recent_volume_24h),
   };
@@ -219,29 +222,35 @@ export async function fetchNFTRecentActivity(params: {
   };
 
   const duneChain = chainMap[params.chain.toLowerCase()] || params.chain.toLowerCase();
-  const queryId = process.env.DUNE_NFT_ACTIVITY_QUERY_ID;
+  const contractLower = params.contractAddress.toLowerCase();
+  const limit = params.limit ?? 10;
 
-  if (!queryId) {
-    console.warn('Dune NFT activity query ID not configured');
-    return null;
-  }
+  const sql = `
+    SELECT
+      'sale' as type,
+      block_time as timestamp,
+      amount as price,
+      trader as from_addr,
+      nft_from_address as to_addr
+    FROM nft.trades
+    WHERE nft_contract_address = '${contractLower}'
+      AND blockchain = '${duneChain}'
+    ORDER BY block_time DESC
+    LIMIT ${limit}
+  `;
 
-  const result = await executeDuneQuery(queryId, {
-    contract_address: params.contractAddress,
-    blockchain: duneChain,
-    limit: params.limit ?? 10,
-  });
+  const result = await executeDuneSQL(sql);
 
   if (!result || result.rows.length === 0) {
     return null;
   }
 
   return result.rows.map(row => ({
-    type: stringValue(row.type) === 'sale' ? 'sale' : 'mint',
+    type: 'sale',
     timestamp: stringValue(row.timestamp) || new Date().toISOString(),
     price: formatCurrency(row.price),
-    from: stringValue(row.from),
-    to: stringValue(row.to),
+    from: stringValue(row.from_addr),
+    to: stringValue(row.to_addr),
   }));
 }
 
@@ -265,17 +274,22 @@ export async function fetchTokenPrice(params: {
   };
 
   const duneChain = chainMap[params.chain.toLowerCase()] || params.chain.toLowerCase();
-  const queryId = process.env.DUNE_TOKEN_PRICE_QUERY_ID;
+  const tokenLower = params.tokenAddress.toLowerCase();
 
-  if (!queryId) {
-    console.warn('Dune token price query ID not configured');
-    return null;
-  }
+  const sql = `
+    SELECT
+      price,
+      price_24h_change_percent as price_change_24h,
+      market_cap,
+      volume_24h
+    FROM prices.usd
+    WHERE token_address = '${tokenLower}'
+      AND blockchain = '${duneChain}'
+    ORDER BY minute DESC
+    LIMIT 1
+  `;
 
-  const result = await executeDuneQuery(queryId, {
-    token_address: params.tokenAddress,
-    blockchain: duneChain,
-  });
+  const result = await executeDuneSQL(sql);
 
   if (!result || result.rows.length === 0) {
     return null;
