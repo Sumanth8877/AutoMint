@@ -27,6 +27,8 @@ const scriptSrc = [
   'https://*.clerk.accounts.dev',
   'https://*.clerk.com',
   'https://clerk.com',
+  // Vercel Analytics script loading
+  'https://va.vercel-scripts.com',
   // Next.js dev HMR needs eval and inline in dev mode.
   // In production, 'unsafe-inline' is replaced by per-request CSP nonces
   // injected by src/middleware.ts — see buildCsp() there.
@@ -43,6 +45,8 @@ const connectSrc = [
   'https://*.clerk.com',
   'https://clerk.com',
   'https://api.clerk.com',
+  // Vercel Analytics data collection
+  'https://vitals.vercel-insights.com',
   // Sentry error reporting
   'https://*.sentry.io',
   'https://sentry.io',
