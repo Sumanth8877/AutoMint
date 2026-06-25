@@ -30,18 +30,15 @@ export async function POST(req: Request) {
     const limited = await enforceRateLimit(`wallets:import:${authResult.userId}`, RATE_LIMITS.sensitive);
     if (limited) return limited;
 
-    const body = await parseJsonBody<{ walletType?: ImportWalletType; privateKey?: string; nickname?: string | null }>(req);
-    const { walletType, privateKey, nickname } = body;
-
-    if (walletType !== 'EVM' && walletType !== 'SOLANA' && walletType !== 'BITCOIN') {
-      return NextResponse.json({ error: 'Wallet type is required' }, { status: 400 });
-    }
+    const body = await parseJsonBody<{ privateKey?: string; nickname?: string | null }>(req);
+    const { privateKey, nickname } = body;
 
     if (!privateKey) {
       return NextResponse.json({ error: 'Private key is required' }, { status: 400 });
     }
 
-    const wallet = await importWallet(authResult.userId, { walletType, privateKey, nickname });
+    // Auto-detect wallet type from private key format
+    const wallet = await importWallet(authResult.userId, { privateKey, nickname });
 
     return NextResponse.json({ wallet }, { status: 201 });
   } catch (error) {

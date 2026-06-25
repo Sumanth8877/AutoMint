@@ -185,8 +185,32 @@ async function storeBalance(walletId: string, userId: string, snapshot: BalanceS
   return updated;
 }
 
-export async function importWallet(userId: string, data: { walletType: ImportWalletType; privateKey: string; nickname?: string | null }) {
-  const derived = deriveWalletFromPrivateKey(data.walletType, data.privateKey);
+export async function importWallet(userId: string, data: { privateKey: string; nickname?: string | null }) {
+  // Auto-detect wallet type from private key format
+  let walletType: ImportWalletType = 'EVM';
+  
+  // Try to detect wallet type by attempting to derive from each type
+  try {
+    // Try EVM first (most common)
+    deriveWalletFromPrivateKey('EVM', data.privateKey);
+    walletType = 'EVM';
+  } catch {
+    try {
+      // Try Solana
+      deriveWalletFromPrivateKey('SOLANA', data.privateKey);
+      walletType = 'SOLANA';
+    } catch {
+      try {
+        // Try Bitcoin
+        deriveWalletFromPrivateKey('BITCOIN', data.privateKey);
+        walletType = 'BITCOIN';
+      } catch {
+        throw new Error('Invalid private key format. Could not detect wallet type (EVM, Solana, or Bitcoin).');
+      }
+    }
+  }
+
+  const derived = deriveWalletFromPrivateKey(walletType, data.privateKey);
 
   const [existing] = await getDb()
     .select({ id: wallets.id })

@@ -38,8 +38,7 @@ type BalanceRecord = {
 
 type WalletForm = {
   nickname: string;
-  address: string;
-  chain: Chain;
+  privateKey: string;
 };
 
 const explorerHosts: Record<Chain, string> = {
@@ -110,7 +109,7 @@ export default function WalletsClient() {
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [walletTypeFilter, setWalletTypeFilter] = useState<WalletTypeFilter>('ALL');
-  const [form, setForm] = useState<WalletForm>({ nickname: '', address: '', chain: 'ethereum' });
+  const [form, setForm] = useState<WalletForm>({ nickname: '', privateKey: '' });
 
   // Fetch wallets with React Query
   const { data: walletsData, isLoading, error: fetchError } = useQuery({
@@ -182,20 +181,20 @@ export default function WalletsClient() {
   }, [fetchError]);
 
   function openAdd() {
-    setForm({ nickname: '', address: '', chain: 'ethereum' });
+    setForm({ nickname: '', privateKey: '' });
     setFormError(null);
     setAddModalOpen(true);
   }
 
   function openEdit(wallet: WalletRecord) {
-    setForm({ nickname: wallet.nickname ?? '', address: wallet.address, chain: wallet.chain });
+    setForm({ nickname: wallet.nickname ?? '', privateKey: '' });
     setFormError(null);
     setEditWallet(wallet);
   }
 
   // Add wallet mutation
   const addWalletMutation = useMutation({
-    mutationFn: async (walletData: { address: string; nickname: string | null; chain: string }) => {
+    mutationFn: async (walletData: { privateKey: string; nickname: string | null }) => {
       return apiRequest<{ wallet: WalletRecord }>('/api/wallets', {
         method: 'POST',
         body: walletData,
@@ -210,10 +209,10 @@ export default function WalletsClient() {
 
   // Edit wallet mutation
   const editWalletMutation = useMutation({
-    mutationFn: async ({ id, nickname, chain }: { id: string; nickname: string | null; chain: string }) => {
+    mutationFn: async ({ id, nickname }: { id: string; nickname: string | null }) => {
       return apiRequest<{ wallet: WalletRecord }>(`/api/wallets/${id}`, {
         method: 'PATCH',
-        body: { nickname, chain },
+        body: { nickname },
       });
     },
     onSuccess: (data) => {
@@ -256,9 +255,8 @@ export default function WalletsClient() {
 
     try {
       await addWalletMutation.mutateAsync({
-        address: form.address.trim(),
+        privateKey: form.privateKey.trim(),
         nickname: form.nickname.trim() || null,
-        chain: form.chain,
       });
     } catch (requestError) {
       setFormError(requestError instanceof Error ? requestError.message : 'Failed to add wallet.');
@@ -277,7 +275,6 @@ export default function WalletsClient() {
       await editWalletMutation.mutateAsync({
         id: editWallet.id,
         nickname: form.nickname.trim() || null,
-        chain: form.chain,
       });
     } catch (requestError) {
       setFormError(requestError instanceof Error ? requestError.message : 'Failed to update wallet.');
@@ -471,19 +468,8 @@ export default function WalletsClient() {
       <Modal open={addModalOpen} title="Add Wallet" onClose={() => setAddModalOpen(false)}>
         <form onSubmit={submitWallet} className="space-y-4">
           <Input label="Wallet Name" value={form.nickname} onChange={(event) => setForm((current) => ({ ...current, nickname: event.target.value }))} placeholder="Main Wallet" />
-          <Input label="Wallet Address" value={form.address} onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))} placeholder="0x, Solana, or Bitcoin address" required />
-          <label className="block text-sm font-medium text-muted">
-            EVM Network
-            <select
-              value={form.chain}
-              onChange={(event) => setForm((current) => ({ ...current, chain: event.target.value as Chain }))}
-              className="mt-2 h-11 w-full rounded-lg border border-border bg-background/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-            >
-              {chainOptions.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-          </label>
+          <Input label="Private Key" type="password" value={form.privateKey} onChange={(event) => setForm((current) => ({ ...current, privateKey: event.target.value }))} placeholder="Your private key (EVM, Solana, or Bitcoin)" required />
+          <p className="text-xs text-muted">Wallet type (EVM/Solana/Bitcoin) will be auto-detected from your private key format</p>
           {formError ? <div className="rounded-lg border border-danger/20 bg-danger/10 p-3 text-sm text-danger" role="alert">{formError}</div> : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setAddModalOpen(false)}>Cancel</Button>
@@ -500,20 +486,7 @@ export default function WalletsClient() {
             onChange={(event) => setForm((current) => ({ ...current, nickname: event.target.value }))}
             placeholder="Main Wallet"
           />
-          {editWallet?.walletType === 'EVM' ? (
-            <label className="block text-sm font-medium text-muted">
-              EVM Network
-              <select
-                value={form.chain}
-                onChange={(event) => setForm((current) => ({ ...current, chain: event.target.value as Chain }))}
-                className="mt-2 h-11 w-full rounded-lg border border-border bg-background/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-              >
-                {chainOptions.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </label>
-          ) : null}
+          <p className="text-xs text-muted">Wallet type: {editWallet?.walletType} | Chain: {editWallet?.chain}</p>
           {formError ? <div className="rounded-lg border border-danger/20 bg-danger/10 p-3 text-sm text-danger" role="alert">{formError}</div> : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setEditWallet(null)}>Cancel</Button>
