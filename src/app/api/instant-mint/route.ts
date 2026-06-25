@@ -452,10 +452,24 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
+    // Find the collection by contract address to get its ID
+    const [collection] = await getDb()
+      .select()
+      .from(collections)
+      .where(and(
+        eq(collections.contractAddress, contractAddressLower),
+        eq(collections.userId, authResult.userId)
+      ))
+      .limit(1);
+
+    if (!collection) {
+      throw new Error('Collection not found. Please ensure the collection exists in your database.');
+    }
+
     // Create mint task
     const task = await addMintTask(authResult.userId, {
       walletId: defaults.defaultWalletId,
-      collectionId: contractAddressLower,
+      collectionId: collection.id,
       quantity: 1,
       chain: supportedChain,
     });
