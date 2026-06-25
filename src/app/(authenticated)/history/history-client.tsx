@@ -275,9 +275,9 @@ export default function HistoryClient() {
     enabled: activeTab === 'analyzer',
   });
 
-  const mintRows = mintData?.items || [];
-  const scheduledRows = scheduledData?.items || [];
-  const analyzerRows = analyzerData?.items || [];
+  const mintRows = useMemo(() => mintData?.items ?? [], [mintData?.items]);
+  const scheduledRows = useMemo(() => scheduledData?.items ?? [], [scheduledData?.items]);
+  const analyzerRows = useMemo(() => analyzerData?.items ?? [], [analyzerData?.items]);
   const totalPages = (mintData?.totalPages || scheduledData?.totalPages || analyzerData?.totalPages || 1);
   const loading = activeTab === 'mints' ? mintLoading : activeTab === 'scheduled' ? scheduledLoading : analyzerLoading;
   const fetchError = activeTab === 'mints' ? mintError : activeTab === 'scheduled' ? scheduledError : analyzerError;
@@ -309,16 +309,6 @@ export default function HistoryClient() {
         method: 'PATCH',
         body: { scheduledTime, quantity: Number(quantity) },
       });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['scheduled-history'] });
-    },
-  });
-
-  // Delete scheduled task mutation
-  const deleteScheduledMutation = useMutation({
-    mutationFn: async (id: string) => {
-      return apiRequest<{ success: true }>(`/api/history/scheduled/${id}`, { method: 'DELETE' });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['scheduled-history'] });

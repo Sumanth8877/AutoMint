@@ -92,7 +92,7 @@ export default function EmailNotificationsClient() {
         body: preferences,
       });
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['email-notifications'] });
       setSavedAt(new Date().toISOString());
       setSuccess('Preferences saved successfully');

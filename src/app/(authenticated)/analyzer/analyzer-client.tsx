@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowRight, CheckCircle2, Clipboard, ExternalLink, Gauge, Save, Sparkles, TerminalSquare } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, ExternalLink, Gauge, Save, Sparkles, TerminalSquare } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -271,16 +271,6 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
       setError(requestError instanceof Error ? requestError.message : 'Analyzer request failed.');
     } finally {
       setAnalyzing(false);
-    }
-  };
-
-  const pasteUrl = async () => {
-    try {
-      const text = await navigator.clipboard.readText();
-      setUrl(text);
-      setError(null);
-    } catch {
-      setError('Clipboard access is unavailable in this browser.');
     }
   };
 

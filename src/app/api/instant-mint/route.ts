@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getErrorMessage, parseJsonBody } from '@/lib/api/errors';
 import { resolveMintIntent, type MintIntent } from '@/lib/resolve-mint-intent';
-import { AnalyzerResolutionError, normalizeAnalyzerInput, runAnalyzer, type AnalyzerResult } from '@/lib/services/analyzer.service';
-import { addMintTask, executeMintTask, getUserMintTasks } from '@/lib/services/mint.service';
+import { runAnalyzer } from '@/lib/services/analyzer.service';
+import { addMintTask, executeMintTask } from '@/lib/services/mint.service';
 import { getEffectiveExecutionDefaults } from '@/lib/services/execution-settings.service';
 import { scheduleMint } from '@/lib/services/qstash.service';
 import { getDb } from '@/lib/db';
@@ -27,7 +27,7 @@ async function resolveMintUrl(url: string): Promise<MintIntent & { mintPhases: M
     if (intent.contractAddress) {
       return { ...intent, mintPhases: [{ type: 'public', proofRequired: false }] };
     }
-  } catch (error) {
+  } catch {
     console.log('URL resolver failed, trying fallback methods');
   }
 
@@ -44,7 +44,7 @@ async function resolveMintUrl(url: string): Promise<MintIntent & { mintPhases: M
     if (jinaResult.status === 'fulfilled' && jinaResult.value.contractAddress) {
       return jinaResult.value;
     }
-  } catch (error) {
+  } catch {
     console.log('Firecrawl + Jina failed, trying Browserbase');
   }
 
@@ -54,7 +54,7 @@ async function resolveMintUrl(url: string): Promise<MintIntent & { mintPhases: M
     if (browserbaseResult.contractAddress) {
       return browserbaseResult;
     }
-  } catch (error) {
+  } catch {
     console.log('Browserbase failed');
   }
 
@@ -218,31 +218,6 @@ function extractMintPhases(content: string): MintPhase[] {
   return phases;
 }
 
-function extractMintTime(content: string): Date | undefined {
-  // Try to extract mint time from content
-  const timePatterns = [
-    /mint\s+(?:starts?|begins?|opens?)\s*(?:at|on)?\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i,
-    /(?:launch|drop)\s*(?:at|on)?\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i,
-    /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})/,
-  ];
-
-  for (const pattern of timePatterns) {
-    const match = content.match(pattern);
-    if (match) {
-      try {
-        const date = new Date(match[1]);
-        if (!isNaN(date.getTime())) {
-          return date;
-        }
-      } catch {
-        continue;
-      }
-    }
-  }
-
-  return undefined;
-}
-
 function extractCollectionName(content: string): string | null {
   // Try to extract collection name from content
   const patterns = [
@@ -314,7 +289,7 @@ async function getBestRpcUrl(chain: SupportedChain): Promise<string> {
   return chainRpcs[0]; // Fallback to first
 }
 
-async function estimateGas(chain: SupportedChain, rpcUrl: string, contractAddress: string): Promise<{ standard: string; recommended: string }> {
+async function estimateGas(rpcUrl: string): Promise<{ standard: string; recommended: string }> {
   // Implement gas estimation
   try {
     const response = await fetch(rpcUrl, {
@@ -388,7 +363,7 @@ export async function POST(request: Request) {
     const rpcUrl = await getBestRpcUrl(supportedChain);
 
     // Estimate gas
-    const gasEstimate = await estimateGas(supportedChain, rpcUrl, contractAddress);
+    const gasEstimate = await estimateGas(rpcUrl);
 
     // Run analyzer for risk assessment with minimal depth (no social discovery)
     const settings = await getEffectiveExecutionDefaults(authResult.userId);

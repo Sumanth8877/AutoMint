@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import type { LucideIcon } from 'lucide-react';
 import {
   Activity,
   AlertTriangle,
@@ -15,7 +14,6 @@ import {
   Target,
   Wallet,
   Zap,
-  XCircle,
 } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Card from '@/components/ui/Card';
@@ -25,9 +23,8 @@ import { getUserMintTasks } from '@/lib/services/mint.service';
 import { getRecentActivities } from '@/lib/monitoring';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getDb } from '@/lib/db';
-import { mintTasks, wallets, collections } from '@/drizzle/schema';
-import { eq, and, desc, count, sql } from 'drizzle-orm';
-import { getClient } from '@/lib/blockchain/client';
+import { wallets, collections } from '@/drizzle/schema';
+import { eq } from 'drizzle-orm';
 import { formatEther } from 'viem';
 
 async function getDashboardData(userId: string) {
@@ -50,7 +47,7 @@ async function getDashboardData(userId: string) {
       if (wallet.address && wallet.balance) {
         try {
           portfolioValue += BigInt(wallet.balance);
-        } catch (e) {
+        } catch {
           // Skip balance parse if it fails
         }
       }
@@ -65,7 +62,7 @@ async function getDashboardData(userId: string) {
     let activities: Awaited<ReturnType<typeof getRecentActivities>> = [];
     try {
       activities = await getRecentActivities(userId);
-    } catch (e) {
+    } catch {
       // Skip activities if fetch fails
     }
     

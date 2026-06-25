@@ -120,7 +120,7 @@ export default function WalletsClient() {
     queryFn: () => apiRequest<{ wallets: WalletRecord[] }>('/api/wallets'),
   });
 
-  const wallets = walletsData?.wallets || [];
+  const wallets = useMemo(() => walletsData?.wallets ?? [], [walletsData?.wallets]);
 
   const filteredWallets = useMemo(() => {
     if (walletTypeFilter === 'ALL') return wallets;

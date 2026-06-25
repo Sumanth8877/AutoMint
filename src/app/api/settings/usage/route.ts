@@ -90,7 +90,7 @@ async function fetchRedisUsage(todayTasks: number): Promise<UsageStat> {
       ok: true,
       tip: `Free tier: 10,000 commands/day. Metrics calculated from active cache-locks + background scheduler operations.`,
     };
-  } catch (err) {
+  } catch {
     const backupCmds = (todayTasks * 28) + 142;
     return {
       ...base,
@@ -366,7 +366,7 @@ export async function GET() {
     todayTasks = (todayTasksRes.rows[0] as { count: number }).count ?? 0;
     monthTasks = (monthTasksRes.rows[0] as { count: number }).count ?? 0;
     monthActivities = (monthActivitiesRes.rows[0] as { count: number }).count ?? 0;
-  } catch (err) {
+  } catch {
     // If DB is down or migrating, fall back to safe base numbers
     todayTasks = 0;
     monthTasks = 1;

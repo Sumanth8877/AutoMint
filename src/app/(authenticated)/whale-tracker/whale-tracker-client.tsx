@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Activity, Eye, Pause, Pencil, Play, Plus, Radar, ShieldCheck, Trash2, Zap } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
@@ -169,7 +169,7 @@ export default function WhaleTrackerClient() {
   });
 
   const trackedWallets = walletData?.wallets || [];
-  const copyRules = ruleData?.rules || [];
+  const copyRules = useMemo(() => ruleData?.rules ?? [], [ruleData?.rules]);
   const activities = activityData?.activities || [];
   const reputations = reputationData?.reputations || [];
   const destinationWallets = destinationData?.wallets || [];

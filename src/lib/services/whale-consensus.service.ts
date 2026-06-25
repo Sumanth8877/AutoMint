@@ -8,7 +8,7 @@ import { logActivity } from '@/lib/monitoring';
 import { getMintState } from '@/lib/services/mint-state.service';
 import { fetchMintRequirements } from '@/lib/services/mint-requirements.service';
 import { executeMintTask } from '@/lib/services/mint.service';
-import { getBatchWalletReputationWeights, getWalletReputationWeight, updateWalletReputation } from '@/lib/services/wallet-reputation.service';
+import { getBatchWalletReputationWeights, updateWalletReputation } from '@/lib/services/wallet-reputation.service';
 import { addBreadcrumb, captureException, captureMessage } from '@/lib/observability/sentry';
 
 type Chain = 'ethereum' | 'base' | 'polygon';

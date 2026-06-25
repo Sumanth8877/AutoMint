@@ -82,7 +82,7 @@ export default function ApiKeysClient() {
     return Array.from(groups.entries()).sort(([left], [right]) => left.localeCompare(right));
   }, [payload, statusFilter]);
 
-  function handlePayload(response: IntegrationStatusResponse) {
+  function handlePayload() {
     setLastRefreshAt(new Date().toISOString());
   }
 
@@ -101,9 +101,9 @@ export default function ApiKeysClient() {
         method: 'POST',
       });
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['integrations'] });
-      handlePayload(data);
+      handlePayload();
     },
   });
 
@@ -111,8 +111,8 @@ export default function ApiKeysClient() {
     setTesting(true);
     setError(null);
     try {
-      const response = await testMutation.mutateAsync();
-      handlePayload(response);
+      await testMutation.mutateAsync();
+      handlePayload();
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to test integrations.');
       setLastRefreshAt(new Date().toISOString());

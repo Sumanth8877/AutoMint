@@ -10,23 +10,6 @@ type MoralisNFTCollectionResponse = {
   }[];
 };
 
-type MoralisNFTMetadataResponse = {
-  result: {
-    token_address: string;
-    token_id: string;
-    contract_type: string;
-    owner_of: string;
-    block_number: string;
-    block_number_minted: string;
-    token_uri: string;
-    metadata: string;
-    last_token_uri_sync: string;
-    last_metadata_sync: string;
-    possible_spam: boolean;
-    verified_collection: boolean;
-  }[];
-};
-
 type MoralisNFTTradesResponse = {
   result: {
     transaction_hash: string;

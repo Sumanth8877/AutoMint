@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { addBreadcrumb, captureException, captureMessage } from '@/lib/observability/sentry';
+import { addBreadcrumb, captureMessage } from '@/lib/observability/sentry';
 
 // ─── Private Mempool Endpoints ────────────────────────────────────────────────
 //

@@ -49,7 +49,7 @@ export default function CollectionsClient() {
     queryFn: () => apiRequest<{ collections: CollectionRecord[] }>('/api/collections'),
   });
 
-  const collections = collectionsData?.collections || [];
+  const collections = useMemo(() => collectionsData?.collections ?? [], [collectionsData?.collections]);
   const trackedCount = collections.length;
   const syncedCount = useMemo(() => collections.filter((collection) => collection.tokenStandard || collection.totalSupply).length, [collections]);
   const unknownCount = trackedCount - syncedCount;

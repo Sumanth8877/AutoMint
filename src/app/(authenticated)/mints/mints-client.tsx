@@ -95,9 +95,9 @@ export default function MintsClient() {
     queryFn: () => apiRequest<{ collections: CollectionRecord[] }>('/api/collections'),
   });
 
-  const tasks = mintsData?.tasks || [];
-  const wallets = walletsData?.wallets || [];
-  const collections = collectionsData?.collections || [];
+  const tasks = useMemo(() => mintsData?.tasks ?? [], [mintsData?.tasks]);
+  const wallets = useMemo(() => walletsData?.wallets ?? [], [walletsData?.wallets]);
+  const collections = useMemo(() => collectionsData?.collections ?? [], [collectionsData?.collections]);
 
   const collectionById = useMemo(() => new Map(collections.map((collection) => [collection.id, collection])), [collections]);
   const walletById = useMemo(() => new Map(wallets.map((wallet) => [wallet.id, wallet])), [wallets]);

@@ -111,7 +111,7 @@ export default function RpcProvidersClient() {
         body: settings,
       });
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rpc-providers'] });
       setSuccess('RPC provider settings saved successfully.');
     },
