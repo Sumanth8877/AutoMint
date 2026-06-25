@@ -10,12 +10,16 @@ export const dynamic = 'force-dynamic';
 // TELEGRAM_WEBHOOK_SECRET must be set whenever Telegram is enabled.
 // Fail at module load time so the misconfiguration surfaces in deployment logs
 // before any request is processed, rather than silently allowing all requests.
-if (isTelegramEnabled() && !process.env.TELEGRAM_WEBHOOK_SECRET) {
-  throw new Error(
-    '[C-2] TELEGRAM_WEBHOOK_SECRET is required when TELEGRAM_ENABLED=true. ' +
-    'Generate a secret (openssl rand -hex 32) and set it in your environment. ' +
-    'The same value must be registered with the Telegram Bot API as the webhook secret token.',
-  );
+try {
+  if (isTelegramEnabled() && !process.env.TELEGRAM_WEBHOOK_SECRET) {
+    throw new Error(
+      '[C-2] TELEGRAM_WEBHOOK_SECRET is required when TELEGRAM_ENABLED=true. ' +
+      'Generate a secret (openssl rand -hex 32) and set it in your environment. ' +
+      'The same value must be registered with the Telegram Bot API as the webhook secret token.',
+    );
+  }
+} catch (error) {
+  console.error('Telegram webhook startup validation failed:', error);
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
