@@ -50,10 +50,20 @@ function getQStashToken() {
 
 function getWebhookUrl() {
   const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL;
-  if (appUrl) return `${appUrl.replace(/\/$/, '')}/api/webhooks/qstash`;
+  if (appUrl) {
+    const url = appUrl.replace(/\/$/, '');
+    // Ensure URL has a scheme
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      return `https://${url}/api/webhooks/qstash`;
+    }
+    return `${url}/api/webhooks/qstash`;
+  }
 
   const vercelUrl = process.env.VERCEL_URL;
-  if (vercelUrl) return `https://${vercelUrl.replace(/\/$/, '')}/api/webhooks/qstash`;
+  if (vercelUrl) {
+    const url = vercelUrl.replace(/\/$/, '');
+    return `https://${url}/api/webhooks/qstash`;
+  }
 
   throw new Error('APP_URL, NEXT_PUBLIC_APP_URL, or VERCEL_URL is required');
 }
