@@ -141,7 +141,7 @@ export async function watchForMintLive(
     // On each new block, check mint state — a mint can only go live on a block boundary
     try {
       unwatch = client.watchBlockNumber({
-        onBlockNumber: async (blockNumber) => {
+        onBlockNumber: async (blockNumber: bigint) => {
           if (settled) return;
 
           try {
@@ -164,7 +164,7 @@ export async function watchForMintLive(
             // Ignore individual block check errors — keep watching
           }
         },
-        onError: (error) => {
+        onError: (error: Error) => {
           if (settled) return;
           addBreadcrumb({
             category: 'mint-monitor',
