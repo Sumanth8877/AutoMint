@@ -95,7 +95,7 @@ type NotificationPayload = {
 };
 
 export function isTelegramEnabled() {
-  return process.env.TELEGRAM_ENABLED === 'true';
+  return process.env.TELEGRAM_ENABLED?.trim().toLowerCase() === 'true';
 }
 
 function telegramDisabledResult(reason = 'telegram_disabled') {

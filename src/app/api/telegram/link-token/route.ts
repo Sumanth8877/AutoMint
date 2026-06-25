@@ -27,6 +27,7 @@ export async function GET() {
     const botUsername = process.env.TELEGRAM_BOT_USERNAME?.replace(/^@/, '');
 
     return NextResponse.json({
+      enabled: true,
       token,
       linked: Boolean(account),
       account,
