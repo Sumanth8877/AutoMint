@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Bell, ChevronRight, KeyRound, Lock, Radio, Settings, SlidersHorizontal, User, Wrench } from 'lucide-react';
+import { Bell, ChevronRight, KeyRound, Lock, Radio, Settings, SlidersHorizontal, User, Wrench, Send } from 'lucide-react';
 import Card from '@/components/ui/Card';
 import { PageHeader } from '@/components/ui/page-header';
 
@@ -25,7 +25,10 @@ const groups: { title: string; icon: React.ElementType; items: { label: string; 
   {
     title: 'Notifications',
     icon: Bell,
-    items: [{ label: 'Email Notifications', href: '/settings/email-notifications', icon: Bell, description: 'Mint alerts and system errors' }],
+    items: [
+      { label: 'Email Notifications', href: '/settings/email-notifications', icon: Bell, description: 'Mint alerts and system errors' },
+      { label: 'Telegram', href: '/settings/telegram', icon: Send, description: 'Link Telegram bot for mint commands and alerts' },
+    ],
   },
   {
     title: 'Security',
