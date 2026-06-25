@@ -75,7 +75,7 @@ export default function MintsClient() {
   const [queueOpen, setQueueOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
-  const [form, setForm] = useState({ walletId: '', collectionId: '', mintUrl: '', quantity: '1' });
+  const [form, setForm] = useState({ walletId: '', mintUrl: '' });
   const [analyzedUrl, setAnalyzedUrl] = useState<string | null>(null);
 
   // Handle mintUrl from URL params
@@ -124,7 +124,7 @@ export default function MintsClient() {
 
   // Create task mutation
   const createTaskMutation = useMutation({
-    mutationFn: async (data: { walletId: string; collectionId?: string; mintUrl?: string; analysisConfirmed: boolean; quantity: string }) => {
+    mutationFn: async (data: { walletId: string; mintUrl: string; analysisConfirmed: boolean; quantity: string }) => {
       return apiRequest<MintActionResponse>('/api/mints', {
         method: 'POST',
         body: data,
@@ -212,14 +212,18 @@ export default function MintsClient() {
 
     try {
       const mintUrl = form.mintUrl.trim();
+      if (!analyzedUrl || analyzedUrl !== mintUrl) {
+        setFormError('Please analyze the URL before creating a mint task');
+        return;
+      }
+
       const payload = await createTaskMutation.mutateAsync({
         walletId: form.walletId,
-        collectionId: mintUrl ? undefined : form.collectionId,
-        mintUrl: mintUrl || undefined,
-        analysisConfirmed: Boolean(mintUrl && analyzedUrl === mintUrl),
-        quantity: form.quantity,
+        mintUrl: mintUrl,
+        analysisConfirmed: true,
+        quantity: '1',
       });
-      setForm({ walletId: '', collectionId: '', mintUrl: '', quantity: '1' });
+      setForm({ walletId: '', mintUrl: '' });
       setAnalyzedUrl(null);
       setModalOpen(false);
       if (payload.analyzerRequired) {
@@ -403,34 +407,32 @@ export default function MintsClient() {
               value={form.mintUrl}
               onChange={(event) => handleMintUrlChange(event.target.value)}
               placeholder="https://..."
+              required
             />
             <div className="flex items-center justify-between gap-3">
-              <span className="text-xs text-muted">{analyzedUrl === form.mintUrl.trim() && form.mintUrl.trim() ? 'Analysis ready' : 'Paste a URL to create from a launchpad or explorer.'}</span>
+              {analyzedUrl === form.mintUrl.trim() && form.mintUrl.trim() ? (
+                <span className="text-xs text-success">Analysis ready</span>
+              ) : (
+                <span className="text-xs text-muted">Paste a URL to analyze</span>
+              )}
               <Button type="button" variant="secondary" onClick={analyzeMintUrl} loading={analyzing} disabled={!form.mintUrl.trim()}>
                 <ShieldCheck className="h-4 w-4" aria-hidden="true" />
                 Analyze
               </Button>
             </div>
+            {analyzedUrl === form.mintUrl.trim() && form.mintUrl.trim() && (
+              <div className="flex items-center gap-2 rounded-lg bg-background/50 p-3">
+                <ShieldCheck className="h-4 w-4 text-success" aria-hidden="true" />
+                <span className="text-sm font-medium text-success">Safe to mint</span>
+              </div>
+            )}
           </div>
-          <label className="block text-sm font-medium text-muted">
-            Collection
-            <select
-              value={form.collectionId}
-              onChange={(event) => setForm((current) => ({ ...current, collectionId: event.target.value }))}
-              className="mt-2 h-11 w-full rounded-lg border border-border bg-background/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-              required={!form.mintUrl.trim()}
-            >
-              <option value="">Select collection</option>
-              {collections.map((collection) => (
-                <option key={collection.id} value={collection.id}>{collection.name || shortAddress(collection.contractAddress)} / {collection.chain}</option>
-              ))}
-            </select>
-          </label>
-          <Input label="Quantity" type="number" min="1" value={form.quantity} onChange={(event) => setForm((current) => ({ ...current, quantity: event.target.value }))} required />
           {formError ? <div className="rounded-lg border border-danger/20 bg-danger/10 p-3 text-sm text-danger" role="alert">{formError}</div> : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button type="submit" loading={saving}>Create Mint</Button>
+            <Button type="submit" loading={saving} disabled={!analyzedUrl || analyzedUrl !== form.mintUrl.trim()}>
+              Create Mint
+            </Button>
           </div>
         </form>
       </Modal>

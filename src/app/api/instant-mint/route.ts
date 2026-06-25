@@ -3,12 +3,11 @@ import { requireApiUser } from '@/lib/auth/require-auth';
 import { getErrorMessage, parseJsonBody } from '@/lib/api/errors';
 import { resolveMintIntent, type MintIntent } from '@/lib/resolve-mint-intent';
 import { AnalyzerResolutionError, normalizeAnalyzerInput, runAnalyzer, type AnalyzerResult } from '@/lib/services/analyzer.service';
-import { analyzeMintRisk } from '@/lib/services/risk.service';
 import { addMintTask, executeMintTask, getUserMintTasks } from '@/lib/services/mint.service';
 import { getEffectiveExecutionDefaults } from '@/lib/services/execution-settings.service';
 import { scheduleMint } from '@/lib/services/qstash.service';
 import { getDb } from '@/lib/db';
-import { collections, mintTasks } from '@/drizzle/schema';
+import { collections, mintTasks, wallets } from '@/drizzle/schema';
 import { eq, and, desc } from 'drizzle-orm';
 
 const SUPPORTED_CHAINS = ['ethereum', 'base', 'polygon'] as const;
@@ -398,6 +397,30 @@ export async function POST(request: Request) {
 
     // Get execution defaults
     const defaults = await getEffectiveExecutionDefaults(authResult.userId);
+
+    // Check if user has a default wallet
+    if (!defaults.defaultWalletId) {
+      throw new Error('No default wallet configured. Please add a wallet in your settings.');
+    }
+
+    // Verify wallet exists and has sufficient balance
+    const [wallet] = await getDb()
+      .select()
+      .from(wallets)
+      .where(and(
+        eq(wallets.id, defaults.defaultWalletId),
+        eq(wallets.userId, authResult.userId)
+      ))
+      .limit(1);
+
+    if (!wallet) {
+      throw new Error('Default wallet not found. Please configure a valid wallet in your settings.');
+    }
+
+    // Check wallet balance (simplified check - in production would check actual chain balance)
+    if (wallet.balance && parseFloat(wallet.balance) < 0.01) {
+      throw new Error('Insufficient funds in wallet. Please ensure you have enough balance for gas and mint cost.');
+    }
 
     // Upsert collection
     const contractAddressLower = contractAddress.toLowerCase();

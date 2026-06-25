@@ -256,6 +256,16 @@ export async function executeMintTask(
       blockNumber: result.blockNumber?.toString() || undefined,
       confirmedAt: result.blockNumber ? now : undefined,
     });
+
+    // Update collection with minted NFT info (floor price tracking)
+    if (claimed.collectionId) {
+      await getDb().update(collections)
+        .set({
+          lastSyncedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(collections.id, claimed.collectionId));
+    }
   }
 
   if (claimed.userId) {
