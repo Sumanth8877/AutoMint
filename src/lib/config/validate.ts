@@ -61,6 +61,9 @@ const REQUIRED_VARS: EnvSpec[] = [
 
   // ── Moralis Web3 API (optional - for blockchain data and analytics)
   // { name: 'MORALIS_API_KEY' }, // Optional, not required
+
+  // ── NFTScan API (optional - for NFT data and analytics)
+  // { name: 'NFTSCAN_API_KEY' }, // Optional, not required
 ];
 
 export function validateEnv(): void {

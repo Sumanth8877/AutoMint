@@ -4,6 +4,7 @@ import type { CollectionMetadata } from '@/lib/blockchain/collections';
 import type { AnalyzerDebugLogLevel, AnalyzerTiming, MintIntent } from '@/lib/resolve-mint-intent';
 import { fetchNFTCollectionMetrics } from '@/lib/services/dune-analytics.service';
 import { getNFTCollection, getNFTTrades } from '@/lib/services/moralis.service';
+import { getNFTCollection as getNFTScanCollection, getNFTStatistics } from '@/lib/services/nftscan.service';
 
 export type MarketStatus = 'Hot' | 'Active' | 'Stable' | 'Declining' | 'Inactive';
 
@@ -306,6 +307,38 @@ async function fetchMoralisIntelligence(intent: MintIntent): Promise<MarketProvi
   };
 }
 
+async function fetchNFTScanIntelligence(intent: MintIntent): Promise<MarketProviderResult | null> {
+  if (!intent.contractAddress) return null;
+
+  const [collection, statistics] = await Promise.allSettled([
+    getNFTScanCollection({
+      contractAddress: intent.contractAddress,
+      chain: intent.chain,
+    }),
+    getNFTStatistics({
+      contractAddress: intent.contractAddress,
+      chain: intent.chain,
+    }),
+  ]);
+
+  const collectionData = collection.status === 'fulfilled' ? collection.value : null;
+  const statsData = statistics.status === 'fulfilled' ? statistics.value : null;
+
+  if (!collectionData && !statsData) return null;
+
+  return {
+    source: 'NFTScan',
+    collectionName: collectionData?.name,
+    description: collectionData?.description,
+    verified: collectionData?.isVerified,
+    ownerCount: statsData?.totalHolderCount,
+    volume: statsData?.totalVolume,
+    floorPrice: collectionData?.floorPrice,
+    floorCurrency: collectionData?.floorPriceSymbol,
+    recentSalesCount: statsData?.oneDayTradeCount,
+  };
+}
+
 export async function fetchCollectionIntelligence(params: {
   intent: MintIntent;
   metadata: Omit<CollectionMetadata, 'totalSupply'> & { totalSupply: string };
@@ -344,6 +377,7 @@ export async function fetchCollectionIntelligence(params: {
     fetchAlchemyIntelligence(params.intent),
     fetchDuneIntelligence(params.intent),
     fetchMoralisIntelligence(params.intent),
+    fetchNFTScanIntelligence(params.intent),
   ]);
   params.timingBreakdown.push({ stage: 'Market Intelligence', durationMs: Date.now() - startedAt });
 
