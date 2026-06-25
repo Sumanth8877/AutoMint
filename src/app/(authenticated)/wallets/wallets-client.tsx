@@ -205,10 +205,17 @@ export default function WalletsClient() {
       });
     },
     onSuccess: (data) => {
+      console.log('Wallet added successfully:', data.wallet);
       refetch();
       queryClient.invalidateQueries({ queryKey: ['wallets'] });
       if (data.wallet.walletType === 'EVM') void refreshBalance(data.wallet, false);
       setAddModalOpen(false);
+      setForm({ nickname: '', privateKey: '' });
+      setImportWalletType(null);
+    },
+    onError: (error) => {
+      console.error('Error adding wallet:', error);
+      setFormError(error instanceof Error ? error.message : 'Failed to add wallet.');
     },
   });
 
@@ -258,7 +265,6 @@ export default function WalletsClient() {
 
   async function submitWallet(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSaving(true);
     setFormError(null);
 
     if (!importWalletType) {
@@ -266,17 +272,11 @@ export default function WalletsClient() {
       return;
     }
 
-    try {
-      await addWalletMutation.mutateAsync({
-        privateKey: form.privateKey.trim(),
-        nickname: form.nickname.trim() || null,
-        walletType: importWalletType,
-      });
-    } catch (requestError) {
-      setFormError(requestError instanceof Error ? requestError.message : 'Failed to add wallet.');
-    } finally {
-      setSaving(false);
-    }
+    addWalletMutation.mutate({
+      privateKey: form.privateKey.trim(),
+      nickname: form.nickname.trim() || null,
+      walletType: importWalletType,
+    });
   }
 
   async function submitEdit(event: React.FormEvent<HTMLFormElement>) {
