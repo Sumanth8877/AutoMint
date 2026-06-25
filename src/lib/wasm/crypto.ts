@@ -1,4 +1,4 @@
-import init, { sign_transaction, hash_message, verify_signature, generate_keypair, encrypt_data, decrypt_data } from '../../../public/wasm/wasm_crypto';
+import init, { sign_transaction, hash_message, verify_signature, generate_keypair, encrypt_data, decrypt_data } from './pkg/wasm_crypto';
 
 let wasmInitialized = false;
 
