@@ -72,6 +72,11 @@ export async function executeMintTask(
   userId: string,
   options: { existingLockToken?: string; privateMempool?: boolean } = {},
 ): Promise<{ success: boolean; txHash?: string; error?: string }> {
+  // Validate that taskId is a UUID, not a contract address
+  if (!taskId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+    return { success: false, error: 'Invalid task ID format. Expected UUID, got contract address.' };
+  }
+
   return startSpan('mint.execute_task', { area: 'minting', taskId, userId }, async (): Promise<{ success: boolean; txHash?: string; error?: string }> => {
   const mintLock = options.existingLockToken
     ? { acquired: true, mintId: taskId, key: `mint-lock:${taskId}`, token: options.existingLockToken }
@@ -311,6 +316,11 @@ export async function removeMintTask(id: string, userId: string) {
 }
 
 export async function getMintTaskById(id: string, userId: string) {
+  // Validate that id is a UUID, not a contract address
+  if (!id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+    throw new Error('Invalid task ID format. Expected UUID.');
+  }
+
   const [task] = await getDb()
     .select()
     .from(mintTasks)
