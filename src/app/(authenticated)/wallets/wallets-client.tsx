@@ -15,6 +15,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { apiRequest } from '@/lib/api/client';
 import type { WalletType } from '@/lib/wallets/detection';
 
+type ImportWalletType = 'EVM' | 'SOLANA' | 'BITCOIN';
+
 type Chain = 'ethereum' | 'base' | 'polygon';
 type SupportedWalletType = Exclude<WalletType, 'UNKNOWN'>;
 type WalletTypeFilter = 'ALL' | SupportedWalletType;
@@ -110,6 +112,7 @@ export default function WalletsClient() {
   const [formError, setFormError] = useState<string | null>(null);
   const [walletTypeFilter, setWalletTypeFilter] = useState<WalletTypeFilter>('ALL');
   const [form, setForm] = useState<WalletForm>({ nickname: '', privateKey: '' });
+  const [importWalletType, setImportWalletType] = useState<ImportWalletType | null>(null);
 
   // Fetch wallets with React Query
   const { data: walletsData, isLoading, error: fetchError } = useQuery({
@@ -180,8 +183,9 @@ export default function WalletsClient() {
     }
   }, [fetchError]);
 
-  function openAdd() {
+  function openAdd(walletType: ImportWalletType) {
     setForm({ nickname: '', privateKey: '' });
+    setImportWalletType(walletType);
     setFormError(null);
     setAddModalOpen(true);
   }
@@ -194,7 +198,7 @@ export default function WalletsClient() {
 
   // Add wallet mutation
   const addWalletMutation = useMutation({
-    mutationFn: async (walletData: { privateKey: string; nickname: string | null }) => {
+    mutationFn: async (walletData: { privateKey: string; nickname: string | null; walletType: ImportWalletType }) => {
       return apiRequest<{ wallet: WalletRecord }>('/api/wallets', {
         method: 'POST',
         body: walletData,
@@ -253,10 +257,16 @@ export default function WalletsClient() {
     setSaving(true);
     setFormError(null);
 
+    if (!importWalletType) {
+      setFormError('Please select a wallet type');
+      return;
+    }
+
     try {
       await addWalletMutation.mutateAsync({
         privateKey: form.privateKey.trim(),
         nickname: form.nickname.trim() || null,
+        walletType: importWalletType,
       });
     } catch (requestError) {
       setFormError(requestError instanceof Error ? requestError.message : 'Failed to add wallet.');
@@ -343,10 +353,20 @@ export default function WalletsClient() {
         title="Wallets"
         description="Manage wallet names, defaults, balances, network coverage, and scheduled mint task assignment."
         actions={
-          <Button type="button" onClick={openAdd}>
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Add Wallet
-          </Button>
+          <div className="flex gap-2">
+            <Button type="button" variant="secondary" onClick={() => openAdd('EVM')}>
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Import EVM
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => openAdd('SOLANA')}>
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Import Solana
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => openAdd('BITCOIN')}>
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Import Bitcoin
+            </Button>
+          </div>
         }
       />
 
@@ -455,21 +475,30 @@ export default function WalletsClient() {
             icon={Wallet}
             title="No wallets connected."
             description="Add a wallet to make it available for mint planning, execution defaults, and balance checks."
-            action={
-              <Button type="button" onClick={openAdd}>
-                <Plus className="h-4 w-4" aria-hidden="true" />
-                Add Wallet
-              </Button>
-            }
           />
         )}
       </div>
 
-      <Modal open={addModalOpen} title="Add Wallet" onClose={() => setAddModalOpen(false)}>
+      <Modal open={addModalOpen} title={`Add ${importWalletType === 'EVM' ? 'EVM' : importWalletType === 'SOLANA' ? 'Solana' : 'Bitcoin'} Wallet`} onClose={() => setAddModalOpen(false)}>
         <form onSubmit={submitWallet} className="space-y-4">
           <Input label="Wallet Name" value={form.nickname} onChange={(event) => setForm((current) => ({ ...current, nickname: event.target.value }))} placeholder="Main Wallet" />
-          <Input label="Private Key" type="password" value={form.privateKey} onChange={(event) => setForm((current) => ({ ...current, privateKey: event.target.value }))} placeholder="Your private key (EVM, Solana, or Bitcoin)" required />
-          <p className="text-xs text-muted">Wallet type (EVM/Solana/Bitcoin) will be auto-detected from your private key format</p>
+          <Input
+            label="Private Key"
+            type="password"
+            value={form.privateKey}
+            onChange={(event) => setForm((current) => ({ ...current, privateKey: event.target.value }))}
+            placeholder={
+              importWalletType === 'EVM'
+                ? '0x... (64 hex characters)'
+                : importWalletType === 'SOLANA'
+                  ? 'Base58 encoded or array format'
+                  : 'Base58Check encoded or hex format'
+            }
+            required
+          />
+          <p className="text-xs text-muted">
+            Importing {importWalletType === 'EVM' ? 'EVM (Ethereum, Base, Polygon)' : importWalletType === 'SOLANA' ? 'Solana' : 'Bitcoin'} wallet
+          </p>
           {formError ? <div className="rounded-lg border border-danger/20 bg-danger/10 p-3 text-sm text-danger" role="alert">{formError}</div> : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setAddModalOpen(false)}>Cancel</Button>
