@@ -115,7 +115,7 @@ export default function WalletsClient() {
   const [importWalletType, setImportWalletType] = useState<ImportWalletType | null>(null);
 
   // Fetch wallets with React Query
-  const { data: walletsData, isLoading, error: fetchError } = useQuery({
+  const { data: walletsData, isLoading, error: fetchError, refetch } = useQuery({
     queryKey: ['wallets'],
     queryFn: () => apiRequest<{ wallets: WalletRecord[] }>('/api/wallets'),
   });
@@ -205,6 +205,7 @@ export default function WalletsClient() {
       });
     },
     onSuccess: (data) => {
+      refetch();
       queryClient.invalidateQueries({ queryKey: ['wallets'] });
       if (data.wallet.walletType === 'EVM') void refreshBalance(data.wallet, false);
       setAddModalOpen(false);
@@ -220,6 +221,7 @@ export default function WalletsClient() {
       });
     },
     onSuccess: (data) => {
+      refetch();
       queryClient.invalidateQueries({ queryKey: ['wallets'] });
       if (data.wallet.walletType === 'EVM') void refreshBalance(data.wallet, false);
       setEditWallet(null);
@@ -232,6 +234,7 @@ export default function WalletsClient() {
       return apiRequest<{ wallet: WalletRecord }>(`/api/wallets/${id}/default`, { method: 'PATCH' });
     },
     onSuccess: () => {
+      refetch();
       queryClient.invalidateQueries({ queryKey: ['wallets'] });
     },
   });
@@ -242,6 +245,7 @@ export default function WalletsClient() {
       return apiRequest<{ success: true }>(`/api/wallets/${id}`, { method: 'DELETE' });
     },
     onSuccess: (_, id) => {
+      refetch();
       queryClient.invalidateQueries({ queryKey: ['wallets'] });
       setBalances((current) => {
         const next = { ...current };
