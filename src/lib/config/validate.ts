@@ -55,6 +55,12 @@ const REQUIRED_VARS: EnvSpec[] = [
 
   // ── GoPlus Security (optional - for contract security scanning)
   // { name: 'GOPLUS_API_KEY' }, // Optional, not required
+
+  // ── Dune Analytics (optional - for blockchain data and analytics)
+  // { name: 'DUNE_API_KEY' }, // Optional, not required
+  // { name: 'DUNE_NFT_METRICS_QUERY_ID' }, // Optional, custom query ID for NFT metrics
+  // { name: 'DUNE_NFT_ACTIVITY_QUERY_ID' }, // Optional, custom query ID for NFT activity
+  // { name: 'DUNE_TOKEN_PRICE_QUERY_ID' }, // Optional, custom query ID for token prices
 ];
 
 export function validateEnv(): void {

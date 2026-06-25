@@ -2,6 +2,7 @@ import 'server-only';
 
 import type { CollectionMetadata } from '@/lib/blockchain/collections';
 import type { AnalyzerDebugLogLevel, AnalyzerTiming, MintIntent } from '@/lib/resolve-mint-intent';
+import { fetchNFTCollectionMetrics } from '@/lib/services/dune-analytics.service';
 
 export type MarketStatus = 'Hot' | 'Active' | 'Stable' | 'Declining' | 'Inactive';
 
@@ -255,6 +256,27 @@ async function fetchAlchemyIntelligence(intent: MintIntent): Promise<MarketProvi
   };
 }
 
+async function fetchDuneIntelligence(intent: MintIntent): Promise<MarketProviderResult | null> {
+  if (!intent.contractAddress) return null;
+
+  const metrics = await fetchNFTCollectionMetrics({
+    contractAddress: intent.contractAddress,
+    chain: intent.chain,
+  });
+
+  if (!metrics) return null;
+
+  return {
+    source: 'Dune',
+    volume: metrics.totalVolume,
+    ownerCount: metrics.uniqueTraders,
+    floorPrice: metrics.avgSalePrice,
+    floorCurrency: 'ETH',
+    floorSymbol: 'ETH',
+    recentSalesCount: metrics.recentTrades24h,
+  };
+}
+
 export async function fetchCollectionIntelligence(params: {
   intent: MintIntent;
   metadata: Omit<CollectionMetadata, 'totalSupply'> & { totalSupply: string };
@@ -291,6 +313,7 @@ export async function fetchCollectionIntelligence(params: {
   const providerResults = await Promise.allSettled([
     fetchOpenSeaIntelligence(params.intent),
     fetchAlchemyIntelligence(params.intent),
+    fetchDuneIntelligence(params.intent),
   ]);
   params.timingBreakdown.push({ stage: 'Market Intelligence', durationMs: Date.now() - startedAt });
 
