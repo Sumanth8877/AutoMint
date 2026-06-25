@@ -22,7 +22,7 @@ import Card from '@/components/ui/Card';
 import { MetricCard } from '@/components/ui/metric-card';
 import { PageHeader } from '@/components/ui/page-header';
 import { getUserMintTasks } from '@/lib/services/mint.service';
-import { getActivities } from '@/lib/monitoring';
+import { getRecentActivities } from '@/lib/monitoring';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getDb } from '@/lib/db';
 import { mintTasks, wallets, collections } from '@/drizzle/schema';
@@ -46,13 +46,11 @@ async function getDashboardData(userId: string) {
   // Calculate portfolio value (sum of all wallet balances)
   let portfolioValue = 0n;
   for (const wallet of userWallets) {
-    if (wallet.address) {
+    if (wallet.address && wallet.balance) {
       try {
-        const client = getClient();
-        const balance = await client.getBalance({ address: wallet.address as `0x${string}` });
-        portfolioValue += balance;
+        portfolioValue += BigInt(wallet.balance);
       } catch (e) {
-        // Skip balance fetch if it fails
+        // Skip balance parse if it fails
       }
     }
   }
@@ -63,7 +61,7 @@ async function getDashboardData(userId: string) {
   const failedTasks = tasks.filter(t => t.status === 'failed').length;
   
   // Get recent activities
-  const activities = await getActivities(userId, 10);
+  const activities = await getRecentActivities(userId);
   
   // System health checks
   const systemStatuses = [
@@ -108,10 +106,10 @@ async function getDashboardData(userId: string) {
       name: task.contractAddress ? `${task.contractAddress.slice(0, 6)}...${task.contractAddress.slice(-4)}` : 'Unknown',
       status: task.status.charAt(0).toUpperCase() + task.status.slice(1),
       wallet: task.walletId ? `${task.walletId.slice(0, 6)}...${task.walletId.slice(-4)}` : 'Unknown',
-      eta: task.scheduledAt ? new Date(task.scheduledAt).toLocaleTimeString() : 'N/A',
+      eta: task.scheduledTime ? new Date(task.scheduledTime).toLocaleTimeString() : 'N/A',
       risk: task.riskThreshold && task.riskThreshold > 75 ? 'High' : task.riskThreshold && task.riskThreshold > 50 ? 'Medium' : 'Low',
     })),
-    riskFeed: [], // TODO: Implement risk feed from risk service
+    riskFeed: [] as Array<{ title: string; source: string; level: string; time: string }>, // TODO: Implement risk feed from risk service
     watchlist: userCollections.slice(0, 4).map(col => ({
       name: col.name || 'Unknown',
       chain: col.chain || 'Unknown',
@@ -121,7 +119,7 @@ async function getDashboardData(userId: string) {
     activity: activities.slice(0, 5).map(act => [
       new Date(act.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       act.type,
-      act.message || '',
+      act.title || '',
     ]),
     systemStatuses,
   };
@@ -130,7 +128,13 @@ async function getDashboardData(userId: string) {
 export default async function DashboardPage() {
   const authResult = await requireApiUser();
   if ('error' in authResult) {
-    return authResult.error;
+    // Auth check failed - the middleware should handle this
+    // But if we get here, redirect to sign-in
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-muted">Redirecting to sign-in...</p>
+      </div>
+    );
   }
   
   const data = await getDashboardData(authResult.userId);
