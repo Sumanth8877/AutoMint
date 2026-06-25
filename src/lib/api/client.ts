@@ -12,7 +12,7 @@ type RequestOptions = Omit<RequestInit, 'body'> & {
 
 // Simple client-side cache with TTL
 const apiCache = new Map<string, { data: unknown; timestamp: number }>();
-const CACHE_TTL = 30000; // 30 seconds
+const CACHE_TTL = 14400000; // 4 hours
 
 function getCacheKey(url: string, options: RequestOptions): string {
   return `${url}:${JSON.stringify(options.method || 'GET')}`;

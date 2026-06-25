@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { CalendarClock, Copy, Eye, Gauge, Pencil, ReceiptText, RefreshCcw, Search, Trash2 } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
@@ -241,22 +242,45 @@ function DetailGrid({ rows }: { rows: Array<[string, string]> }) {
 }
 
 export default function HistoryClient() {
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<TabKey>('mints');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [analyzerFilter, setAnalyzerFilter] = useState('');
   const [page, setPage] = useState(1);
-  const [mintRows, setMintRows] = useState<MintHistoryRow[]>([]);
-  const [scheduledRows, setScheduledRows] = useState<ScheduledTaskRow[]>([]);
-  const [analyzerRows, setAnalyzerRows] = useState<AnalyzerHistoryRow[]>([]);
-  const [totalPages, setTotalPages] = useState(1);
-  const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const [reloadVersion, setReloadVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<SelectedRow>(null);
   const [editing, setEditing] = useState<ScheduledTaskRow | null>(null);
   const [editForm, setEditForm] = useState({ scheduledTime: '', quantity: '1' });
+
+  // Fetch mint history with React Query
+  const { data: mintData, isLoading: mintLoading, error: mintError } = useQuery({
+    queryKey: ['mint-history', activeTab, page, search, status],
+    queryFn: () => apiRequest<HistoryResponse<MintHistoryRow>>(`/api/history/mints?page=${page}&search=${search}&status=${status}`),
+    enabled: activeTab === 'mints',
+  });
+
+  // Fetch scheduled tasks with React Query
+  const { data: scheduledData, isLoading: scheduledLoading, error: scheduledError } = useQuery({
+    queryKey: ['scheduled-history', activeTab, page, search, status],
+    queryFn: () => apiRequest<HistoryResponse<ScheduledTaskRow>>(`/api/history/scheduled?page=${page}&search=${search}&status=${status}`),
+    enabled: activeTab === 'scheduled',
+  });
+
+  // Fetch analyzer history with React Query
+  const { data: analyzerData, isLoading: analyzerLoading, error: analyzerError } = useQuery({
+    queryKey: ['analyzer-history', activeTab, page, search, analyzerFilter],
+    queryFn: () => apiRequest<HistoryResponse<AnalyzerHistoryRow>>(`/api/history/analyzer?page=${page}&search=${search}&filter=${analyzerFilter}`),
+    enabled: activeTab === 'analyzer',
+  });
+
+  const mintRows = mintData?.items || [];
+  const scheduledRows = scheduledData?.items || [];
+  const analyzerRows = analyzerData?.items || [];
+  const totalPages = (mintData?.totalPages || scheduledData?.totalPages || analyzerData?.totalPages || 1);
+  const loading = activeTab === 'mints' ? mintLoading : activeTab === 'scheduled' ? scheduledLoading : analyzerLoading;
+  const fetchError = activeTab === 'mints' ? mintError : activeTab === 'scheduled' ? scheduledError : analyzerError;
 
   const filterOptions = activeTab === 'mints' ? mintStatusOptions : activeTab === 'scheduled' ? scheduledStatusOptions : analyzerFilterOptions;
   const activeItems = useMemo(() => {
@@ -265,64 +289,49 @@ export default function HistoryClient() {
     return analyzerRows;
   }, [activeTab, analyzerRows, mintRows, scheduledRows]);
 
+  // Set error from fetch error
+  useEffect(() => {
+    if (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : 'Failed to load history data.');
+    }
+  }, [fetchError]);
+
   useEffect(() => {
     const timeout = window.setTimeout(() => setPage(1), 250);
     return () => window.clearTimeout(timeout);
   }, [activeTab, analyzerFilter, search, status]);
 
-  useEffect(() => {
-    let active = true;
-    const controller = new AbortController();
+  // Edit scheduled task mutation
+  const editScheduledMutation = useMutation({
+    mutationFn: async ({ id, scheduledTime, quantity }: { id: string; scheduledTime: string; quantity: string }) => {
+      return apiRequest<{ task: ScheduledTaskRow }>(`/api/history/scheduled/${id}`, {
+        method: 'PATCH',
+        body: { scheduledTime, quantity: Number(quantity) },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['scheduled-history'] });
+    },
+  });
 
-    const loadHistory = async () => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const params = new URLSearchParams({
-          tab: activeTab,
-          page: String(page),
-          limit: '20',
-        });
-        if (search.trim()) params.set('search', search.trim());
-        if (activeTab === 'analyzer' && analyzerFilter) params.set('filter', analyzerFilter);
-        if (activeTab !== 'analyzer' && status) params.set('status', status);
-
-        if (activeTab === 'mints') {
-          const payload = await apiRequest<HistoryResponse<MintHistoryRow>>(`/api/history?${params.toString()}`, { signal: controller.signal });
-          if (!active) return;
-          setMintRows(payload.items);
-          setTotalPages(payload.totalPages);
-        } else if (activeTab === 'scheduled') {
-          const payload = await apiRequest<HistoryResponse<ScheduledTaskRow>>(`/api/history?${params.toString()}`, { signal: controller.signal });
-          if (!active) return;
-          setScheduledRows(payload.items);
-          setTotalPages(payload.totalPages);
-        } else {
-          params.delete('tab');
-          const payload = await apiRequest<HistoryResponse<AnalyzerHistoryRow>>(`/api/analyzer/history?${params.toString()}`, { signal: controller.signal });
-          if (!active) return;
-          setAnalyzerRows(payload.items);
-          setTotalPages(payload.totalPages);
-        }
-      } catch (requestError) {
-        if (!active || controller.signal.aborted) return;
-        setError(requestError instanceof Error ? requestError.message : 'Failed to load history.');
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-
-    void loadHistory();
-
-    return () => {
-      active = false;
-      controller.abort();
-    };
-  }, [activeTab, analyzerFilter, page, reloadVersion, search, status]);
+  // Delete scheduled task mutation
+  const deleteScheduledMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest<{ success: true }>(`/api/history/scheduled/${id}`, { method: 'DELETE' });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['scheduled-history'] });
+    },
+  });
 
   const refreshActiveTab = () => {
-    setReloadVersion((current) => current + 1);
+    if (activeTab === 'mints') {
+      queryClient.invalidateQueries({ queryKey: ['mint-history'] });
+    } else if (activeTab === 'scheduled') {
+      queryClient.invalidateQueries({ queryKey: ['scheduled-history'] });
+    } else {
+      queryClient.invalidateQueries({ queryKey: ['analyzer-history'] });
+    }
   };
 
   const runTaskAction = async (task: ScheduledTaskRow, action: 'cancel' | 'duplicate') => {
@@ -331,7 +340,7 @@ export default function HistoryClient() {
     try {
       await apiRequest('/api/history', { method: 'PATCH', body: { taskId: task.id, action } });
       if (action === 'cancel') {
-        setScheduledRows((current) => current.map((row) => (row.id === task.id ? { ...row, status: 'cancelled' } : row)));
+        queryClient.invalidateQueries({ queryKey: ['scheduled-history'] });
       } else {
         refreshActiveTab();
       }
@@ -352,17 +361,12 @@ export default function HistoryClient() {
     setUpdatingId(editing.id);
     setError(null);
     try {
-      await apiRequest('/api/history', {
-        method: 'PATCH',
-        body: {
-          taskId: editing.id,
-          action: 'edit',
-          scheduledTime: editForm.scheduledTime ? new Date(editForm.scheduledTime).toISOString() : undefined,
-          quantity: Number(editForm.quantity),
-        },
+      await editScheduledMutation.mutateAsync({
+        id: editing.id,
+        scheduledTime: editForm.scheduledTime ? new Date(editForm.scheduledTime).toISOString() : '',
+        quantity: editForm.quantity,
       });
       setEditing(null);
-      refreshActiveTab();
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to edit task.');
     } finally {
@@ -377,7 +381,7 @@ export default function HistoryClient() {
     setError(null);
     try {
       await apiRequest('/api/analyzer', { method: 'POST', body: { input } });
-      refreshActiveTab();
+      queryClient.invalidateQueries({ queryKey: ['analyzer-history'] });
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to reanalyze collection.');
     } finally {

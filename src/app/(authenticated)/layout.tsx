@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { syncUser } from '@/lib/auth/sync-user';
 import AppShell from '@/components/app-shell';
+import { QueryClientProviderWrapper } from '@/components/providers/query-client-provider';
 
 export default async function AuthenticatedLayout({
   children,
@@ -18,6 +19,8 @@ export default async function AuthenticatedLayout({
   await syncUser();
 
   return (
-    <AppShell>{children}</AppShell>
+    <QueryClientProviderWrapper>
+      <AppShell>{children}</AppShell>
+    </QueryClientProviderWrapper>
   );
 }

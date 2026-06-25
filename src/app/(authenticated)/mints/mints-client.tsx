@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { CalendarClock, MoreHorizontal, Play, Plus, RotateCcw, ShieldCheck, Trash2, XCircle, Zap } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
@@ -63,10 +64,7 @@ function statusVariant(status: string) {
 }
 
 export default function MintsClient() {
-  const [tasks, setTasks] = useState<MintTask[]>([]);
-  const [wallets, setWallets] = useState<WalletRecord[]>([]);
-  const [collections, setCollections] = useState<CollectionRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -78,6 +76,26 @@ export default function MintsClient() {
   const [form, setForm] = useState({ walletId: '', collectionId: '', mintUrl: '', quantity: '1' });
   const [analyzedUrl, setAnalyzedUrl] = useState<string | null>(null);
 
+  // Fetch data with React Query
+  const { data: mintsData, isLoading, error: fetchError } = useQuery({
+    queryKey: ['mints'],
+    queryFn: () => apiRequest<{ tasks: MintTask[] }>('/api/mints'),
+  });
+
+  const { data: walletsData } = useQuery({
+    queryKey: ['wallets'],
+    queryFn: () => apiRequest<{ wallets: WalletRecord[] }>('/api/wallets'),
+  });
+
+  const { data: collectionsData } = useQuery({
+    queryKey: ['collections'],
+    queryFn: () => apiRequest<{ collections: CollectionRecord[] }>('/api/collections'),
+  });
+
+  const tasks = mintsData?.tasks || [];
+  const wallets = walletsData?.wallets || [];
+  const collections = collectionsData?.collections || [];
+
   const collectionById = useMemo(() => new Map(collections.map((collection) => [collection.id, collection])), [collections]);
   const walletById = useMemo(() => new Map(wallets.map((wallet) => [wallet.id, wallet])), [wallets]);
   const evmWallets = useMemo(() => wallets.filter((wallet) => wallet.walletType === 'EVM'), [wallets]);
@@ -86,35 +104,67 @@ export default function MintsClient() {
   const readyCount = tasks.filter((task) => task.status === 'ready').length;
   const retryCount = tasks.filter((task) => task.status === 'failed').length;
 
+  // Set error from fetch error
   useEffect(() => {
-    let active = true;
+    if (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : 'Failed to load mint data.');
+    }
+  }, [fetchError]);
 
-    const run = async () => {
-      try {
-        const [mintsPayload, walletsPayload, collectionsPayload] = await Promise.all([
-          apiRequest<{ tasks: MintTask[] }>('/api/mints'),
-          apiRequest<{ wallets: WalletRecord[] }>('/api/wallets'),
-          apiRequest<{ collections: CollectionRecord[] }>('/api/collections'),
-        ]);
-
-        if (!active) return;
-        setTasks(mintsPayload.tasks);
-        setWallets(walletsPayload.wallets);
-        setCollections(collectionsPayload.collections);
-      } catch (requestError) {
-        if (!active) return;
-        setError(requestError instanceof Error ? requestError.message : 'Failed to load mint data.');
-      } finally {
-        if (active) setLoading(false);
+  // Create task mutation
+  const createTaskMutation = useMutation({
+    mutationFn: async (data: { walletId: string; collectionId?: string; mintUrl?: string; analysisConfirmed: boolean; quantity: string }) => {
+      return apiRequest<MintActionResponse>('/api/mints', {
+        method: 'POST',
+        body: data,
+      });
+    },
+    onSuccess: (payload) => {
+      queryClient.invalidateQueries({ queryKey: ['mints'] });
+      if (payload.collection) {
+        queryClient.invalidateQueries({ queryKey: ['collections'] });
       }
-    };
+    },
+  });
 
-    void run();
+  // Start task mutation
+  const startTaskMutation = useMutation({
+    mutationFn: async ({ id, action }: { id: string; action: string }) => {
+      return apiRequest<MintActionResponse>('/api/mints', {
+        method: 'PATCH',
+        body: { id, action },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mints'] });
+    },
+  });
 
-    return () => {
-      active = false;
-    };
-  }, []);
+  // Cancel task mutation
+  const cancelTaskMutation = useMutation({
+    mutationFn: async ({ id, action }: { id: string; action: string }) => {
+      return apiRequest<MintActionResponse>('/api/mints', {
+        method: 'PATCH',
+        body: { id, action },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mints'] });
+    },
+  });
+
+  // Delete task mutation
+  const deleteTaskMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest<{ success: true }>('/api/mints', {
+        method: 'DELETE',
+        body: { id },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mints'] });
+    },
+  });
 
   const handleMintUrlChange = (value: string) => {
     setForm((current) => ({ ...current, mintUrl: value }));
@@ -151,26 +201,13 @@ export default function MintsClient() {
 
     try {
       const mintUrl = form.mintUrl.trim();
-      const payload = await apiRequest<MintActionResponse>('/api/mints', {
-        method: 'POST',
-        body: {
-          walletId: form.walletId,
-          collectionId: mintUrl ? undefined : form.collectionId,
-          mintUrl: mintUrl || undefined,
-          analysisConfirmed: Boolean(mintUrl && analyzedUrl === mintUrl),
-          quantity: form.quantity,
-        },
+      const payload = await createTaskMutation.mutateAsync({
+        walletId: form.walletId,
+        collectionId: mintUrl ? undefined : form.collectionId,
+        mintUrl: mintUrl || undefined,
+        analysisConfirmed: Boolean(mintUrl && analyzedUrl === mintUrl),
+        quantity: form.quantity,
       });
-      setTasks((current) => [payload.task, ...current]);
-      const returnedCollection = payload.collection;
-      if (returnedCollection) {
-        setCollections((current) => {
-          const exists = current.some((collection) => collection.id === returnedCollection.id);
-          return exists
-            ? current.map((collection) => (collection.id === returnedCollection.id ? returnedCollection : collection))
-            : [returnedCollection, ...current];
-        });
-      }
       setForm({ walletId: '', collectionId: '', mintUrl: '', quantity: '1' });
       setAnalyzedUrl(null);
       setModalOpen(false);
@@ -189,8 +226,7 @@ export default function MintsClient() {
     setError(null);
 
     try {
-      const payload = await apiRequest<MintActionResponse>('/api/mints', { method: 'PATCH', body: { id: task.id, action: 'start' } });
-      setTasks((current) => current.map((item) => (item.id === task.id ? payload.task : item)));
+      const payload = await startTaskMutation.mutateAsync({ id: task.id, action: 'start' });
       if (payload.result && !payload.result.success) {
         setError(payload.result.error ?? 'Mint execution failed.');
       }
@@ -206,8 +242,7 @@ export default function MintsClient() {
     setError(null);
 
     try {
-      const payload = await apiRequest<MintActionResponse>('/api/mints', { method: 'PATCH', body: { id: task.id, action: 'cancel' } });
-      setTasks((current) => current.map((item) => (item.id === task.id ? payload.task : item)));
+      await cancelTaskMutation.mutateAsync({ id: task.id, action: 'cancel' });
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to cancel task.');
     } finally {
@@ -220,8 +255,7 @@ export default function MintsClient() {
     setError(null);
 
     try {
-      await apiRequest<{ success: true }>('/api/mints', { method: 'DELETE', body: { id: task.id } });
-      setTasks((current) => current.filter((item) => item.id !== task.id));
+      await deleteTaskMutation.mutateAsync(task.id);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to delete task.');
     } finally {
@@ -265,7 +299,7 @@ export default function MintsClient() {
           <span className="col-span-7 text-right sm:col-span-1">Actions</span>
         </div>
         <div className="divide-y divide-border">
-          {loading ? (
+          {isLoading ? (
             [0, 1, 2].map((item) => (
               <div key={item} className="px-5 py-4">
                 <Skeleton className="h-5 w-full" />

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Copy, Edit3, ExternalLink, Plus, RefreshCw, Star, Trash2, Wallet } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
@@ -98,9 +99,8 @@ function formatBalance(balance: BalanceRecord | undefined) {
 }
 
 export default function WalletsClient() {
-  const [wallets, setWallets] = useState<WalletRecord[]>([]);
+  const queryClient = useQueryClient();
   const [balances, setBalances] = useState<Record<string, BalanceRecord>>({});
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
@@ -111,6 +111,14 @@ export default function WalletsClient() {
   const [formError, setFormError] = useState<string | null>(null);
   const [walletTypeFilter, setWalletTypeFilter] = useState<WalletTypeFilter>('ALL');
   const [form, setForm] = useState<WalletForm>({ nickname: '', address: '', chain: 'ethereum' });
+
+  // Fetch wallets with React Query
+  const { data: walletsData, isLoading, error: fetchError } = useQuery({
+    queryKey: ['wallets'],
+    queryFn: () => apiRequest<{ wallets: WalletRecord[] }>('/api/wallets'),
+  });
+
+  const wallets = walletsData?.wallets || [];
 
   const filteredWallets = useMemo(() => {
     if (walletTypeFilter === 'ALL') return wallets;
@@ -159,29 +167,19 @@ export default function WalletsClient() {
     await Promise.all(walletRows.filter((wallet) => wallet.walletType === 'EVM').map((wallet) => refreshBalance(wallet, false)));
   }, [refreshBalance]);
 
+  // Refresh balances when wallets data changes
   useEffect(() => {
-    let active = true;
+    if (wallets.length > 0) {
+      void refreshBalances(wallets);
+    }
+  }, [wallets, refreshBalances]);
 
-    const run = async () => {
-      try {
-        const payload = await apiRequest<{ wallets: WalletRecord[] }>('/api/wallets');
-        if (!active) return;
-        setWallets(payload.wallets);
-        void refreshBalances(payload.wallets);
-      } catch (requestError) {
-        if (!active) return;
-        setError(requestError instanceof Error ? requestError.message : 'Failed to load wallets.');
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-
-    void run();
-
-    return () => {
-      active = false;
-    };
-  }, [refreshBalances]);
+  // Set error from fetch error
+  useEffect(() => {
+    if (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : 'Failed to load wallets.');
+    }
+  }, [fetchError]);
 
   function openAdd() {
     setForm({ nickname: '', address: '', chain: 'ethereum' });
@@ -195,24 +193,73 @@ export default function WalletsClient() {
     setEditWallet(wallet);
   }
 
+  // Add wallet mutation
+  const addWalletMutation = useMutation({
+    mutationFn: async (walletData: { address: string; nickname: string | null; chain: string }) => {
+      return apiRequest<{ wallet: WalletRecord }>('/api/wallets', {
+        method: 'POST',
+        body: walletData,
+      });
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['wallets'] });
+      if (data.wallet.walletType === 'EVM') void refreshBalance(data.wallet, false);
+      setAddModalOpen(false);
+    },
+  });
+
+  // Edit wallet mutation
+  const editWalletMutation = useMutation({
+    mutationFn: async ({ id, nickname, chain }: { id: string; nickname: string | null; chain: string }) => {
+      return apiRequest<{ wallet: WalletRecord }>(`/api/wallets/${id}`, {
+        method: 'PATCH',
+        body: { nickname, chain },
+      });
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['wallets'] });
+      if (data.wallet.walletType === 'EVM') void refreshBalance(data.wallet, false);
+      setEditWallet(null);
+    },
+  });
+
+  // Set default wallet mutation
+  const setDefaultMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest<{ wallet: WalletRecord }>(`/api/wallets/${id}/default`, { method: 'PATCH' });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['wallets'] });
+    },
+  });
+
+  // Delete wallet mutation
+  const deleteWalletMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest<{ success: true }>(`/api/wallets/${id}`, { method: 'DELETE' });
+    },
+    onSuccess: (_, id) => {
+      queryClient.invalidateQueries({ queryKey: ['wallets'] });
+      setBalances((current) => {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
+      setDeleteWallet(null);
+    },
+  });
+
   async function submitWallet(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
     setFormError(null);
 
     try {
-      const payload = await apiRequest<{ wallet: WalletRecord }>('/api/wallets', {
-        method: 'POST',
-        body: {
-          address: form.address.trim(),
-          nickname: form.nickname.trim() || null,
-          chain: form.chain,
-        },
+      await addWalletMutation.mutateAsync({
+        address: form.address.trim(),
+        nickname: form.nickname.trim() || null,
+        chain: form.chain,
       });
-
-      setWallets((current) => [...current, payload.wallet]);
-      if (payload.wallet.walletType === 'EVM') void refreshBalance(payload.wallet, false);
-      setAddModalOpen(false);
     } catch (requestError) {
       setFormError(requestError instanceof Error ? requestError.message : 'Failed to add wallet.');
     } finally {
@@ -227,17 +274,11 @@ export default function WalletsClient() {
     setFormError(null);
 
     try {
-      const payload = await apiRequest<{ wallet: WalletRecord }>(`/api/wallets/${editWallet.id}`, {
-        method: 'PATCH',
-        body: {
-          nickname: form.nickname.trim() || null,
-          chain: form.chain,
-        },
+      await editWalletMutation.mutateAsync({
+        id: editWallet.id,
+        nickname: form.nickname.trim() || null,
+        chain: form.chain,
       });
-
-      setWallets((current) => current.map((wallet) => wallet.id === payload.wallet.id ? { ...wallet, ...payload.wallet } : wallet));
-      if (payload.wallet.walletType === 'EVM') void refreshBalance(payload.wallet, false);
-      setEditWallet(null);
     } catch (requestError) {
       setFormError(requestError instanceof Error ? requestError.message : 'Failed to update wallet.');
     } finally {
@@ -255,8 +296,7 @@ export default function WalletsClient() {
     setError(null);
 
     try {
-      const payload = await apiRequest<{ wallet: WalletRecord }>(`/api/wallets/${wallet.id}/default`, { method: 'PATCH' });
-      setWallets((current) => current.map((item) => ({ ...item, isDefault: item.id === payload.wallet.id })));
+      await setDefaultMutation.mutateAsync(wallet.id);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to set default wallet.');
     } finally {
@@ -270,14 +310,7 @@ export default function WalletsClient() {
     setError(null);
 
     try {
-      await apiRequest<{ success: true }>(`/api/wallets/${deleteWallet.id}`, { method: 'DELETE' });
-      setWallets((current) => current.filter((wallet) => wallet.id !== deleteWallet.id));
-      setBalances((current) => {
-        const next = { ...current };
-        delete next[deleteWallet.id];
-        return next;
-      });
-      setDeleteWallet(null);
+      await deleteWalletMutation.mutateAsync(deleteWallet.id);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to remove wallet.');
     } finally {
@@ -349,7 +382,7 @@ export default function WalletsClient() {
       ) : null}
 
       <div className="mt-6 grid gap-4">
-        {loading ? (
+        {isLoading ? (
           [0, 1, 2].map((item) => (
             <Card key={item} className="p-5">
               <Skeleton className="h-6 w-56 bg-white/5" />

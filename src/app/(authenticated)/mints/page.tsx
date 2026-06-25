@@ -1,7 +1,7 @@
 import MintsClient from './mints-client';
 
-// Cache this page for 1 hour
-export const revalidate = 3600;
+// Cache this page for 4 hours
+export const revalidate = 14400;
 
 export default function MintsPage() {
   return <MintsClient />;

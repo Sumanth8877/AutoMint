@@ -3,8 +3,8 @@ import { requireApiUser } from '@/lib/auth/require-auth';
 import { getErrorMessage, parseJsonBody } from '@/lib/api/errors';
 import { addCollection, getUserCollections, removeCollection } from '@/lib/services/collection.service';
 
-// Cache GET requests for 30 seconds
-export const revalidate = 30;
+// Cache GET requests for 4 hours
+export const revalidate = 14400;
 
 // GET /api/collections
 export async function GET() {

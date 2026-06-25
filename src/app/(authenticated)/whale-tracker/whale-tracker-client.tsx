@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Activity, Eye, Pause, Pencil, Play, Plus, Radar, ShieldCheck, Trash2, Zap } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
@@ -129,14 +130,7 @@ const emptyRuleForm: RuleForm = {
 };
 
 export default function WhaleTrackerClient() {
-  const [trackedWallets, setTrackedWallets] = useState<TrackedWallet[]>([]);
-  const [copyRules, setCopyRules] = useState<CopyRule[]>([]);
-  const [destinationWallets, setDestinationWallets] = useState<DestinationWallet[]>([]);
-  const [activities, setActivities] = useState<TrackerActivity[]>([]);
-  const [reputations, setReputations] = useState<Reputation[]>([]);
-  const [detectedMints24h, setDetectedMints24h] = useState(0);
-  const [copiedMints24h, setCopiedMints24h] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -148,45 +142,127 @@ export default function WhaleTrackerClient() {
   const [walletForm, setWalletForm] = useState<WalletForm>({ walletName: '', walletAddress: '', networkType: 'EVM' });
   const [ruleForm, setRuleForm] = useState<RuleForm>(emptyRuleForm);
 
+  // Fetch all data with React Query
+  const { data: walletData, isLoading: walletsLoading } = useQuery({
+    queryKey: ['watched-wallets'],
+    queryFn: () => apiRequest<{ wallets: TrackedWallet[] }>('/api/watched-wallets'),
+  });
+
+  const { data: ruleData } = useQuery({
+    queryKey: ['copy-mint-rules'],
+    queryFn: () => apiRequest<{ rules: CopyRule[] }>('/api/copy-mint/rules'),
+  });
+
+  const { data: activityData } = useQuery({
+    queryKey: ['whale-tracker-activity'],
+    queryFn: () => apiRequest<{ activities: TrackerActivity[]; metrics: { detectedMints24h: number; copiedMints24h: number } }>('/api/whale-tracker/activity'),
+  });
+
+  const { data: reputationData } = useQuery({
+    queryKey: ['wallet-reputation'],
+    queryFn: () => apiRequest<{ reputations: Reputation[] }>('/api/wallet-reputation'),
+  });
+
+  const { data: destinationData } = useQuery({
+    queryKey: ['wallets'],
+    queryFn: () => apiRequest<{ wallets: DestinationWallet[] }>('/api/wallets'),
+  });
+
+  const trackedWallets = walletData?.wallets || [];
+  const copyRules = ruleData?.rules || [];
+  const activities = activityData?.activities || [];
+  const reputations = reputationData?.reputations || [];
+  const destinationWallets = destinationData?.wallets || [];
+  const detectedMints24h = activityData?.metrics.detectedMints24h || 0;
+  const copiedMints24h = activityData?.metrics.copiedMints24h || 0;
+
   const activeCopyRules = useMemo(() => copyRules.filter((rule) => rule.enabled).length, [copyRules]);
 
-  const loadData = useCallback(async () => {
-    setError(null);
-    const [walletPayload, rulePayload, activityPayload, reputationPayload, destinationPayload] = await Promise.all([
-      apiRequest<{ wallets: TrackedWallet[] }>('/api/watched-wallets'),
-      apiRequest<{ rules: CopyRule[] }>('/api/copy-mint/rules'),
-      apiRequest<{ activities: TrackerActivity[]; metrics: { detectedMints24h: number; copiedMints24h: number } }>('/api/whale-tracker/activity'),
-      apiRequest<{ reputations: Reputation[] }>('/api/wallet-reputation'),
-      apiRequest<{ wallets: DestinationWallet[] }>('/api/wallets'),
-    ]);
-
-    setTrackedWallets(walletPayload.wallets);
-    setCopyRules(rulePayload.rules);
-    setActivities(activityPayload.activities);
-    setDetectedMints24h(activityPayload.metrics.detectedMints24h);
-    setCopiedMints24h(activityPayload.metrics.copiedMints24h);
-    setReputations(reputationPayload.reputations);
-    setDestinationWallets(destinationPayload.wallets);
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-
-    const run = async () => {
-      try {
-        await loadData();
-      } catch (requestError) {
-        if (active) setError(requestError instanceof Error ? requestError.message : 'Failed to load Whale Tracker.');
-      } finally {
-        if (active) setLoading(false);
+  // Add/edit tracked wallet mutation
+  const walletMutation = useMutation({
+    mutationFn: async (data: { walletName: string | null; walletAddress: string; networkType: NetworkType; id?: string }) => {
+      if (data.id) {
+        return apiRequest<{ wallet: TrackedWallet }>(`/api/watched-wallets/${data.id}`, {
+          method: 'PATCH',
+          body: { walletName: data.walletName, walletAddress: data.walletAddress, networkType: data.networkType },
+        });
+      } else {
+        return apiRequest<{ wallet: TrackedWallet }>('/api/watched-wallets', {
+          method: 'POST',
+          body: { walletName: data.walletName, walletAddress: data.walletAddress, networkType: data.networkType },
+        });
       }
-    };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['watched-wallets'] });
+    },
+  });
 
-    void run();
-    return () => {
-      active = false;
-    };
-  }, [loadData]);
+  // Set tracking status mutation
+  const trackingMutation = useMutation({
+    mutationFn: async ({ id, active }: { id: string; active: boolean }) => {
+      return apiRequest<{ wallet: TrackedWallet }>(`/api/watched-wallets/${id}`, {
+        method: 'PATCH',
+        body: { active },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['watched-wallets'] });
+    },
+  });
+
+  // Delete wallet mutation
+  const deleteWalletMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest<{ success: true }>(`/api/watched-wallets/${id}`, { method: 'DELETE' });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['watched-wallets'] });
+    },
+  });
+
+  // Add/edit copy rule mutation
+  const ruleMutation = useMutation({
+    mutationFn: async (data: RuleForm & { id?: string }) => {
+      if (data.id) {
+        return apiRequest<{ rule: CopyRule }>(`/api/copy-mint/rules/${data.id}`, {
+          method: 'PATCH',
+          body: data,
+        });
+      } else {
+        return apiRequest<{ rule: CopyRule }>('/api/copy-mint/rules', {
+          method: 'POST',
+          body: data,
+        });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['copy-mint-rules'] });
+    },
+  });
+
+  // Toggle rule status mutation
+  const toggleRuleMutation = useMutation({
+    mutationFn: async ({ id, enabled }: { id: string; enabled: boolean }) => {
+      return apiRequest<{ rule: CopyRule }>(`/api/copy-mint/rules/${id}`, {
+        method: 'PATCH',
+        body: { enabled },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['copy-mint-rules'] });
+    },
+  });
+
+  // Delete rule mutation
+  const deleteRuleMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest<{ success: true }>(`/api/copy-mint/rules/${id}`, { method: 'DELETE' });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['copy-mint-rules'] });
+    },
+  });
 
   function openAddWallet() {
     setWalletForm({ walletName: '', walletAddress: '', networkType: 'EVM' });
@@ -230,23 +306,12 @@ export default function WhaleTrackerClient() {
     setFormError(null);
 
     try {
-      if (walletModal === 'edit' && editingWallet) {
-        await apiRequest<{ wallet: TrackedWallet }>(`/api/watched-wallets/${editingWallet.id}`, {
-          method: 'PATCH',
-          body: { walletName: walletForm.walletName.trim() || null },
-        });
-      } else {
-        await apiRequest<{ wallet: TrackedWallet }>('/api/watched-wallets', {
-          method: 'POST',
-          body: {
-            walletName: walletForm.walletName.trim() || null,
-            walletAddress: walletForm.walletAddress.trim(),
-            networkType: walletForm.networkType,
-          },
-        });
-      }
-
-      await loadData();
+      await walletMutation.mutateAsync({
+        walletName: walletForm.walletName.trim() || null,
+        walletAddress: walletForm.walletAddress.trim(),
+        networkType: walletForm.networkType,
+        id: walletModal === 'edit' ? editingWallet?.id : undefined,
+      });
       setWalletModal(null);
     } catch (requestError) {
       setFormError(requestError instanceof Error ? requestError.message : 'Failed to save tracked wallet.');
@@ -260,11 +325,7 @@ export default function WhaleTrackerClient() {
     setError(null);
 
     try {
-      await apiRequest<{ wallet: TrackedWallet }>(`/api/watched-wallets/${wallet.id}`, {
-        method: 'PATCH',
-        body: { active },
-      });
-      await loadData();
+      await trackingMutation.mutateAsync({ id: wallet.id, active });
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to update tracking status.');
     } finally {
@@ -277,8 +338,7 @@ export default function WhaleTrackerClient() {
     setError(null);
 
     try {
-      await apiRequest<{ success: true }>(`/api/watched-wallets/${wallet.id}`, { method: 'DELETE' });
-      await loadData();
+      await deleteWalletMutation.mutateAsync(wallet.id);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to delete tracked wallet.');
     } finally {
@@ -302,19 +362,12 @@ export default function WhaleTrackerClient() {
     };
 
     try {
-      if (ruleModal === 'edit' && editingRule) {
-        await apiRequest<{ rule: CopyRule }>(`/api/copy-mint/rules/${editingRule.id}`, {
-          method: 'PATCH',
-          body,
-        });
-      } else {
-        await apiRequest<{ rule: CopyRule }>('/api/copy-mint/rules', {
-          method: 'POST',
-          body,
-        });
-      }
-
-      await loadData();
+      await ruleMutation.mutateAsync({
+        ...body,
+        maxPrice: body.maxPrice || '',
+        destinationWalletId: body.destinationWalletId || '',
+        id: ruleModal === 'edit' ? editingRule?.id : undefined,
+      });
       setRuleModal(null);
     } catch (requestError) {
       setFormError(requestError instanceof Error ? requestError.message : 'Failed to save copy rule.');
@@ -328,11 +381,7 @@ export default function WhaleTrackerClient() {
     setError(null);
 
     try {
-      await apiRequest<{ rule: CopyRule }>(`/api/copy-mint/rules/${rule.id}`, {
-        method: 'PATCH',
-        body: { enabled },
-      });
-      await loadData();
+      await toggleRuleMutation.mutateAsync({ id: rule.id, enabled });
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to update copy rule.');
     } finally {
@@ -345,8 +394,7 @@ export default function WhaleTrackerClient() {
     setError(null);
 
     try {
-      await apiRequest<{ success: true }>(`/api/copy-mint/rules/${rule.id}`, { method: 'DELETE' });
-      await loadData();
+      await deleteRuleMutation.mutateAsync(rule.id);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to delete copy rule.');
     } finally {
@@ -391,7 +439,7 @@ export default function WhaleTrackerClient() {
         </div>
 
         <Card className="overflow-hidden">
-          {loading ? (
+          {walletsLoading ? (
             <div className="space-y-3 p-5">
               {[0, 1, 2].map((item) => <Skeleton key={item} className="h-16 w-full bg-white/5" />)}
             </div>
@@ -464,7 +512,7 @@ export default function WhaleTrackerClient() {
             </Button>
           </div>
           <div className="mt-4 space-y-3">
-            {loading ? (
+            {walletsLoading ? (
               [0, 1].map((item) => <Skeleton key={item} className="h-24 w-full bg-white/5" />)
             ) : copyRules.length > 0 ? (
               copyRules.map((rule) => {
@@ -504,7 +552,7 @@ export default function WhaleTrackerClient() {
         <Card className="p-5">
           <h2 className="text-lg font-semibold text-text">Reputation</h2>
           <div className="mt-4 space-y-3">
-            {loading ? (
+            {walletsLoading ? (
               [0, 1, 2].map((item) => <Skeleton key={item} className="h-20 w-full bg-white/5" />)
             ) : reputations.length > 0 ? (
               reputations.map((reputation) => (
@@ -536,7 +584,7 @@ export default function WhaleTrackerClient() {
         <Card className="p-5">
           <h2 className="text-lg font-semibold text-text">Detected Mint Activity</h2>
           <div className="mt-4 space-y-3">
-            {loading ? (
+            {walletsLoading ? (
               [0, 1, 2].map((item) => <Skeleton key={item} className="h-20 w-full bg-white/5" />)
             ) : activities.length > 0 ? (
               activities.map((activityItem) => (

@@ -12,8 +12,8 @@ import { resolveMintIntent, type MintIntent } from '@/lib/resolve-mint-intent';
 import { AnalyzerResolutionError, normalizeAnalyzerInput, runAnalyzer, type AnalyzerResult } from '@/lib/services/analyzer.service';
 import { analyzeMintRisk } from '@/lib/services/risk.service';
 
-// Cache GET requests for 30 seconds
-export const revalidate = 30;
+// Cache GET requests for 4 hours
+export const revalidate = 14400;
 
 const SUPPORTED_CHAINS = ['ethereum', 'base', 'polygon'] as const;
 type SupportedChain = (typeof SUPPORTED_CHAINS)[number];

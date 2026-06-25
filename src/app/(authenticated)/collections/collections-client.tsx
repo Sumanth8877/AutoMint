@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { FolderKanban, Plus, Radar, ShieldAlert, Sparkles, Trash2, TrendingUp } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
@@ -34,8 +35,7 @@ function statusVariant(status: string | null) {
 }
 
 export default function CollectionsClient() {
-  const [collections, setCollections] = useState<CollectionRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -43,32 +43,47 @@ export default function CollectionsClient() {
   const [formError, setFormError] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', contractAddress: '', chain: 'ethereum' });
 
+  // Fetch collections with React Query
+  const { data: collectionsData, isLoading, error: fetchError } = useQuery({
+    queryKey: ['collections'],
+    queryFn: () => apiRequest<{ collections: CollectionRecord[] }>('/api/collections'),
+  });
+
+  const collections = collectionsData?.collections || [];
   const trackedCount = collections.length;
   const syncedCount = useMemo(() => collections.filter((collection) => collection.tokenStandard || collection.totalSupply).length, [collections]);
   const unknownCount = trackedCount - syncedCount;
 
+  // Set error from fetch error
   useEffect(() => {
-    let active = true;
+    if (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : 'Failed to load collections.');
+    }
+  }, [fetchError]);
 
-    const run = async () => {
-      try {
-        const payload = await apiRequest<{ collections: CollectionRecord[] }>('/api/collections');
-        if (!active) return;
-        setCollections(payload.collections);
-      } catch (requestError) {
-        if (!active) return;
-        setError(requestError instanceof Error ? requestError.message : 'Failed to load collections.');
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
+  // Add collection mutation
+  const addCollectionMutation = useMutation({
+    mutationFn: async (data: { name: string; contractAddress: string; chain: string }) => {
+      return apiRequest<{ collection: CollectionRecord }>('/api/collections', {
+        method: 'POST',
+        body: data,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['collections'] });
+      setModalOpen(false);
+    },
+  });
 
-    void run();
-
-    return () => {
-      active = false;
-    };
-  }, []);
+  // Delete collection mutation
+  const deleteCollectionMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest<{ success: true }>(`/api/collections/${id}`, { method: 'DELETE' });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['collections'] });
+    },
+  });
 
   const submitCollection = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -76,18 +91,11 @@ export default function CollectionsClient() {
     setFormError(null);
 
     try {
-      const payload = await apiRequest<{ collection: CollectionRecord }>('/api/collections', {
-        method: 'POST',
-        body: {
-          name: form.name.trim(),
-          contractAddress: form.contractAddress.trim(),
-          chain: form.chain,
-        },
+      await addCollectionMutation.mutateAsync({
+        name: form.name.trim(),
+        contractAddress: form.contractAddress.trim(),
+        chain: form.chain,
       });
-
-      setCollections((current) => [...current, payload.collection]);
-      setForm({ name: '', contractAddress: '', chain: 'ethereum' });
-      setModalOpen(false);
     } catch (requestError) {
       setFormError(requestError instanceof Error ? requestError.message : 'Failed to add collection.');
     } finally {
@@ -95,13 +103,12 @@ export default function CollectionsClient() {
     }
   };
 
-  const deleteCollection = async (collection: CollectionRecord) => {
-    setDeletingId(collection.id);
+  const deleteCollection = async (id: string) => {
+    setDeletingId(id);
     setError(null);
 
     try {
-      await apiRequest<{ success: true }>('/api/collections', { method: 'DELETE', body: { id: collection.id } });
-      setCollections((current) => current.filter((item) => item.id !== collection.id));
+      await deleteCollectionMutation.mutateAsync(id);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to delete collection.');
     } finally {
@@ -135,7 +142,7 @@ export default function CollectionsClient() {
         </div>
       ) : null}
 
-      {loading ? (
+      {isLoading ? (
         <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {[0, 1, 2, 3].map((item) => (
             <Card key={item} className="p-5">
@@ -157,7 +164,7 @@ export default function CollectionsClient() {
                   <Badge variant={statusVariant(collection.mintStatus) as 'success' | 'warning' | 'danger'}>{collection.mintStatus ?? 'unknown'}</Badge>
                   <button
                     type="button"
-                    onClick={() => deleteCollection(collection)}
+                    onClick={() => deleteCollection(collection.id)}
                     disabled={deletingId === collection.id}
                     className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-white/5 hover:text-danger disabled:opacity-50"
                     aria-label={`Delete ${collection.name ?? collection.contractAddress}`}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { ArrowLeft, Radio, Save, SlidersHorizontal } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
@@ -59,37 +60,27 @@ function formatLatency(latency: number | null) {
 }
 
 export default function RpcProvidersClient() {
-  const [payload, setPayload] = useState<RpcProviderPayload | null>(null);
+  const queryClient = useQueryClient();
   const [draft, setDraft] = useState<RpcProviderSettings | null>(null);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  // Fetch RPC provider settings with React Query
+  const { data: payload, isLoading, error: fetchError } = useQuery({
+    queryKey: ['rpc-providers'],
+    queryFn: () => apiRequest<RpcProviderPayload>('/api/settings/rpc-providers'),
+  });
+
+  // Initialize draft when payload changes
+  useEffect(() => {
+    if (payload) {
+      setDraft(payload.settings);
+    }
+  }, [payload]);
+
   const dirty = useMemo(() => settingsKey(payload?.settings ?? null) !== settingsKey(draft), [draft, payload]);
   const configuredProviders = payload?.routing.providers.filter((provider) => provider.configured) ?? [];
-
-  useEffect(() => {
-    let active = true;
-
-    apiRequest<RpcProviderPayload>('/api/settings/rpc-providers')
-      .then((response) => {
-        if (!active) return;
-        setPayload(response);
-        setDraft(response.settings);
-      })
-      .catch((requestError) => {
-        if (!active) return;
-        setError(requestError instanceof Error ? requestError.message : 'Failed to load RPC provider settings.');
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
 
   useEffect(() => {
     if (!success) return;
@@ -98,10 +89,31 @@ export default function RpcProvidersClient() {
     return () => window.clearTimeout(timeout);
   }, [success]);
 
+  // Set error from fetch error
+  useEffect(() => {
+    if (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : 'Failed to load RPC provider settings.');
+    }
+  }, [fetchError]);
+
   function updateDraft<K extends keyof RpcProviderSettings>(key: K, value: RpcProviderSettings[K]) {
     setDraft((current) => current ? { ...current, [key]: value } : current);
     setSuccess(null);
   }
+
+  // Save settings mutation
+  const saveMutation = useMutation({
+    mutationFn: async (settings: RpcProviderSettings) => {
+      return apiRequest<RpcProviderPayload>('/api/settings/rpc-providers', {
+        method: 'PATCH',
+        body: settings,
+      });
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['rpc-providers'] });
+      setSuccess('RPC provider settings saved successfully.');
+    },
+  });
 
   async function saveSettings() {
     if (!draft) return;
@@ -110,14 +122,7 @@ export default function RpcProvidersClient() {
     setSuccess(null);
 
     try {
-      const response = await apiRequest<RpcProviderPayload>('/api/settings/rpc-providers', {
-        method: 'PATCH',
-        cache: 'no-store',
-        body: draft,
-      });
-      setPayload(response);
-      setDraft(response.settings);
-      setSuccess('RPC provider settings saved.');
+      await saveMutation.mutateAsync(draft);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to save RPC provider settings.');
     } finally {
@@ -138,7 +143,7 @@ export default function RpcProvidersClient() {
             Control how AutoMint selects configured RPC providers during mint execution.
           </p>
         </div>
-        <Button type="button" onClick={saveSettings} loading={saving} disabled={loading || !draft || !dirty}>
+        <Button type="button" onClick={saveSettings} loading={saving} disabled={isLoading || !draft || !dirty}>
           <Save className="h-4 w-4" aria-hidden="true" />
           {saving ? 'Saving...' : 'Save Settings'}
         </Button>
@@ -147,7 +152,7 @@ export default function RpcProvidersClient() {
       {error ? <div className="mb-6 rounded-lg border border-danger/25 bg-danger/10 px-4 py-3 text-sm text-danger" role="alert">{error}</div> : null}
       {success ? <div className="mb-6 rounded-lg border border-success/25 bg-success/10 px-4 py-3 text-sm text-success" role="status">{success}</div> : null}
 
-      {loading || !draft || !payload ? (
+      {isLoading || !draft || !payload ? (
         <Card className="p-6 text-sm text-muted">Loading RPC provider settings...</Card>
       ) : (
         <div className="grid gap-5">

@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, RefreshCw, TestTube2 } from 'lucide-react';
 import Link from 'next/link';
 import Badge from '@/components/ui/Badge';
@@ -50,12 +51,17 @@ function formatTime(value: string | null) {
 }
 
 export default function ApiKeysClient() {
-  const [payload, setPayload] = useState<IntegrationStatusResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [testing, setTesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastRefreshAt, setLastRefreshAt] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+
+  // Fetch integration status with React Query
+  const { data: payload, isLoading, error: fetchError } = useQuery({
+    queryKey: ['integrations'],
+    queryFn: () => apiRequest<IntegrationStatusResponse>('/api/settings/integrations'),
+  });
 
   const summary = payload?.summary;
   const filteredGroups = useMemo(() => {
@@ -77,32 +83,34 @@ export default function ApiKeysClient() {
   }, [payload, statusFilter]);
 
   function handlePayload(response: IntegrationStatusResponse) {
-    setPayload(response);
     setLastRefreshAt(new Date().toISOString());
   }
 
-  async function loadIntegrations() {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await apiRequest<IntegrationStatusResponse>('/api/settings/integrations');
-      handlePayload(response);
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Failed to load integration status.');
-      setLastRefreshAt(new Date().toISOString());
-    } finally {
-      setLoading(false);
+  // Set error from fetch error
+  useEffect(() => {
+    if (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : 'Failed to load integration status.');
     }
-  }
+  }, [fetchError]);
+
+  // Test integrations mutation
+  const testMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest<IntegrationStatusResponse>('/api/settings/integrations', {
+        method: 'POST',
+      });
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['integrations'] });
+      handlePayload(data);
+    },
+  });
 
   async function testAllIntegrations() {
     setTesting(true);
     setError(null);
     try {
-      const response = await apiRequest<IntegrationStatusResponse>('/api/settings/integrations', {
-        method: 'POST',
-        cache: 'no-store',
-      });
+      const response = await testMutation.mutateAsync();
       handlePayload(response);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to test integrations.');
@@ -111,29 +119,6 @@ export default function ApiKeysClient() {
       setTesting(false);
     }
   }
-
-  useEffect(() => {
-    let active = true;
-
-    apiRequest<IntegrationStatusResponse>('/api/settings/integrations')
-      .then((response) => {
-        if (!active) return;
-        handlePayload(response);
-        setError(null);
-      })
-      .catch((requestError) => {
-        if (!active) return;
-        setError(requestError instanceof Error ? requestError.message : 'Failed to load integration status.');
-        setLastRefreshAt(new Date().toISOString());
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
 
   return (
     <div>
@@ -152,11 +137,11 @@ export default function ApiKeysClient() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="secondary" onClick={loadIntegrations} disabled={loading || testing}>
+          <Button type="button" variant="secondary" onClick={() => queryClient.invalidateQueries({ queryKey: ['integrations'] })} disabled={isLoading || testing}>
             <RefreshCw className="h-4 w-4" aria-hidden="true" />
             Refresh
           </Button>
-          <Button type="button" onClick={testAllIntegrations} loading={testing} disabled={loading}>
+          <Button type="button" onClick={testAllIntegrations} loading={testing} disabled={isLoading}>
             <TestTube2 className="h-4 w-4" aria-hidden="true" />
             Test All Integrations
           </Button>
@@ -224,7 +209,7 @@ export default function ApiKeysClient() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {loading ? (
+              {isLoading ? (
                 <tr>
                   <td className="px-4 py-8 text-center text-muted" colSpan={8}>Loading integration status...</td>
                 </tr>

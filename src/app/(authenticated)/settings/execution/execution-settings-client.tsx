@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { ArrowLeft, Save, SlidersHorizontal } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
@@ -62,41 +63,52 @@ function settingKey(settings: ExecutionSettings | null) {
 }
 
 export default function ExecutionSettingsClient() {
-  const [payload, setPayload] = useState<ExecutionPayload | null>(null);
+  const queryClient = useQueryClient();
   const [draft, setDraft] = useState<ExecutionSettings | null>(null);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  // Fetch execution settings with React Query
+  const { data: payload, isLoading, error: fetchError } = useQuery({
+    queryKey: ['execution-settings'],
+    queryFn: () => apiRequest<ExecutionPayload>('/api/settings/execution'),
+  });
+
+  // Initialize draft when payload changes
+  useEffect(() => {
+    if (payload) {
+      setDraft(payload.settings);
+    }
+  }, [payload]);
+
   const dirty = useMemo(() => settingKey(payload?.settings ?? null) !== settingKey(draft), [draft, payload]);
 
+  // Set error from fetch error
   useEffect(() => {
-    let active = true;
-
-    apiRequest<ExecutionPayload>('/api/settings/execution')
-      .then((response) => {
-        if (!active) return;
-        setPayload(response);
-        setDraft(response.settings);
-      })
-      .catch((requestError) => {
-        if (!active) return;
-        setError(requestError instanceof Error ? requestError.message : 'Failed to load execution settings.');
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
+    if (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : 'Failed to load execution settings.');
+    }
+  }, [fetchError]);
 
   function updateDraft<K extends keyof ExecutionSettings>(key: K, value: ExecutionSettings[K]) {
     setDraft((current) => current ? { ...current, [key]: value } : current);
     setSuccess(null);
   }
+
+  // Save settings mutation
+  const saveMutation = useMutation({
+    mutationFn: async (settings: ExecutionSettings) => {
+      return apiRequest<ExecutionPayload>('/api/settings/execution', {
+        method: 'PATCH',
+        body: settings,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['execution-settings'] });
+      setSuccess('Execution settings saved successfully.');
+    },
+  });
 
   async function saveSettings() {
     if (!draft) return;
@@ -105,14 +117,7 @@ export default function ExecutionSettingsClient() {
     setSuccess(null);
 
     try {
-      const response = await apiRequest<ExecutionPayload>('/api/settings/execution', {
-        method: 'PATCH',
-        cache: 'no-store',
-        body: draft,
-      });
-      setPayload(response);
-      setDraft(response.settings);
-      setSuccess('Execution settings saved.');
+      await saveMutation.mutateAsync(draft);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to save execution settings.');
     } finally {
@@ -152,7 +157,7 @@ export default function ExecutionSettingsClient() {
             User-level defaults for mint creation, execution behavior, and analyzer automation.
           </p>
         </div>
-        <Button type="button" onClick={saveSettings} loading={saving} disabled={loading || !draft || !dirty}>
+        <Button type="button" onClick={saveSettings} loading={saving} disabled={isLoading || !draft || !dirty}>
           <Save className="h-4 w-4" aria-hidden="true" />
           Save Settings
         </Button>
@@ -161,7 +166,7 @@ export default function ExecutionSettingsClient() {
       {error ? <div className="mb-6 rounded-lg border border-danger/25 bg-danger/10 px-4 py-3 text-sm text-danger" role="alert">{error}</div> : null}
       {success ? <div className="mb-6 rounded-lg border border-success/25 bg-success/10 px-4 py-3 text-sm text-success" role="status">{success}</div> : null}
 
-      {loading || !draft ? (
+      {isLoading || !draft ? (
         <Card className="p-6 text-sm text-muted">Loading execution settings...</Card>
       ) : (
         <div className="grid gap-5">

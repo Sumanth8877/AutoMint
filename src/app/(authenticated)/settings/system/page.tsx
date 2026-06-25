@@ -10,8 +10,8 @@ import { redirect } from 'next/navigation';
 import { auth } from '@clerk/nextjs/server';
 import { DependencyUpdateCenter } from '@/components/settings/DependencyUpdateCenter';
 
-// Cache this page for 1 hour
-export const revalidate = 3600;
+// Cache this page for 4 hours
+export const revalidate = 14400;
 
 export default async function SystemMaintenancePage() {
   const { userId } = await auth();

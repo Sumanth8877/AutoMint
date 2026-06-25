@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { ArrowLeft, Mail, Save } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
@@ -53,13 +54,48 @@ function formatDate(value: string | null) {
 }
 
 export default function EmailNotificationsClient() {
-  const [settings, setSettings] = useState<EmailSettingsResponse | null>(null);
+  const queryClient = useQueryClient();
   const [draft, setDraft] = useState<EmailPreferences | null>(null);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+
+  // Fetch email notification settings with React Query
+  const { data: settings, isLoading, error: fetchError } = useQuery({
+    queryKey: ['email-notifications'],
+    queryFn: () => apiRequest<EmailSettingsResponse>('/api/settings/email-notifications'),
+  });
+
+  // Initialize draft when settings changes
+  useEffect(() => {
+    if (settings) {
+      setDraft(settings.preferences);
+      setSavedAt(settings.preferences.updatedAt);
+    }
+  }, [settings]);
+
+  // Set error from fetch error
+  useEffect(() => {
+    if (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : 'Failed to load email notification settings.');
+    }
+  }, [fetchError]);
+
+  // Save settings mutation
+  const saveMutation = useMutation({
+    mutationFn: async (preferences: EmailPreferences) => {
+      return apiRequest<EmailSettingsResponse>('/api/settings/email-notifications', {
+        method: 'PATCH',
+        body: preferences,
+      });
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['email-notifications'] });
+      setSavedAt(new Date().toISOString());
+      setSuccess('Preferences saved successfully');
+    },
+  });
 
   async function saveSettings() {
     if (!draft) return;
@@ -67,15 +103,7 @@ export default function EmailNotificationsClient() {
     setError(null);
     setSuccess(null);
     try {
-      const response = await apiRequest<EmailSettingsResponse>('/api/settings/email-notifications', {
-        method: 'PATCH',
-        cache: 'no-store',
-        body: draft,
-      });
-      setSettings(response);
-      setDraft(response.preferences);
-      setSavedAt(new Date().toISOString());
-      setSuccess('Preferences saved successfully');
+      await saveMutation.mutateAsync(draft);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to save email notification settings.');
     } finally {
@@ -86,29 +114,6 @@ export default function EmailNotificationsClient() {
   function updateDraft(key: keyof EmailPreferences, value: boolean) {
     setDraft((current) => current ? { ...current, [key]: value } : current);
   }
-
-  useEffect(() => {
-    let active = true;
-
-    apiRequest<EmailSettingsResponse>('/api/settings/email-notifications')
-      .then((response) => {
-        if (!active) return;
-        setSettings(response);
-        setDraft(response.preferences);
-        setError(null);
-      })
-      .catch((requestError) => {
-        if (!active) return;
-        setError(requestError instanceof Error ? requestError.message : 'Failed to load email notification settings.');
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
 
   useEffect(() => {
     if (!success) return;
@@ -130,7 +135,7 @@ export default function EmailNotificationsClient() {
             Control which AutoMint emails are sent to your authenticated account email.
           </p>
         </div>
-        <Button type="button" onClick={saveSettings} loading={saving} disabled={loading || !draft}>
+        <Button type="button" onClick={saveSettings} loading={saving} disabled={isLoading || !draft}>
           <Save className="h-4 w-4" aria-hidden="true" />
           {saving ? 'Saving...' : 'Save Preferences'}
         </Button>
@@ -163,7 +168,7 @@ export default function EmailNotificationsClient() {
             <Badge variant={draft?.emailEnabled ? 'success' : 'default'}>{draft?.emailEnabled ? 'ON' : 'OFF'}</Badge>
           </div>
 
-          {loading || !draft ? (
+          {isLoading || !draft ? (
             <div className="py-10 text-sm text-muted">Loading email preferences...</div>
           ) : (
             <div className="divide-y divide-border">
