@@ -33,6 +33,7 @@ type WalletRecord = {
   nickname: string | null;
   chain: string;
   walletType: WalletType;
+  isDefault: boolean;
 };
 
 type CollectionRecord = {
@@ -78,15 +79,6 @@ export default function MintsClient() {
   const [form, setForm] = useState({ walletId: '', mintUrl: '' });
   const [analyzedUrl, setAnalyzedUrl] = useState<string | null>(null);
 
-  // Handle mintUrl from URL params
-  useEffect(() => {
-    const mintUrlParam = searchParams.get('mintUrl');
-    if (mintUrlParam) {
-      setForm((current) => ({ ...current, mintUrl: mintUrlParam }));
-      setModalOpen(true);
-    }
-  }, [searchParams]);
-
   // Fetch data with React Query
   const { data: mintsData, isLoading, error: fetchError } = useQuery({
     queryKey: ['mints'],
@@ -110,10 +102,31 @@ export default function MintsClient() {
   const collectionById = useMemo(() => new Map(collections.map((collection) => [collection.id, collection])), [collections]);
   const walletById = useMemo(() => new Map(wallets.map((wallet) => [wallet.id, wallet])), [wallets]);
   const evmWallets = useMemo(() => wallets.filter((wallet) => wallet.walletType === 'EVM'), [wallets]);
+  const defaultWallet = useMemo(() => wallets.find((wallet) => wallet.isDefault), [wallets]);
   const runningCount = tasks.filter((task) => task.status === 'running').length;
   const queuedCount = tasks.filter((task) => task.status === 'pending' || task.status === 'monitoring').length;
   const readyCount = tasks.filter((task) => task.status === 'ready').length;
   const retryCount = tasks.filter((task) => task.status === 'failed').length;
+
+  // Handle mintUrl from URL params and set default wallet
+  useEffect(() => {
+    const mintUrlParam = searchParams.get('mintUrl');
+    if (mintUrlParam) {
+      setForm((current) => ({ 
+        ...current, 
+        mintUrl: mintUrlParam,
+        walletId: defaultWallet?.id || ''
+      }));
+      setModalOpen(true);
+    }
+  }, [searchParams, defaultWallet?.id]);
+
+  // Set default wallet when modal opens
+  useEffect(() => {
+    if (modalOpen && defaultWallet && !form.walletId) {
+      setForm((current) => ({ ...current, walletId: defaultWallet.id }));
+    }
+  }, [modalOpen, defaultWallet, form.walletId]);
 
   // Set error from fetch error
   useEffect(() => {

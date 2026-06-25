@@ -257,21 +257,21 @@ export default function HistoryClient() {
   // Fetch mint history with React Query
   const { data: mintData, isLoading: mintLoading, error: mintError } = useQuery({
     queryKey: ['mint-history', activeTab, page, search, status],
-    queryFn: () => apiRequest<HistoryResponse<MintHistoryRow>>(`/api/history/mints?page=${page}&search=${search}&status=${status}`),
+    queryFn: () => apiRequest<HistoryResponse<MintHistoryRow>>(`/api/history?tab=mints&page=${page}&search=${search}&status=${status}`),
     enabled: activeTab === 'mints',
   });
 
   // Fetch scheduled tasks with React Query
   const { data: scheduledData, isLoading: scheduledLoading, error: scheduledError } = useQuery({
     queryKey: ['scheduled-history', activeTab, page, search, status],
-    queryFn: () => apiRequest<HistoryResponse<ScheduledTaskRow>>(`/api/history/scheduled?page=${page}&search=${search}&status=${status}`),
+    queryFn: () => apiRequest<HistoryResponse<ScheduledTaskRow>>(`/api/history?tab=scheduled&page=${page}&search=${search}&status=${status}`),
     enabled: activeTab === 'scheduled',
   });
 
   // Fetch analyzer history with React Query
   const { data: analyzerData, isLoading: analyzerLoading, error: analyzerError } = useQuery({
     queryKey: ['analyzer-history', activeTab, page, search, analyzerFilter],
-    queryFn: () => apiRequest<HistoryResponse<AnalyzerHistoryRow>>(`/api/history/analyzer?page=${page}&search=${search}&filter=${analyzerFilter}`),
+    queryFn: () => apiRequest<HistoryResponse<AnalyzerHistoryRow>>(`/api/history?tab=analyzer&page=${page}&search=${search}&filter=${analyzerFilter}`),
     enabled: activeTab === 'analyzer',
   });
 

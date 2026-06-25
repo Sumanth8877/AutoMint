@@ -53,7 +53,7 @@ type ActivityItem = {
 
 function Logo() {
   return (
-    <Link href="/dashboard" className="flex items-center gap-3" aria-label="AutoMint dashboard">
+    <Link href="/" className="flex items-center gap-3" aria-label="AutoMint home">
       <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-primary/25 bg-primary/15">
         <Sparkles className="h-4 w-4 text-accent" aria-hidden="true" />
       </div>
