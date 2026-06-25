@@ -37,10 +37,10 @@ export default function TelegramSettingsPage() {
     fetchTelegramLink();
   }, [fetchTelegramLink]);
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
+  const copyToClipboard = async (text: string) => {
+    await navigator.clipboard.writeText(text);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    window.setTimeout(() => setCopied(false), 2000);
   };
 
   const generateNewToken = () => {
@@ -119,16 +119,18 @@ export default function TelegramSettingsPage() {
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted">2. Send this command:</span>
               </div>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 bg-black/5 px-3 py-2 rounded text-sm font-mono">
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+                <code className="min-w-0 rounded bg-black/20 px-3 py-2 font-mono text-sm leading-6 text-text break-all">
                   /start {data.token}
                 </code>
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => copyToClipboard(`/start ${data.token!}`)}
+                  onClick={() => void copyToClipboard(`/start ${data.token}`)}
+                  title="Copy Telegram start command"
                 >
                   {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  {copied ? 'Copied' : 'Copy'}
                 </Button>
               </div>
               {data.deepLink && (
