@@ -3,6 +3,7 @@ import { requireApiUser } from '@/lib/auth/require-auth';
 import { getErrorMessage, parseJsonBody } from '@/lib/api/errors';
 import { captureException } from '@/lib/observability/sentry';
 import { AnalyzerExecutionError, AnalyzerResolutionError, runAnalyzer } from '@/lib/services/analyzer.service';
+import { getEffectiveExecutionDefaults } from '@/lib/services/execution-settings.service';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,9 +17,11 @@ export async function POST(req: Request) {
 
 
   let input = '';
+  let depth = 'full';
   try {
-    const body = await parseJsonBody<{ input?: string }>(req);
+    const body = await parseJsonBody<{ input?: string; depth?: 'full' | 'minimal' }>(req);
     input = body.input?.trim() ?? '';
+    depth = body.depth ?? 'full';
   } catch {
     return NextResponse.json({ error: 'Invalid JSON request body' }, { status: 400 });
   }
@@ -30,14 +33,18 @@ export async function POST(req: Request) {
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
+    async start(controller) {
       const send = (event: string, data: unknown) => {
         controller.enqueue(encoder.encode(sse(event, data)));
       };
 
+      const settings = await getEffectiveExecutionDefaults(authResult.userId);
+      settings.autoDetectSocials = depth === 'full';
+
       void runAnalyzer({
         userId: authResult.userId,
         input,
+        settings,
         onLog: (entry) => send('log', entry),
       }).then((result) => {
         send('result', result);

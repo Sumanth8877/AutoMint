@@ -32,6 +32,9 @@ import {
 } from '@/lib/services/analyzer-cache.service';
 import { analyzerHistory } from '@/drizzle/schema';
 import { getDb } from '@/lib/db';
+import { getNFTCollection, getNFTTrades, getNFTStatistics } from '@/lib/services/nftscan.service';
+import { getNFTCollection as getMoralisCollection, getNFTTrades as getMoralisTrades } from '@/lib/services/moralis.service';
+import { checkTokenSecurity } from '@/lib/services/goplus-security.service';
 
 type AnalyzerSettings = Awaited<ReturnType<typeof getEffectiveExecutionDefaults>>;
 
@@ -264,6 +267,24 @@ async function resolveIntentWithCache(params: {
   const intent = await resolveMintIntent(params.normalizedInput, params.logger, params.telemetry);
   await writeAnalyzerCache(key, intent, ANALYZER_CACHE_TTL.contractResolution);
   return intent;
+}
+
+async function runBlockchainDiscoveryWithCache(params: {
+  contractAddress: string;
+  chain: string;
+  enabled: boolean;
+  cacheStats: AnalyzerCacheStats;
+  log: (level: AnalyzerDebugLogLevel, stage: string, message: string) => void;
+  timingBreakdown: AnalyzerTiming[];
+}) {
+  const key = ANALYZER_CACHE_KEYS.discoveryResults(`blockchain_${params.contractAddress}_${params.chain}`);
+  const cached = await readAnalyzerCache<Awaited<ReturnType<typeof runBlockchainDiscovery>>>(key, params.cacheStats);
+  logCacheResult(params.log, Boolean(cached), 'Blockchain Discovery Results');
+  if (cached) return cached;
+
+  const fresh = await runBlockchainDiscovery(params);
+  await writeAnalyzerCache(key, fresh, ANALYZER_CACHE_TTL.discoveryResults);
+  return fresh;
 }
 
 async function runSocialDiscoveryWithCache(params: {
@@ -513,6 +534,127 @@ function logSocialFindings(
   for (const key of SOCIAL_KEYS) {
     log(socials[key] ? 'success' : 'warning', 'social_discovery', `${labels[key]} ${socials[key] ? 'found' : 'not found'}`);
   }
+}
+
+async function runBlockchainDiscovery(params: {
+  contractAddress: string;
+  chain: string;
+  enabled: boolean;
+  log: (level: AnalyzerDebugLogLevel, stage: string, message: string) => void;
+  timingBreakdown: AnalyzerTiming[];
+}) {
+  if (!params.enabled) {
+    params.log('warning', 'blockchain_discovery', 'Blockchain discovery skipped');
+    return { 
+      collectionData: null, 
+      trades: null, 
+      statistics: null, 
+      securityCheck: null 
+    };
+  }
+
+  params.log('info', 'blockchain_discovery', 'Starting blockchain discovery with NFT Scan, Moralis, and GoPlus Security');
+
+  // Try NFT Scan first
+  let collectionData = null;
+  let trades = null;
+  let statistics = null;
+
+  params.log('info', 'blockchain_discovery', 'Fetching NFT Scan collection data');
+  try {
+    collectionData = await runTimed(params.timingBreakdown, 'NFT Scan Collection', () => 
+      getNFTCollection({ contractAddress: params.contractAddress, chain: params.chain })
+    );
+    if (collectionData) {
+      params.log('success', 'blockchain_discovery', `NFT Scan collection found: ${collectionData.name}`);
+    }
+  } catch (error) {
+    params.log('warning', 'blockchain_discovery', `NFT Scan collection failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  // Fallback to Moralis if NFT Scan fails
+  if (!collectionData) {
+    params.log('info', 'blockchain_discovery', 'NFT Scan failed, trying Moralis');
+    try {
+      const moralisCollection = await runTimed(params.timingBreakdown, 'Moralis Collection', () => 
+        getMoralisCollection({ contractAddress: params.contractAddress, chain: params.chain })
+      );
+      if (moralisCollection) {
+        collectionData = {
+          contractAddress: moralisCollection.tokenAddress,
+          name: moralisCollection.name,
+          symbol: moralisCollection.symbol,
+          contractType: moralisCollection.contractType,
+          ownerCount: 0,
+          totalSupply: 0,
+          totalVolume: '0',
+          floorPrice: '0',
+          floorPriceSymbol: '',
+          logo: '',
+          description: '',
+          website: '',
+          twitter: '',
+          discord: '',
+          telegram: '',
+          isVerified: false,
+        };
+        params.log('success', 'blockchain_discovery', `Moralis collection found: ${moralisCollection.name}`);
+      }
+    } catch (error) {
+      params.log('warning', 'blockchain_discovery', `Moralis collection failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  // Get trades data
+  params.log('info', 'blockchain_discovery', 'Fetching recent trades');
+  try {
+    trades = await runTimed(params.timingBreakdown, 'NFT Scan Trades', () => 
+      getNFTTrades({ contractAddress: params.contractAddress, chain: params.chain, limit: 10 })
+    );
+    if (!trades) {
+      // Fallback to Moralis
+      trades = await runTimed(params.timingBreakdown, 'Moralis Trades', () => 
+        getMoralisTrades({ contractAddress: params.contractAddress, chain: params.chain, limit: 10 })
+      );
+    }
+    if (trades && trades.length > 0) {
+      params.log('success', 'blockchain_discovery', `Found ${trades.length} recent trades`);
+    }
+  } catch (error) {
+    params.log('warning', 'blockchain_discovery', `Trades fetch failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  // Get statistics
+  params.log('info', 'blockchain_discovery', 'Fetching collection statistics');
+  try {
+    statistics = await runTimed(params.timingBreakdown, 'NFT Scan Statistics', () => 
+      getNFTStatistics({ contractAddress: params.contractAddress, chain: params.chain })
+    );
+    if (statistics) {
+      params.log('success', 'blockchain_discovery', `Statistics loaded: ${statistics.totalHolderCount} holders, ${statistics.totalTradeCount} trades`);
+    }
+  } catch (error) {
+    params.log('warning', 'blockchain_discovery', `Statistics fetch failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  // Security check with GoPlus
+  let securityCheck = null;
+  params.log('info', 'blockchain_discovery', 'Running GoPlus Security check');
+  try {
+    securityCheck = await runTimed(params.timingBreakdown, 'GoPlus Security', () => 
+      checkTokenSecurity({ contractAddress: params.contractAddress, chain: params.chain })
+    );
+    if (securityCheck) {
+      params.log('success', 'blockchain_discovery', `Security check complete: risk score ${securityCheck.riskScore}/100`);
+      if (securityCheck.riskFactors.length > 0) {
+        params.log('warning', 'blockchain_discovery', `Risk factors: ${securityCheck.riskFactors.join(', ')}`);
+      }
+    }
+  } catch (error) {
+    params.log('warning', 'blockchain_discovery', `GoPlus Security check failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  return { collectionData, trades, statistics, securityCheck };
 }
 
 async function runSocialDiscovery(params: {
@@ -956,6 +1098,16 @@ export async function runAnalyzer(params: {
     timingBreakdown: telemetry.timingBreakdown,
   });
 
+  // Run blockchain discovery for security and verification
+  const blockchainDiscovery = await runBlockchainDiscoveryWithCache({
+    contractAddress,
+    chain,
+    enabled: true, // Always enable blockchain discovery for security
+    cacheStats,
+    log,
+    timingBreakdown: telemetry.timingBreakdown,
+  });
+
   const collectionIntelligence = await fetchCollectionIntelligenceWithCache({
     intent,
     metadata: {
@@ -968,6 +1120,14 @@ export async function runAnalyzer(params: {
   });
 
   const providerUsed = selectedProviderFromChain(params.input, intent, telemetry.providerChain);
+  
+  // Incorporate blockchain security check into risk analysis
+  let enhancedRiskFactors = [];
+  if (blockchainDiscovery.securityCheck && blockchainDiscovery.securityCheck.riskScore > 0) {
+    enhancedRiskFactors.push(...blockchainDiscovery.securityCheck.riskFactors);
+    log('warning', 'security', `GoPlus Security detected ${blockchainDiscovery.securityCheck.riskFactors.length} risk factors`);
+  }
+  
   const riskAnalysis = await runAnalyzerRisk({
     userId: params.userId,
     contractAddress,
@@ -983,6 +1143,16 @@ export async function runAnalyzer(params: {
     log,
     timingBreakdown: telemetry.timingBreakdown,
   });
+  
+  // Merge GoPlus security factors into risk analysis
+  if (enhancedRiskFactors.length > 0) {
+    riskAnalysis.riskFactors = [...new Set([...riskAnalysis.riskFactors, ...enhancedRiskFactors])];
+    // Boost risk score if GoPlus detected issues
+    if (blockchainDiscovery.securityCheck && blockchainDiscovery.securityCheck.riskScore > 30) {
+      riskAnalysis.riskScore = Math.min(100, riskAnalysis.riskScore + Math.floor(blockchainDiscovery.securityCheck.riskScore * 0.3));
+      log('warning', 'security', `Risk score adjusted to ${riskAnalysis.riskScore} based on blockchain security analysis`);
+    }
+  }
   const result: AnalyzerResult = {
     intent,
     metadata: {

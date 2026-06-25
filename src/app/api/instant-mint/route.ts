@@ -390,8 +390,10 @@ export async function POST(request: Request) {
     // Estimate gas
     const gasEstimate = await estimateGas(supportedChain, rpcUrl, contractAddress);
 
-    // Run analyzer for risk assessment
-    const analysis = await runAnalyzer({ userId: authResult.userId, input: url });
+    // Run analyzer for risk assessment with minimal depth (no social discovery)
+    const settings = await getEffectiveExecutionDefaults(authResult.userId);
+    settings.autoDetectSocials = false; // Disable social discovery for mint flow
+    const analysis = await runAnalyzer({ userId: authResult.userId, input: url, settings });
     // Skip risk assessment for instant mint - will be done during task execution
     const riskAssessment = null;
 

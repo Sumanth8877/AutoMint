@@ -229,7 +229,7 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
       const response = await fetch('/api/analyzer/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input }),
+        body: JSON.stringify({ input, depth: 'full' }),
       });
 
       if (!response.ok || !response.body) {
