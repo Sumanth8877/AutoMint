@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'next/navigation';
 import { CalendarClock, MoreHorizontal, Play, Plus, RotateCcw, ShieldCheck, Trash2, XCircle, Zap } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
@@ -65,6 +66,7 @@ function statusVariant(status: string) {
 
 export default function MintsClient() {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
   const [saving, setSaving] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -75,6 +77,15 @@ export default function MintsClient() {
   const [formError, setFormError] = useState<string | null>(null);
   const [form, setForm] = useState({ walletId: '', collectionId: '', mintUrl: '', quantity: '1' });
   const [analyzedUrl, setAnalyzedUrl] = useState<string | null>(null);
+
+  // Handle mintUrl from URL params
+  useEffect(() => {
+    const mintUrlParam = searchParams.get('mintUrl');
+    if (mintUrlParam) {
+      setForm((current) => ({ ...current, mintUrl: mintUrlParam }));
+      setModalOpen(true);
+    }
+  }, [searchParams]);
 
   // Fetch data with React Query
   const { data: mintsData, isLoading, error: fetchError } = useQuery({

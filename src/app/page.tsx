@@ -56,6 +56,7 @@ export default function HomePage() {
   const [inputError, setInputError] = useState<string | null>(null);
 
   const analyzerHref = url.trim() ? `/analyzer?input=${encodeURIComponent(url.trim())}` : '/analyzer';
+  const mintsHref = url.trim() ? `/mints?mintUrl=${encodeURIComponent(url.trim())}` : '/mints';
 
   const pasteUrl = async () => {
     try {
@@ -204,10 +205,10 @@ export default function HomePage() {
                   {copied ? 'Copied' : 'Stage Analysis'}
                 </Button>
                 <Link
-                  href={analyzerHref}
+                  href={mintsHref}
                   className="inline-flex h-12 w-full shrink-0 items-center justify-center gap-2.5 rounded-lg bg-success px-5 text-sm font-medium text-white transition hover:bg-success/90"
                 >
-                  Analyze
+                  Mint
                   <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </Link>
                 </div>
