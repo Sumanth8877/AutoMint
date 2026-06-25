@@ -4,11 +4,12 @@ import { getErrorMessage, parseJsonBody } from '@/lib/api/errors';
 import { resolveMintIntent, type MintIntent } from '@/lib/resolve-mint-intent';
 import { AnalyzerResolutionError, normalizeAnalyzerInput, runAnalyzer, type AnalyzerResult } from '@/lib/services/analyzer.service';
 import { analyzeMintRisk } from '@/lib/services/risk.service';
-import { addMintTask, executeMintTask } from '@/lib/services/mint.service';
+import { addMintTask, executeMintTask, getUserMintTasks } from '@/lib/services/mint.service';
 import { getEffectiveExecutionDefaults } from '@/lib/services/execution-settings.service';
+import { scheduleMint } from '@/lib/services/qstash.service';
 import { getDb } from '@/lib/db';
-import { collections } from '@/drizzle/schema';
-import { eq } from 'drizzle-orm';
+import { collections, mintTasks } from '@/drizzle/schema';
+import { eq, and, desc } from 'drizzle-orm';
 
 const SUPPORTED_CHAINS = ['ethereum', 'base', 'polygon'] as const;
 type SupportedChain = (typeof SUPPORTED_CHAINS)[number];
@@ -20,12 +21,12 @@ function asSupportedChain(chain: string): SupportedChain {
   return chain as SupportedChain;
 }
 
-async function resolveMintUrl(url: string): Promise<MintIntent> {
+async function resolveMintUrl(url: string): Promise<MintIntent & { mintPhases: MintPhase[]; mintTime?: Date }> {
   // First attempt: URL resolver
   try {
     const intent = await resolveMintIntent(url);
     if (intent.contractAddress) {
-      return intent;
+      return { ...intent, mintPhases: [{ type: 'public', proofRequired: false }] };
     }
   } catch (error) {
     console.log('URL resolver failed, trying fallback methods');
@@ -61,7 +62,7 @@ async function resolveMintUrl(url: string): Promise<MintIntent> {
   throw new Error('Failed to resolve mint URL. All resolution methods failed.');
 }
 
-async function fetchWithFirecrawl(url: string): Promise<MintIntent> {
+async function fetchWithFirecrawl(url: string): Promise<MintIntent & { mintPhases: MintPhase[]; mintTime?: Date }> {
   // Implement Firecrawl API call
   const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
     method: 'POST',
@@ -84,7 +85,7 @@ async function fetchWithFirecrawl(url: string): Promise<MintIntent> {
   return parseMintDetailsFromContent(data.markdown || data.html, url);
 }
 
-async function fetchWithJina(url: string): Promise<MintIntent> {
+async function fetchWithJina(url: string): Promise<MintIntent & { mintPhases: MintPhase[]; mintTime?: Date }> {
   // Implement Jina AI reader API
   const response = await fetch(`https://r.jina.ai/http://${url}`, {
     method: 'GET',
@@ -101,7 +102,7 @@ async function fetchWithJina(url: string): Promise<MintIntent> {
   return parseMintDetailsFromContent(content, url);
 }
 
-async function fetchWithBrowserbase(url: string): Promise<MintIntent> {
+async function fetchWithBrowserbase(url: string): Promise<MintIntent & { mintPhases: MintPhase[]; mintTime?: Date }> {
   // Implement Browserbase with Playwright
   const response = await fetch('https://api.browserbase.com/v1/sessions', {
     method: 'POST',
@@ -150,7 +151,7 @@ async function fetchWithBrowserbase(url: string): Promise<MintIntent> {
   return parseMintDetailsFromContent(contentData.content, url);
 }
 
-function parseMintDetailsFromContent(content: string, url: string): MintIntent {
+function parseMintDetailsFromContent(content: string, url: string): MintIntent & { mintPhases: MintPhase[] } {
   // Parse contract address from content
   const contractAddressMatch = content.match(/0x[a-fA-F0-9]{40}/);
   const contractAddress = contractAddressMatch ? contractAddressMatch[0] : null;
@@ -163,6 +164,9 @@ function parseMintDetailsFromContent(content: string, url: string): MintIntent {
     chain = 'polygon';
   }
 
+  // Extract mint phases (WL, allowlist, public)
+  const mintPhases = extractMintPhases(content);
+
   return {
     contractAddress: contractAddress || undefined,
     chain,
@@ -172,7 +176,72 @@ function parseMintDetailsFromContent(content: string, url: string): MintIntent {
     isValid: !!contractAddress,
     confidence: contractAddress ? 0.8 : 0.3,
     sourcePlatform: 'custom' as const,
+    mintPhases,
   };
+}
+
+type MintPhase = {
+  type: 'whitelist' | 'allowlist' | 'public';
+  startTime?: Date;
+  endTime?: Date;
+  price?: string;
+  proofRequired?: boolean;
+};
+
+function extractMintPhases(content: string): MintPhase[] {
+  const phases: MintPhase[] = [];
+  const contentLower = content.toLowerCase();
+
+  // Detect whitelist phase
+  if (contentLower.includes('whitelist') || contentLower.includes('wl') || contentLower.includes('allowlist')) {
+    phases.push({
+      type: contentLower.includes('allowlist') ? 'allowlist' : 'whitelist',
+      proofRequired: true,
+    });
+  }
+
+  // Detect public phase
+  if (contentLower.includes('public') || contentLower.includes('public sale') || contentLower.includes('open mint')) {
+    phases.push({
+      type: 'public',
+      proofRequired: false,
+    });
+  }
+
+  // If no phases detected, default to public
+  if (phases.length === 0) {
+    phases.push({
+      type: 'public',
+      proofRequired: false,
+    });
+  }
+
+  return phases;
+}
+
+function extractMintTime(content: string): Date | undefined {
+  // Try to extract mint time from content
+  const timePatterns = [
+    /mint\s+(?:starts?|begins?|opens?)\s*(?:at|on)?\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i,
+    /(?:launch|drop)\s*(?:at|on)?\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i,
+    /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})/,
+  ];
+
+  for (const pattern of timePatterns) {
+    const match = content.match(pattern);
+    if (match) {
+      try {
+        const date = new Date(match[1]);
+        if (!isNaN(date.getTime())) {
+          return date;
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  return undefined;
 }
 
 function extractCollectionName(content: string): string | null {
@@ -289,32 +358,50 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'URL is required' }, { status: 400 });
     }
 
-    // Resolve mint URL with fallback chain
-    const intent = await resolveMintIntent(url);
+    // Resolve mint URL with fallback chain to get mint phases
+    const resolved = await resolveMintUrl(url);
+    const { contractAddress, chain, mintPhases } = resolved;
 
-    if (!intent.contractAddress) {
+    if (!contractAddress) {
       throw new Error('Could not resolve contract address from URL');
     }
 
-    const chain = asSupportedChain(intent.chain);
+    const supportedChain = asSupportedChain(chain);
+
+    // Check for existing tasks for this contract
+    const existingTasks = await getDb()
+      .select()
+      .from(mintTasks)
+      .where(and(
+        eq(mintTasks.userId, authResult.userId),
+        eq(mintTasks.contractAddress, contractAddress.toLowerCase())
+      ))
+      .orderBy(desc(mintTasks.createdAt));
+
+    // Determine which phases have already been minted
+    const mintedPhases = new Set(
+      existingTasks
+        .filter(t => t.status === 'completed')
+        .map(t => t.phase || 'public')
+    );
 
     // Get best RPC URL
-    const rpcUrl = await getBestRpcUrl(chain);
+    const rpcUrl = await getBestRpcUrl(supportedChain);
 
     // Estimate gas
-    const gasEstimate = await estimateGas(chain, rpcUrl, intent.contractAddress);
+    const gasEstimate = await estimateGas(supportedChain, rpcUrl, contractAddress);
 
     // Run analyzer for risk assessment
     const analysis = await runAnalyzer({ userId: authResult.userId, input: url });
-    const riskAssessment = await analyzeMintRisk(intent.contractAddress);
+    const riskAssessment = await analyzeMintRisk(contractAddress);
 
     // Get execution defaults
     const defaults = await getEffectiveExecutionDefaults(authResult.userId);
 
     // Upsert collection
-    const contractAddress = intent.contractAddress.toLowerCase();
+    const contractAddressLower = contractAddress.toLowerCase();
     const collectionValues = {
-      name: analysis?.metadata.name ?? intent.collectionName ?? 'Unknown Collection',
+      name: analysis?.metadata.name ?? resolved.collectionName ?? 'Unknown Collection',
       tokenStandard: analysis?.metadata.tokenStandard ?? undefined,
       owner: analysis?.metadata.owner ?? undefined,
       totalSupply: analysis?.metadata.totalSupply ?? undefined,
@@ -330,8 +417,8 @@ export async function POST(request: Request) {
       .insert(collections)
       .values({
         userId: authResult.userId,
-        contractAddress,
-        chain,
+        contractAddress: contractAddressLower,
+        chain: supportedChain,
         ...collectionValues,
       })
       .onConflictDoUpdate({
@@ -339,25 +426,65 @@ export async function POST(request: Request) {
         set: collectionValues,
       });
 
-    // Create mint task with default values
+    // Determine which phase to mint
+    let targetPhase: MintPhase | null = null;
+    const mintStartTime = analysis?.requirements.mintStartTime || analysis?.mintState.startTime;
+    const isMintLive = mintStartTime ? new Date(mintStartTime) <= new Date() : false;
+
+    if (isMintLive) {
+      // Mint is live, use public phase
+      targetPhase = mintPhases.find(p => p.type === 'public') || mintPhases[0];
+    } else {
+      // Mint is not live, find the earliest phase not yet minted
+      for (const phase of mintPhases) {
+        const phaseKey = phase.type;
+        if (!mintedPhases.has(phaseKey)) {
+          targetPhase = phase;
+          break;
+        }
+      }
+    }
+
+    if (!targetPhase) {
+      return NextResponse.json({
+        error: 'All phases have already been minted for this collection',
+        existingTasks: existingTasks.map(t => ({ id: t.id, status: t.status, phase: t.phase })),
+      }, { status: 400 });
+    }
+
+    // Create mint task
     const task = await addMintTask(authResult.userId, {
       walletId: defaults.defaultWalletId,
-      collectionId: contractAddress,
-      quantity: 1, // Default quantity
-      chain,
+      collectionId: contractAddressLower,
+      quantity: 1,
+      chain: supportedChain,
     });
 
-    // Execute mint immediately
-    await executeMintTask(task.id, authResult.userId);
+    // Update task with phase information
+    await getDb()
+      .update(mintTasks)
+      .set({ phase: targetPhase.type })
+      .where(eq(mintTasks.id, task.id));
+
+    if (isMintLive) {
+      // Execute mint immediately
+      await executeMintTask(task.id, authResult.userId);
+    } else {
+      // Schedule mint for the appropriate time
+      const scheduledTime = mintStartTime ? new Date(mintStartTime) : new Date(Date.now() + 30 * 60 * 1000); // Default to 30 mins if no time
+      await scheduleMint({ taskId: task.id, userId: authResult.userId, scheduledTime });
+    }
 
     return NextResponse.json({
       success: true,
       task: {
         id: task.id,
         status: task.status,
-        contractAddress,
-        chain,
+        contractAddress: contractAddressLower,
+        chain: supportedChain,
         quantity: 1,
+        phase: targetPhase.type,
+        scheduledTime: isMintLive ? undefined : mintStartTime,
         gasEstimate,
         risk: riskAssessment,
       },

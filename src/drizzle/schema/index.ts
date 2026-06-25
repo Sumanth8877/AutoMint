@@ -283,6 +283,7 @@ export const mintTasks = pgTable('mint_tasks', {
   txHash: text('tx_hash'),
   qstashMessageId: text('qstash_message_id'),
   scheduledTime: timestamp('scheduled_time'),
+  phase: text('phase').$type<'whitelist' | 'allowlist' | 'public'>(),
   overrideRiskFlag: boolean('override_risk_flag').default(false).notNull(),
   riskScore: integer('risk_score'),
   riskReasons: json('risk_reasons').$type<string[]>(),
