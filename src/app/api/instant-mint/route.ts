@@ -419,7 +419,9 @@ export async function POST(request: Request) {
 
     // Check mint status first before checking balance
     const mintStartTime = analysis?.requirements.mintStartTime || analysis?.mintState.startTime;
-    const isMintLive = mintStartTime ? new Date(mintStartTime) <= new Date() : false;
+    const mintStatus = analysis?.mintState.status?.toLowerCase() || '';
+    const isMintLive = mintStartTime ? new Date(mintStartTime) <= new Date() : 
+                        mintStatus === 'live' || mintStatus === 'active' || mintStatus === 'minting';
     const hasMintInfo = analysis?.mintState.status || analysis?.requirements.mintStartTime;
 
     if (!hasMintInfo) {
@@ -431,9 +433,13 @@ export async function POST(request: Request) {
     }
 
     // Now check wallet balance only if mint is live or scheduled
-    if (wallet.balance && parseFloat(wallet.balance) < 0.01) {
-      const mintPrice = analysis?.requirements.mintPrice || '0';
-      throw new Error(`Insufficient funds in wallet. Current balance: ${wallet.balance} ${wallet.balanceSymbol || 'ETH'}. Required for mint: ${mintPrice} ETH + gas fees.`);
+    const mintPrice = analysis?.requirements.mintPrice || '0';
+    const currentBalance = wallet.balance ? parseFloat(wallet.balance) : 0;
+    const requiredAmount = parseFloat(mintPrice) + 0.01; // mint price + estimated gas
+    
+    if (currentBalance < requiredAmount) {
+      const needed = (requiredAmount - currentBalance).toFixed(4);
+      throw new Error(`Insufficient funds in wallet. Current balance: ${currentBalance.toFixed(4)} ${wallet.balanceSymbol || 'ETH'}. Required: ${requiredAmount.toFixed(4)} ${wallet.balanceSymbol || 'ETH'} (mint: ${mintPrice} ETH + gas: ~0.01 ETH). Need ${needed} more.`);
     }
 
     // Upsert collection
