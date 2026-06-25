@@ -17,7 +17,7 @@ import { sendMintFailedEmail, sendMintScheduledEmail, sendSystemErrorEmail } fro
 import { getClient } from '@/lib/blockchain/client';
 import type { Hex } from 'viem';
 
-const QSTASH_BASE_URL = process.env.QSTASH_BASE_URL || 'https://qstash.upstash.io';
+const QSTASH_BASE_URL = process.env.QSTASH_URL || process.env.QSTASH_BASE_URL || 'https://qstash.upstash.io';
 // Monitoring fix: reduced from 60s to 30s.
 // WebSocket monitoring watches for 25s per invocation;
 // if no mint-live event is detected, we reschedule at 30s for the next window.

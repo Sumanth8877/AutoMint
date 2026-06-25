@@ -119,8 +119,9 @@ async function fetchQStashUsage(): Promise<UsageStat> {
   try {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const qstashBaseUrl = process.env.QSTASH_URL || process.env.QSTASH_BASE_URL || 'https://qstash.upstash.io';
     const res = await fetch(
-      `https://qstash.upstash.io/v2/logs?fromDate=${monthStart}&count=1000`,
+      `${qstashBaseUrl}/v2/logs?fromDate=${monthStart}&count=1000`,
       {
         headers: { Authorization: `Bearer ${token}` },
         signal: AbortSignal.timeout(8_000),

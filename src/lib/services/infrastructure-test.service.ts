@@ -40,7 +40,7 @@ export type InfrastructureTestResult = {
 
 const TEST_URL = 'https://opensea.io/collection/azuki';
 const TEST_WALLET = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045';
-const QSTASH_BASE_URL = 'https://qstash.upstash.io';
+const QSTASH_BASE_URL = process.env.QSTASH_URL || process.env.QSTASH_BASE_URL || 'https://qstash.upstash.io';
 const ETHEREUM_CHAIN_ID = 1;
 
 function serviceScore(status: InfrastructureTestStatus, latency: number) {
