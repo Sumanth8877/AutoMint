@@ -7,7 +7,33 @@ export class ApiClientError extends Error {
 
 type RequestOptions = Omit<RequestInit, 'body'> & {
   body?: BodyInit | Record<string, unknown> | null;
+  skipCache?: boolean;
 };
+
+// Simple client-side cache with TTL
+const apiCache = new Map<string, { data: unknown; timestamp: number }>();
+const CACHE_TTL = 30000; // 30 seconds
+
+function getCacheKey(url: string, options: RequestOptions): string {
+  return `${url}:${JSON.stringify(options.method || 'GET')}`;
+}
+
+function getCachedData(key: string): unknown | null {
+  const cached = apiCache.get(key);
+  if (!cached) return null;
+  
+  const now = Date.now();
+  if (now - cached.timestamp > CACHE_TTL) {
+    apiCache.delete(key);
+    return null;
+  }
+  
+  return cached.data;
+}
+
+function setCachedData(key: string, data: unknown): void {
+  apiCache.set(key, { data, timestamp: Date.now() });
+}
 
 export async function apiRequest<T>(url: string, options: RequestOptions = {}): Promise<T> {
   const headers = new Headers(options.headers);
@@ -18,6 +44,16 @@ export async function apiRequest<T>(url: string, options: RequestOptions = {}): 
     body = JSON.stringify(body);
   }
 
+  const cacheKey = getCacheKey(url, options);
+  
+  // Return cached data for GET requests unless skipCache is true
+  if (!options.skipCache && (!options.method || options.method === 'GET')) {
+    const cached = getCachedData(cacheKey);
+    if (cached) {
+      return cached as T;
+    }
+  }
+
   const response = await fetch(url, { ...options, headers, body: body as BodyInit | null | undefined });
   const payload = await response.json().catch(() => null) as { error?: string } | T | null;
 
@@ -26,6 +62,11 @@ export async function apiRequest<T>(url: string, options: RequestOptions = {}): 
       ? payload.error
       : 'Request failed';
     throw new ApiClientError(message, response.status, payload);
+  }
+
+  // Cache successful GET responses
+  if (!options.skipCache && (!options.method || options.method === 'GET')) {
+    setCachedData(cacheKey, payload);
   }
 
   return payload as T;
