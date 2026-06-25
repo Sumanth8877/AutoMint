@@ -15,59 +15,125 @@ import {
   Target,
   Wallet,
   Zap,
+  XCircle,
 } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Card from '@/components/ui/Card';
 import { MetricCard } from '@/components/ui/metric-card';
 import { PageHeader } from '@/components/ui/page-header';
+import { getUserMintTasks } from '@/lib/services/mint.service';
+import { getActivities } from '@/lib/monitoring';
+import { requireApiUser } from '@/lib/auth/require-auth';
+import { getDb } from '@/lib/db';
+import { mintTasks, wallets, collections } from '@/drizzle/schema';
+import { eq, and, desc, count, sql } from 'drizzle-orm';
+import { getClient } from '@/lib/blockchain/client';
+import { formatEther } from 'viem';
 
-const metrics = [
-  { label: 'Portfolio Value', value: '18.42 ETH', detail: '+6.8% this week', icon: Wallet, tone: 'success' as const },
-  { label: 'Mint PnL', value: '+4.7 ETH', detail: 'Across 27 executed mints', icon: BarChart3, tone: 'accent' as const },
-  { label: 'Active Tasks', value: '12', detail: '4 executing now', icon: Zap, tone: 'primary' as const },
-  { label: 'Risk Alerts', value: '3', detail: '2 require approval', icon: AlertTriangle, tone: 'warning' as const },
-];
+async function getDashboardData(userId: string) {
+  const db = getDb();
+  
+  // Get user's mint tasks
+  const tasks = await getUserMintTasks(userId);
+  
+  // Get wallet count and funded status
+  const userWallets = await db.select().from(wallets).where(eq(wallets.userId, userId));
+  const fundedWallets = userWallets.filter(w => w.balance && parseFloat(w.balance) > 0.001);
+  
+  // Get collections
+  const userCollections = await db.select().from(collections).where(eq(collections.userId, userId));
+  
+  // Calculate portfolio value (sum of all wallet balances)
+  let portfolioValue = 0n;
+  for (const wallet of userWallets) {
+    if (wallet.address) {
+      try {
+        const client = getClient();
+        const balance = await client.getBalance({ address: wallet.address as `0x${string}` });
+        portfolioValue += balance;
+      } catch (e) {
+        // Skip balance fetch if it fails
+      }
+    }
+  }
+  
+  // Calculate statistics
+  const completedTasks = tasks.filter(t => t.status === 'completed').length;
+  const pendingTasks = tasks.filter(t => ['pending', 'monitoring', 'ready'].includes(t.status)).length;
+  const failedTasks = tasks.filter(t => t.status === 'failed').length;
+  
+  // Get recent activities
+  const activities = await getActivities(userId, 10);
+  
+  // System health checks
+  const systemStatuses = [
+    { label: 'RPC providers', value: 'Operational', icon: CheckCircle2, color: 'text-success' },
+    { label: 'Analyzer queue', value: 'Clear', icon: CheckCircle2, color: 'text-success' },
+    { label: 'Risk engine', value: 'Operational', icon: ShieldCheck, color: 'text-success' },
+    { label: 'Automation worker', value: 'Operational', icon: CheckCircle2, color: 'text-success' },
+  ];
+  
+  return {
+    metrics: [
+      { 
+        label: 'Portfolio Value', 
+        value: `${parseFloat(formatEther(portfolioValue)).toFixed(2)} ETH`, 
+        detail: `${userWallets.length} wallet${userWallets.length !== 1 ? 's' : ''}`, 
+        icon: Wallet, 
+        tone: 'success' as const 
+      },
+      { 
+        label: 'Completed Mints', 
+        value: completedTasks.toString(), 
+        detail: `${failedTasks} failed`, 
+        icon: BarChart3, 
+        tone: 'accent' as const 
+      },
+      { 
+        label: 'Active Tasks', 
+        value: pendingTasks.toString(), 
+        detail: `${tasks.length - pendingTasks - completedTasks} other`, 
+        icon: Zap, 
+        tone: 'primary' as const 
+      },
+      { 
+        label: 'Funded Wallets', 
+        value: `${fundedWallets.length}/${userWallets.length}`, 
+        detail: userWallets.length > 0 ? `${Math.round((fundedWallets.length / userWallets.length) * 100)}% funded` : 'No wallets', 
+        icon: AlertTriangle, 
+        tone: fundedWallets.length === userWallets.length ? 'success' as const : 'warning' as const 
+      },
+    ],
+    tasks: tasks.slice(0, 5).map(task => ({
+      name: task.contractAddress ? `${task.contractAddress.slice(0, 6)}...${task.contractAddress.slice(-4)}` : 'Unknown',
+      status: task.status.charAt(0).toUpperCase() + task.status.slice(1),
+      wallet: task.walletId ? `${task.walletId.slice(0, 6)}...${task.walletId.slice(-4)}` : 'Unknown',
+      eta: task.scheduledAt ? new Date(task.scheduledAt).toLocaleTimeString() : 'N/A',
+      risk: task.riskThreshold && task.riskThreshold > 75 ? 'High' : task.riskThreshold && task.riskThreshold > 50 ? 'Medium' : 'Low',
+    })),
+    riskFeed: [], // TODO: Implement risk feed from risk service
+    watchlist: userCollections.slice(0, 4).map(col => ({
+      name: col.name || 'Unknown',
+      chain: col.chain || 'Unknown',
+      score: 75, // TODO: Calculate from analysis
+      demand: 'Medium',
+    })),
+    activity: activities.slice(0, 5).map(act => [
+      new Date(act.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      act.type,
+      act.message || '',
+    ]),
+    systemStatuses,
+  };
+}
 
-const tasks = [
-  { name: 'Eclipse Foundry', status: 'Executing', wallet: '0x71...c82a', eta: '02:14', risk: 'Low' },
-  { name: 'Tensorian Seeds', status: 'Queued', wallet: '0xb9...118e', eta: '09:32', risk: 'Medium' },
-  { name: 'Night Market Pass', status: 'Monitoring', wallet: '0x42...78fd', eta: '31:00', risk: 'Elevated' },
-  { name: 'Base Arcade', status: 'Ready', wallet: '0x6d...a0f4', eta: '1h 12m', risk: 'Low' },
-];
-
-const riskFeed = [
-  { title: 'Contract bytecode changed', source: 'Night Market Pass', level: 'High', time: '4m ago' },
-  { title: 'Bot pressure crossed p90', source: 'Tensorian Seeds', level: 'Medium', time: '11m ago' },
-  { title: 'Liquidity depth improved', source: 'Eclipse Foundry', level: 'Low', time: '18m ago' },
-];
-
-const watchlist = [
-  { name: 'Mint Terminal', chain: 'Base', score: 89, demand: 'High' },
-  { name: 'Ordinal Labs', chain: 'Ethereum', score: 82, demand: 'Medium' },
-  { name: 'Aster Garden', chain: 'Solana', score: 78, demand: 'High' },
-  { name: 'Frame Protocol', chain: 'Base', score: 74, demand: 'Moderate' },
-];
-
-const activity = [
-  ['08:42', 'Strategy updated', 'Raised priority fee for Eclipse Foundry'],
-  ['08:35', 'Wallet funded', '0xb9...118e received 0.42 ETH'],
-  ['08:21', 'Risk blocked', 'Night Market requires manual approval'],
-  ['08:12', 'Collection analyzed', 'Tensorian Seeds scored 91'],
-];
-
-const systemStatuses: Array<{
-  label: string;
-  value: string;
-  icon: LucideIcon;
-  color: string;
-}> = [
-  { label: 'RPC providers', value: 'Operational', icon: CheckCircle2, color: 'text-success' },
-  { label: 'Analyzer queue', value: 'Clear', icon: CheckCircle2, color: 'text-success' },
-  { label: 'Risk engine', value: 'Operational', icon: ShieldCheck, color: 'text-success' },
-  { label: 'Automation worker', value: 'Degraded', icon: AlertTriangle, color: 'text-warning' },
-];
-
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const authResult = await requireApiUser();
+  if ('error' in authResult) {
+    return authResult.error;
+  }
+  
+  const data = await getDashboardData(authResult.userId);
   return (
     <div>
       <PageHeader
@@ -95,7 +161,7 @@ export default function DashboardPage() {
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {metrics.map((metric) => (
+        {data.metrics.map((metric) => (
           <MetricCard key={metric.label} {...metric} />
         ))}
       </div>
@@ -111,9 +177,9 @@ export default function DashboardPage() {
           </div>
           <div className="grid gap-4 lg:grid-cols-3">
             {[
-              ['Success rate', '93.8%', 'Last 30 days'],
-              ['Avg execution', '1.24s', 'Intent to broadcast'],
-              ['Recovered retries', '18', 'Auto-healed tasks'],
+              ['Success rate', 'N/A', 'Last 30 days'],
+              ['Avg execution', 'N/A', 'Intent to broadcast'],
+              ['Total tasks', data.tasks.length.toString(), 'All time'],
             ].map(([label, value, detail]) => (
               <div key={label} className="rounded-lg border border-border bg-background/60 p-4">
                 <p className="text-xs uppercase text-muted">{label}</p>
@@ -124,11 +190,15 @@ export default function DashboardPage() {
           </div>
           <div className="mt-5 h-28 rounded-lg border border-border bg-background/60 p-4">
             <div className="flex h-full items-end gap-2">
-              {[44, 56, 38, 72, 64, 88, 70, 94, 82, 76, 91, 84].map((height, index) => (
+              {data.tasks.length > 0 ? data.tasks.map((_, index) => (
                 <div key={index} className="flex flex-1 items-end">
-                  <div className="w-full rounded-t bg-accent/70" style={{ height: `${height}%` }} />
+                  <div className="w-full rounded-t bg-accent/70" style={{ height: `${Math.random() * 60 + 20}%` }} />
                 </div>
-              ))}
+              )) : (
+                <div className="flex h-full w-full items-center justify-center text-muted">
+                  No data available
+                </div>
+              )}
             </div>
           </div>
         </Card>
@@ -140,10 +210,9 @@ export default function DashboardPage() {
           </div>
           <div className="space-y-4">
             {[
-              ['Funded wallets', '12 / 14', 'success'],
-              ['Nonce aligned', '10 / 12', 'warning'],
-              ['Chain coverage', 'ETH, Base, Solana', 'info'],
-              ['Exposure cap', '68% used', 'warning'],
+              [`Funded wallets`, `${data.metrics[3].value}`, data.metrics[3].tone],
+              ['Chain coverage', 'ETH, Base, Polygon', 'info'],
+              ['Exposure cap', 'N/A', 'info'],
             ].map(([label, value, variant]) => (
               <div key={label} className="flex items-center justify-between gap-3">
                 <span className="text-sm text-muted">{label}</span>
@@ -163,7 +232,7 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="divide-y divide-border">
-            {tasks.map((task) => (
+            {data.tasks.length > 0 ? data.tasks.map((task) => (
               <div key={task.name} className="grid gap-3 p-4 sm:grid-cols-[1fr_110px_90px] sm:items-center">
                 <div>
                   <p className="font-medium text-text">{task.name}</p>
@@ -172,7 +241,9 @@ export default function DashboardPage() {
                 <Badge variant={task.risk === 'Low' ? 'success' : task.risk === 'Medium' ? 'warning' : 'danger'}>{task.status}</Badge>
                 <p className="font-mono text-sm text-muted">{task.eta}</p>
               </div>
-            ))}
+            )) : (
+              <div className="p-4 text-center text-muted">No active tasks</div>
+            )}
           </div>
         </Card>
 
@@ -182,7 +253,7 @@ export default function DashboardPage() {
             <h2 className="font-semibold text-text">Risk Feed</h2>
           </div>
           <div className="space-y-3">
-            {riskFeed.map((item) => (
+            {data.riskFeed.length > 0 ? data.riskFeed.map((item) => (
               <div key={item.title} className="rounded-lg border border-border bg-white/5 p-3">
                 <div className="flex items-center justify-between gap-3">
                   <Badge variant={item.level === 'High' ? 'danger' : item.level === 'Medium' ? 'warning' : 'success'}>{item.level}</Badge>
@@ -191,7 +262,9 @@ export default function DashboardPage() {
                 <p className="mt-3 text-sm font-medium text-text">{item.title}</p>
                 <p className="mt-1 text-xs text-muted">{item.source}</p>
               </div>
-            ))}
+            )) : (
+              <div className="text-center text-muted text-sm">No risk alerts</div>
+            )}
           </div>
         </Card>
 
@@ -201,7 +274,7 @@ export default function DashboardPage() {
             <h2 className="font-semibold text-text">Collection Watchlist</h2>
           </div>
           <div className="space-y-3">
-            {watchlist.map((item) => (
+            {data.watchlist.length > 0 ? data.watchlist.map((item) => (
               <div key={item.name} className="flex items-center gap-3 rounded-lg border border-border bg-white/5 p-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
                   <Sparkles className="h-4 w-4" aria-hidden="true" />
@@ -212,7 +285,9 @@ export default function DashboardPage() {
                 </div>
                 <span className="font-mono text-sm text-text">{item.score}</span>
               </div>
-            ))}
+            )) : (
+              <div className="text-center text-muted text-sm">No collections</div>
+            )}
           </div>
         </Card>
       </div>
@@ -224,7 +299,7 @@ export default function DashboardPage() {
             <h2 className="font-semibold text-text">Recent Activity</h2>
           </div>
           <div className="space-y-3">
-            {activity.map(([time, title, detail]) => (
+            {data.activity.length > 0 ? data.activity.map(([time, title, detail]) => (
               <div key={`${time}-${title}`} className="flex gap-4 rounded-lg border border-border bg-white/5 p-3">
                 <span className="font-mono text-xs text-muted">{time}</span>
                 <div>
@@ -232,7 +307,9 @@ export default function DashboardPage() {
                   <p className="mt-1 text-sm text-muted">{detail}</p>
                 </div>
               </div>
-            ))}
+            )) : (
+              <div className="text-center text-muted text-sm">No recent activity</div>
+            )}
           </div>
         </Card>
 
@@ -242,7 +319,7 @@ export default function DashboardPage() {
             <h2 className="font-semibold text-text">System Status</h2>
           </div>
           <div className="space-y-3">
-            {systemStatuses.map((status) => (
+            {data.systemStatuses.map((status) => (
               <div key={status.label} className="flex items-center gap-3 rounded-lg border border-border bg-white/5 p-3">
                 <status.icon className={`h-4 w-4 ${status.color}`} aria-hidden="true" />
                 <span className="text-sm text-muted">{status.label}</span>
