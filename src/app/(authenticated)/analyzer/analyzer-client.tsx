@@ -285,7 +285,11 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
   };
 
   const openMints = () => {
-    window.location.href = '/mints';
+    if (url.trim()) {
+      window.location.href = `/mints?mintUrl=${encodeURIComponent(url.trim())}`;
+    } else {
+      window.location.href = '/mints';
+    }
   };
 
   return (
@@ -319,9 +323,9 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
               aria-invalid={Boolean(error)}
             />
             <div className="grid grid-cols-2 gap-2">
-              <Button variant="secondary" type="button" onClick={pasteUrl}>
-                <Clipboard className="h-4 w-4" aria-hidden="true" />
-                Paste
+              <Button variant="secondary" type="button" onClick={openMints}>
+                <Sparkles className="h-4 w-4" aria-hidden="true" />
+                Mint
               </Button>
               <Button type="submit" loading={analyzing}>
                 <Gauge className="h-4 w-4" aria-hidden="true" />
