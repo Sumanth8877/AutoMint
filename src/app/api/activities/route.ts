@@ -4,6 +4,9 @@ import { activities } from '@/drizzle/schema';
 import { eq, desc } from 'drizzle-orm';
 import { requireApiUser } from '@/lib/auth/require-auth';
 
+// Cache GET requests for 30 seconds
+export const revalidate = 30;
+
 export async function GET() {
   const authResult = await requireApiUser();
   if ('error' in authResult) return authResult.error;

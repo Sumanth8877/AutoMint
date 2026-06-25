@@ -5,6 +5,9 @@ import { getErrorMessage } from '@/lib/api/errors';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getDb } from '@/lib/db';
 
+// Cache GET requests for 30 seconds
+export const revalidate = 30;
+
 const MAX_LIMIT = 50;
 const DEFAULT_LIMIT = 20;
 const RECENT_DAYS = 7;

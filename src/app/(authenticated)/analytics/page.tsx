@@ -15,6 +15,9 @@ import { PageHeader } from '@/components/ui/page-header';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getAnalyticsDashboard, type ChartPoint } from '@/lib/services/analytics.service';
 
+// Cache this page for 30 seconds (has dynamic data)
+export const revalidate = 30;
+
 function formatPercent(value: number) {
   return `${value.toFixed(value % 1 === 0 ? 0 : 1)}%`;
 }

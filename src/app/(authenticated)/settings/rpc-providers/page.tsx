@@ -1,6 +1,7 @@
 import RpcProvidersClient from './rpc-providers-client';
 
-export const dynamic = 'force-dynamic';
+// Cache this page for 1 hour
+export const revalidate = 3600;
 
 export default function RpcProvidersPage() {
   return <RpcProvidersClient />;

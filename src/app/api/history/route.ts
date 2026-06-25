@@ -7,6 +7,9 @@ import { getErrorMessage, parseJsonBody } from '@/lib/api/errors';
 import { addMintTask } from '@/lib/services/mint.service';
 import { cancelScheduledMint, scheduleMint } from '@/lib/services/qstash.service';
 
+// Cache GET requests for 30 seconds
+export const revalidate = 30;
+
 const MAX_LIMIT = 50;
 const DEFAULT_LIMIT = 20;
 
