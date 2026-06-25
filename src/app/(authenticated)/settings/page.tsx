@@ -3,6 +3,9 @@ import { Bell, ChevronRight, KeyRound, Lock, Radio, Settings, SlidersHorizontal,
 import Card from '@/components/ui/Card';
 import { PageHeader } from '@/components/ui/page-header';
 
+// Cache this static page for 1 hour
+export const revalidate = 3600;
+
 const groups: { title: string; icon: React.ElementType; items: { label: string; href: string; icon: React.ElementType; description: string }[] }[] = [
   {
     title: 'General',
