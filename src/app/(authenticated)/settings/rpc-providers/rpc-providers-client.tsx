@@ -72,7 +72,7 @@ export default function RpcProvidersClient() {
   useEffect(() => {
     let active = true;
 
-    apiRequest<RpcProviderPayload>('/api/settings/rpc-providers', { cache: 'no-store' })
+    apiRequest<RpcProviderPayload>('/api/settings/rpc-providers')
       .then((response) => {
         if (!active) return;
         setPayload(response);

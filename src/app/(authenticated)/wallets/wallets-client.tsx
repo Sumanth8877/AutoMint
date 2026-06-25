@@ -164,7 +164,7 @@ export default function WalletsClient() {
 
     const run = async () => {
       try {
-        const payload = await apiRequest<{ wallets: WalletRecord[] }>('/api/wallets', { cache: 'no-store' });
+        const payload = await apiRequest<{ wallets: WalletRecord[] }>('/api/wallets');
         if (!active) return;
         setWallets(payload.wallets);
         void refreshBalances(payload.wallets);

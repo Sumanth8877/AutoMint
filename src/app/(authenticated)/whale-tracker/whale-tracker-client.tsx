@@ -153,11 +153,11 @@ export default function WhaleTrackerClient() {
   const loadData = useCallback(async () => {
     setError(null);
     const [walletPayload, rulePayload, activityPayload, reputationPayload, destinationPayload] = await Promise.all([
-      apiRequest<{ wallets: TrackedWallet[] }>('/api/watched-wallets', { cache: 'no-store' }),
-      apiRequest<{ rules: CopyRule[] }>('/api/copy-mint/rules', { cache: 'no-store' }),
-      apiRequest<{ activities: TrackerActivity[]; metrics: { detectedMints24h: number; copiedMints24h: number } }>('/api/whale-tracker/activity', { cache: 'no-store' }),
-      apiRequest<{ reputations: Reputation[] }>('/api/wallet-reputation', { cache: 'no-store' }),
-      apiRequest<{ wallets: DestinationWallet[] }>('/api/wallets', { cache: 'no-store' }),
+      apiRequest<{ wallets: TrackedWallet[] }>('/api/watched-wallets'),
+      apiRequest<{ rules: CopyRule[] }>('/api/copy-mint/rules'),
+      apiRequest<{ activities: TrackerActivity[]; metrics: { detectedMints24h: number; copiedMints24h: number } }>('/api/whale-tracker/activity'),
+      apiRequest<{ reputations: Reputation[] }>('/api/wallet-reputation'),
+      apiRequest<{ wallets: DestinationWallet[] }>('/api/wallets'),
     ]);
 
     setTrackedWallets(walletPayload.wallets);

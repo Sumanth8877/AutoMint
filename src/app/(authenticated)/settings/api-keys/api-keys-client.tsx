@@ -85,9 +85,7 @@ export default function ApiKeysClient() {
     setLoading(true);
     setError(null);
     try {
-      const response = await apiRequest<IntegrationStatusResponse>('/api/settings/integrations', {
-        cache: 'no-store',
-      });
+      const response = await apiRequest<IntegrationStatusResponse>('/api/settings/integrations');
       handlePayload(response);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to load integration status.');
@@ -117,9 +115,7 @@ export default function ApiKeysClient() {
   useEffect(() => {
     let active = true;
 
-    apiRequest<IntegrationStatusResponse>('/api/settings/integrations', {
-      cache: 'no-store',
-    })
+    apiRequest<IntegrationStatusResponse>('/api/settings/integrations')
       .then((response) => {
         if (!active) return;
         handlePayload(response);

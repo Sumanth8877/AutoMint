@@ -74,7 +74,7 @@ export default function ExecutionSettingsClient() {
   useEffect(() => {
     let active = true;
 
-    apiRequest<ExecutionPayload>('/api/settings/execution', { cache: 'no-store' })
+    apiRequest<ExecutionPayload>('/api/settings/execution')
       .then((response) => {
         if (!active) return;
         setPayload(response);

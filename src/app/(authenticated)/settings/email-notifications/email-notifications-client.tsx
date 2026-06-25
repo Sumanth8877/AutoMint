@@ -90,9 +90,7 @@ export default function EmailNotificationsClient() {
   useEffect(() => {
     let active = true;
 
-    apiRequest<EmailSettingsResponse>('/api/settings/email-notifications', {
-      cache: 'no-store',
-    })
+    apiRequest<EmailSettingsResponse>('/api/settings/email-notifications')
       .then((response) => {
         if (!active) return;
         setSettings(response);
