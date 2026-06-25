@@ -403,7 +403,7 @@ export async function POST(request: Request) {
       throw new Error('No default wallet configured. Please add a wallet in your settings.');
     }
 
-    // Verify wallet exists and has sufficient balance
+    // Verify wallet exists
     const [wallet] = await getDb()
       .select()
       .from(wallets)
@@ -417,9 +417,23 @@ export async function POST(request: Request) {
       throw new Error('Default wallet not found. Please configure a valid wallet in your settings.');
     }
 
-    // Check wallet balance (simplified check - in production would check actual chain balance)
+    // Check mint status first before checking balance
+    const mintStartTime = analysis?.requirements.mintStartTime || analysis?.mintState.startTime;
+    const isMintLive = mintStartTime ? new Date(mintStartTime) <= new Date() : false;
+    const hasMintInfo = analysis?.mintState.status || analysis?.requirements.mintStartTime;
+
+    if (!hasMintInfo) {
+      throw new Error('This collection does not have mint information available. It may not be a minting collection.');
+    }
+
+    if (!isMintLive && !mintStartTime) {
+      throw new Error('This collection is not currently minting and no upcoming mint date is available.');
+    }
+
+    // Now check wallet balance only if mint is live or scheduled
     if (wallet.balance && parseFloat(wallet.balance) < 0.01) {
-      throw new Error('Insufficient funds in wallet. Please ensure you have enough balance for gas and mint cost.');
+      const mintPrice = analysis?.requirements.mintPrice || '0';
+      throw new Error(`Insufficient funds in wallet. Current balance: ${wallet.balance} ${wallet.balanceSymbol || 'ETH'}. Required for mint: ${mintPrice} ETH + gas fees.`);
     }
 
     // Upsert collection
@@ -452,8 +466,6 @@ export async function POST(request: Request) {
 
     // Determine which phase to mint
     let targetPhase: MintPhase | null = null;
-    const mintStartTime = analysis?.requirements.mintStartTime || analysis?.mintState.startTime;
-    const isMintLive = mintStartTime ? new Date(mintStartTime) <= new Date() : false;
 
     if (isMintLive) {
       // Mint is live, use public phase
