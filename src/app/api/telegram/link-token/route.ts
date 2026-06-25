@@ -11,6 +11,15 @@ export async function GET() {
     const limited = await enforceRateLimit(`telegram:link-token:${authResult.userId}`, RATE_LIMITS.tokenGeneration);
     if (limited) return limited;
 
+    // Debug logging
+    console.log('Telegram enabled check:', {
+      TELEGRAM_ENABLED: process.env.TELEGRAM_ENABLED,
+      TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN ? 'SET' : 'NOT SET',
+      TELEGRAM_WEBHOOK_SECRET: process.env.TELEGRAM_WEBHOOK_SECRET ? 'SET' : 'NOT SET',
+      TELEGRAM_LINK_SECRET: process.env.TELEGRAM_LINK_SECRET ? 'SET' : 'NOT SET',
+      isTelegramEnabled: isTelegramEnabled(),
+    });
+
     if (!isTelegramEnabled()) {
       return NextResponse.json({
         enabled: false,
