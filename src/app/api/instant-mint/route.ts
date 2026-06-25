@@ -393,7 +393,8 @@ export async function POST(request: Request) {
 
     // Run analyzer for risk assessment
     const analysis = await runAnalyzer({ userId: authResult.userId, input: url });
-    const riskAssessment = await analyzeMintRisk(contractAddress);
+    // Skip risk assessment for instant mint - will be done during task execution
+    const riskAssessment = null;
 
     // Get execution defaults
     const defaults = await getEffectiveExecutionDefaults(authResult.userId);
