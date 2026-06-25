@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import { PageHeader } from '@/components/ui/page-header';
@@ -20,24 +20,22 @@ export default function TelegramSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    fetchTelegramLink();
-  }, []);
-
-  const fetchTelegramLink = async () => {
+  const fetchTelegramLink = useCallback(async () => {
     try {
-      const response = await fetch('/api/telegram/link-token', {
-        cache: 'no-store',
-      });
+      const response = await fetch('/api/telegram/link-token');
       const result = await response.json();
-      console.log('Telegram link response:', result);
       setData(result);
     } catch (error) {
       console.error('Failed to fetch Telegram link:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial async load for the Telegram link state
+    fetchTelegramLink();
+  }, [fetchTelegramLink]);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);

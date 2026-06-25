@@ -112,6 +112,7 @@ export default function MintsClient() {
   useEffect(() => {
     const mintUrlParam = searchParams.get('mintUrl');
     if (mintUrlParam) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- initializes form from URL query params on page entry
       setForm((current) => ({ 
         ...current, 
         mintUrl: mintUrlParam,
@@ -124,6 +125,7 @@ export default function MintsClient() {
   // Set default wallet when modal opens
   useEffect(() => {
     if (modalOpen && defaultWallet && !form.walletId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncs the editable form with the current default wallet
       setForm((current) => ({ ...current, walletId: defaultWallet.id }));
     }
   }, [modalOpen, defaultWallet, form.walletId]);
@@ -131,6 +133,7 @@ export default function MintsClient() {
   // Set error from fetch error
   useEffect(() => {
     if (fetchError) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- mirrors React Query fetch failures into local UI state
       setError(fetchError instanceof Error ? fetchError.message : 'Failed to load mint data.');
     }
   }, [fetchError]);

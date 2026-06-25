@@ -66,6 +66,38 @@ const REQUIRED_VARS: EnvSpec[] = [
   // { name: 'NFTSCAN_API_KEY' }, // Optional, not required
 ];
 
+function validateAppUrl(): string | null {
+  const candidates = [
+    ['APP_URL', process.env.APP_URL],
+    ['NEXT_PUBLIC_APP_URL', process.env.NEXT_PUBLIC_APP_URL],
+    ['VERCEL_URL', process.env.VERCEL_URL],
+  ] as const;
+
+  for (const [name, rawValue] of candidates) {
+    const value = rawValue?.trim();
+    if (!value) continue;
+
+    const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : `https://${value}`;
+    try {
+      const parsed = new URL(withScheme);
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+        return `${name}: must use http:// or https://`;
+      }
+      if (parsed.username || parsed.password || parsed.search || parsed.hash) {
+        return `${name}: must not include credentials, query, or hash`;
+      }
+      if (parsed.pathname !== '/' && parsed.pathname !== '') {
+        return `${name}: must be an origin URL or hostname without a path`;
+      }
+      return null;
+    } catch {
+      return `${name}: must be a valid absolute URL or hostname`;
+    }
+  }
+
+  return 'APP_URL, NEXT_PUBLIC_APP_URL, or VERCEL_URL: one is required for QStash destination URLs';
+}
+
 export function validateEnv(): void {
   const errors: string[] = [];
 
@@ -82,6 +114,9 @@ export function validateEnv(): void {
       if (error) errors.push(`  • ${spec.name}: ${error}`);
     }
   }
+
+  const appUrlError = validateAppUrl();
+  if (appUrlError) errors.push(`  â€¢ ${appUrlError}`);
 
   if (errors.length > 0) {
     throw new Error(

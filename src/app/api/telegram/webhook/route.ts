@@ -54,6 +54,15 @@ function isAuthorized(request: Request): boolean {
 }
 
 // ── Route ─────────────────────────────────────────────────────────────────────
+export async function GET() {
+  return NextResponse.json({
+    ok: true,
+    endpoint: '/api/telegram/webhook',
+    enabled: isTelegramEnabled(),
+    method: 'POST',
+  });
+}
+
 export async function POST(request: Request) {
   console.log('Telegram webhook received request');
   

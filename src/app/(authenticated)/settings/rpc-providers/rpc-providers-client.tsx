@@ -75,6 +75,7 @@ export default function RpcProvidersClient() {
   // Initialize draft when payload changes
   useEffect(() => {
     if (payload) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncs fetched settings into an editable draft form
       setDraft(payload.settings);
     }
   }, [payload]);
@@ -92,6 +93,7 @@ export default function RpcProvidersClient() {
   // Set error from fetch error
   useEffect(() => {
     if (fetchError) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- mirrors React Query fetch failures into local UI state
       setError(fetchError instanceof Error ? fetchError.message : 'Failed to load RPC provider settings.');
     }
   }, [fetchError]);

@@ -241,32 +241,34 @@ export async function executeMintTask(
   }
 
   const now = new Date();
-  await getDb().update(mintTasks)
-    .set({ status: 'completed', txHash: result.txHash || null, confirmedAt: result.txHash ? now : null, updatedAt: now })
-    .where(eq(mintTasks.id, taskId));
+  await getDb().transaction(async (tx) => {
+    await tx.update(mintTasks)
+      .set({ status: 'completed', txHash: result.txHash || null, confirmedAt: result.txHash ? now : null, updatedAt: now })
+      .where(eq(mintTasks.id, taskId));
 
-  if (result.txHash) {
-    await getDb().insert(mintHistory).values({
-      userId: claimed.userId,
-      walletId: claimed.walletId,
-      collectionId: claimed.collectionId,
-      status: 'pending',
-      transactionHash: result.txHash,
-      gasUsed: result.gasUsed || undefined,
-      blockNumber: result.blockNumber?.toString() || undefined,
-      confirmedAt: result.blockNumber ? now : undefined,
-    });
+    if (result.txHash) {
+      await tx.insert(mintHistory).values({
+        userId: claimed.userId,
+        walletId: claimed.walletId,
+        collectionId: claimed.collectionId,
+        status: 'pending',
+        transactionHash: result.txHash,
+        idempotencyKey: `mint:${taskId}:${result.txHash}`,
+        gasUsed: result.gasUsed || undefined,
+        blockNumber: result.blockNumber?.toString() || undefined,
+        confirmedAt: result.blockNumber ? now : undefined,
+      }).onConflictDoNothing();
 
-    // Update collection with minted NFT info (floor price tracking)
-    if (claimed.collectionId) {
-      await getDb().update(collections)
-        .set({
-          lastSyncedAt: now,
-          updatedAt: now,
-        })
-        .where(eq(collections.id, claimed.collectionId));
+      if (claimed.collectionId) {
+        await tx.update(collections)
+          .set({
+            lastSyncedAt: now,
+            updatedAt: now,
+          })
+          .where(eq(collections.id, claimed.collectionId));
+      }
     }
-  }
+  });
 
   if (claimed.userId) {
     await logActivity(claimed.userId, 'task_completed', 'Mint executed', {

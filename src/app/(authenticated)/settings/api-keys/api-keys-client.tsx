@@ -89,6 +89,7 @@ export default function ApiKeysClient() {
   // Set error from fetch error
   useEffect(() => {
     if (fetchError) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- mirrors React Query fetch failures into local UI state
       setError(fetchError instanceof Error ? fetchError.message : 'Failed to load integration status.');
     }
   }, [fetchError]);

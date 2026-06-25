@@ -70,6 +70,7 @@ export default function EmailNotificationsClient() {
   // Initialize draft when settings changes
   useEffect(() => {
     if (settings) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncs fetched preferences into an editable draft form
       setDraft(settings.preferences);
       setSavedAt(settings.preferences.updatedAt);
     }
@@ -78,6 +79,7 @@ export default function EmailNotificationsClient() {
   // Set error from fetch error
   useEffect(() => {
     if (fetchError) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- mirrors React Query fetch failures into local UI state
       setError(fetchError instanceof Error ? fetchError.message : 'Failed to load email notification settings.');
     }
   }, [fetchError]);

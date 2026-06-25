@@ -3,6 +3,7 @@ import {
   executeScheduledMint,
   executeScheduledRiskRecheck,
   executeReceiptRecheck,
+  executeRecoveryCheck,
   verifyQStashSignature,
   type ScheduledMintPayload,
 } from '@/lib/services/qstash.service';
@@ -33,6 +34,8 @@ export async function POST(request: Request) {
     } else if (payload.type === 'receipt_check') {
       // C-04: poll chain for known txHash — never calls sendTransaction
       result = await executeReceiptRecheck(payload.taskId);
+    } else if (payload.type === 'recovery') {
+      result = await executeRecoveryCheck();
     } else {
       result = await executeScheduledMint(payload.taskId);
     }

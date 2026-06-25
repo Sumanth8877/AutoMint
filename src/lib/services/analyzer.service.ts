@@ -1122,7 +1122,7 @@ export async function runAnalyzer(params: {
   const providerUsed = selectedProviderFromChain(params.input, intent, telemetry.providerChain);
   
   // Incorporate blockchain security check into risk analysis
-  let enhancedRiskFactors = [];
+  const enhancedRiskFactors: string[] = [];
   if (blockchainDiscovery.securityCheck && blockchainDiscovery.securityCheck.riskScore > 0) {
     enhancedRiskFactors.push(...blockchainDiscovery.securityCheck.riskFactors);
     log('warning', 'security', `GoPlus Security detected ${blockchainDiscovery.securityCheck.riskFactors.length} risk factors`);

@@ -62,7 +62,7 @@ async function getDashboardData(userId: string) {
     const failedTasks = tasks.filter(t => t.status === 'failed').length;
     
     // Get recent activities
-    let activities: any[] = [];
+    let activities: Awaited<ReturnType<typeof getRecentActivities>> = [];
     try {
       activities = await getRecentActivities(userId);
     } catch (e) {
@@ -224,7 +224,7 @@ export default async function DashboardPage() {
             <div className="flex h-full items-end gap-2">
               {data.tasks.length > 0 ? data.tasks.map((_, index) => (
                 <div key={index} className="flex flex-1 items-end">
-                  <div className="w-full rounded-t bg-accent/70" style={{ height: `${Math.random() * 60 + 20}%` }} />
+                  <div className="w-full rounded-t bg-accent/70" style={{ height: `${((index * 37) % 60) + 20}%` }} />
                 </div>
               )) : (
                 <div className="flex h-full w-full items-center justify-center text-muted">

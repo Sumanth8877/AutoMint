@@ -11,9 +11,15 @@ import { addBreadcrumb } from '@/lib/observability/sentry';
  * Protected by CRON_SECRET environment variable.
  * Call once after deployment to bootstrap the recovery loop.
  */
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: Request) {
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && request.headers.get('authorization') !== `Bearer ${cronSecret}`) {
+  if (!cronSecret) {
+    return NextResponse.json({ error: 'CRON_SECRET is not configured' }, { status: 503 });
+  }
+
+  if (request.headers.get('authorization') !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

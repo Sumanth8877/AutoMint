@@ -48,21 +48,46 @@ function getQStashToken() {
   return token;
 }
 
-function getWebhookUrl() {
-  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL;
-  if (appUrl) {
-    const url = appUrl.replace(/\/$/, '');
-    // Ensure URL has a scheme
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      return `https://${url}/api/webhooks/qstash`;
-    }
-    return `${url}/api/webhooks/qstash`;
+function normalizeAppUrl(rawValue: string, envName: string) {
+  const trimmed = rawValue.trim();
+  if (!trimmed) throw new Error(`${envName} is empty`);
+
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(withScheme);
+  } catch {
+    throw new Error(`${envName} must be a valid absolute URL or hostname`);
   }
 
-  const vercelUrl = process.env.VERCEL_URL;
-  if (vercelUrl) {
-    const url = vercelUrl.replace(/\/$/, '');
-    return `https://${url}/api/webhooks/qstash`;
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    throw new Error(`${envName} must use http:// or https://`);
+  }
+
+  if (parsed.username || parsed.password || parsed.hash || parsed.search) {
+    throw new Error(`${envName} must be an origin URL without credentials, query, or hash`);
+  }
+
+  if (parsed.pathname !== '/' && parsed.pathname !== '') {
+    throw new Error(`${envName} must not include a path`);
+  }
+
+  return parsed.origin;
+}
+
+function getWebhookUrl() {
+  const candidates = [
+    ['APP_URL', process.env.APP_URL],
+    ['NEXT_PUBLIC_APP_URL', process.env.NEXT_PUBLIC_APP_URL],
+    ['VERCEL_URL', process.env.VERCEL_URL],
+  ] as const;
+
+  for (const [envName, value] of candidates) {
+    if (!value) continue;
+    return `${normalizeAppUrl(value, envName)}/api/webhooks/qstash`;
   }
 
   throw new Error('APP_URL, NEXT_PUBLIC_APP_URL, or VERCEL_URL is required');
@@ -127,14 +152,7 @@ export function verifyQStashSignature(headers: Headers, rawBody: string) {
   const now = Math.floor(Date.now() / 1000);
   const bodyHash = crypto.createHash('sha256').update(rawBody).digest('base64url');
 
-  // C-7 fix: resolve expected webhook URL for sub claim validation.
-  // Skips sub check gracefully if APP_URL / VERCEL_URL is not set.
-  let expectedWebhookUrl: string | null = null;
-  try {
-    expectedWebhookUrl = getWebhookUrl();
-  } catch {
-    expectedWebhookUrl = null;
-  }
+  const expectedWebhookUrl = getWebhookUrl();
 
   for (const key of keys) {
     const payload = verifyJwtSignature(signature, key);
@@ -144,7 +162,7 @@ export function verifyQStashSignature(headers: Headers, rawBody: string) {
     if (payload.body && payload.body !== bodyHash) continue;
     // C-7 fix: reject JWT whose sub does not match this endpoint's URL.
     // Prevents cross-endpoint replay of a valid QStash signature.
-    if (payload.sub && expectedWebhookUrl && payload.sub !== expectedWebhookUrl) continue;
+    if (payload.sub && payload.sub !== expectedWebhookUrl) continue;
     return payload;
   }
 
@@ -935,22 +953,26 @@ export async function executeReceiptRecheck(taskId: string) {
       if (recheckAttemptsRemaining === BUMP_AT_REMAINING && task.walletId) {
         void (async () => {
           try {
-            const { prewarmWalletKey } = await import('@/lib/services/wallet.service');
             const { getDecryptedPrivateKey } = await import('@/lib/services/wallet.service');
             const { privateKeyToAccount } = await import('viem/accounts');
             const { bumpTransactionGas } = await import('@/lib/services/rpc-manager.service');
-            const { parseEther } = await import('viem');
 
             const rawKey = await getDecryptedPrivateKey(task.walletId as string, task.userId);
             const hexKey = (rawKey.startsWith('0x') ? rawKey : `0x${rawKey}`) as `0x${string}`;
             const account = privateKeyToAccount(hexKey);
+            const txForBump = await getClient(wallet.chain, task.userId).getTransaction({ hash });
+            if (!txForBump) throw new Error('Cannot bump: original transaction not found');
 
             await bumpTransactionGas(account, {
               chain: wallet.chain,
-              nonce: 0, // Will use on-chain pending nonce if 0 — bump function handles this
+              nonce: txForBump.nonce,
               contractAddress: task.contractAddress as `0x${string}`,
-              data: '0x' as `0x${string}`, // bump re-signs with stored params
-              value: task.mintPrice ? parseEther(task.mintPrice) : 0n,
+              data: txForBump.input,
+              value: txForBump.value,
+              currentMaxFeePerGas: txForBump.maxFeePerGas ?? undefined,
+              currentMaxPriorityFeePerGas: txForBump.maxPriorityFeePerGas ?? undefined,
+              currentGasPrice: txForBump.gasPrice ?? undefined,
+              gasLimit: txForBump.gas,
               userId: task.userId,
             });
             addBreadcrumb({

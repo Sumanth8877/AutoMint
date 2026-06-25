@@ -2,7 +2,17 @@
 // The WASM files are compiled and available in public/wasm/
 // This module only works in browser environment
 
-let wasmModule: any = null;
+type WasmCryptoModule = {
+  default: () => Promise<unknown>;
+  sign_transaction: (privateKeyHex: string, messageHex: string) => string;
+  hash_message: (message: string) => string;
+  verify_signature: (publicKeyHex: string, messageHex: string, signatureHex: string) => string;
+  generate_keypair: () => string;
+  encrypt_data: (plaintext: string, keyHex: string) => string;
+  decrypt_data: (encryptedBase64: string, keyHex: string) => string;
+};
+
+let wasmModule: WasmCryptoModule | null = null;
 let wasmInitialized = false;
 
 async function ensureWasmInitialized() {
@@ -14,8 +24,8 @@ async function ensureWasmInitialized() {
         throw new Error('WASM crypto only works in browser environment');
       }
       
-      // @ts-ignore - Dynamic import from public folder
-      wasmModule = await import('/wasm/wasm_crypto.js');
+      // @ts-expect-error - Dynamic import from public assets is resolved by the browser.
+      wasmModule = await import('/wasm/wasm_crypto.js') as WasmCryptoModule;
       await wasmModule.default();
       wasmInitialized = true;
     } catch (error) {
@@ -25,34 +35,39 @@ async function ensureWasmInitialized() {
   }
 }
 
+function getWasmModule() {
+  if (!wasmModule) throw new Error('WASM crypto module is not initialized');
+  return wasmModule;
+}
+
 export async function signTransactionWasm(privateKeyHex: string, messageHex: string): Promise<string> {
   await ensureWasmInitialized();
-  return wasmModule.sign_transaction(privateKeyHex, messageHex);
+  return getWasmModule().sign_transaction(privateKeyHex, messageHex);
 }
 
 export async function hashMessageWasm(message: string): Promise<string> {
   await ensureWasmInitialized();
-  return wasmModule.hash_message(message);
+  return getWasmModule().hash_message(message);
 }
 
 export async function verifySignatureWasm(publicKeyHex: string, messageHex: string, signatureHex: string): Promise<string> {
   await ensureWasmInitialized();
-  return wasmModule.verify_signature(publicKeyHex, messageHex, signatureHex);
+  return getWasmModule().verify_signature(publicKeyHex, messageHex, signatureHex);
 }
 
 export async function generateKeypairWasm(): Promise<string> {
   await ensureWasmInitialized();
-  return wasmModule.generate_keypair();
+  return getWasmModule().generate_keypair();
 }
 
 export async function encryptDataWasm(plaintext: string, keyHex: string): Promise<string> {
   await ensureWasmInitialized();
-  return wasmModule.encrypt_data(plaintext, keyHex);
+  return getWasmModule().encrypt_data(plaintext, keyHex);
 }
 
 export async function decryptDataWasm(encryptedBase64: string, keyHex: string): Promise<string> {
   await ensureWasmInitialized();
-  return wasmModule.decrypt_data(encryptedBase64, keyHex);
+  return getWasmModule().decrypt_data(encryptedBase64, keyHex);
 }
 
 export async function initializeWasmCrypto() {
