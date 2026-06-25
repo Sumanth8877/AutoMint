@@ -31,98 +31,126 @@ import { getClient } from '@/lib/blockchain/client';
 import { formatEther } from 'viem';
 
 async function getDashboardData(userId: string) {
-  const db = getDb();
-  
-  // Get user's mint tasks
-  const tasks = await getUserMintTasks(userId);
-  
-  // Get wallet count and funded status
-  const userWallets = await db.select().from(wallets).where(eq(wallets.userId, userId));
-  const fundedWallets = userWallets.filter(w => w.balance && parseFloat(w.balance) > 0.001);
-  
-  // Get collections
-  const userCollections = await db.select().from(collections).where(eq(collections.userId, userId));
-  
-  // Calculate portfolio value (sum of all wallet balances)
-  let portfolioValue = 0n;
-  for (const wallet of userWallets) {
-    if (wallet.address && wallet.balance) {
-      try {
-        portfolioValue += BigInt(wallet.balance);
-      } catch (e) {
-        // Skip balance parse if it fails
+  try {
+    const db = getDb();
+    
+    // Get user's mint tasks
+    const tasks = await getUserMintTasks(userId);
+    
+    // Get wallet count and funded status
+    const userWallets = await db.select().from(wallets).where(eq(wallets.userId, userId));
+    const fundedWallets = userWallets.filter(w => w.balance && parseFloat(w.balance) > 0.001);
+    
+    // Get collections
+    const userCollections = await db.select().from(collections).where(eq(collections.userId, userId));
+    
+    // Calculate portfolio value (sum of all wallet balances)
+    let portfolioValue = 0n;
+    for (const wallet of userWallets) {
+      if (wallet.address && wallet.balance) {
+        try {
+          portfolioValue += BigInt(wallet.balance);
+        } catch (e) {
+          // Skip balance parse if it fails
+        }
       }
     }
+    
+    // Calculate statistics
+    const completedTasks = tasks.filter(t => t.status === 'completed').length;
+    const pendingTasks = tasks.filter(t => ['pending', 'monitoring', 'ready'].includes(t.status)).length;
+    const failedTasks = tasks.filter(t => t.status === 'failed').length;
+    
+    // Get recent activities
+    let activities: any[] = [];
+    try {
+      activities = await getRecentActivities(userId);
+    } catch (e) {
+      // Skip activities if fetch fails
+    }
+    
+    // System health checks
+    const systemStatuses = [
+      { label: 'RPC providers', value: 'Operational', icon: CheckCircle2, color: 'text-success' },
+      { label: 'Analyzer queue', value: 'Clear', icon: CheckCircle2, color: 'text-success' },
+      { label: 'Risk engine', value: 'Operational', icon: ShieldCheck, color: 'text-success' },
+      { label: 'Automation worker', value: 'Operational', icon: CheckCircle2, color: 'text-success' },
+    ];
+    
+    return {
+      metrics: [
+        { 
+          label: 'Portfolio Value', 
+          value: `${parseFloat(formatEther(portfolioValue)).toFixed(2)} ETH`, 
+          detail: `${userWallets.length} wallet${userWallets.length !== 1 ? 's' : ''}`, 
+          icon: Wallet, 
+          tone: 'success' as const 
+        },
+        { 
+          label: 'Completed Mints', 
+          value: completedTasks.toString(), 
+          detail: `${failedTasks} failed`, 
+          icon: BarChart3, 
+          tone: 'accent' as const 
+        },
+        { 
+          label: 'Active Tasks', 
+          value: pendingTasks.toString(), 
+          detail: `${tasks.length - pendingTasks - completedTasks} other`, 
+          icon: Zap, 
+          tone: 'primary' as const 
+        },
+        { 
+          label: 'Funded Wallets', 
+          value: `${fundedWallets.length}/${userWallets.length}`, 
+          detail: userWallets.length > 0 ? `${Math.round((fundedWallets.length / userWallets.length) * 100)}% funded` : 'No wallets', 
+          icon: AlertTriangle, 
+          tone: fundedWallets.length === userWallets.length ? 'success' as const : 'warning' as const 
+        },
+      ],
+      tasks: tasks.slice(0, 5).map(task => ({
+        name: task.contractAddress ? `${task.contractAddress.slice(0, 6)}...${task.contractAddress.slice(-4)}` : 'Unknown',
+        status: task.status.charAt(0).toUpperCase() + task.status.slice(1),
+        wallet: task.walletId ? `${task.walletId.slice(0, 6)}...${task.walletId.slice(-4)}` : 'Unknown',
+        eta: task.scheduledTime ? new Date(task.scheduledTime).toLocaleTimeString() : 'N/A',
+        risk: task.riskThreshold && task.riskThreshold > 75 ? 'High' : task.riskThreshold && task.riskThreshold > 50 ? 'Medium' : 'Low',
+      })),
+      riskFeed: [] as Array<{ title: string; source: string; level: string; time: string }>, // TODO: Implement risk feed from risk service
+      watchlist: userCollections.slice(0, 4).map(col => ({
+        name: col.name || 'Unknown',
+        chain: col.chain || 'Unknown',
+        score: 75, // TODO: Calculate from analysis
+        demand: 'Medium',
+      })),
+      activity: activities.slice(0, 5).map(act => [
+        new Date(act.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        act.type,
+        act.title || '',
+      ]),
+      systemStatuses,
+    };
+  } catch (error) {
+    console.error('Dashboard data fetch error:', error);
+    // Return empty data on error
+    return {
+      metrics: [
+        { label: 'Portfolio Value', value: '0.00 ETH', detail: '0 wallets', icon: Wallet, tone: 'success' as const },
+        { label: 'Completed Mints', value: '0', detail: '0 failed', icon: BarChart3, tone: 'accent' as const },
+        { label: 'Active Tasks', value: '0', detail: '0 other', icon: Zap, tone: 'primary' as const },
+        { label: 'Funded Wallets', value: '0/0', detail: 'No wallets', icon: AlertTriangle, tone: 'warning' as const },
+      ],
+      tasks: [],
+      riskFeed: [],
+      watchlist: [],
+      activity: [],
+      systemStatuses: [
+        { label: 'RPC providers', value: 'Operational', icon: CheckCircle2, color: 'text-success' },
+        { label: 'Analyzer queue', value: 'Clear', icon: CheckCircle2, color: 'text-success' },
+        { label: 'Risk engine', value: 'Operational', icon: ShieldCheck, color: 'text-success' },
+        { label: 'Automation worker', value: 'Operational', icon: CheckCircle2, color: 'text-success' },
+      ],
+    };
   }
-  
-  // Calculate statistics
-  const completedTasks = tasks.filter(t => t.status === 'completed').length;
-  const pendingTasks = tasks.filter(t => ['pending', 'monitoring', 'ready'].includes(t.status)).length;
-  const failedTasks = tasks.filter(t => t.status === 'failed').length;
-  
-  // Get recent activities
-  const activities = await getRecentActivities(userId);
-  
-  // System health checks
-  const systemStatuses = [
-    { label: 'RPC providers', value: 'Operational', icon: CheckCircle2, color: 'text-success' },
-    { label: 'Analyzer queue', value: 'Clear', icon: CheckCircle2, color: 'text-success' },
-    { label: 'Risk engine', value: 'Operational', icon: ShieldCheck, color: 'text-success' },
-    { label: 'Automation worker', value: 'Operational', icon: CheckCircle2, color: 'text-success' },
-  ];
-  
-  return {
-    metrics: [
-      { 
-        label: 'Portfolio Value', 
-        value: `${parseFloat(formatEther(portfolioValue)).toFixed(2)} ETH`, 
-        detail: `${userWallets.length} wallet${userWallets.length !== 1 ? 's' : ''}`, 
-        icon: Wallet, 
-        tone: 'success' as const 
-      },
-      { 
-        label: 'Completed Mints', 
-        value: completedTasks.toString(), 
-        detail: `${failedTasks} failed`, 
-        icon: BarChart3, 
-        tone: 'accent' as const 
-      },
-      { 
-        label: 'Active Tasks', 
-        value: pendingTasks.toString(), 
-        detail: `${tasks.length - pendingTasks - completedTasks} other`, 
-        icon: Zap, 
-        tone: 'primary' as const 
-      },
-      { 
-        label: 'Funded Wallets', 
-        value: `${fundedWallets.length}/${userWallets.length}`, 
-        detail: userWallets.length > 0 ? `${Math.round((fundedWallets.length / userWallets.length) * 100)}% funded` : 'No wallets', 
-        icon: AlertTriangle, 
-        tone: fundedWallets.length === userWallets.length ? 'success' as const : 'warning' as const 
-      },
-    ],
-    tasks: tasks.slice(0, 5).map(task => ({
-      name: task.contractAddress ? `${task.contractAddress.slice(0, 6)}...${task.contractAddress.slice(-4)}` : 'Unknown',
-      status: task.status.charAt(0).toUpperCase() + task.status.slice(1),
-      wallet: task.walletId ? `${task.walletId.slice(0, 6)}...${task.walletId.slice(-4)}` : 'Unknown',
-      eta: task.scheduledTime ? new Date(task.scheduledTime).toLocaleTimeString() : 'N/A',
-      risk: task.riskThreshold && task.riskThreshold > 75 ? 'High' : task.riskThreshold && task.riskThreshold > 50 ? 'Medium' : 'Low',
-    })),
-    riskFeed: [] as Array<{ title: string; source: string; level: string; time: string }>, // TODO: Implement risk feed from risk service
-    watchlist: userCollections.slice(0, 4).map(col => ({
-      name: col.name || 'Unknown',
-      chain: col.chain || 'Unknown',
-      score: 75, // TODO: Calculate from analysis
-      demand: 'Medium',
-    })),
-    activity: activities.slice(0, 5).map(act => [
-      new Date(act.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      act.type,
-      act.title || '',
-    ]),
-    systemStatuses,
-  };
 }
 
 export default async function DashboardPage() {
