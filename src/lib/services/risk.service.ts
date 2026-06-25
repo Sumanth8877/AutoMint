@@ -8,6 +8,7 @@ import { getMintState } from '@/lib/services/mint-state.service';
 import { applyRiskWeights, getRiskWeights } from '@/lib/services/risk-learning.service';
 import { addBreadcrumb, captureException, startSpan } from '@/lib/observability/sentry';
 import { isTelegramEnabled } from '@/lib/services/telegram.service';
+import { checkTokenSecurity } from '@/lib/services/goplus-security.service';
 
 const RISK_THRESHOLD = 75;
 
@@ -111,6 +112,53 @@ async function scoreContractAnalysis(params: {
       }
     } catch {
       score += addRisk(reasons, 'Contract mint state could not be verified', 7);
+    }
+
+    // GoPlus Security check
+    try {
+      const goPlusResult = await checkTokenSecurity({
+        contractAddress: params.contractAddress,
+        chain: params.chain,
+      });
+
+      if (goPlusResult) {
+        // Add GoPlus risk factors to reasons
+        reasons.push(...goPlusResult.riskFactors);
+
+        // Add GoPlus risk score (scaled to fit within contract analysis max of 40)
+        const goPlusScore = Math.min(goPlusResult.riskScore * 0.4, 40);
+        score += goPlusScore;
+
+        // Critical GoPlus checks
+        if (goPlusResult.isHoneypot) {
+          score = Math.min(score + 30, 40);
+          addRisk(reasons, 'GoPlus: Honeypot detected - extremely dangerous', 30);
+        }
+        if (goPlusResult.cannotBuy) {
+          score = Math.min(score + 25, 40);
+          addRisk(reasons, 'GoPlus: Cannot buy token', 25);
+        }
+        if (goPlusResult.cannotSell) {
+          score = Math.min(score + 25, 40);
+          addRisk(reasons, 'GoPlus: Cannot sell token', 25);
+        }
+        if (goPlusResult.isAirdropScam) {
+          score = Math.min(score + 20, 40);
+          addRisk(reasons, 'GoPlus: Airdrop scam detected', 20);
+        }
+        if (goPlusResult.isBlacklisted) {
+          score = Math.min(score + 15, 40);
+          addRisk(reasons, 'GoPlus: Token is blacklisted', 15);
+        }
+      }
+    } catch (error) {
+      // GoPlus check failed, but don't fail the entire risk analysis
+      addBreadcrumb({
+        category: 'risk',
+        message: 'GoPlus Security check failed',
+        level: 'warning',
+        data: { error: error instanceof Error ? error.message : String(error) },
+      });
     }
   }
 

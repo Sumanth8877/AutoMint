@@ -52,6 +52,9 @@ const REQUIRED_VARS: EnvSpec[] = [
   { name: 'QSTASH_TOKEN' },
   { name: 'QSTASH_CURRENT_SIGNING_KEY' },
   { name: 'QSTASH_NEXT_SIGNING_KEY' },
+
+  // ── GoPlus Security (optional - for contract security scanning)
+  // { name: 'GOPLUS_API_KEY' }, // Optional, not required
 ];
 
 export function validateEnv(): void {
