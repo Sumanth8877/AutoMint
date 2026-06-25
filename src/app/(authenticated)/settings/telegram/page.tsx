@@ -26,8 +26,11 @@ export default function TelegramSettingsPage() {
 
   const fetchTelegramLink = async () => {
     try {
-      const response = await fetch('/api/telegram/link-token');
+      const response = await fetch('/api/telegram/link-token', {
+        cache: 'no-store',
+      });
       const result = await response.json();
+      console.log('Telegram link response:', result);
       setData(result);
     } catch (error) {
       console.error('Failed to fetch Telegram link:', error);

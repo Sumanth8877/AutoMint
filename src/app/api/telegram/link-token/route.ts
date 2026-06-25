@@ -11,15 +11,6 @@ export async function GET() {
     const limited = await enforceRateLimit(`telegram:link-token:${authResult.userId}`, RATE_LIMITS.tokenGeneration);
     if (limited) return limited;
 
-    // Debug logging
-    console.log('Telegram enabled check:', {
-      TELEGRAM_ENABLED: process.env.TELEGRAM_ENABLED,
-      TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN ? 'SET' : 'NOT SET',
-      TELEGRAM_WEBHOOK_SECRET: process.env.TELEGRAM_WEBHOOK_SECRET ? 'SET' : 'NOT SET',
-      TELEGRAM_LINK_SECRET: process.env.TELEGRAM_LINK_SECRET ? 'SET' : 'NOT SET',
-      isTelegramEnabled: isTelegramEnabled(),
-    });
-
     if (!isTelegramEnabled()) {
       return NextResponse.json({
         enabled: false,
@@ -41,6 +32,10 @@ export async function GET() {
       account,
       deepLink: botUsername ? `https://t.me/${botUsername}?start=${encodeURIComponent(token)}` : null,
       expiresInSeconds: 600,
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+      },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to create Telegram link token';
