@@ -5,8 +5,9 @@ import { getErrorMessage } from '@/lib/api/errors';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getDb } from '@/lib/db';
 
-// Cache GET requests for 4 hours
-export const revalidate = 14400;
+// Disable ISR — history data must reflect recent mints immediately
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 const MAX_LIMIT = 50;
 const DEFAULT_LIMIT = 20;
