@@ -175,30 +175,6 @@ export async function hasCache(key: string): Promise<boolean> {
   }
 }
 
-// ─── Rate Limiting ──────────────────────────────────
-
-/**
- * Simple sliding-window rate limit using Redis.
- * Returns true if allowed, false if rate-limited.
- */
-export async function checkRateLimit(
-  identifier: string,
-  maxRequests: number,
-  windowSeconds: number,
-): Promise<boolean> {
-  const key = CACHE_KEYS.rateLimit(identifier);
-  try {
-    const client = getRedisClient();
-    const current = await client.incr(key);
-    if (current === 1) {
-      await client.expire(key, windowSeconds);
-    }
-    return current <= maxRequests;
-  } catch (error) {
-    addBreadcrumb({ category: 'redis', message: `Rate limit error for "${identifier}"`, level: 'error', data: { identifier, error: String(error) } });
-    return true; // Allow on error (fail open)
-  }
-}
 
 // ─── Health Check ────────────────────────────────────
 
