@@ -7,7 +7,6 @@ import 'server-only';
 
 import {
   resolveMintIntent,
-  extractDiscoveryFields,
   type AnalyzerDebugLogEntry,
   type AnalyzerDebugLogLevel,
   type AnalyzerProviderAttempt,
@@ -17,7 +16,7 @@ import {
 } from '@/lib/resolve-mint-intent';
 import { addBreadcrumb } from '@/lib/observability/sentry';
 import { discoverWithFirecrawl } from '@/lib/services/firecrawl.provider';
-import { discoverWithJina, type DiscoveryProviderResult, type DiscoverySocials } from '@/lib/services/jina.provider';
+import { discoverWithJina, extractDiscoveryFields, type DiscoveryProviderResult, type DiscoverySocials } from '@/lib/services/jina.provider';
 import {
   ANALYZER_CACHE_KEYS,
   ANALYZER_CACHE_TTL,
