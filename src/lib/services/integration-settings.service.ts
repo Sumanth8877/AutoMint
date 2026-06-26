@@ -5,7 +5,7 @@ import { integrationSettings } from '@/drizzle/schema';
 import { getDb } from '@/lib/db';
 import { decrypt, encrypt } from '@/lib/security/encryption';
 
-export const INTEGRATION_SETTING_KEYS = ['ALCHEMY_API_KEY', 'QUICKNODE_RPC_URL'] as const;
+export const INTEGRATION_SETTING_KEYS = ['ALCHEMY_API_KEY'] as const;
 export type IntegrationSettingKey = typeof INTEGRATION_SETTING_KEYS[number];
 
 export type IntegrationSetting = {
