@@ -109,7 +109,15 @@ export default function WalletsClient() {
   const [editWallet, setEditWallet] = useState<WalletRecord | null>(null);
   const [deleteWallet, setDeleteWallet] = useState<WalletRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Auto-dismiss success messages after 4 seconds
+  useEffect(() => {
+    if (!successMsg) return;
+    const t = window.setTimeout(() => setSuccessMsg(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [successMsg]);
   const [walletTypeFilter, setWalletTypeFilter] = useState<WalletTypeFilter>('ALL');
   const [form, setForm] = useState<WalletForm>({ nickname: '', privateKey: '' });
   const [importWalletType, setImportWalletType] = useState<ImportWalletType | null>(null);
@@ -213,6 +221,7 @@ export default function WalletsClient() {
       setAddModalOpen(false);
       setForm({ nickname: '', privateKey: '' });
       setImportWalletType(null);
+      setSuccessMsg(`Wallet ${data.wallet.nickname || shortAddress(data.wallet.address)} added`);
     },
     onError: (error) => {
       console.error('Error adding wallet:', error);
@@ -233,6 +242,7 @@ export default function WalletsClient() {
       queryClient.invalidateQueries({ queryKey: ['wallets'] });
       if (data.wallet.walletType === 'EVM') void refreshBalance(data.wallet, false);
       setEditWallet(null);
+      setSuccessMsg('Wallet updated');
     },
   });
 
@@ -244,6 +254,7 @@ export default function WalletsClient() {
     onSuccess: () => {
       refetch();
       queryClient.invalidateQueries({ queryKey: ['wallets'] });
+      setSuccessMsg('Default wallet updated');
     },
   });
 
@@ -261,6 +272,7 @@ export default function WalletsClient() {
         return next;
       });
       setDeleteWallet(null);
+      setSuccessMsg('Wallet removed');
     },
   });
 
@@ -396,6 +408,12 @@ export default function WalletsClient() {
           </button>
         ))}
       </div>
+
+      {successMsg ? (
+        <div className="mt-6 rounded-lg border border-success/20 bg-success/10 p-3 text-sm text-success" role="status">
+          {successMsg}
+        </div>
+      ) : null}
 
       {error ? (
         <div className="mt-6 rounded-lg border border-danger/20 bg-danger/10 p-3 text-sm text-danger" role="alert">
