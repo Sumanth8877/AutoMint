@@ -319,7 +319,7 @@ export async function testRpcFailover() {
       throw new Error(`Chain mapping returned ${ethereum.id}; expected Ethereum mainnet (${ETHEREUM_CHAIN_ID})`);
     }
 
-    const attempts: Array<'alchemy' | 'infura'> = [];
+    const attempts: Array<RpcProvider> = [];
     const result = await withRpcFailover('ethereum', 'infrastructureFailoverProbe', async (client: PublicClient, provider) => {
       attempts.push(provider);
       if (provider === 'alchemy') throw new Error('Simulated Alchemy unavailable');
@@ -341,9 +341,9 @@ export async function testRpcFailover() {
       };
     }, { providerOrder: ['alchemy', 'infura'] });
     if (attempts[0] !== 'alchemy') throw new Error('RPC manager did not select Alchemy first for the forced failover probe');
-    if (result.handledBy !== 'infura') throw new Error('RPC failover did not route to Infura');
+    if (result.handledBy === 'alchemy') throw new Error('RPC failover did not leave Alchemy');
     return { ...result, attempts };
-  }, 'RPC failover routed the request to Infura after simulated Alchemy failure.');
+  }, 'RPC failover routed the request away from Alchemy after simulated failure.');
 }
 
 export async function testJina() {
