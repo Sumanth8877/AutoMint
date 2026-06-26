@@ -25,7 +25,7 @@ type MintTask = {
   contractAddress: string | null;
   mintPrice: string | null;
   scheduledTime: string | null;       // #8 — when upcoming mint will fire
-  lastError: string | null;            // U3 — failure reason
+  riskReasons: string[] | null;       // U3 — failure reasons from execution
   createdAt: string;
 };
 
@@ -357,10 +357,12 @@ export default function MintsClient() {
                       </p>
                     ) : null}
                     {/* U3 — show error reason for failed tasks */}
-                    {task.status === 'failed' && task.lastError ? (
-                      <p className="mt-1 text-xs text-danger truncate" title={task.lastError}>
-                        Error: {task.lastError}
+                    {task.status === 'failed' && task.riskReasons && task.riskReasons.length > 0 ? (
+                      <p className="mt-1 text-xs text-danger truncate" title={task.riskReasons.join('; ')}>
+                        Reason: {task.riskReasons[0]}
                       </p>
+                    ) : task.status === 'failed' ? (
+                      <p className="mt-1 text-xs text-danger">Execution failed — click retry to try again</p>
                     ) : null}
                   </div>
                   <div className="col-span-2 hidden md:block">
