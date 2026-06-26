@@ -364,13 +364,6 @@ export async function handleCopyMintEvent(event: CopyMintEvent) {
 
     const result = await executeMintTask(task.id, event.userId);
     if (result.success) {
-      const { updateWalletReputation } = await import('@/lib/services/wallet-reputation.service');
-      await updateWalletReputation({
-        walletAddress: event.watchedWalletAddress,
-        chain: event.chain,
-        outcome: 'copy_mint_success',
-        metadata: { contractAddress, taskId: task.id, txHash: result.txHash },
-      });
       await sendCopyMintNotification(event.userId, 'mint_success', {
         wallet: event.watchedWalletAddress,
         contractAddress,
@@ -380,13 +373,6 @@ export async function handleCopyMintEvent(event: CopyMintEvent) {
       return { action: 'executed' as const, taskId: task.id, txHash: result.txHash };
     }
 
-    const { updateWalletReputation } = await import('@/lib/services/wallet-reputation.service');
-    await updateWalletReputation({
-      walletAddress: event.watchedWalletAddress,
-      chain: event.chain,
-      outcome: 'copy_mint_failed',
-      metadata: { contractAddress, taskId: task.id, error: result.error },
-    });
     await sendCopyMintNotification(event.userId, 'mint_failed', {
       wallet: event.watchedWalletAddress,
       contractAddress,
