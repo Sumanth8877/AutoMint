@@ -5,8 +5,9 @@ import { enforceRateLimit, RATE_LIMITS } from '@/lib/api/rate-limit';
 import { getUserWallets, importWallet, removeWallet } from '@/lib/services/wallet.service';
 import type { ImportWalletType } from '@/lib/wallets/private-key';
 
-// Cache GET requests for 4 hours
-export const revalidate = 14400;
+// Disable cache — mutations need fresh data immediately
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 // GET /api/wallets
 export async function GET() {
