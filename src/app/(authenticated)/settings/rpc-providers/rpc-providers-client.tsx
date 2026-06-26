@@ -11,7 +11,7 @@ import Input from '@/components/ui/Input';
 import { apiRequest } from '@/lib/api/client';
 import type { RpcPreferredProvider, RpcRoutingMode } from '@/lib/services/rpc-provider-settings.service';
 
-type ProviderName = 'ALCHEMY' | 'QUICKNODE';
+type ProviderName = 'ALCHEMY' | 'INFURA' | 'DRPC' | 'CHAINSTACK';
 
 type RpcProviderSettings = {
   id: string;
@@ -42,7 +42,16 @@ type RpcProviderPayload = {
 
 const providerLabels: Record<ProviderName, string> = {
   ALCHEMY: 'Alchemy',
-  QUICKNODE: 'QuickNode',
+  INFURA: 'Infura',
+  DRPC: 'dRPC',
+  CHAINSTACK: 'Chainstack',
+};
+
+const providerDescriptions: Record<ProviderName, string> = {
+  ALCHEMY: 'Primary provider — 300M CU/month free. Add ALCHEMY_API_KEY to settings.',
+  INFURA: 'Secondary — 100K req/day free. Add INFURA_API_KEY to settings.',
+  DRPC: 'Always-on fallback — free public endpoints, no API key needed.',
+  CHAINSTACK: 'Optional — 3M RU/month free. Paste node URL from Chainstack dashboard.',
 };
 
 function settingsKey(settings: RpcProviderSettings | null) {
@@ -81,7 +90,7 @@ export default function RpcProvidersClient() {
   }, [payload]);
 
   const dirty = useMemo(() => settingsKey(payload?.settings ?? null) !== settingsKey(draft), [draft, payload]);
-  const configuredProviders = payload?.routing.providers.filter((provider) => provider.configured) ?? [];
+  const configuredProviders = payload?.routing.providers ?? [];  // Show all 4 providers including unconfigured ones
 
   useEffect(() => {
     if (!success) return;
