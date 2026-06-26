@@ -334,12 +334,25 @@ export async function executeMint(
     const account = privateKeyToAccount(privateKey);
     const walletClient = getWalletClient(chain, account, { userId });
 
-    // ── Pre-mint simulation (eth_call dry-run) ─────────────────────────
-    // Simulate the mint transaction before spending gas. If the contract
-    // would revert (sold out, wrong price, paused, wrong phase), abort here.
-    // No nonce consumed, no gas wasted, no MEV exposure.
-    const simulation = await simulateMint(account.address, chain, params, userId);
+    // ── C-03 Fix + Simulation: all run in parallel ──────────────────────────────────────────
+    // eth_call simulation, nonce allocation, and EIP-1559 gas params resolve concurrently.
+    // This means simulation adds ZERO net latency on live mints — it completes during
+    // the same ~100–300ms RPC window as nonce allocation and gas estimation.
+    //
+    // Sequential simulation (the naive approach) would gate broadcast behind an extra
+    // round-trip, adding ~100–300ms per mint — critical when racing bots on a live drop.
+    const [simulation, nonceResult, gasParams] = await Promise.all([
+      simulateMint(account.address, chain, params, userId),
+      allocateNonce(account.address, chain).catch(() => null),
+      resolveGasParams(chain, userId),
+    ]);
+
+    // Gate on simulation AFTER all three have resolved.
+    // Release the inflight nonce if simulation failed so it doesn't create a gap.
     if (!simulation.success) {
+      if (nonceResult?.nonce !== undefined) {
+        void releaseInflightNonce(account.address, chain, nonceResult.nonce).catch(() => undefined);
+      }
       const labels: Record<string, string> = {
         sold_out: 'Collection is sold out',
         price_mismatch: 'Mint price mismatch — check mintPrice config',
@@ -355,23 +368,6 @@ export async function executeMint(
         error: `SimulationFailed: ${label}${simulation.revertReason ? ` — ${simulation.revertReason}` : ''}`,
       };
     }
-
-    // ── C-03 Fix: allocate unique nonce ─────────────────────────────────────
-    // Speed fix: allocate nonce and resolve EIP-1559 gas params in parallel.
-    // Both are independent of each other; running them concurrently saves
-    // 200–400ms compared to sequential await calls.
-    const [nonceResult, gasParams] = await Promise.all([
-      allocateNonce(account.address, chain).catch(() => null),
-      resolveGasParams(chain, userId),
-    ]);
-    const allocatedNonce: number | undefined = nonceResult?.nonce;
-    const value = params.mintPrice ? parseEther(params.mintPrice) : BigInt(0);
-
-    // C-04: hoist hash before the receipt try so the catch block can always return it.
-    // If sendTransaction succeeds, hash is defined and must never be discarded —
-    // even when waitForTransactionReceipt subsequently times out.
-    let hash: Hex | undefined;
-
     try {
       // Speed fix (multi-RPC broadcast racing):
       // 1. Sign the transaction locally — pure crypto, no network call
