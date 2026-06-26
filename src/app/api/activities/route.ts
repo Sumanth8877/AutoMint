@@ -5,8 +5,9 @@ import { eq, desc } from 'drizzle-orm';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { captureException } from '@/lib/observability/sentry';
 
-// Cache GET requests for 4 hours
-export const revalidate = 14400;
+// Real-time — activities reflect mints that just completed
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET() {
   const authResult = await requireApiUser();
