@@ -933,7 +933,37 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
   if (!message?.text) return { handled: false };
 
   const { command, rawArgs } = parseCommand(message.text);
-  if (!command.startsWith('/')) return { handled: false };
+
+  // Bug #1 Fix: Plain text message (no '/' prefix).
+  // If the user pasted a raw URL, treat it as /mint <url> so they don't
+  // need to know the command syntax. Any other plain text gets a helpful
+  // hint rather than being silently dropped.
+  if (!command.startsWith('/')) {
+    const text = message.text?.trim() ?? '';
+
+    if (text.startsWith('http://') || text.startsWith('https://')) {
+      // Requires account + wallet — resolve both before handing off.
+      if (!message.from) {
+        await reply(message, 'Unable to process message without a Telegram user ID.');
+        return { handled: true };
+      }
+      const urlAccount = await getTelegramAccountByTelegramId(String(message.from.id));
+      if (!urlAccount) {
+        await reply(message, accountRequiredText());
+        return { handled: true };
+      }
+      // Route to the same handler as /mint <url>
+      await handleMintCommand(message, urlAccount.userId, text);
+      return { handled: true };
+    }
+
+    // Non-URL, non-command text — guide the user instead of ghosting them.
+    await reply(
+      message,
+      'Paste a mint URL to start, or use /mint <url>.\n\nOther commands: /schedule /watch /status /cancel /settings',
+    );
+    return { handled: true };
+  }
 
   if (command === '/start') {
     await handleStart(message, rawArgs);
