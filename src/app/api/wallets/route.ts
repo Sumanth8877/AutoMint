@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/require-auth';
-import { getErrorMessage, parseJsonBody } from '@/lib/api/errors';
+import { getErrorMessage, parseJsonBody, handleRouteError } from '@/lib/api/errors';
 import { getUserWallets, importWallet, removeWallet } from '@/lib/services/wallet.service';
 import type { ImportWalletType } from '@/lib/wallets/private-key';
 
@@ -51,13 +51,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ wallet }, { status: 201 });
   } catch (error) {
-    const message = getErrorMessage(error, 'Failed to import wallet');
-    const status = message === 'Wallet already added'
-      ? 409
-      : message === 'Invalid JSON request body' || message.includes('Invalid') || message.includes('required')
-        ? 400
-        : 500;
-    return NextResponse.json({ error: message }, { status });
+    return handleRouteError(error, 'Failed to import wallet');
   }
 }
 
@@ -75,8 +69,6 @@ export async function DELETE(req: Request) {
     await removeWallet(id, authResult.userId);
     return NextResponse.json({ success: true });
   } catch (error) {
-    const message = getErrorMessage(error, 'Failed to delete wallet');
-    const status = message.includes('not found') ? 404 : message === 'Invalid JSON request body' ? 400 : 500;
-    return NextResponse.json({ error: message }, { status });
+    return handleRouteError(error, 'Failed to delete wallet');
   }
 }
