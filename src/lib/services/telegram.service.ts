@@ -635,9 +635,28 @@ async function handleStart(message: TelegramMessage, token: string) {
   await sendTelegramMessage(account.chatId, 'Telegram linked to AutoMint. Commands: /mint <url>, /schedule <url>, /watch <wallet>, /status, /cancel, /settings.');
 }
 
-async function handleMintCommand(message: TelegramMessage, userId: string, url: string) {
-  if (!url) {
-    await reply(message, 'Usage: /mint <url>');
+const MAX_MINT_QUANTITY = 50;
+
+/** Parse "url" or "url qty" — supports /mint url qty and bare "url qty" */
+function parseMintInput(rawInput: string): { url: string; quantity: number } | { error: string } {
+  const parts = rawInput.trim().split(/\s+/);
+  const lastPart = parts[parts.length - 1] ?? '';
+
+  if (parts.length > 1 && /^\d+$/.test(lastPart)) {
+    const qty = parseInt(lastPart, 10);
+    if (qty < 1) return { error: '❌ Quantity must be at least 1.' };
+    if (qty > MAX_MINT_QUANTITY) {
+      return { error: `❌ Quantity ${qty} exceeds the maximum of ${MAX_MINT_QUANTITY} NFTs per mint.\n\nTry a number between 1–${MAX_MINT_QUANTITY}.` };
+    }
+    return { url: parts.slice(0, -1).join(' '), quantity: qty };
+  }
+
+  return { url: rawInput.trim(), quantity: 1 };
+}
+
+async function handleMintCommand(message: TelegramMessage, userId: string, rawInput: string) {
+  if (!rawInput) {
+    await reply(message, `Usage: /mint <url> [quantity]\n\nExamples:\n  /mint https://... 1 (default)\n  /mint https://... 5\n  https://... 3 (bare URL)\n\nMax: ${MAX_MINT_QUANTITY} NFTs per mint`);
     return;
   }
 
@@ -650,11 +669,17 @@ async function handleMintCommand(message: TelegramMessage, userId: string, url: 
   // C-04 Fix: create a task and schedule via QStash — never execute inline.
   // The webhook returns immediately. All blockchain execution happens in the
   // QStash → /api/webhooks/qstash → executeScheduledMint pipeline.
-  const result = await createMintTaskFromUrl(url, wallet.id, userId, 1);
+  const parsed = parseMintInput(rawInput);
+  if ('error' in parsed) { await reply(message, parsed.error); return; }
+  const { url, quantity } = parsed;
+
+  // C-04 Fix: create a task and schedule via QStash — never execute inline.
+  const result = await createMintTaskFromUrl(url, wallet.id, userId, quantity);
+  const qtyLabel = `${quantity} NFT${quantity > 1 ? 's' : ''}`;
 
   if (result.action === 'FAILED') {
     await sendTelegramNotification(userId, 'mint_failed', { url, error: result.error });
-    await reply(message, `Mint failed: ${result.error || 'Unknown error'}`);
+    await reply(message, `❌ Mint failed: ${result.error || 'Unknown error'}`);
     return;
   }
 
@@ -662,7 +687,7 @@ async function handleMintCommand(message: TelegramMessage, userId: string, url: 
     await sendTelegramNotification(userId, 'mint_created', { url, taskId: result.taskId });
     await reply(
       message,
-      `Monitoring started.\nTask: ${result.taskId}\nYou\'ll be notified when execution begins.`,
+      `⏳ Monitoring started.\nTask: ${result.taskId}\nQty: ${qtyLabel}\nYou'll be notified when the mint goes live.`,
     );
     return;
   }
@@ -671,7 +696,7 @@ async function handleMintCommand(message: TelegramMessage, userId: string, url: 
   await sendTelegramNotification(userId, 'mint_created', { url, taskId: result.taskId });
   await reply(
     message,
-    `Mint task created.\nTask: ${result.taskId}\nExecution starting shortly — you\'ll be notified on completion.`,
+    `✅ Mint task created.\nTask: ${result.taskId}\nQty: ${qtyLabel}\nExecution starting shortly — you'll be notified on completion.`,
   );
 }
 
