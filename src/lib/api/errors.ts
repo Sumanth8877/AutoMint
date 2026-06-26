@@ -1,40 +1,25 @@
 import { NextResponse } from 'next/server';
 
-// ── Helpers (unchanged) ────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-export function getErrorMessage(error: unknown, fallback: string): string {
+export function getErrorMessage(error: unknown, fallback = 'Request failed') {
   return error instanceof Error ? error.message : fallback;
 }
 
-export async function parseJsonBody<T>(req: Request): Promise<T> {
+export async function parseJsonBody<T>(request: Request): Promise<T> {
   try {
-    return (await req.json()) as T;
+    return (await request.json()) as T;
   } catch {
     throw new ValidationError('Invalid JSON request body');
   }
 }
 
 // ── AppError class hierarchy ──────────────────────────────────────────────────
-//
-// Services throw typed errors; route handlers call handleRouteError(err) to
-// map them to the correct HTTP status without brittle string matching.
-//
-// Usage in a service:
-//   throw new ConflictError('Collection already added');
-//   throw new ValidationError('contractAddress is required');
-//   throw new NotFoundError('Wallet not found');
-//
-// Usage in a route handler catch block:
-//   } catch (err) {
-//     return handleRouteError(err, 'Failed to add collection');
-//   }
 
 export class AppError extends Error {
   constructor(
     message: string,
-    /** HTTP status code this error maps to */
     readonly status: number,
-    /** Optional machine-readable code for clients */
     readonly code?: string,
   ) {
     super(message);
@@ -42,35 +27,35 @@ export class AppError extends Error {
   }
 }
 
-/** 409 Conflict — resource already exists or state prevents the action */
+/** 409 Conflict */
 export class ConflictError extends AppError {
   constructor(message: string, code?: string) {
     super(message, 409, code ?? 'CONFLICT');
   }
 }
 
-/** 400 Bad Request — invalid input, missing field, wrong type */
+/** 400 Bad Request */
 export class ValidationError extends AppError {
   constructor(message: string, code?: string) {
     super(message, 400, code ?? 'VALIDATION_ERROR');
   }
 }
 
-/** 404 Not Found — resource does not exist or is not owned by this user */
+/** 404 Not Found */
 export class NotFoundError extends AppError {
   constructor(message: string, code?: string) {
     super(message, 404, code ?? 'NOT_FOUND');
   }
 }
 
-/** 401 Unauthorized — missing or invalid auth */
+/** 401 Unauthorized */
 export class UnauthorizedError extends AppError {
   constructor(message: string = 'Unauthorized', code?: string) {
     super(message, 401, code ?? 'UNAUTHORIZED');
   }
 }
 
-/** 403 Forbidden — authenticated but not permitted */
+/** 403 Forbidden */
 export class ForbiddenError extends AppError {
   constructor(message: string = 'Forbidden', code?: string) {
     super(message, 403, code ?? 'FORBIDDEN');
@@ -79,21 +64,36 @@ export class ForbiddenError extends AppError {
 
 // ── Route error handler ───────────────────────────────────────────────────────
 //
-// Replaces brittle catch blocks like:
-//   const status = message === 'X' ? 409 : message.includes('Y') ? 400 : 500;
+// Typed AppError subclasses carry their own status code — no string matching.
+// Plain Error fallback infers status from common message patterns so services
+// that haven't yet adopted AppError still return the right HTTP code.
 //
-// With a single call:
-//   return handleRouteError(err, 'Failed to add collection');
-//
-// AppError subclasses carry their own status. Unknown errors → 500.
+// Usage in a route catch block:
+//   } catch (err) {
+//     return handleRouteError(err, 'Failed to add collection');
+//   }
 
-export function handleRouteError(
-  error: unknown,
-  fallback: string,
-): NextResponse {
+export function handleRouteError(error: unknown, fallback: string): NextResponse {
   if (error instanceof AppError) {
     return NextResponse.json({ error: error.message }, { status: error.status });
   }
+
   const message = getErrorMessage(error, fallback);
-  return NextResponse.json({ error: message }, { status: 500 });
+  const lower = message.toLowerCase();
+
+  // Infer HTTP status from message for services not yet using AppError subclasses
+  const status =
+    lower.includes('not found')         ? 404 :
+    lower.includes('already added')     ? 409 :
+    lower.includes('already exists')    ? 409 :
+    lower.includes('invalid json')      ? 400 :
+    lower.includes('is required')       ? 400 :
+    lower.includes('must be')           ? 400 :
+    lower.includes('invalid')           ? 400 :
+    lower.includes('unsupported')       ? 400 :
+    lower.includes('unauthorized')      ? 401 :
+    lower.includes('forbidden')         ? 403 :
+    500;
+
+  return NextResponse.json({ error: message }, { status });
 }
