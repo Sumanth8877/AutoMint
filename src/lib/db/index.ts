@@ -52,7 +52,16 @@ export function getPoolDb(): ReturnType<typeof drizzleServerless<typeof schema>>
     if (!url) {
       throw new Error('DATABASE_URL is not set');
     }
-    _pool = new Pool({ connectionString: url });
+    _pool = new Pool({
+      connectionString: url,
+      // Cap concurrent WS connections per serverless instance.
+      // Neon's free tier allows 25 total; 5 per instance leaves headroom for
+      // concurrent Vercel invocations without exhausting the pool.
+      max: 5,
+      // Release idle connections after 10s — avoids holding slots across
+      // the gap between QStash invocations.
+      idleTimeoutMillis: 10_000,
+    });
     _poolDb = drizzleServerless(_pool, { schema });
   }
   return _poolDb;

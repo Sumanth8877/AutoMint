@@ -32,16 +32,30 @@ export type MonitorResult =
 async function getWebSocketUrl(chain: string): Promise<string | null> {
   try {
     const settings = await getAllSettings();
-    const apiKey = settings.ALCHEMY_API_KEY?.value || process.env.ALCHEMY_API_KEY;
+    const chainLower = chain.toLowerCase();
 
-    if (apiKey) {
-      const chainLower = chain.toLowerCase();
-      if (chainLower === 'base')    return `wss://base-mainnet.g.alchemy.com/v2/${apiKey}`;
-      if (chainLower === 'polygon') return `wss://polygon-mainnet.g.alchemy.com/v2/${apiKey}`;
-      return `wss://eth-mainnet.g.alchemy.com/v2/${apiKey}`;
+    // 1. Alchemy WSS — derived from the same API key used for HTTP.
+    //    Always tried first: lowest latency, most reliable.
+    const alchemyKey = settings.ALCHEMY_API_KEY?.value || process.env.ALCHEMY_API_KEY;
+    if (alchemyKey) {
+      if (chainLower === 'base')    return `wss://base-mainnet.g.alchemy.com/v2/${alchemyKey}`;
+      if (chainLower === 'polygon') return `wss://polygon-mainnet.g.alchemy.com/v2/${alchemyKey}`;
+      return `wss://eth-mainnet.g.alchemy.com/v2/${alchemyKey}`;
     }
 
-    // Fall back to env-var WSS URL if configured
+    // 2. Infura WSS — same API key as HTTP, different subdomain + /ws/ path.
+    //    Activated when Alchemy is not configured. Previously, the monitor
+    //    returned null here and fell back to 30s HTTP polling.
+    //    With this fallback: detection latency is 0–12s (ETH) / 0–2s (Base)
+    //    even when Alchemy is unavailable.
+    const infuraKey = settings.INFURA_API_KEY?.value || process.env.INFURA_API_KEY;
+    if (infuraKey) {
+      if (chainLower === 'base')    return `wss://base-mainnet.infura.io/ws/v3/${infuraKey}`;
+      if (chainLower === 'polygon') return `wss://polygon-mainnet.infura.io/ws/v3/${infuraKey}`;
+      return `wss://mainnet.infura.io/ws/v3/${infuraKey}`;
+    }
+
+    // 3. Explicit env-var WSS URLs (e.g. Chainstack or custom node).
     return process.env[`ALCHEMY_${chain.toUpperCase()}_WSS_URL`]
       || process.env.ALCHEMY_WSS_URL
       || null;
