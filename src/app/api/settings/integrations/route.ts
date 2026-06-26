@@ -9,7 +9,6 @@ import { getDb } from '@/lib/db';
 
 type KnownService =
   | 'Alchemy'
-  | 'QuickNode'
   | 'Jina'
   | 'Firecrawl'
   | 'Browserbase'
@@ -42,8 +41,6 @@ type ServiceTestResult = {
 
 const KNOWN_VARIABLES: Array<{ variableName: string; serviceName: KnownService }> = [
   { variableName: 'ALCHEMY_API_KEY', serviceName: 'Alchemy' },
-  { variableName: 'QUICKNODE_RPC_URL', serviceName: 'QuickNode' },
-  { variableName: 'QUICKNODE_WSS_URL', serviceName: 'QuickNode' },
   { variableName: 'JINA_API_KEY', serviceName: 'Jina' },
   { variableName: 'FIRECRAWL_API_KEY', serviceName: 'Firecrawl' },
   { variableName: 'BROWSERBASE_API_KEY', serviceName: 'Browserbase' },
@@ -62,7 +59,6 @@ const KNOWN_VARIABLES: Array<{ variableName: string; serviceName: KnownService }
 
 const SERVICE_KEYWORDS: Array<[string, KnownService]> = [
   ['ALCHEMY', 'Alchemy'],
-  ['QUICKNODE', 'QuickNode'],
   ['JINA', 'Jina'],
   ['FIRECRAWL', 'Firecrawl'],
   ['BROWSERBASE', 'Browserbase'],
@@ -74,7 +70,7 @@ const SERVICE_KEYWORDS: Array<[string, KnownService]> = [
   ['CLERK', 'Clerk'],
 ];
 
-const SERVICE_DISCOVERY_PATTERN = /(ALCHEMY|QUICKNODE|JINA|FIRECRAWL|BROWSERBASE|QSTASH|SENTRY|CLERK|REDIS|KV_REST)/;
+const SERVICE_DISCOVERY_PATTERN = /(ALCHEMY|JINA|FIRECRAWL|BROWSERBASE|QSTASH|SENTRY|CLERK|REDIS|KV_REST)/;
 const GENERIC_SERVICE_SECRET_PATTERN = /^[A-Z][A-Z0-9_]+_(API_KEY|RPC_URL|WSS_URL|DSN)$/;
 const IGNORED_PREFIXES = [
   'npm_',
@@ -279,11 +275,6 @@ async function testAlchemy() {
   });
 }
 
-async function testQuickNode() {
-  return runTest('QuickNode', async () => {
-    await createEthereumClient(requireEnv('QUICKNODE_RPC_URL')).getBlockNumber();
-  });
-}
 
 async function testJina() {
   return runTest('Jina', async () => {
@@ -383,7 +374,6 @@ async function testClerk() {
 async function testAllIntegrations() {
   const results = await Promise.all([
     testAlchemy(),
-    testQuickNode(),
     testJina(),
     testFirecrawl(),
     testBrowserbase(),
