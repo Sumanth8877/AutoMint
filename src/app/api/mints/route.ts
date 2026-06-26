@@ -222,20 +222,53 @@ export async function POST(req: Request) {
     }
 
     const mintState = analysis?.mintState ?? await getMintState(collection.contractAddress, collection.chain);
-    if (mintState.status !== 'LIVE' && mintState.status !== 'ENDED') {
-      const detectedStart = mintState.startTime || collection.mintStart || undefined;
-      const scheduledTime = detectedStart && detectedStart.getTime() > Date.now() ? detectedStart : undefined;
-      const scheduledTask = await scheduleMint({ taskId: preparedTask.id, userId: authResult.userId, scheduledTime });
+
+    // Bug #7 Fixed: Explicitly reject ENDED mints before the LIVE/scheduling branches.
+    // Previously ENDED fell through both checks and returned 201 with a pending task
+    // that had no QStash message and would never execute.
+    if (mintState.status === 'ENDED') {
+      await removeMintTask(preparedTask.id, authResult.userId).catch(() => {});
+      return NextResponse.json(
+        { error: 'This mint has already ended and is no longer mintable.' },
+        { status: 422 },
+      );
+    }
+
+    if (mintState.status !== 'LIVE') {
+      // UPCOMING — find the best start time available.
+      // Priority: on-chain mintState → collection DB → tiered discoverMintRequirements
+      let detectedStart: Date | undefined =
+        mintState.startTime ??
+        (collection.mintStart ? new Date(collection.mintStart) : undefined);
+
+      if (!detectedStart && mintUrl) {
+        // On-chain RPC + analyzer both missed the startTime — run tiered discovery
+        console.log('[mints/route] startTime missing — running discoverMintRequirements for timing');
+        const discovered = await discoverMintRequirements(mintUrl, {
+          contractAddress: collection.contractAddress,
+          chain: collection.chain,
+        });
+        if (discovered.mintStartTime) {
+          detectedStart = discovered.mintStartTime;
+          console.log('[mints/route] Discovery found startTime:', detectedStart.toISOString());
+        }
+      }
+
+      const scheduledTime =
+        detectedStart && detectedStart.getTime() > Date.now() ? detectedStart : undefined;
+
+      const scheduledTask = await scheduleMint({
+        taskId: preparedTask.id,
+        userId: authResult.userId,
+        scheduledTime,
+      });
 
       return NextResponse.json({ task: scheduledTask, collection }, { status: 201 });
     }
 
-    if (mintState.status === 'LIVE') {
-      const readyTask = await updateMintTaskStatus(preparedTask.id, authResult.userId, 'ready');
-      return NextResponse.json({ task: readyTask, collection }, { status: 201 });
-    }
-
-    return NextResponse.json({ task: preparedTask, collection }, { status: 201 });
+    // LIVE — mark ready for immediate execution.
+    const readyTask = await updateMintTaskStatus(preparedTask.id, authResult.userId, 'ready');
+    return NextResponse.json({ task: readyTask, collection }, { status: 201 });
   } catch (error) {
     const message = getErrorMessage(error, 'Failed to create mint task');
     if (error instanceof AnalyzerResolutionError) {
