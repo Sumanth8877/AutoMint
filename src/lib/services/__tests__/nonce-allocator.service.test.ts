@@ -20,10 +20,12 @@
 
 // ── Module mocks ──────────────────────────────────────────────────────
 
-jest.mock('@/lib/observability/sentry', () => ({
-  captureException: jest.fn().mockResolvedValue(undefined),
-  captureMessage: jest.fn().mockResolvedValue(undefined),
-  addBreadcrumb: jest.fn(),
+import { vi, type MockedFunction } from 'vitest';
+
+vi.mock('@/lib/observability/sentry', () => ({
+  captureException: vi.fn().mockResolvedValue(undefined),
+  captureMessage: vi.fn().mockResolvedValue(undefined),
+  addBreadcrumb: vi.fn(),
 }));
 
 // In-memory Redis mock
@@ -34,34 +36,34 @@ const createMockRedis = () => {
   return {
     store,
     sortedSets,
-    get: jest.fn(async (key: string) => store.get(key) ?? null),
-    set: jest.fn(async (key: string, value: string, opts?: { nx?: boolean; px?: number }) => {
+    get: vi.fn(async (key: string) => store.get(key) ?? null),
+    set: vi.fn(async (key: string, value: string, opts?: { nx?: boolean; px?: number }) => {
       if (opts?.nx && store.has(key)) return null;
       store.set(key, value);
       return 'OK';
     }),
-    del: jest.fn(async (key: string) => {
+    del: vi.fn(async (key: string) => {
       store.delete(key);
       return 1;
     }),
-    eval: jest.fn(async () => {
+    eval: vi.fn(async () => {
       // Lua CAS delete: if value matches, delete and return 1
       // For the lock release script
       return 1;
     }),
-    zadd: jest.fn(async (key: string, { score, member }: { score: number; member: string }) => {
+    zadd: vi.fn(async (key: string, { score, member }: { score: number; member: string }) => {
       if (!sortedSets.has(key)) sortedSets.set(key, new Map());
       sortedSets.get(key)!.set(member, score);
       return 1;
     }),
-    zrem: jest.fn(async (key: string, member: string) => {
+    zrem: vi.fn(async (key: string, member: string) => {
       const set = sortedSets.get(key);
       if (!set) return 0;
       const had = set.has(member);
       set.delete(member);
       return had ? 1 : 0;
     }),
-    zrangebyscore: jest.fn(async (key: string, min: number | string, max: number | string) => {
+    zrangebyscore: vi.fn(async (key: string, min: number | string, max: number | string) => {
       const set = sortedSets.get(key);
       if (!set) return [];
       const minN = min === '-inf' ? -Infinity : Number(min);
@@ -72,7 +74,7 @@ const createMockRedis = () => {
       }
       return result;
     }),
-    zremrangebyscore: jest.fn(async (key: string, min: number | string, max: number | string) => {
+    zremrangebyscore: vi.fn(async (key: string, min: number | string, max: number | string) => {
       const set = sortedSets.get(key);
       if (!set) return 0;
       const minN = min === '-inf' ? -Infinity : Number(min);
@@ -92,13 +94,13 @@ const createMockRedis = () => {
 let mockRedis = createMockRedis();
 let mockChainPendingNonce = 0;
 
-jest.mock('@/lib/redis', () => ({
+vi.mock('@/lib/redis', () => ({
   getRedisClient: () => mockRedis,
 }));
 
-jest.mock('@/lib/blockchain/client', () => ({
+vi.mock('@/lib/blockchain/client', () => ({
   getClient: () => ({
-    getTransactionCount: jest.fn(async () => mockChainPendingNonce),
+    getTransactionCount: vi.fn(async () => mockChainPendingNonce),
   }),
 }));
 
@@ -122,7 +124,7 @@ const CHAIN = 'ethereum';
 function resetMocks() {
   mockRedis = createMockRedis();
   mockChainPendingNonce = 0;
-  jest.clearAllMocks();
+  vi.clearAllMocks();
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────
@@ -326,7 +328,7 @@ describe('C-03 Nonce Allocator', () => {
 
       // Simulate lock always held by another worker
       const lockKey = NONCE_KEYS.lock(ADDR, CHAIN);
-      mockRedis.set = jest.fn(async (key: string, _value: string, opts?: { nx?: boolean }) => {
+      mockRedis.set = vi.fn(async (key: string, _value: string, opts?: { nx?: boolean }) => {
         if (key === lockKey && opts?.nx) return null; // Always fail lock
         mockRedis.store.set(key, _value);
         return 'OK';
@@ -341,7 +343,7 @@ describe('C-03 Nonce Allocator', () => {
     it('reports lock exhaustion via captureMessage', async () => {
       mockChainPendingNonce = 0;
       const lockKey = NONCE_KEYS.lock(ADDR, CHAIN);
-      mockRedis.set = jest.fn(async (key: string, _value: string, opts?: { nx?: boolean }) => {
+      mockRedis.set = vi.fn(async (key: string, _value: string, opts?: { nx?: boolean }) => {
         if (key === lockKey && opts?.nx) return null;
         mockRedis.store.set(key, _value);
         return 'OK';
@@ -470,7 +472,7 @@ describe('C-03 Nonce Allocator', () => {
     it('fallback result also has a usable nonce (RPC nonce)', async () => {
       mockChainPendingNonce = 99;
       const lockKey = NONCE_KEYS.lock(ADDR, CHAIN);
-      mockRedis.set = jest.fn(async (key: string, _value: string, opts?: { nx?: boolean }) => {
+      mockRedis.set = vi.fn(async (key: string, _value: string, opts?: { nx?: boolean }) => {
         if (key === lockKey && opts?.nx) return null;
         mockRedis.store.set(key, _value);
         return 'OK';

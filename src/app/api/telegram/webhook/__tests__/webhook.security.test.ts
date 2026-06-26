@@ -18,24 +18,26 @@
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
-jest.mock('@/lib/services/telegram.service', () => ({
-  isTelegramEnabled: jest.fn(),
-  handleTelegramUpdate: jest.fn(),
+import { vi, type MockedFunction } from 'vitest';
+
+vi.mock('@/lib/services/telegram.service', () => ({
+  isTelegramEnabled: vi.fn(),
+  handleTelegramUpdate: vi.fn(),
 }));
 
-jest.mock('@/lib/api/errors', () => ({
-  parseJsonBody: jest.fn(),
+vi.mock('@/lib/api/errors', () => ({
+  parseJsonBody: vi.fn(),
 }));
 
-jest.mock('@/lib/observability/sentry', () => ({
-  captureException: jest.fn().mockResolvedValue(undefined),
+vi.mock('@/lib/observability/sentry', () => ({
+  captureException: vi.fn().mockResolvedValue(undefined),
 }));
 
-jest.mock('crypto', () => {
-  const actual = jest.requireActual<typeof import('crypto')>('crypto');
+vi.mock('crypto', () => {
+  const actual = require('crypto') as typeof import('crypto');
   return {
     ...actual,
-    timingSafeEqual: jest.fn(actual.timingSafeEqual),
+    timingSafeEqual: vi.fn(actual.timingSafeEqual),
   };
 });
 
@@ -43,10 +45,10 @@ import { isTelegramEnabled, handleTelegramUpdate } from '@/lib/services/telegram
 import { parseJsonBody } from '@/lib/api/errors';
 import crypto from 'crypto';
 
-const mockIsTelegramEnabled = isTelegramEnabled as jest.MockedFunction<typeof isTelegramEnabled>;
-const mockHandleTelegramUpdate = handleTelegramUpdate as jest.MockedFunction<typeof handleTelegramUpdate>;
-const mockParseJsonBody = parseJsonBody as jest.MockedFunction<typeof parseJsonBody>;
-const mockTimingSafeEqual = crypto.timingSafeEqual as jest.MockedFunction<typeof crypto.timingSafeEqual>;
+const mockIsTelegramEnabled = isTelegramEnabled as MockedFunction<typeof isTelegramEnabled>;
+const mockHandleTelegramUpdate = handleTelegramUpdate as MockedFunction<typeof handleTelegramUpdate>;
+const mockParseJsonBody = parseJsonBody as MockedFunction<typeof parseJsonBody>;
+const mockTimingSafeEqual = crypto.timingSafeEqual as MockedFunction<typeof crypto.timingSafeEqual>;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -68,7 +70,7 @@ describe('Security Finding C-2 — Telegram webhook authentication', () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env = { ...originalEnv };
     // Default: Telegram enabled, secret present, handleTelegramUpdate is no-op
     mockIsTelegramEnabled.mockReturnValue(true);
@@ -121,14 +123,14 @@ describe('Security Finding C-2 — Telegram webhook authentication', () => {
       // Re-import without the startup-throw guard by patching isTelegramEnabled to false
       // then back to true after import so the module-load guard doesn't throw.
       mockIsTelegramEnabled.mockReturnValueOnce(false);  // for startup check
-      jest.resetModules();
+      vi.resetModules();
       // Minimal re-mock
-      jest.mock('@/lib/services/telegram.service', () => ({
-        isTelegramEnabled: jest.fn().mockReturnValue(true), // now enabled for the actual POST
-        handleTelegramUpdate: jest.fn(),
+      vi.mock('@/lib/services/telegram.service', () => ({
+        isTelegramEnabled: vi.fn().mockReturnValue(true), // now enabled for the actual POST
+        handleTelegramUpdate: vi.fn(),
       }));
-      jest.mock('@/lib/api/errors', () => ({ parseJsonBody: jest.fn() }));
-      jest.mock('@/lib/observability/sentry', () => ({ captureException: jest.fn() }));
+      vi.mock('@/lib/api/errors', () => ({ parseJsonBody: vi.fn() }));
+      vi.mock('@/lib/observability/sentry', () => ({ captureException: vi.fn() }));
 
       const { POST } = await import('../route');
       const res = await POST(makeRequest(VALID_SECRET));
@@ -251,7 +253,7 @@ describe('Security Finding C-2 — Telegram webhook authentication', () => {
       ];
 
       for (const req of cases) {
-        jest.clearAllMocks();
+        vi.clearAllMocks();
         mockIsTelegramEnabled.mockReturnValue(true);
         const res = await POST(req);
         expect(res.status).toBe(401);

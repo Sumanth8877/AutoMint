@@ -53,6 +53,12 @@ const REQUIRED_VARS: EnvSpec[] = [
   { name: 'QSTASH_CURRENT_SIGNING_KEY' },
   { name: 'QSTASH_NEXT_SIGNING_KEY' },
 
+  // ── Mint execution behaviour (optional overrides)
+  // L-10 Fix: SKIP_MINT_SIMULATION is referenced in src/lib/blockchain/mint.ts
+  // but was missing from this registry, making it invisible to anyone reading
+  // the env var documentation. It is optional (defaults to false / not set),
+  // so it goes in OPTIONAL_VARS below rather than REQUIRED_VARS.
+
   // ── GoPlus Security (optional - for contract security scanning)
   // { name: 'GOPLUS_API_KEY' }, // Optional, not required
 

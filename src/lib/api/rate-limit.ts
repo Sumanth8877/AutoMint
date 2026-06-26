@@ -117,15 +117,12 @@ export async function enforceRateLimit(
 
 /**
  * Common rate-limit presets keyed by endpoint sensitivity.
- * Tune these to your traffic profile.
+ * Only presets that are actively used are kept here — do not add speculative
+ * ones that are not yet wired into a route handler.
  */
 export const RATE_LIMITS = {
-  /** Sensitive write/mutation endpoints (wallet import, mint creation). */
-  sensitive: { limit: 10, windowSeconds: 60 },
-  /** Expensive endpoints that fan out to external APIs / RPCs. */
+  /** Expensive endpoints that fan out to external APIs / RPCs (e.g. /api/analyzer). */
   expensive: { limit: 20, windowSeconds: 60 },
-  /** Token / link generation that could be abused for enumeration. */
+  /** Token / link generation endpoints (e.g. /api/telegram/link-token). */
   tokenGeneration: { limit: 5, windowSeconds: 60 },
-  /** General authenticated read endpoints. */
-  standard: { limit: 60, windowSeconds: 60 },
 } as const;

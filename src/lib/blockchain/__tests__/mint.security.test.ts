@@ -31,30 +31,32 @@ import { executeMint, type MintParams } from '../mint';
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
-jest.mock('@/lib/services/wallet.service', () => ({
-  getDecryptedPrivateKey: jest.fn(),
+import { vi, type MockedFunction } from 'vitest';
+
+vi.mock('@/lib/services/wallet.service', () => ({
+  getDecryptedPrivateKey: vi.fn(),
 }));
 
-jest.mock('@/lib/services/rpc-manager.service', () => ({
-  getWalletClient: jest.fn(),
+vi.mock('@/lib/services/rpc-manager.service', () => ({
+  getWalletClient: vi.fn(),
 }));
 
-jest.mock('../client', () => ({
-  getClient: jest.fn(),
+vi.mock('../client', () => ({
+  getClient: vi.fn(),
 }));
 
-jest.mock('@/lib/observability/sentry', () => ({
-  captureException: jest.fn().mockResolvedValue(undefined),
-  captureMessage: jest.fn().mockResolvedValue(undefined),
+vi.mock('@/lib/observability/sentry', () => ({
+  captureException: vi.fn().mockResolvedValue(undefined),
+  captureMessage: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { getDecryptedPrivateKey } from '@/lib/services/wallet.service';
 import { getWalletClient } from '@/lib/services/rpc-manager.service';
 import { getClient } from '../client';
 
-const mockGetDecryptedPrivateKey = getDecryptedPrivateKey as jest.MockedFunction<typeof getDecryptedPrivateKey>;
-const mockGetWalletClient = getWalletClient as jest.MockedFunction<typeof getWalletClient>;
-const mockGetClient = getClient as jest.MockedFunction<typeof getClient>;
+const mockGetDecryptedPrivateKey = getDecryptedPrivateKey as MockedFunction<typeof getDecryptedPrivateKey>;
+const mockGetWalletClient = getWalletClient as MockedFunction<typeof getWalletClient>;
+const mockGetClient = getClient as MockedFunction<typeof getClient>;
 
 // ── Test fixtures ─────────────────────────────────────────────────────────────
 
@@ -80,20 +82,20 @@ function setupLiveMode() {
 
 function setupPublicClientMocks(status: 'success' | 'reverted' = 'success') {
   mockGetClient.mockReturnValue({
-    call: jest.fn().mockResolvedValue({}),
-    estimateGas: jest.fn().mockResolvedValue(BigInt(21000)),
-    waitForTransactionReceipt: jest.fn().mockResolvedValue({
+    call: vi.fn().mockResolvedValue({}),
+    estimateGas: vi.fn().mockResolvedValue(BigInt(21000)),
+    waitForTransactionReceipt: vi.fn().mockResolvedValue({
       status,
       gasUsed: BigInt(21000),
       blockNumber: BigInt(100),
     }),
-    readContract: jest.fn().mockResolvedValue(true),
+    readContract: vi.fn().mockResolvedValue(true),
   } as unknown as Parameters<typeof mockGetClient.mockReturnValue>[0]);
 }
 
 function setupWalletClientMock(txHash: `0x${string}` = TX_HASH) {
   mockGetWalletClient.mockReturnValue({
-    sendTransaction: jest.fn().mockResolvedValue(txHash),
+    sendTransaction: vi.fn().mockResolvedValue(txHash),
   } as unknown as Parameters<typeof mockGetWalletClient.mockReturnValue>[0]);
 }
 
@@ -103,7 +105,7 @@ describe('Security Finding C-1 — executeMint()', () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // Reset environment before every test
     process.env = { ...originalEnv };
     delete process.env.PRIVATE_KEY;
