@@ -15,7 +15,7 @@ const groups: { title: string; icon: React.ElementType; items: { label: string; 
   {
     title: 'RPC Providers',
     icon: Radio,
-    items: [{ label: 'Provider Settings', href: '/settings/rpc-providers', icon: Radio, description: 'Alchemy, QuickNode and failover' }],
+    items: [{ label: 'Provider Settings', href: '/settings/rpc-providers', icon: Radio, description: 'Alchemy, Infura, dRPC, Chainstack and failover' }],
   },
   {
     title: 'Execution',
