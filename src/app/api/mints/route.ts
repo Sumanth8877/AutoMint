@@ -11,6 +11,7 @@ import { getEffectiveExecutionDefaults } from '@/lib/services/execution-settings
 import { resolveMintIntent, type MintIntent } from '@/lib/resolve-mint-intent';
 import { AnalyzerResolutionError, normalizeAnalyzerInput, runAnalyzer, type AnalyzerResult } from '@/lib/services/analyzer.service';
 import { analyzeMintRisk } from '@/lib/services/risk.service';
+import { discoverMintRequirements } from '@/lib/services/mint-discovery.service';
 
 // Cache GET requests for 4 hours
 export const revalidate = 14400;
@@ -76,12 +77,49 @@ async function upsertCollectionFromMintIntent(userId: string, intent: MintIntent
   return created;
 }
 
-async function applyAnalyzerResultToTask(taskId: string, analysis: AnalyzerResult) {
+async function applyAnalyzerResultToTask(
+  taskId: string,
+  analysis: AnalyzerResult,
+  mintUrl: string,
+) {
+  // Build what we already know from the analyzer
+  const knownFromAnalyzer: Parameters<typeof discoverMintRequirements>[1] = {
+    contractAddress: analysis.intent?.contractAddress,
+    chain: analysis.intent?.chain,
+    collectionName: analysis.intent?.collectionName,
+    mintFunction: analysis.mintFunction?.functionName ?? analysis.requirements?.mintFunction,
+    mintPrice: analysis.requirements?.mintPrice,
+    mintStartTime: analysis.requirements?.mintStartTime ?? analysis.mintState?.startTime ?? undefined,
+    mintEndTime: analysis.requirements?.mintEndTime ?? analysis.mintState?.endTime ?? undefined,
+  };
+
+  // Only escalate to Jina/Firecrawl/Browserbase if the analyzer left gaps
+  const hasCriticalGaps =
+    !knownFromAnalyzer.mintFunction ||
+    !knownFromAnalyzer.mintPrice ||
+    (!knownFromAnalyzer.mintStartTime && analysis.mintState?.status !== 'LIVE');
+
+  let finalRequirements = knownFromAnalyzer;
+
+  if (hasCriticalGaps && mintUrl) {
+    console.log('[mints/route] Analyzer left gaps — running discoverMintRequirements for:', mintUrl);
+    const discovered = await discoverMintRequirements(mintUrl, knownFromAnalyzer);
+    finalRequirements = {
+      contractAddress: knownFromAnalyzer.contractAddress ?? discovered.contractAddress,
+      chain: knownFromAnalyzer.chain ?? discovered.chain,
+      collectionName: knownFromAnalyzer.collectionName ?? discovered.collectionName,
+      mintFunction: knownFromAnalyzer.mintFunction ?? discovered.mintFunction,
+      mintPrice: knownFromAnalyzer.mintPrice ?? discovered.mintPrice,
+      mintStartTime: knownFromAnalyzer.mintStartTime ?? discovered.mintStartTime,
+      mintEndTime: knownFromAnalyzer.mintEndTime ?? discovered.mintEndTime,
+    };
+  }
+
   const [task] = await getDb()
     .update(mintTasks)
     .set({
-      mintFunction: analysis.mintFunction.functionName || analysis.requirements.mintFunction,
-      mintPrice: analysis.requirements.mintPrice,
+      mintFunction: finalRequirements.mintFunction ?? 'mint',
+      mintPrice: finalRequirements.mintPrice ?? '0',
       updatedAt: new Date(),
     })
     .where(eq(mintTasks.id, taskId))
@@ -166,7 +204,7 @@ export async function POST(req: Request) {
       riskThreshold: body.riskThreshold ?? defaults.riskThreshold,
     });
 
-    const analyzedTask = analysis ? await applyAnalyzerResultToTask(task.id, analysis) : null;
+    const analyzedTask = analysis ? await applyAnalyzerResultToTask(task.id, analysis, mintUrl ?? '') : null;
     const preparedTask = analyzedTask ?? task;
 
     const [collection] = await getDb()
