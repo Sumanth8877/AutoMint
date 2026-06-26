@@ -11,15 +11,13 @@ import { getDb } from '@/lib/db';
 import { collections, mintTasks, wallets } from '@/drizzle/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { logger } from '@/lib/logger';
+import { SUPPORTED_CHAINS, type ChainKey } from '@/lib/blockchain/chains';
 
-const SUPPORTED_CHAINS = ['ethereum', 'base', 'polygon'] as const;
-type SupportedChain = (typeof SUPPORTED_CHAINS)[number];
-
-function asSupportedChain(chain: string): SupportedChain {
-  if (!SUPPORTED_CHAINS.includes(chain as SupportedChain)) {
-    throw new Error(`Unsupported chain. Supported: ${SUPPORTED_CHAINS.join(', ')}`);
+function asSupportedChain(chain: string): ChainKey {
+  if (!(chain in SUPPORTED_CHAINS)) {
+    throw new Error(`Unsupported chain. Supported: ${Object.keys(SUPPORTED_CHAINS).join(', ')}`);
   }
-  return chain as SupportedChain;
+  return chain as ChainKey;
 }
 
 async function resolveMintUrl(url: string): Promise<MintIntent & { mintPhases: MintPhase[]; mintTime?: Date; resolvedStartTime?: Date | null }> {
@@ -236,10 +234,10 @@ function extractCollectionSlug(url: string): string | null {
   return urlParts[urlParts.length - 1] || null;
 }
 
-async function getBestRpcUrl(chain: SupportedChain): Promise<string> {
+async function getBestRpcUrl(chain: ChainKey): Promise<string> {
   // Implement auto RPC routing logic
   // This should select the best RPC based on latency, health, etc.
-  const rpcUrls: Record<SupportedChain, string[]> = {
+  const rpcUrls: Record<ChainKey, string[]> = {
     ethereum: [
       process.env.ETHEREUM_RPC_URL || 'https://eth.llamarpc.com',
       'https://rpc.ankr.com/eth',
