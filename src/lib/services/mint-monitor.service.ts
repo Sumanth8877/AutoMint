@@ -16,7 +16,7 @@ import { getAllSettings } from '@/lib/services/integration-settings.service';
  *
  * After timeout, the caller reschedules via QStash and we watch again.
  */
-const WATCH_TIMEOUT_MS = 25_000;
+const WATCH_TIMEOUT_MS = 8_000;  // Hobby plan: 10s fn limit → 8s watch window
 
 export type MonitorResult =
   | 'live'     // mint went live — execute immediately

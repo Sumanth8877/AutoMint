@@ -17,10 +17,15 @@ export const runtime = 'nodejs';
 // Vercel deployment checks or alert on-call. A thrown error at startup
 // causes the deployment health check to fail immediately, making the
 // misconfiguration impossible to miss.
+// NOTE: We use console.error here deliberately — NOT throw.
+// A module-level throw in a Next.js API route fires during cold-start,
+// causing every request to that route to return 500 and breaking Vercel
+// deployment health checks. The isAuthorized() guard below already rejects
+// all requests when the secret is missing, so the route is still secure.
 if (isTelegramEnabled() && !process.env.TELEGRAM_WEBHOOK_SECRET) {
-  throw new Error(
+  console.error(
     '[AutoMint] TELEGRAM_WEBHOOK_SECRET is required when TELEGRAM_ENABLED=true. ' +
-    'Generate one with: openssl rand -hex 32',
+    'All webhook requests will be rejected until this is configured.',
   );
 }
 
