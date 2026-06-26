@@ -370,6 +370,10 @@ export async function executeMint(
         error: `SimulationFailed: ${label}${simulation.revertReason ? ` — ${simulation.revertReason}` : ''}`,
       };
     }
+
+    // C-04: hoist hash before the broadcast try so the catch block can always return it.
+    let hash: Hex | undefined;
+
     try {
       // Speed fix (multi-RPC broadcast racing):
       // 1. Sign the transaction locally — pure crypto, no network call
