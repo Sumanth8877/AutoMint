@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getErrorMessage, parseJsonBody } from '@/lib/api/errors';
 import { resolveMintIntent, type MintIntent } from '@/lib/resolve-mint-intent';
+import { discoverMintRequirements } from '@/lib/services/mint-discovery.service';
 import { runAnalyzer } from '@/lib/services/analyzer.service';
 import { addMintTask, executeMintTask } from '@/lib/services/mint.service';
 import { getEffectiveExecutionDefaults } from '@/lib/services/execution-settings.service';
@@ -86,7 +87,7 @@ async function fetchWithFirecrawl(url: string): Promise<MintIntent & { mintPhase
 
 async function fetchWithJina(url: string): Promise<MintIntent & { mintPhases: MintPhase[]; mintTime?: Date }> {
   // Implement Jina AI reader API
-  const response = await fetch(`https://r.jina.ai/http://${url}`, {
+  const response = await fetch(`https://r.jina.ai/${url}`, { // Bug #4 Fixed: full URL, no http:// prefix
     method: 'GET',
     headers: {
       'Authorization': `Bearer ${process.env.JINA_API_KEY}`,
@@ -395,7 +396,12 @@ export async function POST(request: Request) {
     }
 
     // Check mint status first before checking balance
-    const mintStartTime = analysis?.requirements.mintStartTime || analysis?.mintState.startTime;
+    // Use tiered discovery startTime (on-chain → Jina/Firecrawl → Browserbase)
+    const mintStartTime =
+      analysis?.requirements?.mintStartTime ??
+      analysis?.mintState?.startTime ??
+      resolved.resolvedStartTime ??
+      null;
     const mintStatus = analysis?.mintState.status?.toLowerCase() || '';
     const isMintLive = mintStartTime ? new Date(mintStartTime) <= new Date() : 
                         mintStatus === 'live' || mintStatus === 'active' || mintStatus === 'minting';

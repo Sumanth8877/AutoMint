@@ -20,7 +20,7 @@ import {
 import { captureException } from '@/lib/observability/sentry';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+// maxDuration removed — using Vercel hobby plan default (10s)
 
 export async function GET(request: Request) {
   const auth = await requireApiUser();

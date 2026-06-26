@@ -34,7 +34,7 @@ import { invalidateCache } from '@/lib/redis';
 
 const execAsync = promisify(exec);
 export const dynamic = 'force-dynamic';
-export const maxDuration = 120;
+// maxDuration removed — using Vercel hobby plan default (10s)
 
 interface UpgradeBranchBody {
   packageNames?: string[];

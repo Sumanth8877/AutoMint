@@ -36,7 +36,7 @@ import { parseJsonBody } from '@/lib/api/errors';
 import { invalidateCache } from '@/lib/redis';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 120;
+// maxDuration removed — using Vercel hobby plan default (10s)
 
 interface InstallBody {
   packageNames?: string[];

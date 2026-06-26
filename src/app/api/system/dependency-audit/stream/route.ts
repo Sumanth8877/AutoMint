@@ -26,7 +26,7 @@ import { captureException } from '@/lib/observability/sentry';
 import { getCache, setCache } from '@/lib/redis';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 120;
+// maxDuration removed — using Vercel hobby plan default (10s)
 
 const REPORT_CACHE_TTL = 3_600;
 const reportCacheKey = (includeDev: boolean) => `dep-report:${includeDev ? 'all' : 'prod'}`;
