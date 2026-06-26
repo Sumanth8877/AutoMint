@@ -303,7 +303,14 @@ export const mintTasks = pgTable('mint_tasks', {
   confirmedAt: timestamp('confirmed_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  // M-09 Fix: composite index mirrors migration 0018_performance_indexes.sql.
+  // Every dashboard render and QStash status check queries by (userId, status).
+  // Without this, PostgreSQL falls back to a full table scan as task history grows.
+  // Declaring it here keeps the schema as the single source of truth so
+  // drizzle-kit push and migrations produce identical results.
+  userStatusIdx: index('idx_mint_tasks_user_status').on(table.userId, table.status),
+}));
 
 // ─── Mint History ────────────────────────────────────
 export const mintHistory = pgTable('mint_history', {

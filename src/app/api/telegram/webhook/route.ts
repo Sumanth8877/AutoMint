@@ -12,8 +12,16 @@ export const runtime = 'nodejs';
 // TELEGRAM_WEBHOOK_SECRET must be set whenever Telegram is enabled.
 // Fail at module load time so the misconfiguration surfaces in deployment logs
 // before any request is processed, rather than silently allowing all requests.
+// M-10 Fix: throw at module load time instead of just logging.
+// console.error() only appears in server logs — it does not surface to
+// Vercel deployment checks or alert on-call. A thrown error at startup
+// causes the deployment health check to fail immediately, making the
+// misconfiguration impossible to miss.
 if (isTelegramEnabled() && !process.env.TELEGRAM_WEBHOOK_SECRET) {
-  console.error('[C-2] TELEGRAM_WEBHOOK_SECRET is required when TELEGRAM_ENABLED=true');
+  throw new Error(
+    '[AutoMint] TELEGRAM_WEBHOOK_SECRET is required when TELEGRAM_ENABLED=true. ' +
+    'Generate one with: openssl rand -hex 32',
+  );
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────

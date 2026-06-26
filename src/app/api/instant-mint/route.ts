@@ -12,6 +12,7 @@ import { collections, mintTasks, wallets } from '@/drizzle/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { logger } from '@/lib/logger';
 import { SUPPORTED_CHAINS, type ChainKey } from '@/lib/blockchain/chains';
+import { estimateGas } from '@/lib/blockchain/gas';
 
 function asSupportedChain(chain: string): ChainKey {
   if (!(chain in SUPPORTED_CHAINS)) {
@@ -352,21 +353,19 @@ export async function POST(request: Request) {
         .map(t => t.phase || 'public')
     );
 
-    // Get best RPC URL
-    const rpcUrl = await getBestRpcUrl(supportedChain);
+    // M-04/M-05 Fix: replaced dead getBestRpcUrl+estimateGas stubs with the
+    // real estimateGas() from gas.ts, which uses EIP-1559 (baseFee*2 + tip)
+    // instead of the legacy eth_gasPrice the stubs used.
+    const gasEstimate = await estimateGas(supportedChain);
 
-    // Estimate gas
-    const gasEstimate = await estimateGas(rpcUrl);
-
-    // Run analyzer for risk assessment with minimal depth (no social discovery)
-    const settings = await getEffectiveExecutionDefaults(authResult.userId);
-    settings.autoDetectSocials = false; // Disable social discovery for mint flow
-    const analysis = await runAnalyzer({ userId: authResult.userId, input: url, settings });
+    // M-06 Fix: fetch execution defaults once and pass to analyzer.
+    // Previously getEffectiveExecutionDefaults was called twice (at chars 11187
+    // and 11585), and the first result was mutated before being used.
+    const defaults = await getEffectiveExecutionDefaults(authResult.userId);
+    const analyzerSettings = { ...defaults, autoDetectSocials: false };
+    const analysis = await runAnalyzer({ userId: authResult.userId, input: url, settings: analyzerSettings });
     // Skip risk assessment for instant mint - will be done during task execution
     const riskAssessment = null;
-
-    // Get execution defaults
-    const defaults = await getEffectiveExecutionDefaults(authResult.userId);
 
     // Check if user has a default wallet
     if (!defaults.defaultWalletId) {

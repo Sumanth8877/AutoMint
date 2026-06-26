@@ -288,12 +288,20 @@ export async function cancelScheduledMint(taskId: string, userId?: string) {
   return updated;
 }
 
-async function loadTaskWithWallet(taskId: string) {
+// M-03 Fix: loadTaskWithWallet now accepts an optional userId.
+// When provided, it is added to the WHERE clause so a replayed QStash message
+// carrying a foreign taskId cannot execute another user's mint.
+// QStash payloads are HMAC-signed, but defence-in-depth still applies.
+async function loadTaskWithWallet(taskId: string, userId?: string) {
+  const whereClause = userId
+    ? and(eq(mintTasks.id, taskId), eq(mintTasks.userId, userId))
+    : eq(mintTasks.id, taskId);
+
   const [row] = await getDb()
     .select({ task: mintTasks, wallet: wallets })
     .from(mintTasks)
     .leftJoin(wallets, eq(mintTasks.walletId, wallets.id))
-    .where(eq(mintTasks.id, taskId))
+    .where(whereClause)
     .limit(1);
 
   return row ?? null;
