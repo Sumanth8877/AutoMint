@@ -1,3 +1,27 @@
+/**
+ * @file task.service.ts
+ *
+ * ⚠️  ARCHITECTURAL NOTE — NOT YET INTEGRATED INTO MINT FLOW
+ * -----------------------------------------------------------
+ * This service provides a full task queue (createTask, startTask, completeTask,
+ * failTask, retryDeadLetterTask, getDeadLetterTasks, etc.) with a validated
+ * state machine (VALID_TRANSITIONS) and idempotency keys.
+ *
+ * CURRENT STATUS: Scaffolded but NOT wired into the live mint execution path.
+ * The mint orchestrator (mint-orchestrator.service.ts), QStash worker
+ * (api/webhooks/qstash/route.ts), and recovery service (mint-recovery.service.ts)
+ * all bypass this service and use direct DB queries instead.
+ *
+ * TO INTEGRATE:
+ *   1. Replace direct mintTasks DB writes in mint.service.ts with createTask()
+ *   2. Replace status updates in qstash/route.ts with startTask() / completeTask() / failTask()
+ *   3. Replace recovery polling in mint-recovery.service.ts with getDeadLetterTasks()
+ *   4. Replace health-check task count queries with getTaskCounts()
+ *
+ * Until integrated, this file is imported only by the health-check route
+ * (api/admin/system/health) and tests. Do not delete — wire it up instead.
+ */
+
 import { getDb } from '@/lib/db';
 import { tasks } from '@/drizzle/schema/tasks';
 import { sql, eq, and, desc, asc } from 'drizzle-orm';
