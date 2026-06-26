@@ -245,32 +245,55 @@ export default function WalletsClient() {
     },
   });
 
-  // Set default wallet mutation
+  // Set default wallet mutation — optimistic: flip isDefault immediately, rollback on error
   const setDefaultMutation = useMutation({
     mutationFn: async (id: string) => {
       return apiRequest<{ wallet: WalletRecord }>(`/api/wallets/${id}/default`, { method: 'PATCH' });
     },
-    onSuccess: () => {
-      refetch();
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['wallets'] });
+      const previous = queryClient.getQueryData<{ wallets: WalletRecord[] }>(['wallets']);
+      queryClient.setQueryData<{ wallets: WalletRecord[] }>(['wallets'], (old) => ({
+        wallets: (old?.wallets ?? []).map((w) => ({ ...w, isDefault: w.id === id })),
+      }));
+      return { previous };
+    },
+    onError: (_err, _id, context) => {
+      if (context?.previous) queryClient.setQueryData(['wallets'], context.previous);
+      setError('Failed to update default wallet.');
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['wallets'] });
       setSuccessMsg('Default wallet updated');
     },
   });
 
-  // Delete wallet mutation
+  // Delete wallet mutation — optimistic: remove from list immediately, rollback on error
   const deleteWalletMutation = useMutation({
     mutationFn: async (id: string) => {
       return apiRequest<{ success: true }>(`/api/wallets/${id}`, { method: 'DELETE' });
     },
-    onSuccess: (_, id) => {
-      refetch();
-      queryClient.invalidateQueries({ queryKey: ['wallets'] });
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['wallets'] });
+      const previous = queryClient.getQueryData<{ wallets: WalletRecord[] }>(['wallets']);
+      queryClient.setQueryData<{ wallets: WalletRecord[] }>(['wallets'], (old) => ({
+        wallets: (old?.wallets ?? []).filter((w) => w.id !== id),
+      }));
       setBalances((current) => {
         const next = { ...current };
         delete next[id];
         return next;
       });
+      return { previous };
+    },
+    onError: (_err, _id, context) => {
+      if (context?.previous) queryClient.setQueryData(['wallets'], context.previous);
+      setError('Failed to remove wallet. It has been restored.');
+    },
+    onSettled: (_, _err, id) => {
+      queryClient.invalidateQueries({ queryKey: ['wallets'] });
       setDeleteWallet(null);
+      setBusyId(null);
       setSuccessMsg('Wallet removed');
     },
   });
