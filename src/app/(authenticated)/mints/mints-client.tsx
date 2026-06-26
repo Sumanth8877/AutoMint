@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useReducer } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { CalendarClock, MoreHorizontal, Play, Plus, RotateCcw, ShieldCheck, Trash2, XCircle, Zap } from 'lucide-react';
@@ -56,6 +56,106 @@ type MintActionResponse = {
   };
 };
 
+// ---------------------------------------------------------------------------
+// Reducer — replaces 10 individual useState calls.
+// Grouping related state here makes impossible UI states explicit:
+//   e.g. saving=true and analyzing=true simultaneously is now impossible
+//   because both are set via dispatched actions, not ad-hoc setters.
+// ---------------------------------------------------------------------------
+
+type MintsForm = { walletId: string; mintUrl: string; scheduleTime: string };
+
+type MintsState = {
+  /** True while the create-mint POST is in-flight */
+  saving: boolean;
+  /** True while the analyze POST is in-flight */
+  analyzing: boolean;
+  /** ID of the task currently being started/cancelled, or null */
+  updatingId: string | null;
+  /** ID of the task currently being deleted, or null */
+  deletingId: string | null;
+  /** Whether the New Mint modal is open */
+  modalOpen: boolean;
+  /** Whether the Queue Settings modal is open */
+  queueOpen: boolean;
+  /** Top-level error banner (fetch/mutation failures) */
+  error: string | null;
+  /** Inline form error shown inside the modal */
+  formError: string | null;
+  /** Controlled form values */
+  form: MintsForm;
+  /** The URL that was last successfully analyzed (used to guard submitMint) */
+  analyzedUrl: string | null;
+};
+
+type MintsAction =
+  | { type: 'START_SAVING' }
+  | { type: 'STOP_SAVING' }
+  | { type: 'START_ANALYZING' }
+  | { type: 'STOP_ANALYZING' }
+  | { type: 'SET_UPDATING_ID'; id: string | null }
+  | { type: 'SET_DELETING_ID'; id: string | null }
+  | { type: 'OPEN_MODAL' }
+  | { type: 'CLOSE_MODAL' }
+  | { type: 'OPEN_QUEUE' }
+  | { type: 'CLOSE_QUEUE' }
+  | { type: 'SET_ERROR'; message: string | null }
+  | { type: 'SET_FORM_ERROR'; message: string | null }
+  | { type: 'PATCH_FORM'; patch: Partial<MintsForm> }
+  | { type: 'SET_ANALYZED_URL'; url: string | null }
+  | { type: 'RESET_FORM' };
+
+const initialState: MintsState = {
+  saving: false,
+  analyzing: false,
+  updatingId: null,
+  deletingId: null,
+  modalOpen: false,
+  queueOpen: false,
+  error: null,
+  formError: null,
+  form: { walletId: '', mintUrl: '', scheduleTime: '' },
+  analyzedUrl: null,
+};
+
+function mintsReducer(state: MintsState, action: MintsAction): MintsState {
+  switch (action.type) {
+    case 'START_SAVING':    return { ...state, saving: true };
+    case 'STOP_SAVING':     return { ...state, saving: false };
+    case 'START_ANALYZING': return { ...state, analyzing: true };
+    case 'STOP_ANALYZING':  return { ...state, analyzing: false };
+    case 'SET_UPDATING_ID': return { ...state, updatingId: action.id };
+    case 'SET_DELETING_ID': return { ...state, deletingId: action.id };
+    case 'OPEN_MODAL':      return { ...state, modalOpen: true };
+    case 'CLOSE_MODAL':     return {
+      ...state,
+      modalOpen: false,
+      saving: false,
+      analyzing: false,
+      formError: null,
+      form: initialState.form,
+      analyzedUrl: null,
+    };
+    case 'OPEN_QUEUE':      return { ...state, queueOpen: true };
+    case 'CLOSE_QUEUE':     return { ...state, queueOpen: false };
+    case 'SET_ERROR':       return { ...state, error: action.message };
+    case 'SET_FORM_ERROR':  return { ...state, formError: action.message };
+    case 'PATCH_FORM':      return { ...state, form: { ...state.form, ...action.patch } };
+    case 'SET_ANALYZED_URL': return { ...state, analyzedUrl: action.url };
+    case 'RESET_FORM':      return {
+      ...state,
+      form: initialState.form,
+      formError: null,
+      analyzedUrl: null,
+    };
+    default: return state;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
 function shortAddress(address: string) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
@@ -67,19 +167,15 @@ function statusVariant(status: string) {
   return 'warning';
 }
 
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 export default function MintsClient() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
-  const [saving, setSaving] = useState(false);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [queueOpen, setQueueOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [form, setForm] = useState({ walletId: '', mintUrl: '', scheduleTime: '' });
-  const [analyzedUrl, setAnalyzedUrl] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(mintsReducer, initialState);
+  const { saving, analyzing, updatingId, deletingId, modalOpen, queueOpen, error, formError, form, analyzedUrl } = state;
 
   // Fetch data with React Query
   const { data: mintsData, isLoading, error: fetchError } = useQuery({
@@ -123,29 +219,25 @@ export default function MintsClient() {
   useEffect(() => {
     const mintUrlParam = searchParams.get('mintUrl');
     if (mintUrlParam) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- initializes form from URL query params on page entry
-      setForm((current) => ({ 
-        ...current, 
-        mintUrl: mintUrlParam,
-        walletId: defaultWallet?.id || ''
-      }));
-      setModalOpen(true);
+      dispatch({ type: 'PATCH_FORM', patch: { mintUrl: mintUrlParam, walletId: defaultWallet?.id ?? '' } });
+      dispatch({ type: 'OPEN_MODAL' });
     }
   }, [searchParams, defaultWallet?.id]);
 
   // Set default wallet when modal opens
   useEffect(() => {
     if (modalOpen && defaultWallet && !form.walletId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncs the editable form with the current default wallet
-      setForm((current) => ({ ...current, walletId: defaultWallet.id }));
+      dispatch({ type: 'PATCH_FORM', patch: { walletId: defaultWallet.id } });
     }
   }, [modalOpen, defaultWallet, form.walletId]);
 
-  // Set error from fetch error
+  // Mirror React Query fetch failures into the error banner
   useEffect(() => {
     if (fetchError) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- mirrors React Query fetch failures into local UI state
-      setError(fetchError instanceof Error ? fetchError.message : 'Failed to load mint data.');
+      dispatch({
+        type: 'SET_ERROR',
+        message: fetchError instanceof Error ? fetchError.message : 'Failed to load mint data.',
+      });
     }
   }, [fetchError]);
 
@@ -196,11 +288,11 @@ export default function MintsClient() {
     },
     onError: (_err, _vars, context) => {
       if (context?.previous) queryClient.setQueryData(['mints'], context.previous);
-      setError('Failed to cancel task.');
+      dispatch({ type: 'SET_ERROR', message: 'Failed to cancel task.' });
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['mints'] });
-      setUpdatingId(null);
+      dispatch({ type: 'SET_UPDATING_ID', id: null });
     },
   });
 
@@ -222,51 +314,57 @@ export default function MintsClient() {
     },
     onError: (_err, _id, context) => {
       if (context?.previous) queryClient.setQueryData(['mints'], context.previous);
-      setError('Failed to delete task. It has been restored.');
+      dispatch({ type: 'SET_ERROR', message: 'Failed to delete task. It has been restored.' });
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['mints'] });
-      setDeletingId(null);
+      dispatch({ type: 'SET_DELETING_ID', id: null });
     },
   });
 
   const handleMintUrlChange = (value: string) => {
-    setForm((current) => ({ ...current, mintUrl: value }));
-    setAnalyzedUrl((current) => (current === value.trim() ? current : null));
+    dispatch({ type: 'PATCH_FORM', patch: { mintUrl: value } });
+    // Clear analyzed state if the URL has changed
+    if (analyzedUrl !== value.trim()) {
+      dispatch({ type: 'SET_ANALYZED_URL', url: null });
+    }
   };
 
   const analyzeMintUrl = async () => {
     const mintUrl = form.mintUrl.trim();
     if (!mintUrl) {
-      setFormError('Paste a mint URL before running analysis.');
+      dispatch({ type: 'SET_FORM_ERROR', message: 'Paste a mint URL before running analysis.' });
       return;
     }
 
-    setAnalyzing(true);
-    setFormError(null);
+    dispatch({ type: 'START_ANALYZING' });
+    dispatch({ type: 'SET_FORM_ERROR', message: null });
 
     try {
       await apiRequest('/api/analyzer', {
         method: 'POST',
         body: { input: mintUrl },
       });
-      setAnalyzedUrl(mintUrl);
+      dispatch({ type: 'SET_ANALYZED_URL', url: mintUrl });
     } catch (requestError) {
-      setFormError(requestError instanceof Error ? requestError.message : 'Failed to analyze mint URL.');
+      dispatch({
+        type: 'SET_FORM_ERROR',
+        message: requestError instanceof Error ? requestError.message : 'Failed to analyze mint URL.',
+      });
     } finally {
-      setAnalyzing(false);
+      dispatch({ type: 'STOP_ANALYZING' });
     }
   };
 
   const submitMint = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setSaving(true);
-    setFormError(null);
+    dispatch({ type: 'START_SAVING' });
+    dispatch({ type: 'SET_FORM_ERROR', message: null });
 
     try {
       const mintUrl = form.mintUrl.trim();
       if (!analyzedUrl || analyzedUrl !== mintUrl) {
-        setFormError('Please analyze the URL before creating a mint task');
+        dispatch({ type: 'SET_FORM_ERROR', message: 'Please analyze the URL before creating a mint task' });
         return;
       }
 
@@ -277,58 +375,59 @@ export default function MintsClient() {
         quantity: '1',
         scheduleTime: form.scheduleTime || undefined,
       });
-      setForm({ walletId: '', mintUrl: '', scheduleTime: '' });
-      setAnalyzedUrl(null);
-      setModalOpen(false);
+      dispatch({ type: 'CLOSE_MODAL' });
       if (payload.analyzerRequired) {
-        setError('Mint task created from URL. Run analysis before scheduling this mint.');
+        dispatch({ type: 'SET_ERROR', message: 'Mint task created from URL. Run analysis before scheduling this mint.' });
       }
     } catch (requestError) {
-      setFormError(requestError instanceof Error ? requestError.message : 'Failed to create mint task.');
+      dispatch({
+        type: 'SET_FORM_ERROR',
+        message: requestError instanceof Error ? requestError.message : 'Failed to create mint task.',
+      });
     } finally {
-      setSaving(false);
+      dispatch({ type: 'STOP_SAVING' });
     }
   };
 
   const startTask = async (task: MintTask) => {
-    setUpdatingId(task.id);
-    setError(null);
+    dispatch({ type: 'SET_UPDATING_ID', id: task.id });
+    dispatch({ type: 'SET_ERROR', message: null });
 
     try {
       const payload = await startTaskMutation.mutateAsync({ id: task.id, action: 'start' });
       if (payload.result && !payload.result.success) {
-        setError(payload.result.error ?? 'Mint execution failed.');
+        dispatch({ type: 'SET_ERROR', message: payload.result.error ?? 'Mint execution failed.' });
       }
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Failed to start task.');
+      dispatch({ type: 'SET_ERROR', message: requestError instanceof Error ? requestError.message : 'Failed to start task.' });
     } finally {
-      setUpdatingId(null);
+      dispatch({ type: 'SET_UPDATING_ID', id: null });
     }
   };
 
   const cancelTask = async (task: MintTask) => {
-    setUpdatingId(task.id);
-    setError(null);
+    dispatch({ type: 'SET_UPDATING_ID', id: task.id });
+    dispatch({ type: 'SET_ERROR', message: null });
 
     try {
       await cancelTaskMutation.mutateAsync({ id: task.id, action: 'cancel' });
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Failed to cancel task.');
+      dispatch({ type: 'SET_ERROR', message: requestError instanceof Error ? requestError.message : 'Failed to cancel task.' });
     } finally {
-      setUpdatingId(null);
+      dispatch({ type: 'SET_UPDATING_ID', id: null });
     }
   };
 
   const deleteTask = async (task: MintTask) => {
-    setDeletingId(task.id);
-    setError(null);
+    dispatch({ type: 'SET_DELETING_ID', id: task.id });
+    dispatch({ type: 'SET_ERROR', message: null });
 
     try {
       await deleteTaskMutation.mutateAsync(task.id);
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Failed to delete task.');
+      dispatch({ type: 'SET_ERROR', message: requestError instanceof Error ? requestError.message : 'Failed to delete task.' });
     } finally {
-      setDeletingId(null);
+      dispatch({ type: 'SET_DELETING_ID', id: null });
     }
   };
 
@@ -339,7 +438,7 @@ export default function MintsClient() {
         title="Mints"
         description="Plan, monitor, pause, and retry mint execution tasks with clear risk state and wallet assignment."
         actions={
-          <Button type="button" onClick={() => setModalOpen(true)}>
+          <Button type="button" onClick={() => dispatch({ type: 'OPEN_MODAL' })}>
             <Plus className="h-4 w-4" aria-hidden="true" />
             New Mint
           </Button>
@@ -440,7 +539,7 @@ export default function MintsClient() {
                 title="No mint tasks"
                 description="Create a mint task after adding at least one wallet and one collection."
                 action={
-                  <Button type="button" onClick={() => setModalOpen(true)}>
+                  <Button type="button" onClick={() => dispatch({ type: 'OPEN_MODAL' })}>
                     <Plus className="h-4 w-4" aria-hidden="true" />
                     New Mint
                   </Button>
@@ -457,20 +556,20 @@ export default function MintsClient() {
             <h2 className="font-semibold text-text">Execution Queue</h2>
             <p className="mt-1 text-sm text-muted">Tasks are created from saved wallets and collections, then started through the mint task route.</p>
           </div>
-          <Button type="button" variant="secondary" onClick={() => setQueueOpen(true)}>
+          <Button type="button" variant="secondary" onClick={() => dispatch({ type: 'OPEN_QUEUE' })}>
             <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
             Queue Settings
           </Button>
         </div>
       </Card>
 
-      <Modal open={modalOpen} title="New Mint" onClose={() => setModalOpen(false)}>
+      <Modal open={modalOpen} title="New Mint" onClose={() => dispatch({ type: 'CLOSE_MODAL' })}>
         <form onSubmit={submitMint} className="space-y-4">
           <label className="block text-sm font-medium text-muted">
             Wallet
             <select
               value={form.walletId}
-              onChange={(event) => setForm((current) => ({ ...current, walletId: event.target.value }))}
+              onChange={(event) => dispatch({ type: 'PATCH_FORM', patch: { walletId: event.target.value } })}
               className="mt-2 h-11 w-full rounded-lg border border-border bg-background/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               required
             >
@@ -512,14 +611,14 @@ export default function MintsClient() {
             <input
               type="datetime-local"
               value={form.scheduleTime}
-              onChange={(event) => setForm((current) => ({ ...current, scheduleTime: event.target.value }))}
+              onChange={(event) => dispatch({ type: 'PATCH_FORM', patch: { scheduleTime: event.target.value } })}
               className="mt-2 h-11 w-full rounded-lg border border-border bg-background/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
             />
             <p className="mt-1 text-xs text-muted">Leave blank to auto-detect from the mint page.</p>
           </label>
           {formError ? <div className="rounded-lg border border-danger/20 bg-danger/10 p-3 text-sm text-danger" role="alert">{formError}</div> : null}
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button type="button" variant="secondary" onClick={() => dispatch({ type: 'CLOSE_MODAL' })}>Cancel</Button>
             <Button type="submit" loading={saving} disabled={!analyzedUrl || analyzedUrl !== form.mintUrl.trim()}>
               Create Mint
             </Button>
@@ -527,11 +626,11 @@ export default function MintsClient() {
         </form>
       </Modal>
 
-      <Modal open={queueOpen} title="Queue Settings" onClose={() => setQueueOpen(false)}>
+      <Modal open={queueOpen} title="Queue Settings" onClose={() => dispatch({ type: 'CLOSE_QUEUE' })}>
         <div className="space-y-4">
           <p className="text-sm leading-6 text-muted">Queue controls are currently read from mint task status in the database. Create, start, and delete actions are available on each task.</p>
           <div className="flex justify-end">
-            <Button type="button" variant="secondary" onClick={() => setQueueOpen(false)}>Close</Button>
+            <Button type="button" variant="secondary" onClick={() => dispatch({ type: 'CLOSE_QUEUE' })}>Close</Button>
           </div>
         </div>
       </Modal>
