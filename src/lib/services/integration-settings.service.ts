@@ -3,7 +3,7 @@ import 'server-only';
 import { eq } from 'drizzle-orm';
 import { integrationSettings } from '@/drizzle/schema';
 import { getDb } from '@/lib/db';
-import { decrypt, encrypt } from '@/lib/security/encryption';
+import { decrypt, encrypt, rotateEncryption } from '@/lib/security/encryption';
 import { getCache, setCache, getRedisClient } from '@/lib/redis';
 
 export const INTEGRATION_SETTING_KEYS = ['ALCHEMY_API_KEY', 'INFURA_API_KEY', 'CHAINSTACK_API_KEY'] as const;
@@ -16,7 +16,7 @@ export type IntegrationSetting = {
   updatedAt: Date;
 };
 
-// ── Settings cache ────────────────────────────────────────────────────────────
+// ── Settings cache ─────────────────────────────────────────────────────────────
 // getAllSettings() is called on every RPC URL build (getAlchemyUrl, getInfuraUrl,
 // getChainstackUrl). In a single mint execution: simulate + nonce + gasParams each
 // call getAllSettings() — that's 3+ DB reads per mint without caching.
@@ -77,6 +77,7 @@ export async function setSetting(key: IntegrationSettingKey, value: string) {
     })
     .returning();
 
+  void invalidateSettingsCache();
   return decryptRow(row);
 }
 
@@ -94,7 +95,6 @@ export async function getAllSettings() {
     }
   }
 
-  // Fire-and-forget cache write — mint execution doesn't wait for Redis
   void setCache(SETTINGS_CACHE_KEY, settings, SETTINGS_CACHE_TTL).catch(() => undefined);
   return settings;
 }
@@ -103,4 +103,44 @@ export async function deleteSetting(key: IntegrationSettingKey) {
   assertSupportedKey(key);
   await getDb().delete(integrationSettings).where(eq(integrationSettings.key, key));
   void invalidateSettingsCache();
+}
+
+// ── Key rotation ───────────────────────────────────────────────────────────────
+//
+// Call after setting ENCRYPTION_KEY to the new value and ENCRYPTION_KEY_PREVIOUS
+// to the old value. Re-encrypts all stored integration secrets with the active key.
+//
+// Step-by-step:
+//   1. openssl rand -hex 64  →  paste as ENCRYPTION_KEY in Vercel
+//   2. Move old key to ENCRYPTION_KEY_PREVIOUS
+//   3. Call rotateAllIntegrationSettings() (from a one-off script or admin route)
+//   4. Remove ENCRYPTION_KEY_PREVIOUS once confirmed
+//
+export async function rotateAllIntegrationSettings(): Promise<{ rotated: number; skipped: number }> {
+  const rows = await getDb().select().from(integrationSettings);
+  let rotated = 0;
+  let skipped = 0;
+
+  for (const row of rows) {
+    try {
+      const newCiphertext = rotateEncryption(row.valueEncrypted);
+      // Only update if the ciphertext actually changed (i.e. was encrypted with an old key)
+      if (newCiphertext !== row.valueEncrypted) {
+        await getDb()
+          .update(integrationSettings)
+          .set({ valueEncrypted: newCiphertext, updatedAt: new Date() })
+          .where(eq(integrationSettings.key, row.key));
+        rotated++;
+      } else {
+        skipped++;
+      }
+    } catch (err) {
+      // Non-fatal: log and continue so one bad row doesn't abort the migration
+      console.error(`[rotateAllIntegrationSettings] Failed to rotate key ${row.key}:`, err);
+      skipped++;
+    }
+  }
+
+  void invalidateSettingsCache();
+  return { rotated, skipped };
 }

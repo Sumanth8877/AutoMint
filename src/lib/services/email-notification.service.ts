@@ -53,13 +53,44 @@ function escapeHtml(value: string) {
     .replace(/'/g, '&#39;');
 }
 
+// Explicit allowlist of env var names that hold secrets.
+// Using a Set instead of a regex eliminates the risk of a new var being
+// missed because it doesn't match the pattern, and avoids accidental matches
+// on public/non-secret vars (e.g. NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY).
+// When you add a new secret env var, add it here too.
+const SENSITIVE_ENV_KEYS = new Set([
+  // Database
+  'DATABASE_URL',
+  // Clerk auth
+  'CLERK_SECRET_KEY',
+  // Encryption
+  'ENCRYPTION_KEY',
+  'ENCRYPTION_KEY_PREVIOUS',
+  // Upstash / Redis
+  'UPSTASH_REDIS_REST_TOKEN',
+  'KV_REST_API_TOKEN',
+  // QStash
+  'QSTASH_TOKEN',
+  'QSTASH_CURRENT_SIGNING_KEY',
+  'QSTASH_NEXT_SIGNING_KEY',
+  // Email
+  'RESEND_API_KEY',
+  // Monitoring / observability
+  'SENTRY_DSN',
+  'SENTRY_AUTH_TOKEN',
+  // RPC providers (stored in DB but may also be present as env fallbacks)
+  'ALCHEMY_API_KEY',
+  'INFURA_API_KEY',
+  'CHAINSTACK_API_KEY',
+  'OPENSEA_API_KEY',
+  // Telegram
+  'TELEGRAM_BOT_TOKEN',
+]);
+
 function sensitiveEnvValues() {
-  return Object.entries(process.env)
-    .filter(([key, value]) => {
-      if (!value || value.length < 4) return false;
-      return /(KEY|TOKEN|SECRET|PASSWORD|PRIVATE|DATABASE_URL|RPC_URL|WSS_URL|DSN)/.test(key);
-    })
-    .map(([, value]) => value as string);
+  return Array.from(SENSITIVE_ENV_KEYS)
+    .map((key) => process.env[key])
+    .filter((value): value is string => typeof value === 'string' && value.length >= 4);
 }
 
 export function sanitizeNotificationError(error: unknown) {

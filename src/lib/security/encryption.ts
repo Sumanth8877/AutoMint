@@ -2,7 +2,7 @@ import 'server-only';
 
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
-// ── AES-256-GCM encryption with key rotation support ─────────────────────────
+// ── AES-256-GCM encryption with key rotation support ──────────────────────────
 //
 // ENCRYPTED VALUE FORMAT
 //   v1:<iv_b64url>:<tag_b64url>:<ciphertext_b64url>
@@ -10,27 +10,29 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 //   All existing ciphertexts use this format. The "v1" prefix is the format
 //   version — it does NOT identify which encryption key was used.
 //
-// KEY ROTATION
-//   When you need to rotate the encryption key:
+// KEY ROTATION WORKFLOW
+// ─────────────────────
+// 1. Generate a new 32-byte key:
+//      openssl rand -hex 64
 //
-//   1. Generate a new 32-byte key:
-//        openssl rand -hex 64
+// 2. Set env vars (zero-downtime — old key still decrypts during migration):
+//      ENCRYPTION_KEY=<new_key>
+//      ENCRYPTION_KEY_PREVIOUS=<old_key>   ← comma-separated if multiple
 //
-//   2. In your environment:
-//        ENCRYPTION_KEY=<new_key>          ← used for all new encryptions
-//        ENCRYPTION_KEY_PREVIOUS=<old_key> ← used as fallback during decrypt
+// 3. Re-encrypt all stored values:
+//      import { rotateAllIntegrationSettings } from
+//        '@/lib/services/integration-settings.service';
+//      await rotateAllIntegrationSettings();
 //
-//   3. Re-encrypt all wallets (run the migration script below) and then
-//      remove ENCRYPTION_KEY_PREVIOUS once migration is confirmed.
+// 4. Once migration is confirmed, remove ENCRYPTION_KEY_PREVIOUS.
 //
-//   decrypt() tries ENCRYPTION_KEY first, then falls back to
-//   ENCRYPTION_KEY_PREVIOUS. This allows a zero-downtime rotation:
-//   new keys encrypt new data while old keys still decrypt existing data.
+// HOW IT WORKS
+//   decrypt() tries ENCRYPTION_KEY first, then each key in
+//   ENCRYPTION_KEY_PREVIOUS. This lets new rows use the new key while
+//   old rows (not yet re-encrypted) still decrypt with the old key.
 //
-// ADDING MORE PREVIOUS KEYS
-//   If you need more than one previous key, use a comma-separated list:
-//     ENCRYPTION_KEY_PREVIOUS=key1,key2
-//   decrypt() will try each in order after the current key fails.
+//   rotateEncryption(ciphertext) decrypts with the key chain and
+//   re-encrypts with the active key — no plaintext escapes memory.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ALGORITHM = 'aes-256-gcm';
@@ -49,7 +51,7 @@ function parseKey(raw: string, envName: string): Buffer {
   return key;
 }
 
-/** Returns the active encryption key (used for new encryptions). */
+/** Returns the active encryption key (used for all new encryptions). */
 function getActiveKey(): Buffer {
   const raw = process.env.ENCRYPTION_KEY;
   if (!raw) throw new Error('ENCRYPTION_KEY is not configured');
@@ -75,7 +77,6 @@ function getDecryptionKeyChain(): Buffer[] {
         try {
           keys.push(parseKey(trimmed, 'ENCRYPTION_KEY_PREVIOUS'));
         } catch {
-          // Log misconfigured previous key but do not crash — it just won't be tried.
           console.error('[encryption] Skipping malformed key in ENCRYPTION_KEY_PREVIOUS');
         }
       }
@@ -125,12 +126,10 @@ export function decrypt(text: string): string {
         decipher.final(),
       ]).toString('utf8');
     } catch (err) {
-      // AES-GCM auth tag mismatch — wrong key, try the next one.
       lastError = err instanceof Error ? err : new Error(String(err));
     }
   }
 
-  // All keys failed — either the ciphertext is corrupt or all keys are wrong.
   throw new Error(
     `Decryption failed with all ${keys.length} configured key(s). ` +
     `If you rotated ENCRYPTION_KEY, ensure the old key is in ENCRYPTION_KEY_PREVIOUS. ` +
@@ -138,10 +137,11 @@ export function decrypt(text: string): string {
   );
 }
 
-// Known private key formats
+// ── Private key helpers ───────────────────────────────────────────────────────
+
 const EVM_PK_RE = /^(0x)?[a-f0-9]{64}$/i;
 const SOLANA_B58_MIN_LEN = 32;
-const SOLANA_B58_MAX_LEN = 88; // 64-byte keypair in base58
+const SOLANA_B58_MAX_LEN = 88;
 
 /**
  * Encrypt a private key after basic format validation.
@@ -173,16 +173,15 @@ export function decryptPrivateKey(payload: string | { encrypted?: string; value?
 
 // ── Key rotation helper ───────────────────────────────────────────────────────
 //
-// Call this after setting ENCRYPTION_KEY to the new key and
-// ENCRYPTION_KEY_PREVIOUS to the old key. It re-encrypts the given ciphertext
-// with the active key so it no longer depends on the previous key.
+// Re-encrypts a single ciphertext with the active key.
+// Used by rotateAllIntegrationSettings() in integration-settings.service.ts.
 //
-// Usage (from a migration script):
-//   import { rotateEncryption } from '@/lib/security/encryption';
+// Usage (ad-hoc rotation of a single value):
 //   const newCipher = rotateEncryption(wallet.encryptedPrivateKey);
-//   await db.update(wallets).set({ encryptedPrivateKey: newCipher }).where(eq(wallets.id, wallet.id));
+//   await db.update(wallets).set({ encryptedPrivateKey: newCipher })
+//           .where(eq(wallets.id, wallet.id));
 //
 export function rotateEncryption(oldCiphertext: string): string {
-  const plaintext = decrypt(oldCiphertext); // uses the key chain (old or new key)
+  const plaintext = decrypt(oldCiphertext); // tries the full key chain
   return encrypt(plaintext);               // always uses the active key
 }

@@ -64,7 +64,17 @@ async function fetchOpenSeaMintMeta(contractAddress: string): Promise<OpenSeaMin
     });
 
     if (!res.ok) return undefined;
-    const json = await res.json();
+
+    // AbortSignal.timeout() covers the network round-trip only — not the body
+    // parse. A response with a huge JSON body can still block the event loop
+    // after the headers arrive. Race the body parse against a 5s timeout so
+    // a runaway OpenSea response can't stall the mint execution pipeline.
+    const json = await Promise.race<unknown>([
+      res.json(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('OpenSea JSON parse timeout')), 5_000),
+      ),
+    ]);
     const stats = json?.collection?.stats ?? json?.stats;
     if (!stats) return undefined;
 
