@@ -37,7 +37,7 @@ async function resolveMintUrl(url: string): Promise<MintIntent & { mintPhases: M
     console.log('[instant-mint] resolveMintIntent failed — discovery tiers will handle it');
   }
 
-  // Tiers 2→3: fill ALL missing requirements via Jina/Firecrawl → Browserbase
+  // Tiers 2→3: Jina/Firecrawl in parallel → Browserbase if still missing
   const discovered = await discoverMintRequirements(url, tier1Partial);
 
   return {
@@ -52,45 +52,6 @@ async function resolveMintUrl(url: string): Promise<MintIntent & { mintPhases: M
     mintPhases: discovered.mintPhases ?? [{ type: 'public' as const, proofRequired: false }],
     resolvedStartTime: discovered.mintStartTime ?? null,
   };
-}> {
-  // First attempt: URL resolver
-  try {
-    const intent = await resolveMintIntent(url);
-    if (intent.contractAddress) {
-      return { ...intent, mintPhases: [{ type: 'public', proofRequired: false }] };
-    }
-  } catch {
-    console.log('URL resolver failed, trying fallback methods');
-  }
-
-  // Fallback: Firecrawl + Jina in parallel
-  try {
-    const [firecrawlResult, jinaResult] = await Promise.allSettled([
-      fetchWithFirecrawl(url),
-      fetchWithJina(url),
-    ]);
-
-    if (firecrawlResult.status === 'fulfilled' && firecrawlResult.value.contractAddress) {
-      return firecrawlResult.value;
-    }
-    if (jinaResult.status === 'fulfilled' && jinaResult.value.contractAddress) {
-      return jinaResult.value;
-    }
-  } catch {
-    console.log('Firecrawl + Jina failed, trying Browserbase');
-  }
-
-  // Final fallback: Browserbase with Playwright
-  try {
-    const browserbaseResult = await fetchWithBrowserbase(url);
-    if (browserbaseResult.contractAddress) {
-      return browserbaseResult;
-    }
-  } catch {
-    console.log('Browserbase failed');
-  }
-
-  throw new Error('Failed to resolve mint URL. All resolution methods failed.');
 }
 
 async function fetchWithFirecrawl(url: string): Promise<MintIntent & { mintPhases: MintPhase[]; mintTime?: Date }> {
