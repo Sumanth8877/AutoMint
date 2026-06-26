@@ -7,6 +7,7 @@ import { resolveMintIntent } from '@/lib/resolve-mint-intent';
 import { getMintState } from './mint-state.service';
 import { fetchMintRequirements } from './mint-requirements.service';
 import { scheduleMint } from './qstash.service';
+import { discoverMintRequirements } from '@/lib/services/mint-discovery.service';
 
 // ——— Result types ——————————————————————————————————————————————————
 
@@ -83,19 +84,49 @@ export async function createMintTaskFromUrl(
     return { action: 'TASK_CREATED', taskId: existing.id };
   }
 
-  // 4. Resolve mint state and requirements in parallel
-  const [mintState, requirements] = await Promise.all([
+  // 4. Resolve mint state and on-chain requirements in parallel
+  const [mintState, onChainRequirements] = await Promise.all([
     getMintState(intent.contractAddress, intent.chain),
     fetchMintRequirements(intent.contractAddress, intent.chain),
   ]);
 
   if (mintState.status === 'ENDED') {
-    return { action: 'FAILED', error: 'This mint has already ended' };
+    return { action: 'FAILED', error: 'This mint has already ended.' };
   }
 
-  // 5. Create the task record
-  //    status 'pending': mint is not live yet — monitoring engine will wait
-  //    status 'ready':   mint is live now — execution engine will start soon
+  // 4b. Tiered discovery: fill any gaps left by on-chain RPC.
+  //
+  //     Pass everything we already know from Tier 1 (resolveMintIntent +
+  //     fetchMintRequirements + getMintState) so the discovery service only
+  //     escalates to Jina/Firecrawl/Browserbase for fields that are still missing.
+  const discovered = await discoverMintRequirements(url, {
+    contractAddress: intent.contractAddress,
+    chain: intent.chain,
+    collectionName: intent.collectionName,
+    mintFunction: onChainRequirements.mintFunction,
+    mintPrice: onChainRequirements.mintPrice,
+    maxPerWallet: onChainRequirements.maxPerWallet,
+    maxPerTx: onChainRequirements.maxPerTx,
+    mintStartTime: mintState.startTime ?? onChainRequirements.mintStartTime ?? undefined,
+    mintEndTime: mintState.endTime ?? onChainRequirements.mintEndTime ?? undefined,
+  });
+
+  // Merge: on-chain values win; discovery fills gaps
+  const mintFunction = onChainRequirements.mintFunction ?? discovered.mintFunction ?? 'mint';
+  const mintPrice = onChainRequirements.mintPrice ?? discovered.mintPrice ?? '0';
+  const maxPerWallet = onChainRequirements.maxPerWallet ?? discovered.maxPerWallet;
+  const maxPerTx = onChainRequirements.maxPerTx ?? discovered.maxPerTx;
+  const mintStartTime = mintState.startTime ?? onChainRequirements.mintStartTime ?? discovered.mintStartTime ?? undefined;
+  const mintEndTime = mintState.endTime ?? onChainRequirements.mintEndTime ?? discovered.mintEndTime ?? undefined;
+
+  if (discovered.missingFields.length > 0) {
+    console.warn(
+      '[orchestrator] createMintTaskFromUrl — fields still unresolved after all tiers:',
+      discovered.missingFields, '— proceeding with best-effort values',
+    );
+  }
+
+  // 5. Create the task record with fully enriched requirements
   const initialStatus = mintState.status === 'LIVE' ? 'ready' : 'pending';
   const [task] = await getDb()
     .insert(mintTasks)
@@ -105,31 +136,25 @@ export async function createMintTaskFromUrl(
       quantity,
       status: initialStatus,
       contractAddress: intent.contractAddress,
-      mintFunction: requirements.mintFunction,
-      mintPrice: requirements.mintPrice,
-      scheduledTime:
-        mintState.status !== 'LIVE' && mintState.startTime
-          ? mintState.startTime
-          : undefined,
+      mintFunction,
+      mintPrice,
+      scheduledTime: mintState.status !== 'LIVE' && mintStartTime ? mintStartTime : undefined,
       maxRetries: 20,
+      // maxPerWallet/maxPerTx not stored in mintTasks table — used at execution time
     })
     .returning();
 
-  // 6. Schedule via QStash
-  //    For LIVE mints: new Date() → secondsFromDate() enforces Not-Before = now + 1s
-  //    (the minimum QStash supports). No artificial delay.
-  //    For future mints: use the known start time, or let scheduleMint default.
+  // 6. Schedule via QStash using the enriched start time
   const scheduledTime =
     mintState.status === 'LIVE'
       ? new Date()
-      : mintState.startTime && mintState.startTime.getTime() > Date.now()
-        ? mintState.startTime
-        : undefined;
+      : mintStartTime && mintStartTime.getTime() > Date.now()
+      ? mintStartTime
+      : undefined;
 
   await scheduleMint({ taskId: task.id, userId, scheduledTime });
 
-  const action: OrchestratorAction =
-    mintState.status === 'LIVE' ? 'TASK_CREATED' : 'MONITORING';
+  const action: OrchestratorAction = mintState.status === 'LIVE' ? 'TASK_CREATED' : 'MONITORING';
 
   return { action, taskId: task.id };
 }
