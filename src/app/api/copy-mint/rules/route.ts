@@ -50,8 +50,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ rule }, { status: 201 });
   } catch (error) {
-    const message = getErrorMessage(error);
-    const status = message === 'Invalid JSON request body' || message.includes('Invalid') || message.includes('required') ? 400 : 500;
-    return NextResponse.json({ error: message }, { status });
+    return handleRouteError(error, 'Failed to process copy-mint rule');
   }
 }
