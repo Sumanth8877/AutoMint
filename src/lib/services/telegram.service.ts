@@ -632,7 +632,7 @@ async function handleMintCommand(message: TelegramMessage, userId: string, url: 
   }
 
   if (result.action === 'MONITORING') {
-    await sendTelegramNotification(userId, 'mint_scheduled', { url, taskId: result.taskId });
+    await sendTelegramNotification(userId, 'mint_created', { url, taskId: result.taskId });
     await reply(
       message,
       `Monitoring started.\nTask: ${result.taskId}\nYou\'ll be notified when execution begins.`,
@@ -641,7 +641,7 @@ async function handleMintCommand(message: TelegramMessage, userId: string, url: 
   }
 
   // TASK_CREATED: mint is live — task queued for near-immediate execution via QStash.
-  await sendTelegramNotification(userId, 'mint_scheduled', { url, taskId: result.taskId });
+  await sendTelegramNotification(userId, 'mint_created', { url, taskId: result.taskId });
   await reply(
     message,
     `Mint task created.\nTask: ${result.taskId}\nExecution starting shortly — you\'ll be notified on completion.`,
@@ -708,7 +708,7 @@ async function handleScheduleCommand(message: TelegramMessage, userId: string, u
     return;
   }
 
-  await sendTelegramNotification(userId, 'mint_scheduled', {
+  await sendTelegramNotification(userId, 'mint_created', {
     url,
     taskId: task.id,
     contractAddress: intent.contractAddress,
