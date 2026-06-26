@@ -19,7 +19,9 @@ const LINK_TOKEN_TTL_MS = 10 * 60 * 1000;
 
 export type TelegramNotificationType =
   | 'mint_scheduled'
+  | 'mint_created'      // new name for task creation
   | 'mint_started'
+  | 'mint_executing'    // new name for execution start
   | 'mint_success'
   | 'mint_failed'
   | 'high_risk_collection'
@@ -384,6 +386,7 @@ function formatNotification(type: TelegramNotificationType, payload: Notificatio
       if (payload.taskId) lines.push(`Task: ${payload.taskId}`);
       break;
     case 'mint_started':
+    case 'mint_executing':
       lines.push('Mint Started', truncate(subject));
       if (payload.taskId) lines.push(`Task: ${payload.taskId}`);
       break;
@@ -423,12 +426,28 @@ function formatNotification(type: TelegramNotificationType, payload: Notificatio
   return lines.join('\n');
 }
 
+// Issue 2 Fix: Only send Telegram notifications for mint lifecycle events.
+// Analysis, risk, and wallet-tracker events are silently dropped.
+const MINT_NOTIFICATION_TYPES: ReadonlySet<TelegramNotificationType> = new Set([
+  'mint_scheduled',     // task created (alias for mint_created)
+  'mint_created',
+  'mint_executing',     // execution started
+  'mint_started',       // legacy alias for executing
+  'mint_success',
+  'mint_failed',
+]);
+
 export async function sendTelegramNotification(
   userId: string,
   type: TelegramNotificationType,
   payload: NotificationPayload = {},
 ) {
   if (!isTelegramEnabled()) return telegramDisabledResult();
+
+  // Only mint lifecycle notifications are sent — analysis/risk/wallet noise is filtered out
+  if (!MINT_NOTIFICATION_TYPES.has(type)) {
+    return { sent: false, reason: 'notification_type_filtered' };
+  }
 
   try {
     const account = await getTelegramAccountByUserId(userId);
