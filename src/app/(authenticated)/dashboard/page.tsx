@@ -135,6 +135,8 @@ async function getDashboardData(userId: string) {
         eta: task.scheduledTime ? new Date(task.scheduledTime).toLocaleTimeString() : 'N/A',
         risk: task.riskThreshold && task.riskThreshold > 75 ? 'High' : task.riskThreshold && task.riskThreshold > 50 ? 'Medium' : 'Low',
       })),
+      completedCount: completedTasks,
+      failedCount: failedTasks,
       chartData,
       riskFeed: [] as Array<{ title: string; source: string; level: string; time: string }>,
       watchlist: userCollections.slice(0, 4).map(col => ({
@@ -161,6 +163,8 @@ async function getDashboardData(userId: string) {
         { label: 'Active Tasks', value: '0', detail: '0 other', icon: Zap, tone: 'primary' as const },
         { label: 'Funded Wallets', value: '0/0', detail: 'No wallets', icon: AlertTriangle, tone: 'warning' as const },
       ],
+      completedCount: 0,
+      failedCount: 0,
       chartData: last7Labels.map(day => ({ day, completed: 0, failed: 0 })),
       tasks: [],
       riskFeed: [],
@@ -232,7 +236,7 @@ export default async function DashboardPage() {
           </div>
           <div className="grid gap-4 lg:grid-cols-3">
             {[
-              ['Success rate', completedTasks + failedTasks > 0 ? `${Math.round((completedTasks / (completedTasks + failedTasks)) * 100)}%` : 'N/A', 'Last 30 days'],
+              ['Success rate', data.completedCount + data.failedCount > 0 ? `${Math.round((data.completedCount / (data.completedCount + data.failedCount)) * 100)}%` : 'N/A', 'Last 30 days'],
               ['Avg execution', 'N/A', 'Intent to broadcast'],
               ['Total tasks', data.tasks.length.toString(), 'All time'],
             ].map(([label, value, detail]) => (
