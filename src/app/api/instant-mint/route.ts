@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getErrorMessage, parseJsonBody } from '@/lib/api/errors';
 import { resolveMintIntent, type MintIntent } from '@/lib/resolve-mint-intent';
+import { discoverMintRequirements } from '@/lib/services/mint-discovery.service';
+import { getMintState } from '@/lib/services/mint-state.service';
+import { fetchMintRequirements } from '@/lib/services/mint-requirements.service';
 import { runAnalyzer } from '@/lib/services/analyzer.service';
 import { addMintTask, executeMintTask } from '@/lib/services/mint.service';
 import { getEffectiveExecutionDefaults } from '@/lib/services/execution-settings.service';
@@ -20,45 +23,44 @@ function asSupportedChain(chain: string): SupportedChain {
   return chain as SupportedChain;
 }
 
-async function resolveMintUrl(url: string): Promise<MintIntent & { mintPhases: MintPhase[]; mintTime?: Date }> {
-  // First attempt: URL resolver
+type ResolvedMint = MintIntent & {
+  mintPhases: MintPhase[];
+  resolvedStartTime?: Date | null;
+};
+
+async function resolveMintUrl(url: string): Promise<ResolvedMint> {
+  // Tier 1: structured URL resolver (fastest — known platforms)
+  let tier1Partial: Parameters<typeof discoverMintRequirements>[1] = {};
   try {
     const intent = await resolveMintIntent(url);
     if (intent.contractAddress) {
-      return { ...intent, mintPhases: [{ type: 'public', proofRequired: false }] };
+      tier1Partial = {
+        contractAddress: intent.contractAddress,
+        chain: intent.chain,
+        collectionName: intent.collectionName,
+      };
     }
   } catch {
-    console.log('URL resolver failed, trying fallback methods');
+    console.log('[instant-mint] resolveMintIntent failed — discovery tiers will handle it');
   }
 
-  // Fallback: Firecrawl + Jina in parallel
-  try {
-    const [firecrawlResult, jinaResult] = await Promise.allSettled([
-      fetchWithFirecrawl(url),
-      fetchWithJina(url),
-    ]);
+  // Tiers 1→2→3: fill ALL missing requirements
+  // (Tier 1 partial already passed in; only missing fields escalate)
+  const discovered = await discoverMintRequirements(url, tier1Partial);
 
-    if (firecrawlResult.status === 'fulfilled' && firecrawlResult.value.contractAddress) {
-      return firecrawlResult.value;
-    }
-    if (jinaResult.status === 'fulfilled' && jinaResult.value.contractAddress) {
-      return jinaResult.value;
-    }
-  } catch {
-    console.log('Firecrawl + Jina failed, trying Browserbase');
-  }
-
-  // Final fallback: Browserbase with Playwright
-  try {
-    const browserbaseResult = await fetchWithBrowserbase(url);
-    if (browserbaseResult.contractAddress) {
-      return browserbaseResult;
-    }
-  } catch {
-    console.log('Browserbase failed');
-  }
-
-  throw new Error('Failed to resolve mint URL. All resolution methods failed.');
+  // contractAddress is guaranteed non-null here — discoverMintRequirements throws if missing
+  return {
+    contractAddress: discovered.contractAddress,
+    chain: discovered.chain ?? 'ethereum',
+    collectionName: discovered.collectionName,
+    collectionSlug: undefined,
+    sourceUrl: url,
+    isValid: true,
+    confidence: discovered.confidence,
+    sourcePlatform: 'custom' as const,
+    mintPhases: discovered.mintPhases ?? [{ type: 'public', proofRequired: false }],
+    resolvedStartTime: discovered.mintStartTime ?? null,
+  };
 }
 
 async function fetchWithFirecrawl(url: string): Promise<MintIntent & { mintPhases: MintPhase[]; mintTime?: Date }> {
@@ -86,7 +88,7 @@ async function fetchWithFirecrawl(url: string): Promise<MintIntent & { mintPhase
 
 async function fetchWithJina(url: string): Promise<MintIntent & { mintPhases: MintPhase[]; mintTime?: Date }> {
   // Implement Jina AI reader API
-  const response = await fetch(`https://r.jina.ai/http://${url}`, {
+  const response = await fetch(`https://r.jina.ai/${url}` // Bug #4 Fixed: no double-protocol prefix, {
     method: 'GET',
     headers: {
       'Authorization': `Bearer ${process.env.JINA_API_KEY}`,
@@ -395,11 +397,21 @@ export async function POST(request: Request) {
     }
 
     // Check mint status first before checking balance
-    const mintStartTime = analysis?.requirements.mintStartTime || analysis?.mintState.startTime;
+    // Use enriched startTime from tiered discovery (on-chain → Jina/Firecrawl → Browserbase)
+    const mintStartTime =
+      analysis?.requirements?.mintStartTime ??
+      analysis?.mintState?.startTime ??
+      resolved.resolvedStartTime ??
+      null;
     const mintStatus = analysis?.mintState.status?.toLowerCase() || '';
     const isMintLive = mintStartTime ? new Date(mintStartTime) <= new Date() : 
                         mintStatus === 'live' || mintStatus === 'active' || mintStatus === 'minting';
     const hasMintInfo = analysis?.mintState.status || analysis?.requirements.mintStartTime;
+
+    // Explicit ENDED check — reject before wallet balance check
+    if (mintStatus === 'ended' || mintStatus === 'sold out') {
+      throw new Error('This mint has already ended.');
+    }
 
     if (!hasMintInfo) {
       throw new Error('This collection does not have mint information available. It may not be a minting collection.');
