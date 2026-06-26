@@ -41,6 +41,8 @@ type ServiceTestResult = {
 
 const KNOWN_VARIABLES: Array<{ variableName: string; serviceName: KnownService }> = [
   { variableName: 'ALCHEMY_API_KEY', serviceName: 'Alchemy' },
+  { variableName: 'INFURA_API_KEY', serviceName: 'Infura' },
+  { variableName: 'CHAINSTACK_API_KEY', serviceName: 'Chainstack' },
   { variableName: 'JINA_API_KEY', serviceName: 'Jina' },
   { variableName: 'FIRECRAWL_API_KEY', serviceName: 'Firecrawl' },
   { variableName: 'BROWSERBASE_API_KEY', serviceName: 'Browserbase' },

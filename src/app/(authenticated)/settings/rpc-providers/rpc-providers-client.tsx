@@ -11,7 +11,7 @@ import Input from '@/components/ui/Input';
 import { apiRequest } from '@/lib/api/client';
 import type { RpcPreferredProvider, RpcRoutingMode } from '@/lib/services/rpc-provider-settings.service';
 
-type ProviderName = 'ALCHEMY' | 'INFURA' | 'DRPC' | 'CHAINSTACK';
+type ProviderName = 'ALCHEMY' | 'INFURA' | 'CHAINSTACK';
 
 type RpcProviderSettings = {
   id: string;
@@ -43,15 +43,13 @@ type RpcProviderPayload = {
 const providerLabels: Record<ProviderName, string> = {
   ALCHEMY: 'Alchemy',
   INFURA: 'Infura',
-  DRPC: 'dRPC',
   CHAINSTACK: 'Chainstack',
 };
 
 const providerDescriptions: Record<ProviderName, string> = {
   ALCHEMY: 'Primary provider — 300M CU/month free. Add ALCHEMY_API_KEY to settings.',
   INFURA: 'Secondary — 100K req/day free. Add INFURA_API_KEY to settings.',
-  DRPC: 'Always-on fallback — free public endpoints, no API key needed.',
-  CHAINSTACK: 'Optional — 3M RU/month free. Paste node URL from Chainstack dashboard.',
+  CHAINSTACK: 'Enterprise-grade — add CHAINSTACK_API_KEY to settings.',
 };
 
 function settingsKey(settings: RpcProviderSettings | null) {

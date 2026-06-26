@@ -5,7 +5,7 @@ import { rpcProviderSettings } from '@/drizzle/schema';
 import { getDb } from '@/lib/db';
 
 export const RPC_ROUTING_MODES = ['SMART', 'MANUAL'] as const;
-export const RPC_PREFERRED_PROVIDERS = ['ALCHEMY', 'INFURA', 'DRPC', 'CHAINSTACK'] as const;
+export const RPC_PREFERRED_PROVIDERS = ['ALCHEMY', 'INFURA', 'CHAINSTACK'] as const;
 
 export type RpcRoutingMode = (typeof RPC_ROUTING_MODES)[number];
 export type RpcPreferredProvider = (typeof RPC_PREFERRED_PROVIDERS)[number];
@@ -39,7 +39,7 @@ function assertRoutingMode(value: unknown) {
 function assertPreferredProvider(value: unknown) {
   if (value === null || value === '') return null;
   if (!RPC_PREFERRED_PROVIDERS.includes(value as RpcPreferredProvider)) {
-    throw new Error('Preferred provider must be ALCHEMY, INFURA, DRPC, or CHAINSTACK');
+    throw new Error('Preferred provider must be ALCHEMY, INFURA, or CHAINSTACK');
   }
   return value as RpcPreferredProvider;
 }

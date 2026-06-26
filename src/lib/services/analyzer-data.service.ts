@@ -64,10 +64,9 @@ export function deserializeMetadata(metadata: CachedCollectionMetadata): Collect
   return { ...metadata, totalSupply: BigInt(metadata.totalSupply) };
 }
 
-export function rpcProviderLabel(provider: 'ALCHEMY' | 'INFURA' | 'DRPC' | 'CHAINSTACK' | null) {
+export function rpcProviderLabel(provider: 'ALCHEMY' | 'INFURA' | 'CHAINSTACK' | null) {
   if (provider === 'ALCHEMY') return 'Alchemy';
   if (provider === 'INFURA') return 'Infura';
-  if (provider === 'DRPC') return 'dRPC';
   if (provider === 'CHAINSTACK') return 'Chainstack';
   return null;
 }
