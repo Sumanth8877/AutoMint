@@ -25,8 +25,7 @@ import { requireApiUser } from '@/lib/auth/require-auth';
 import { getDb } from '@/lib/db';
 import { captureException } from '@/lib/observability/sentry';
 import { wallets, collections, mintHistory } from '@/drizzle/schema';
-import { gte, desc } from 'drizzle-orm';
-import { eq } from 'drizzle-orm';
+import { and, desc, eq, gte } from 'drizzle-orm';
 import { formatEther } from 'viem';
 
 async function getDashboardData(userId: string) {
@@ -46,7 +45,7 @@ async function getDashboardData(userId: string) {
     // Build 7-day chart from mintHistory (on-chain confirmed/failed transactions)
     const since7Days = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const recentHistory = await db.select().from(mintHistory)
-      .where(gte(mintHistory.createdAt, since7Days))
+      .where(and(gte(mintHistory.createdAt, since7Days), eq(mintHistory.userId, userId)))
       .orderBy(desc(mintHistory.createdAt));
 
     const historyByDay = recentHistory.reduce((acc, h) => {
