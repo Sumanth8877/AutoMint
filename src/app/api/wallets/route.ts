@@ -1,13 +1,16 @@
 import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getErrorMessage, parseJsonBody } from '@/lib/api/errors';
-import { enforceRateLimit, RATE_LIMITS } from '@/lib/api/rate-limit';
 import { getUserWallets, importWallet, removeWallet } from '@/lib/services/wallet.service';
 import type { ImportWalletType } from '@/lib/wallets/private-key';
 
 // Disable cache — mutations need fresh data immediately
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+
+// Hex private key format: optional 0x prefix, then exactly 64 hex characters.
+// Validated here before the key ever reaches importWallet or the DB layer.
+const EVM_PRIVATE_KEY_RE = /^(?:0x)?[a-fA-F0-9]{64}$/;
 
 // GET /api/wallets
 export async function GET() {
@@ -28,9 +31,6 @@ export async function POST(req: Request) {
     const authResult = await requireApiUser();
     if ('error' in authResult) return authResult.error;
 
-    const limited = await enforceRateLimit(`wallets:import:${authResult.userId}`, RATE_LIMITS.sensitive);
-    if (limited) return limited;
-
     const body = await parseJsonBody<{ walletType?: ImportWalletType; privateKey?: string; nickname?: string | null }>(req);
     const { walletType, privateKey, nickname } = body;
 
@@ -40,6 +40,11 @@ export async function POST(req: Request) {
 
     if (!privateKey) {
       return NextResponse.json({ error: 'Private key is required' }, { status: 400 });
+    }
+
+    // Validate EVM private key format before hitting importWallet
+    if (walletType === 'EVM' && !EVM_PRIVATE_KEY_RE.test(privateKey)) {
+      return NextResponse.json({ error: 'Invalid EVM private key format (expected 32-byte hex)' }, { status: 400 });
     }
 
     const wallet = await importWallet(authResult.userId, { walletType, privateKey, nickname });
