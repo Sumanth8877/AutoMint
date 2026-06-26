@@ -84,7 +84,12 @@ export function selectedProviderFromChain(
   return intent.sourcePlatform;
 }
 
-export function deriveAnalyzerScores(result: Pick<AnalyzerResult, 'intent' | 'mintFunction' | 'mintState' | 'riskAnalysis'>) {
+export function deriveAnalyzerScores(result: {
+  intent: { confidence: number };
+  mintFunction: { confidence: number };
+  mintState: { status: string };
+  riskAnalysis: { riskScore: number };
+}) {
   const confidence = Math.round(result.intent.confidence * 100);
   const functionConfidence = Math.round(result.mintFunction.confidence * 100);
   const liveBonus = result.mintState.status === 'LIVE' ? 12 : 0;
