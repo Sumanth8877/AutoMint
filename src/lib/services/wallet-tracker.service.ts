@@ -1,6 +1,7 @@
 import 'server-only';
 
 import crypto from 'crypto';
+import { normalizeAddress, isValidEvmAddress } from '@/lib/utils/address';
 import { and, eq, inArray } from 'drizzle-orm';
 import { watchedWallets } from '@/drizzle/schema';
 import { getDb } from '@/lib/db';
@@ -54,16 +55,8 @@ export type WalletTrackerEvent = {
   transactionHash?: string;
 };
 
-function normalizeAddress(address: string) {
-  return address.trim().toLowerCase();
-}
-
 function normalizeWalletAddress(address: string, networkType: WatchedWalletNetworkType) {
   return networkType === 'EVM' ? normalizeAddress(address) : address.trim();
-}
-
-function isValidEvmAddress(address: string) {
-  return /^0x[a-fA-F0-9]{40}$/.test(address);
 }
 
 function isValidSolanaAddress(address: string) {

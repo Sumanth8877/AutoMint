@@ -2,8 +2,8 @@ import 'server-only';
 
 import { parseAbi, parseEther, parseGwei, Hex, encodeFunctionData, ContractFunctionRevertedError } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { mainnet, base, polygon, type Chain } from 'viem/chains';
 import { getClient } from './client';
+import { getChain } from './chains';
 import { getWalletClient, broadcastRawTransaction } from '@/lib/services/rpc-manager.service';
 import { getDecryptedPrivateKey } from '@/lib/services/wallet.service';
 import { addBreadcrumb, captureException, captureMessage } from '@/lib/observability/sentry';
@@ -16,11 +16,6 @@ import {
 
 // ─── Config ──────────────────────────────────────────
 
-const CHAIN_OBJECTS: Record<string, Chain> = {
-  ethereum: mainnet,
-  base: base,
-  polygon: polygon,
-};
 
 // ─── Types ───────────────────────────────────────────
 
@@ -63,11 +58,6 @@ function getErrorMessage(error: unknown): string {
 }
 
 
-function getChain(chain: string): Chain {
-  const c = CHAIN_OBJECTS[chain];
-  if (!c) throw new Error(`Unsupported chain: ${chain}`);
-  return c;
-}
 
 
 function buildMintData(params: MintParams): Hex {

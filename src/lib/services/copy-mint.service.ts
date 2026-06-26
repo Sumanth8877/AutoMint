@@ -9,6 +9,7 @@ import { fetchMintRequirements } from '@/lib/services/mint-requirements.service'
 import { getMintState } from '@/lib/services/mint-state.service';
 import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
 import { acquireLock, releaseLock } from '@/lib/services/mint-lock.service';
+import { normalizeAddress, isValidEvmAddress } from '@/lib/utils/address';
 
 type CopyMintEvent = {
   userId: string;
@@ -29,13 +30,6 @@ type CopyMintRuleInput = {
   enabled?: boolean;
 };
 
-function normalizeAddress(address: string) {
-  return address.trim().toLowerCase();
-}
-
-function isValidAddress(address: string) {
-  return /^0x[a-fA-F0-9]{40}$/.test(address);
-}
 
 function normalizeQuantity(quantity: string | number | null | undefined) {
   return Math.max(1, parseInt(String(quantity ?? '1'), 10) || 1);
@@ -137,7 +131,7 @@ async function normalizeDestinationWalletId(userId: string, destinationWalletId:
 
 export async function upsertCopyMintRule(userId: string, data: CopyMintRuleInput) {
   const walletAddress = normalizeAddress(data.walletAddress);
-  if (!isValidAddress(walletAddress)) throw new Error('Invalid wallet address');
+  if (!isValidEvmAddress(walletAddress)) throw new Error('Invalid wallet address');
   const destinationWalletId = await normalizeDestinationWalletId(userId, data.destinationWalletId);
 
   const [rule] = await getDb()
@@ -257,7 +251,7 @@ function priceAllowed(mintPrice: string | null | undefined, maxPrice: string | n
 export async function handleCopyMintEvent(event: CopyMintEvent) {
   try {
   const contractAddress = normalizeAddress(event.contractAddress);
-  if (!isValidAddress(contractAddress)) {
+  if (!isValidEvmAddress(contractAddress)) {
     return { action: 'skipped' as const, reason: 'invalid_contract' };
   }
 

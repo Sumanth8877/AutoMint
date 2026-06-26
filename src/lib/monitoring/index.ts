@@ -1,7 +1,6 @@
 import { getDb } from '@/lib/db';
 import { activities } from '@/drizzle/schema';
 import { eq, desc } from 'drizzle-orm';
-import { getCollectionMetadata } from '@/lib/blockchain/collections';
 import { addBreadcrumb } from '@/lib/observability/sentry';
 
 export type ActivityType = 
@@ -37,14 +36,4 @@ export async function getRecentActivities(userId: string, limit = 20) {
     .orderBy(desc(activities.createdAt))
     .limit(limit);
   return result;
-}
-
-export async function syncCollectionMetadata(collectionId: string, contractAddress: string, chain: string) {
-  try {
-    const metadata = await getCollectionMetadata(contractAddress, chain);
-    return metadata;
-  } catch (error) {
-    addBreadcrumb({ category: 'monitoring', message: `Failed to sync collection ${collectionId}`, level: 'error', data: { collectionId, error: String(error) } });
-    throw error;
-  }
 }
