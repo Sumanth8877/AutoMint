@@ -444,17 +444,33 @@ export async function executeScheduledMint(taskId: string) {
     }
 
     if (!task.overrideRiskFlag) {
-      const riskGate = await requireRiskApproval({ taskId, action: 'mint' });
-      if (!riskGate.approved) {
-        await getDb()
-          .update(mintTasks)
-          .set({ status: 'ready', qstashMessageId: null, scheduledTime: null, safeModeEnabled: true, updatedAt: new Date() })
-          .where(eq(mintTasks.id, taskId));
-        return {
-          success: false,
-          skipped: true,
-          error: `Risk approval required: ${riskGate.risk?.riskScore ?? 0}/100`,
-        };
+      // Speed fix: requireRiskApproval() issues a fresh DB SELECT on mintTasks,
+      // but we already have the task from loadTaskWithWallet() above.
+      // If riskScore is stored and below the threshold — and hasBlockingRiskChange()
+      // already returned false (risk hasn't jumped by >20 points) — the full call
+      // will always approve. Skip the DB round-trip and inline the comparison.
+      //
+      // Only fall through to requireRiskApproval() when risk is high or unknown,
+      // which preserves the full Telegram approval gate for those cases.
+      const storedRiskScore = typeof task.riskScore === 'number' ? task.riskScore : null;
+      const riskThreshold   = task.riskThreshold ?? 75;
+      const riskClearlyApproved = storedRiskScore !== null && storedRiskScore <= riskThreshold;
+
+      if (!riskClearlyApproved) {
+        // Risk is high or has no stored score — run the full approval gate
+        // (may send Telegram notification requesting manual approval)
+        const riskGate = await requireRiskApproval({ taskId, action: 'mint' });
+        if (!riskGate.approved) {
+          await getDb()
+            .update(mintTasks)
+            .set({ status: 'ready', qstashMessageId: null, scheduledTime: null, safeModeEnabled: true, updatedAt: new Date() })
+            .where(eq(mintTasks.id, taskId));
+          return {
+            success: false,
+            skipped: true,
+            error: `Risk approval required: ${riskGate.risk?.riskScore ?? 0}/100`,
+          };
+        }
       }
 
       const mintState = await getMintState(task.contractAddress, wallet.chain);
