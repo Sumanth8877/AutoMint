@@ -11,10 +11,15 @@ export async function GET() {
   const authResult = await requireApiUser();
   if ('error' in authResult) return authResult.error;
 
-  const result = await getDb().select().from(activities)
-    .where(eq(activities.userId, authResult.userId))
-    .orderBy(desc(activities.createdAt))
-    .limit(50);
+  try {
+    const result = await getDb().select().from(activities)
+      .where(eq(activities.userId, authResult.userId))
+      .orderBy(desc(activities.createdAt))
+      .limit(50);
 
-  return NextResponse.json({ activities: result });
+    return NextResponse.json({ activities: result });
+  } catch (error) {
+    console.error('[activities] DB query failed:', error);
+    return NextResponse.json({ error: 'Failed to fetch activities' }, { status: 500 });
+  }
 }
