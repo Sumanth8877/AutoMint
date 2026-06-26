@@ -1,5 +1,8 @@
 import 'server-only';
 
+import { logger } from '@/lib/logger';
+import { captureException } from '@/lib/observability/sentry';
+
 /**
  * mint-discovery.service.ts
  *
@@ -327,7 +330,7 @@ async function fetchViaJina(
   if (!res.ok) throw new Error(`Jina ${res.status}: ${res.statusText}`);
   const text = await res.text();
 
-  console.log(`[mint-discovery] Jina returned ${text.length} chars for ${url}`);
+  logger.info('mint-discovery', 'Jina fetch complete', { chars: text.length, url });
   return extractRequirementsFromContent(text, url);
 }
 
@@ -356,7 +359,7 @@ async function fetchViaFirecrawl(
   const data = (await res.json()) as { data?: { markdown?: string; html?: string } };
   const content = data?.data?.markdown ?? data?.data?.html ?? '';
 
-  console.log(`[mint-discovery] Firecrawl returned ${content.length} chars for ${url}`);
+  logger.info('mint-discovery', 'Firecrawl fetch complete', { chars: content.length, url });
   return extractRequirementsFromContent(content, url);
 }
 
@@ -404,7 +407,7 @@ async function fetchViaBrowserbase(
     const data = (await contentRes.json()) as { content?: string };
     const content = data.content ?? '';
 
-    console.log(`[mint-discovery] Browserbase returned ${content.length} chars for ${url}`);
+    logger.info('mint-discovery', 'Browserbase fetch complete', { chars: content.length, url });
     return extractRequirementsFromContent(content, url);
   } finally {
     // Best-effort cleanup — never let session leak block the response
@@ -477,7 +480,7 @@ export async function discoverMintRequirements(
   // Fast path: everything already known
   const initialMissing = computeMissing(current);
   if (initialMissing.length === 0) {
-    console.log('[mint-discovery] All critical fields already resolved — skipping scraper tiers');
+    logger.info('mint-discovery', 'All critical fields resolved — skipping Tier 2+3');
     return {
       ...current,
       confidence: 1.0,
@@ -486,7 +489,7 @@ export async function discoverMintRequirements(
     } as DiscoveredRequirements;
   }
 
-  console.log('[mint-discovery] Missing critical fields:', initialMissing, `— running Tier 2 (budget: ${maxTimeMs}ms)`);
+  logger.info('mint-discovery', 'Missing critical fields — running Tier 2', { missing: initialMissing, budgetMs: maxTimeMs });
 
   // ── Tier 2: Jina + Firecrawl in parallel, with budget check ───────────────
   let tier2Source: DiscoverySource = 'merged';
@@ -524,7 +527,8 @@ export async function discoverMintRequirements(
       console.warn('[mint-discovery] Insufficient budget for Tier 2 — skipping all scrapers');
     }
   } catch (err) {
-    console.warn('[mint-discovery] Tier 2 threw:', err);
+    logger.warn('mint-discovery', 'Tier 2 threw unexpectedly', { error: String(err) });
+    void captureException(err, { area: 'mint-discovery', extra: { tier: 2 } });
   }
 
   // ── Check Tier 3 budget ───────────────────────────────────────────────────
@@ -551,7 +555,7 @@ export async function discoverMintRequirements(
     } as DiscoveredRequirements;
   }
 
-  console.log('[mint-discovery] Still missing after Tier 2:', afterTier2Missing, `— running Tier 3 (${remainingMs}ms left)`);
+  logger.info('mint-discovery', 'Still missing after Tier 2 — running Tier 3', { missing: afterTier2Missing, remainingMs });
 
   // ── Tier 3: Browserbase + Playwright (with remaining time as timeout) ────
   try {
@@ -560,12 +564,13 @@ export async function discoverMintRequirements(
     const bbResult = await Promise.race([tier3Promise, tier3Timeout]);
     if (bbResult !== null) {
       current = merge(current, bbResult);
-      console.log('[mint-discovery] Tier 3 complete');
+      logger.info('mint-discovery', 'Tier 3 complete');
     } else {
       console.warn('[mint-discovery] Tier 3 timed out');
     }
   } catch (err) {
-    console.warn('[mint-discovery] Tier 3 (Browserbase) failed:', err);
+    logger.warn('mint-discovery', 'Tier 3 Browserbase failed', { error: String(err) });
+    void captureException(err, { area: 'mint-discovery', extra: { tier: 3 } });
   }
 
   const finalMissing = computeMissing(current);
@@ -581,7 +586,7 @@ export async function discoverMintRequirements(
   }
 
   if (finalMissing.length > 0) {
-    console.warn('[mint-discovery] Some fields still unresolved after all tiers:', finalMissing);
+    logger.warn('mint-discovery', 'Some fields still unresolved after all tiers', { missing: finalMissing });
   }
 
   return {

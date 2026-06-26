@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { captureException } from '@/lib/observability/sentry';
+
 type DuneExecutionResponse = {
   execution_id: string;
   state: 'QUERY_STATE_PENDING' | 'QUERY_STATE_RUNNING' | 'QUERY_STATE_SUCCEEDED' | 'QUERY_STATE_FAILED' | 'QUERY_STATE_CANCELLED';
@@ -141,6 +143,7 @@ async function executeDuneSQL(sql: string): Promise<DuneQueryResult | null> {
     return null;
   } catch (error) {
     console.error('Dune query execution failed:', error);
+    void captureException(error, { area: 'dune-analytics' });
     return null;
   }
 }

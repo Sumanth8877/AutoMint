@@ -6,6 +6,7 @@ import { initializeWasmCrypto, signTransactionWasm, hashMessageWasm } from '@/li
 export function useWasmCrypto() {
   const [isInitialized, setIsInitialized] = useState(false);
   const [isInitializing, setIsInitializing] = useState(false);
+  const [initError, setInitError] = useState<Error | null>(null);
 
   useEffect(() => {
     async function init() {
@@ -15,7 +16,9 @@ export function useWasmCrypto() {
         await initializeWasmCrypto();
         setIsInitialized(true);
       } catch (error) {
-        console.error('Failed to initialize WASM crypto:', error);
+        const err = error instanceof Error ? error : new Error(String(error));
+        setInitError(err);
+        console.error('Failed to initialize WASM crypto:', err);
       } finally {
         setIsInitializing(false);
       }
@@ -40,6 +43,7 @@ export function useWasmCrypto() {
   return {
     isInitialized,
     isInitializing,
+    initError,
     signTransaction,
     hashMessage,
   };

@@ -23,6 +23,7 @@ import { getUserMintTasks } from '@/lib/services/mint.service';
 import { getRecentActivities } from '@/lib/monitoring';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getDb } from '@/lib/db';
+import { captureException } from '@/lib/observability/sentry';
 import { wallets, collections } from '@/drizzle/schema';
 import { eq } from 'drizzle-orm';
 import { formatEther } from 'viem';
@@ -128,6 +129,7 @@ async function getDashboardData(userId: string) {
     };
   } catch (error) {
     console.error('Dashboard data fetch error:', error);
+    void captureException(error, { area: 'dashboard' });
     // Return empty data on error
     return {
       metrics: [

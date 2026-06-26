@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { captureException } from '@/lib/observability/sentry';
+
 type MoralisNFTCollectionResponse = {
   result: {
     token_address: string;
@@ -101,6 +103,7 @@ async function fetchMoralis<T>(endpoint: string): Promise<T | null> {
     return await response.json();
   } catch (error) {
     console.error('Moralis API request failed:', error);
+    void captureException(error, { area: 'moralis' });
     return null;
   }
 }

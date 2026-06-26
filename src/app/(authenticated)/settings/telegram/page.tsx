@@ -19,6 +19,7 @@ export default function TelegramSettingsPage() {
   const [data, setData] = useState<TelegramLinkResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const fetchTelegramLink = useCallback(async () => {
     try {
@@ -27,6 +28,7 @@ export default function TelegramSettingsPage() {
       setData(result);
     } catch (error) {
       console.error('Failed to fetch Telegram link:', error);
+      setFetchError('Failed to load Telegram settings. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -46,6 +48,15 @@ export default function TelegramSettingsPage() {
   const generateNewToken = () => {
     fetchTelegramLink();
   };
+
+  if (fetchError) {
+    return (
+      <div className="flex items-center gap-3 rounded-lg border border-danger/30 bg-danger/10 p-4 text-danger">
+        <AlertCircle className="h-4 w-4 shrink-0" />
+        <span className="text-sm">{fetchError}</span>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

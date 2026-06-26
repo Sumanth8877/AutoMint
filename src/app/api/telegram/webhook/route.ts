@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { parseJsonBody } from '@/lib/api/errors';
 import { handleTelegramUpdate, isTelegramEnabled, type TelegramUpdate } from '@/lib/services/telegram.service';
 import { captureException } from '@/lib/observability/sentry';
+import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -64,15 +65,15 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  console.log('Telegram webhook received request');
+  logger.info('telegram-webhook', 'Webhook received');
   
   if (!isTelegramEnabled()) {
-    console.log('Telegram disabled by configuration');
+    logger.info('telegram-webhook', 'Telegram disabled by configuration');
     return NextResponse.json({ ok: true, disabled: true, reason: 'Telegram disabled by configuration' });
   }
 
   if (!isAuthorized(request)) {
-    console.log('Telegram webhook unauthorized');
+    logger.warn('telegram-webhook', 'Unauthorized webhook request');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

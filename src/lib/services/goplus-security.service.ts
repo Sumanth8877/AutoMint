@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { captureException } from '@/lib/observability/sentry';
+
 type GoPlusTokenSecurityResponse = {
   code: number;
   result?: Record<string, GoPlusTokenSecurity>;
@@ -272,6 +274,7 @@ export async function checkTokenSecurity(params: {
     };
   } catch (error) {
     console.error('GoPlus Security check failed:', error);
+    void captureException(error, { area: 'goplus-security' });
     return null;
   }
 }

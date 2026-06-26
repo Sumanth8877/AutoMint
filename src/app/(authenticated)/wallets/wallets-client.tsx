@@ -214,7 +214,6 @@ export default function WalletsClient() {
       });
     },
     onSuccess: (data) => {
-      console.log('Wallet added successfully:', data.wallet);
       refetch();
       queryClient.invalidateQueries({ queryKey: ['wallets'] });
       if (data.wallet.walletType === 'EVM') void refreshBalance(data.wallet, false);

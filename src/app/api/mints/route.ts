@@ -12,6 +12,7 @@ import { resolveMintIntent, type MintIntent } from '@/lib/resolve-mint-intent';
 import { AnalyzerResolutionError, normalizeAnalyzerInput, runAnalyzer, type AnalyzerResult } from '@/lib/services/analyzer.service';
 import { analyzeMintRisk } from '@/lib/services/risk.service';
 import { discoverMintRequirements } from '@/lib/services/mint-discovery.service';
+import { logger } from '@/lib/logger';
 
 // Disable cache — mutations need fresh data immediately
 export const dynamic = 'force-dynamic';
@@ -103,7 +104,7 @@ async function applyAnalyzerResultToTask(
   let finalRequirements = knownFromAnalyzer;
 
   if (hasCriticalGaps && mintUrl) {
-    console.log('[mints/route] Analyzer left gaps — running discoverMintRequirements for:', mintUrl);
+    logger.info('mints/route', 'Analyzer left gaps — running discoverMintRequirements', { mintUrl });
     const discovered = await discoverMintRequirements(mintUrl, knownFromAnalyzer);
     finalRequirements = {
       contractAddress: knownFromAnalyzer.contractAddress ?? discovered.contractAddress,
@@ -244,7 +245,7 @@ export async function POST(req: Request) {
         const parsed = new Date(body.scheduleTime);
         if (!isNaN(parsed.getTime()) && parsed.getTime() > Date.now()) {
           detectedStart = parsed;
-          console.log('[mints/route] Using user-supplied schedule override:', detectedStart.toISOString());
+          logger.info('mints/route', 'Using user-supplied schedule override', { startTime: detectedStart.toISOString() });
         }
       }
       detectedStart =
@@ -254,14 +255,14 @@ export async function POST(req: Request) {
 
       if (!detectedStart && mintUrl) {
         // On-chain RPC + analyzer both missed the startTime — run tiered discovery
-        console.log('[mints/route] startTime missing — running discoverMintRequirements for timing');
+        logger.info('mints/route', 'startTime missing — running discoverMintRequirements for timing');
         const discovered = await discoverMintRequirements(mintUrl, {
           contractAddress: collection.contractAddress,
           chain: collection.chain,
         });
         if (discovered.mintStartTime) {
           detectedStart = discovered.mintStartTime;
-          console.log('[mints/route] Discovery found startTime:', detectedStart.toISOString());
+          logger.info('mints/route', 'Discovery found startTime', { startTime: detectedStart.toISOString() });
         }
       }
 

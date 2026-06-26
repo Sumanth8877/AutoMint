@@ -10,6 +10,7 @@ import { scheduleMint } from '@/lib/services/qstash.service';
 import { getDb } from '@/lib/db';
 import { collections, mintTasks, wallets } from '@/drizzle/schema';
 import { eq, and, desc } from 'drizzle-orm';
+import { logger } from '@/lib/logger';
 
 const SUPPORTED_CHAINS = ['ethereum', 'base', 'polygon'] as const;
 type SupportedChain = (typeof SUPPORTED_CHAINS)[number];
@@ -34,7 +35,7 @@ async function resolveMintUrl(url: string): Promise<MintIntent & { mintPhases: M
       };
     }
   } catch {
-    console.log('[instant-mint] resolveMintIntent failed — discovery tiers will handle it');
+    logger.info('instant-mint', 'resolveMintIntent failed — discovery tiers will handle it');
   }
 
   // Tiers 2→3: Jina/Firecrawl in parallel → Browserbase if still missing

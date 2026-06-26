@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { captureException } from '@/lib/observability/sentry';
+
 type NFTScanCollectionResponse = {
   code: number;
   msg: string;
@@ -118,6 +120,7 @@ async function fetchNFTScan<T>(endpoint: string): Promise<T | null> {
     return data;
   } catch (error) {
     console.error('NFTScan API request failed:', error);
+    void captureException(error, { area: 'nftscan' });
     return null;
   }
 }
