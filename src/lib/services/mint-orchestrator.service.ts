@@ -140,6 +140,7 @@ export async function createMintTaskFromUrl(
       mintPrice,
       scheduledTime: mintState.status !== 'LIVE' && mintStartTime ? mintStartTime : undefined,
       maxRetries: 20,
+      // maxPerWallet/maxPerTx not stored in mintTasks table — used at execution time
     })
     .returning();
 
