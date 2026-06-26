@@ -22,7 +22,7 @@ import { captureException } from '@/lib/observability/sentry';
 import { getCache, setCache, invalidateCache } from '@/lib/redis';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+// maxDuration removed — using Vercel hobby plan default (10s)
 
 // Report-level cache TTL: 1 hour
 const REPORT_CACHE_TTL = 3_600;
