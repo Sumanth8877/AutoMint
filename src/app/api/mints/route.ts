@@ -13,7 +13,6 @@ import { AnalyzerResolutionError, normalizeAnalyzerInput, runAnalyzer, type Anal
 import { analyzeMintRisk } from '@/lib/services/risk.service';
 import { discoverMintRequirements } from '@/lib/services/mint-discovery.service';
 import { logger } from '@/lib/logger';
-import { enforceRateLimit, RATE_LIMITS } from '@/lib/api/rate-limit';
 
 // Disable cache — mutations need fresh data immediately
 export const dynamic = 'force-dynamic';
@@ -151,11 +150,6 @@ export async function POST(req: Request) {
     const authResult = await requireApiUser();
     if ('error' in authResult) return authResult.error;
 
-    // H-02 Fix: rate-limit mint creation — sensitive write endpoint.
-    // 10 mint task creations per minute per user is more than enough for
-    // a 2-person team; prevents runaway scripted task flooding.
-    const limited = await enforceRateLimit(`mints:create:${authResult.userId}`, RATE_LIMITS.sensitive);
-    if (limited) return limited;
 
     const body = await parseJsonBody<{
       walletId?: string;
@@ -332,9 +326,6 @@ export async function DELETE(req: Request) {
     const authResult = await requireApiUser();
     if ('error' in authResult) return authResult.error;
 
-    // H-02 Fix: rate-limit task cancellation to prevent mass-cancel abuse.
-    const limited = await enforceRateLimit(`mints:delete:${authResult.userId}`, RATE_LIMITS.sensitive);
-    if (limited) return limited;
 
     const body = await parseJsonBody<{ id?: string }>(req);
     const { id } = body;

@@ -3,7 +3,6 @@ import { requireApiUser } from '@/lib/auth/require-auth';
 import { getErrorMessage, parseJsonBody, handleRouteError } from '@/lib/api/errors';
 import { getUserWallets, importWallet, removeWallet } from '@/lib/services/wallet.service';
 import type { ImportWalletType } from '@/lib/wallets/private-key';
-import { enforceRateLimit, RATE_LIMITS } from '@/lib/api/rate-limit';
 
 // Disable cache — mutations need fresh data immediately
 export const dynamic = 'force-dynamic';
@@ -32,11 +31,6 @@ export async function POST(req: Request) {
     const authResult = await requireApiUser();
     if ('error' in authResult) return authResult.error;
 
-    // H-03 Fix: rate-limit wallet import — this endpoint accepts raw private
-    // keys. Throttling prevents brute-force import attempts and limits the
-    // blast radius of a compromised session token (max 10 imports/min).
-    const limited = await enforceRateLimit(`wallets:import:${authResult.userId}`, RATE_LIMITS.sensitive);
-    if (limited) return limited;
 
     const body = await parseJsonBody<{ walletType?: ImportWalletType; privateKey?: string; nickname?: string | null }>(req);
     const { walletType, privateKey, nickname } = body;
