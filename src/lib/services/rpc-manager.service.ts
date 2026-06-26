@@ -8,7 +8,7 @@ import { addBreadcrumb, captureException, captureMessage } from '@/lib/observabi
 import { getAllSettings } from '@/lib/services/integration-settings.service';
 import { getRpcProviderSettings } from '@/lib/services/rpc-provider-settings.service';
 
-export type RpcProvider = 'alchemy' | 'quicknode';
+export type RpcProvider = 'alchemy' | 'infura' | 'drpc' | 'chainstack';
 export type RpcRoutingMode = 'SMART' | 'MANUAL';
 type RpcHealth = {
   provider: RpcProvider;
@@ -27,7 +27,7 @@ type RpcClient = PublicClient & {
   __provider?: RpcProvider;
 };
 
-const PROVIDERS: RpcProvider[] = ['alchemy', 'quicknode'];
+const PROVIDERS: RpcProvider[] = ['alchemy', 'infura', 'drpc', 'chainstack'];
 const MAX_RETRIES = 3;
 const BASE_BACKOFF_MS = 250;
 const DEFAULT_REQUEST_TIMEOUT_SECONDS = 45;
@@ -83,7 +83,14 @@ async function setHealth(health: RpcHealth) {
   await setCache(healthKey(health.provider), health, HEALTH_TTL_SECONDS);
 }
 
-async function getAlchemyUrl(chain: string) {
+// ── Provider URL builders ────────────────────────────────────────────────────
+// Each builder returns a ready-to-use HTTPS RPC URL, or undefined if that
+// provider is not configured (caller skips it via isProviderConfigured).
+//
+// dRPC is special: it has free PUBLIC endpoints that work with NO API key.
+// Infura and Alchemy require an API key. Chainstack requires the full node URL.
+
+async function getAlchemyUrl(chain: string): Promise<string | undefined> {
   const chainName = normalizeChainName(chain);
   const settings = await getStoredIntegrationSettings();
   const apiKey = settings.ALCHEMY_API_KEY?.value || process.env.ALCHEMY_API_KEY;
@@ -92,20 +99,57 @@ async function getAlchemyUrl(chain: string) {
     if (chainName === 'polygon') return `https://polygon-mainnet.g.alchemy.com/v2/${apiKey}`;
     return `https://eth-mainnet.g.alchemy.com/v2/${apiKey}`;
   }
-
   return process.env[`ALCHEMY_${chainName.toUpperCase()}_RPC_URL`] || process.env.ALCHEMY_RPC_URL;
 }
 
-async function getQuickNodeUrl(chain: string) {
+async function getInfuraUrl(chain: string): Promise<string | undefined> {
+  // Infura pattern: https://{chain}-mainnet.infura.io/v3/{PROJECT_ID}
   const chainName = normalizeChainName(chain);
   const settings = await getStoredIntegrationSettings();
-  return settings.QUICKNODE_RPC_URL?.value
-    || process.env[`QUICKNODE_${chainName.toUpperCase()}_RPC_URL`]
-    || process.env.QUICKNODE_RPC_URL;
+  const apiKey = settings.INFURA_API_KEY?.value || process.env.INFURA_API_KEY;
+  if (apiKey) {
+    if (chainName === 'base') return `https://base-mainnet.infura.io/v3/${apiKey}`;
+    if (chainName === 'polygon') return `https://polygon-mainnet.infura.io/v3/${apiKey}`;
+    return `https://mainnet.infura.io/v3/${apiKey}`;
+  }
+  return process.env[`INFURA_${chainName.toUpperCase()}_RPC_URL`] || process.env.INFURA_RPC_URL;
 }
 
-async function getProviderUrl(provider: RpcProvider, chain: string) {
-  return provider === 'alchemy' ? getAlchemyUrl(chain) : getQuickNodeUrl(chain);
+async function getDrpcUrl(chain: string): Promise<string | undefined> {
+  // dRPC has FREE public endpoints — no API key required.
+  // API key (DRPC_API_KEY) unlocks higher rate limits but is fully optional.
+  const chainName = normalizeChainName(chain);
+  const settings = await getStoredIntegrationSettings();
+  const apiKey = settings.DRPC_API_KEY?.value || process.env.DRPC_API_KEY;
+  if (apiKey) {
+    // Authenticated endpoint via load balancer
+    const networkName = chainName === 'polygon' ? 'polygon' : chainName === 'base' ? 'base' : 'ethereum';
+    return `https://lb.drpc.org/ogrpc?network=${networkName}&dkey=${apiKey}`;
+  }
+  // Public free endpoints — always available, no signup needed
+  if (chainName === 'base') return 'https://base.drpc.org';
+  if (chainName === 'polygon') return 'https://polygon.drpc.org';
+  return 'https://eth.drpc.org';
+}
+
+async function getChainstackUrl(chain: string): Promise<string | undefined> {
+  // Chainstack uses full node URLs — users paste the URL from their Chainstack dashboard.
+  // Each chain has its own node URL (e.g. https://ethereum-mainnet.core.chainstack.com/<key>)
+  const chainName = normalizeChainName(chain);
+  const settings = await getStoredIntegrationSettings();
+  return settings[`CHAINSTACK_${chainName.toUpperCase()}_RPC_URL`]?.value
+    || process.env[`CHAINSTACK_${chainName.toUpperCase()}_RPC_URL`]
+    || settings.CHAINSTACK_RPC_URL?.value
+    || process.env.CHAINSTACK_RPC_URL;
+}
+
+async function getProviderUrl(provider: RpcProvider, chain: string): Promise<string | undefined> {
+  switch (provider) {
+    case 'alchemy':    return getAlchemyUrl(chain);
+    case 'infura':     return getInfuraUrl(chain);
+    case 'drpc':       return getDrpcUrl(chain);
+    case 'chainstack': return getChainstackUrl(chain);
+  }
 }
 
 function getClientCacheKey(provider: RpcProvider, chain: string, url: string, timeoutSeconds: number, account?: string) {
@@ -181,7 +225,9 @@ function normalizeTimeoutSeconds(value: number | null | undefined) {
 
 function toRpcProvider(value: string | null | undefined): RpcProvider | null {
   if (value === 'ALCHEMY') return 'alchemy';
-  if (value === 'QUICKNODE') return 'quicknode';
+  if (value === 'INFURA') return 'infura';
+  if (value === 'DRPC') return 'drpc';
+  if (value === 'CHAINSTACK') return 'chainstack';
   return null;
 }
 
@@ -430,7 +476,7 @@ export async function withRpcFailover<T>(
       lastError = error;
       logRpc('failover triggered', {
         provider,
-        nextProvider: provider === 'alchemy' ? 'quicknode' : null,
+        nextProvider: null,
         chain: normalizedChain,
         operationName,
         error: error instanceof Error ? error.message : String(error),
@@ -480,12 +526,14 @@ export function getWalletClient(chain: string, account: Account, options: RpcFai
 }
 
 export async function getRpcHealthSnapshot() {
-  const [alchemy, quicknode] = await Promise.all([
+  const [alchemy, infura, drpc, chainstack] = await Promise.all([
     getHealth('alchemy'),
-    getHealth('quicknode'),
+    getHealth('infura'),
+    getHealth('drpc'),
+    getHealth('chainstack'),
   ]);
 
-  return { alchemy, quicknode };
+  return { alchemy, infura, drpc, chainstack };
 }
 
 export async function getRpcRoutingSnapshot(userId?: string, chain = 'ethereum') {
@@ -497,8 +545,9 @@ export async function getRpcRoutingSnapshot(userId?: string, chain = 'ethereum')
   const providerOrder = await getProviderOrder({ userId, chain: normalizedChain });
   const providers = await Promise.all(PROVIDERS.map(async (provider) => {
     const providerHealth = health[provider];
+    const providerLabel = provider.toUpperCase() as 'ALCHEMY' | 'INFURA' | 'DRPC' | 'CHAINSTACK';
     return {
-      provider: provider === 'alchemy' ? 'ALCHEMY' as const : 'QUICKNODE' as const,
+      provider: providerLabel,
       configured: await isProviderConfigured(provider, normalizedChain),
       healthy: isHealthy(providerHealth),
       latency: providerHealth.responseTime > 0 ? providerHealth.responseTime : null,
@@ -507,13 +556,17 @@ export async function getRpcRoutingSnapshot(userId?: string, chain = 'ethereum')
   }));
 
   const active = providerOrder[0] ?? null;
+  const activeLabel = active ? (active.toUpperCase() as 'ALCHEMY' | 'INFURA' | 'DRPC' | 'CHAINSTACK') : null;
+  const preferredLabel = settings.preferredProvider
+    ? (settings.preferredProvider.toUpperCase() as 'ALCHEMY' | 'INFURA' | 'DRPC' | 'CHAINSTACK')
+    : null;
 
   return {
     routingMode: settings.routingMode,
-    preferredProvider: settings.preferredProvider === 'alchemy' ? 'ALCHEMY' as const : settings.preferredProvider === 'quicknode' ? 'QUICKNODE' as const : null,
+    preferredProvider: preferredLabel,
     autoFailover: settings.autoFailover,
     rpcTimeoutSeconds: settings.rpcTimeoutSeconds,
-    currentActiveProvider: active === 'alchemy' ? 'ALCHEMY' as const : active === 'quicknode' ? 'QUICKNODE' as const : null,
+    currentActiveProvider: activeLabel,
     providers,
   };
 }
