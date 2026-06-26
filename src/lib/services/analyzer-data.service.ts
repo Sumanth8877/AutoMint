@@ -24,7 +24,6 @@ import { getDb } from '@/lib/db';
 import { getNFTCollection, getNFTTrades, getNFTStatistics } from '@/lib/services/nftscan.service';
 import { getNFTCollection as getMoralisCollection, getNFTTrades as getMoralisTrades } from '@/lib/services/moralis.service';
 import { checkTokenSecurity } from '@/lib/services/goplus-security.service';
-import type { AnalyzerResult } from '@/lib/services/analyzer.service';
 import type { AnalyzerSocials, AnalyzerTiming } from '@/lib/services/analyzer-resolver.service';
 import { runTimed } from '@/lib/services/analyzer-resolver.service';
 
@@ -289,7 +288,34 @@ export async function runAnalyzerRisk(params: {
 type SaveAnalyzerHistoryParams = {
   userId: string;
   input: string;
-  result: AnalyzerResult;
+  result: {
+    intent: {
+      sourceUrl: string;
+      collectionName?: string | null;
+      collectionSlug?: string | null;
+      contractAddress?: string | null;
+      chain: string;
+    };
+    metadata: { name?: string | null };
+    mintState: { status: string };
+    riskAnalysis: { riskScore: number; riskLevel: string; riskFactors: string[] };
+    collectionIntelligence: {
+      floorPrice: string | null;
+      floorCurrency: string | null;
+      floorSymbol: string | null;
+      ownerCount: number | null;
+      volume: string | null;
+      marketStatus: string | null;
+      healthScore: number | null;
+    };
+    socials: AnalyzerSocials;
+    socialHealth: { detectedCount: number };
+    providerChain: unknown[];
+    providerUsed: string;
+    cacheUsed: boolean;
+    rpcProviderUsed: string | null;
+    timingBreakdown: AnalyzerTiming[];
+  };
   scores: ReturnType<typeof deriveAnalyzerScores>;
   analysisDurationMs: number;
 };
