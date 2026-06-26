@@ -200,7 +200,7 @@ export async function runAnalyzer(params: {
     ]);
 
     const mintFunction = settings.autoDetectContractInfo
-      ? await runTimed(telemetry.timingBreakdown, 'Mint Function Discovery', () => discoverMintFunction(discoveredAbi.abi))
+      ? await runTimed(telemetry.timingBreakdown, 'Mint Function Discovery', async () => discoverMintFunction(discoveredAbi.abi))
       : { functionName: 'mint', selector: 'mint(uint256)', confidence: 0 };
 
     log('success', 'metadata', `Owner detected: ${metadata.owner}`);
