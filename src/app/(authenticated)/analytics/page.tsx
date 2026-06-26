@@ -9,14 +9,18 @@ import {
   Zap,
 } from 'lucide-react';
 import { redirect } from 'next/navigation';
+import { Suspense } from 'react';
 import Card from '@/components/ui/Card';
 import { MetricCard } from '@/components/ui/metric-card';
 import { PageHeader } from '@/components/ui/page-header';
+import { Skeleton } from '@/components/ui/skeleton';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getAnalyticsDashboard, type ChartPoint } from '@/lib/services/analytics.service';
 
-// Cache this page for 30 seconds (has dynamic data)
+// Stream-safe: revalidate at the page level; each async section renders when ready.
 export const revalidate = 30;
+
+// ── Formatters ────────────────────────────────────────────────────────────────
 
 function formatPercent(value: number) {
   return `${value.toFixed(value % 1 === 0 ? 0 : 1)}%`;
@@ -46,6 +50,8 @@ function formatLatency(ms: number) {
 function maxValue(points: ChartPoint[]) {
   return Math.max(1, ...points.flatMap((point) => [point.value, point.secondary ?? 0]));
 }
+
+// ── Shared UI primitives ──────────────────────────────────────────────────────
 
 function SectionHeader({ icon: Icon, title, description }: { icon: typeof Activity; title: string; description: string }) {
   return (
@@ -77,7 +83,6 @@ function StatGrid({ items }: { items: Array<{ label: string; value: string | num
 
 function BarChart({ points, dual = false }: { points: ChartPoint[]; dual?: boolean }) {
   const max = maxValue(points);
-
   return (
     <div className="h-44 min-w-0 overflow-hidden rounded-lg border border-border bg-background/60 p-4">
       <div className="flex h-32 min-w-0 items-end gap-2">
@@ -107,7 +112,6 @@ function BarChart({ points, dual = false }: { points: ChartPoint[]; dual?: boole
 
 function OutcomeBars({ points }: { points: ChartPoint[] }) {
   const total = points.reduce((sum, point) => sum + point.value, 0);
-
   return (
     <div className="min-w-0 space-y-3">
       {points.map((point) => {
@@ -129,11 +133,137 @@ function OutcomeBars({ points }: { points: ChartPoint[] }) {
   );
 }
 
+// ── Section skeletons (shown while data streams in) ───────────────────────────
+
+function KpiSkeleton() {
+  return (
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      {[...Array(4)].map((_, i) => (
+        <div key={i} className="rounded-xl border border-border bg-surface p-5">
+          <Skeleton className="mb-3 h-3 w-24" />
+          <Skeleton className="h-8 w-16" />
+          <Skeleton className="mt-2 h-3 w-32" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CardSkeleton() {
+  return (
+    <Card className="min-w-0 p-5">
+      <Skeleton className="mb-4 h-5 w-48" />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="rounded-lg border border-border bg-background/60 p-4">
+            <Skeleton className="mb-2 h-3 w-20" />
+            <Skeleton className="h-7 w-12" />
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// ── Async section components (each fetches its own slice) ─────────────────────
+
+async function KpiSection({ userId }: { userId: string }) {
+  const analytics = await getAnalyticsDashboard(userId);
+  return (
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <MetricCard label="Total Mints" value={analytics.kpis.totalMints} detail={`${analytics.kpis.successfulMints} successful`} icon={Zap} tone="primary" />
+      <MetricCard label="Success Rate" value={formatPercent(analytics.kpis.successRate)} detail={`${analytics.kpis.failedMints} failed mints`} icon={TrendingUp} tone="success" />
+      <MetricCard label="Scheduled Mints" value={analytics.kpis.scheduledMints} detail={`${analytics.kpis.executedScheduledMints} executed`} icon={Clock3} tone="accent" />
+      <MetricCard label="Risk Average" value={analytics.kpis.averageRiskScore} detail={`${analytics.kpis.highRiskCollections} high risk`} icon={ShieldCheck} tone={analytics.kpis.averageRiskScore >= 51 ? 'warning' : 'success'} />
+    </div>
+  );
+}
+
+async function ExecutionSection({ userId }: { userId: string }) {
+  const analytics = await getAnalyticsDashboard(userId);
+  return (
+    <Card className="min-w-0 p-5">
+      <SectionHeader icon={Clock3} title="Execution Performance" description="Timing from task creation to confirmation, with RPC latency from user-scoped RPC execution events." />
+      <StatGrid
+        items={[
+          { label: 'Average Execution Time', value: formatDuration(analytics.executionPerformance.averageExecutionTimeSeconds) },
+          { label: 'Fastest Execution', value: formatDuration(analytics.executionPerformance.fastestExecutionSeconds) },
+          { label: 'Slowest Execution', value: formatDuration(analytics.executionPerformance.slowestExecutionSeconds) },
+          { label: 'Average RPC Latency', value: formatLatency(analytics.executionPerformance.averageRpcLatencyMs) },
+        ]}
+      />
+    </Card>
+  );
+}
+
+async function MintPerformanceSection({ userId }: { userId: string }) {
+  const analytics = await getAnalyticsDashboard(userId);
+  return (
+    <Card className="min-w-0 p-5">
+      <SectionHeader icon={Gauge} title="Mint Performance" description="Execution outcomes from your mint task and mint history records." />
+      <StatGrid
+        items={[
+          { label: 'Successful Mints', value: analytics.mintPerformance.successfulMints },
+          { label: 'Failed Mints', value: analytics.mintPerformance.failedMints },
+          { label: 'Success Rate', value: formatPercent(analytics.mintPerformance.successRate) },
+        ]}
+      />
+      <div className="mt-5 grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(150px,0.75fr)]">
+        <div className="min-w-0">
+          <p className="mb-2 text-xs font-medium uppercase text-muted">Mints Over Time</p>
+          <BarChart points={analytics.mintPerformance.mintsOverTime} dual />
+        </div>
+        <div className="min-w-0">
+          <p className="mb-2 text-xs font-medium uppercase text-muted">Success vs Failure</p>
+          <OutcomeBars points={analytics.mintPerformance.successVsFailure} />
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+async function SpendSection({ userId }: { userId: string }) {
+  const analytics = await getAnalyticsDashboard(userId);
+  return (
+    <Card tone="elevated" className="min-w-0 p-5">
+      <SectionHeader icon={Wallet} title="Profit & Spend Analytics" description="Spending totals from executed mint records, including mint price and recorded gas usage when available." />
+      <StatGrid
+        items={[
+          { label: 'Total Spend', value: formatEth(analytics.spendAnalytics.totalSpendEth) },
+          { label: 'Average Mint Cost', value: formatEth(analytics.spendAnalytics.averageMintCostEth) },
+          { label: 'Highest Mint Cost', value: formatEth(analytics.spendAnalytics.highestMintCostEth) },
+          { label: 'Lowest Mint Cost', value: formatEth(analytics.spendAnalytics.lowestMintCostEth) },
+        ]}
+      />
+    </Card>
+  );
+}
+
+async function RiskSection({ userId }: { userId: string }) {
+  const analytics = await getAnalyticsDashboard(userId);
+  return (
+    <Card className="min-w-0 p-5">
+      <SectionHeader icon={AlertTriangle} title="Risk Analytics" description="Analyzer risk distribution from stored risk scores on your collection mint tasks." />
+      <StatGrid
+        items={[
+          { label: 'Collections Analyzed', value: analytics.riskAnalytics.collectionsAnalyzed },
+          { label: 'Average Risk Score', value: analytics.riskAnalytics.averageRiskScore },
+          { label: 'Low Risk Count', value: analytics.riskAnalytics.lowRiskCount, detail: '0-25' },
+          { label: 'Medium Risk Count', value: analytics.riskAnalytics.mediumRiskCount, detail: '26-50' },
+          { label: 'High Risk Count', value: analytics.riskAnalytics.highRiskCount, detail: '51-75' },
+          { label: 'Critical Risk Count', value: analytics.riskAnalytics.criticalRiskCount, detail: '76-100' },
+        ]}
+      />
+    </Card>
+  );
+}
+
+// ── Page shell — auth only, no data fetching ──────────────────────────────────
+
 export default async function AnalyticsPage() {
   const auth = await requireApiUser();
   if ('error' in auth) redirect('/sign-in');
-
-  const analytics = await getAnalyticsDashboard(auth.userId);
+  const { userId } = auth;
 
   return (
     <div>
@@ -143,74 +273,29 @@ export default async function AnalyticsPage() {
         description="User-owned mint performance, execution speed, spend, risk, and scheduled mint outcomes."
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Total Mints" value={analytics.kpis.totalMints} detail={`${analytics.kpis.successfulMints} successful`} icon={Zap} tone="primary" />
-        <MetricCard label="Success Rate" value={formatPercent(analytics.kpis.successRate)} detail={`${analytics.kpis.failedMints} failed mints`} icon={TrendingUp} tone="success" />
-        <MetricCard label="Scheduled Mints" value={analytics.kpis.scheduledMints} detail={`${analytics.kpis.executedScheduledMints} executed`} icon={Clock3} tone="accent" />
-        <MetricCard label="Risk Average" value={analytics.kpis.averageRiskScore} detail={`${analytics.kpis.highRiskCollections} high risk`} icon={ShieldCheck} tone={analytics.kpis.averageRiskScore >= 51 ? 'warning' : 'success'} />
+      {/* KPI row — streams first, typically fastest (DB-only) */}
+      <Suspense fallback={<KpiSkeleton />}>
+        <KpiSection userId={userId} />
+      </Suspense>
+
+      {/* Execution + Mint Performance row */}
+      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <Suspense fallback={<CardSkeleton />}>
+          <ExecutionSection userId={userId} />
+        </Suspense>
+        <Suspense fallback={<CardSkeleton />}>
+          <MintPerformanceSection userId={userId} />
+        </Suspense>
       </div>
 
+      {/* Spend + Risk row — may wait on Moralis/NFTScan, streams independently */}
       <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <Card className="min-w-0 p-5">
-          <SectionHeader icon={Clock3} title="Execution Performance" description="Timing from task creation to confirmation, with RPC latency from user-scoped RPC execution events." />
-          <StatGrid
-            items={[
-              { label: 'Average Execution Time', value: formatDuration(analytics.executionPerformance.averageExecutionTimeSeconds) },
-              { label: 'Fastest Execution', value: formatDuration(analytics.executionPerformance.fastestExecutionSeconds) },
-              { label: 'Slowest Execution', value: formatDuration(analytics.executionPerformance.slowestExecutionSeconds) },
-              { label: 'Average RPC Latency', value: formatLatency(analytics.executionPerformance.averageRpcLatencyMs) },
-            ]}
-          />
-        </Card>
-
-        <Card className="min-w-0 p-5">
-          <SectionHeader icon={Gauge} title="Mint Performance" description="Execution outcomes from your mint task and mint history records." />
-          <StatGrid
-            items={[
-              { label: 'Successful Mints', value: analytics.mintPerformance.successfulMints },
-              { label: 'Failed Mints', value: analytics.mintPerformance.failedMints },
-              { label: 'Success Rate', value: formatPercent(analytics.mintPerformance.successRate) },
-            ]}
-          />
-          <div className="mt-5 grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(150px,0.75fr)]">
-            <div className="min-w-0">
-              <p className="mb-2 text-xs font-medium uppercase text-muted">Mints Over Time</p>
-              <BarChart points={analytics.mintPerformance.mintsOverTime} dual />
-            </div>
-            <div className="min-w-0">
-              <p className="mb-2 text-xs font-medium uppercase text-muted">Success vs Failure</p>
-              <OutcomeBars points={analytics.mintPerformance.successVsFailure} />
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <Card tone="elevated" className="min-w-0 p-5">
-          <SectionHeader icon={Wallet} title="Profit & Spend Analytics" description="Spending totals from executed mint records, including mint price and recorded gas usage when available." />
-          <StatGrid
-            items={[
-              { label: 'Total Spend', value: formatEth(analytics.spendAnalytics.totalSpendEth) },
-              { label: 'Average Mint Cost', value: formatEth(analytics.spendAnalytics.averageMintCostEth) },
-              { label: 'Highest Mint Cost', value: formatEth(analytics.spendAnalytics.highestMintCostEth) },
-              { label: 'Lowest Mint Cost', value: formatEth(analytics.spendAnalytics.lowestMintCostEth) },
-            ]}
-          />
-        </Card>
-
-        <Card className="min-w-0 p-5">
-          <SectionHeader icon={AlertTriangle} title="Risk Analytics" description="Analyzer risk distribution from stored risk scores on your collection mint tasks." />
-          <StatGrid
-            items={[
-              { label: 'Collections Analyzed', value: analytics.riskAnalytics.collectionsAnalyzed },
-              { label: 'Average Risk Score', value: analytics.riskAnalytics.averageRiskScore },
-              { label: 'Low Risk Count', value: analytics.riskAnalytics.lowRiskCount, detail: '0-25' },
-              { label: 'Medium Risk Count', value: analytics.riskAnalytics.mediumRiskCount, detail: '26-50' },
-              { label: 'High Risk Count', value: analytics.riskAnalytics.highRiskCount, detail: '51-75' },
-              { label: 'Critical Risk Count', value: analytics.riskAnalytics.criticalRiskCount, detail: '76-100' },
-            ]}
-          />
-        </Card>
+        <Suspense fallback={<CardSkeleton />}>
+          <SpendSection userId={userId} />
+        </Suspense>
+        <Suspense fallback={<CardSkeleton />}>
+          <RiskSection userId={userId} />
+        </Suspense>
       </div>
     </div>
   );
