@@ -2,5 +2,9 @@
   "buildCommand": "next build",
   "framework": "nextjs",
   "installCommand": "npm install",
-  "outputDirectory": ".next"
+  "outputDirectory": ".next",
+  "functions": {
+    "src/app/api/webhooks/qstash/route.ts": { "maxDuration": 60 },
+    "src/app/api/analyzer/stream/route.ts": { "maxDuration": 60 }
+  }
 }
