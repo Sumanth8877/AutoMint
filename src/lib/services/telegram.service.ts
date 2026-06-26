@@ -480,7 +480,20 @@ export async function sendTelegramNotification(
     const account = await getTelegramAccountByUserId(userId);
     if (!account) return { sent: false, reason: 'telegram_not_linked' };
 
-    await sendTelegramMessage(account.chatId, formatNotification(type, payload));
+    // For scheduled mints, attach an inline keyboard so the user can cancel
+    // directly from their phone without opening the web app.
+    const replyMarkup: InlineKeyboardMarkup | undefined =
+      type === 'mint_scheduled' && payload.taskId
+        ? {
+            inline_keyboard: [[
+              { text: '❌ Cancel Task', callback_data: `schedule:cancel:${payload.taskId}` },
+            ]],
+          }
+        : undefined;
+
+    await sendTelegramMessage(account.chatId, formatNotification(type, payload), {
+      replyMarkup,
+    });
     return { sent: true };
   } catch (error) {
     await captureException(error instanceof Error ? error : new Error(String(error)), { area: 'telegram', fingerprint: ['telegram', 'notification-failed'] });
@@ -979,10 +992,63 @@ async function handleConsensusCallback(callback: TelegramCallbackQuery) {
   }
 }
 
+
+async function handleScheduledMintCallback(callback: TelegramCallbackQuery) {
+  try {
+    const [scope, action, taskId] = (callback.data || '').split(':');
+    if (scope !== 'schedule' || !action || !taskId) {
+      return { handled: false };
+    }
+
+    const account = await getTelegramAccountByTelegramId(String(callback.from.id));
+    if (!account) {
+      await answerCallbackQuery(callback.id, 'Telegram is not linked to AutoMint.');
+      return { handled: true };
+    }
+
+    if (action === 'cancel') {
+      try {
+        const { cancelScheduledMint } = await import('@/lib/services/qstash.service');
+        const task = await cancelScheduledMint(taskId, account.userId);
+        await answerCallbackQuery(callback.id, '✅ Task cancelled');
+        await sendTelegramMessage(
+          account.chatId,
+          `❌ Mint task cancelled from Telegram.\nTask: ${task.id.slice(0, 8)}`,
+        );
+      } catch (cancelError) {
+        const msg = cancelError instanceof Error ? cancelError.message : 'Cancel failed';
+        await answerCallbackQuery(callback.id, `Failed: ${msg.slice(0, 50)}`);
+        await sendTelegramMessage(
+          account.chatId,
+          `Could not cancel task ${taskId.slice(0, 8)}: ${msg.slice(0, 120)}`,
+        );
+      }
+      return { handled: true };
+    }
+
+    await answerCallbackQuery(callback.id);
+    return { handled: false };
+  } catch (error) {
+    await captureException(error instanceof Error ? error : new Error(String(error)), {
+      area: 'telegram',
+      context: {
+        telegramId: String(callback.from.id),
+        callbackData: callback.data,
+      },
+      fingerprint: ['telegram', 'scheduled-mint-callback'],
+    });
+    throw error;
+  }
+}
+
 export async function handleTelegramUpdate(update: TelegramUpdate) {
   if (!isTelegramEnabled()) return { handled: false, disabled: true };
 
   if (update.callback_query?.data) {
+    // Check schedule:cancel callbacks first (highest priority — user-initiated cancel)
+    const scheduleResult = await handleScheduledMintCallback(update.callback_query);
+    if (scheduleResult.handled) return scheduleResult;
+    // Then risk approval/cancel callbacks
     const riskResult = await handleRiskCallback(update.callback_query);
     if (riskResult.handled) return riskResult;
     return handleConsensusCallback(update.callback_query);
