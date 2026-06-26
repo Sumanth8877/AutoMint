@@ -114,7 +114,7 @@ export async function executeMintTask(
     return { success: false, error: 'Task not found, already running, or completed' };
   }
 
-  await logActivity(claimed.userId, 'mint_status_changed', 'Mint task started', { taskId, status: 'running' });
+  void logActivity(claimed.userId, 'mint_status_changed', 'Mint task started', { taskId, status: 'running' }); // fire-and-forget: non-critical logging must not block mint execution
   addBreadcrumb({
     category: 'mint',
     message: 'mint started',
@@ -271,7 +271,7 @@ export async function executeMintTask(
   });
 
   if (claimed.userId) {
-    await logActivity(claimed.userId, 'task_completed', 'Mint executed', {
+    void logActivity(claimed.userId, 'task_completed', 'Mint executed', {
       taskId,
       walletId: claimed.walletId,
       collectionId: claimed.collectionId,

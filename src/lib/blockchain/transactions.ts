@@ -61,27 +61,47 @@ export async function getTransactionStatus(chain: string, txHash: string): Promi
 }
 
 /**
- * Wait for transaction confirmation (polling-based).
- * Returns the transaction info once confirmed or failed.
+ * Wait for transaction confirmation using viem's native waitForTransactionReceipt.
+ *
+ * Replaces the previous manual while-loop that called getTransactionStatus() every
+ * 500ms. viem handles the polling internally using the same pollingInterval, but:
+ *   - No manual event-loop blocking via setTimeout chains
+ *   - Built-in timeout handling (throws WaitForTransactionReceiptTimeoutError)
+ *   - Cleaner abort on confirmed/reverted receipts
+ *
+ * Behaviour on timeout: returns { status: 'pending' } so callers treat the tx
+ * as unconfirmed, identical to the previous implementation.
  */
 export async function waitForConfirmation(
   chain: string,
   txHash: string,
-  maxWaitMs = 90_000,        // Speed fix: reduced from 120s to 90s
-  pollIntervalMs = 500,      // Speed fix: reduced from 5000ms to 500ms
-  // 500ms polling detects confirmation within one poll cycle after the block lands.
-  // On Base (2s blocks): avg detection latency drops from ~5s to ~500-2500ms.
-  // On Ethereum (12s blocks): drops from ~5s to ~500-1000ms after inclusion.
+  maxWaitMs = 90_000,       // 90s max wait
+  pollIntervalMs = 500,     // 500ms polling — detects confirmation within one cycle
 ): Promise<TransactionInfo> {
-  const start = Date.now();
+  try {
+    const client = getClient(chain);
+    const receipt = await client.waitForTransactionReceipt({
+      hash: txHash as Hex,
+      timeout: maxWaitMs,
+      pollingInterval: pollIntervalMs,
+    });
 
-  while (Date.now() - start < maxWaitMs) {
-    const info = await getTransactionStatus(chain, txHash);
-    if (info.status === 'confirmed' || info.status === 'failed') {
-      return info;
-    }
-    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    const status: TxStatus = receipt.status === 'success' ? 'confirmed' : 'failed';
+    return {
+      hash: txHash,
+      status,
+      blockNumber: receipt.blockNumber ? Number(receipt.blockNumber) : undefined,
+      from: receipt.from,
+      to: receipt.to ?? undefined,
+      gasUsed: receipt.gasUsed?.toString(),
+    };
+  } catch (error) {
+    // Timeout or network error — return pending so callers treat it as unconfirmed
+    captureException(error, {
+      area: 'transactions',
+      context: { txHash, chain },
+      fingerprint: ['transactions', 'wait-timeout'],
+    });
+    return { hash: txHash, status: 'pending' };
   }
-
-  return { hash: txHash, status: 'pending' };
 }
