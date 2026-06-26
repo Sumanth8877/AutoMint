@@ -232,7 +232,7 @@ export default async function DashboardPage() {
           </div>
           <div className="grid gap-4 lg:grid-cols-3">
             {[
-              ['Success rate', completedTasks + failedTasks > 0 ? \`\${Math.round((completedTasks / (completedTasks + failedTasks)) * 100)}%\` : 'N/A', 'Last 30 days'],
+              ['Success rate', completedTasks + failedTasks > 0 ? `${Math.round((completedTasks / (completedTasks + failedTasks)) * 100)}%` : 'N/A', 'Last 30 days'],
               ['Avg execution', 'N/A', 'Intent to broadcast'],
               ['Total tasks', data.tasks.length.toString(), 'All time'],
             ].map(([label, value, detail]) => (
@@ -252,10 +252,10 @@ export default async function DashboardPage() {
                   const failedH = d.failed > 0 ? ((d.failed) / maxVal) * 100 : 0;
                   const completedH = totalH - failedH;
                   return (
-                    <div key={d.day} className="flex flex-1 flex-col items-center gap-0.5" title={`\${d.day}: \${d.completed} ok / \${d.failed} failed`}>
+                    <div key={d.day} className="flex flex-1 flex-col items-center gap-0.5" title={`${d.day}: ${d.completed} ok / ${d.failed} failed`}>
                       <div className="flex w-full flex-1 items-end flex-col justify-end gap-0">
-                        {d.failed > 0 && <div className="w-full rounded-t-sm bg-danger/60" style={{ height: `\${failedH}%` }} />}
-                        {d.completed > 0 && <div className="w-full bg-success/60" style={{ height: `\${completedH}%` }} />}
+                        {d.failed > 0 && <div className="w-full rounded-t-sm bg-danger/60" style={{ height: `${failedH}%` }} />}
+                        {d.completed > 0 && <div className="w-full bg-success/60" style={{ height: `${completedH}%` }} />}
                       </div>
                       <span className="text-[8px] text-muted whitespace-nowrap">{d.day.split(' ')[1]}</span>
                     </div>
