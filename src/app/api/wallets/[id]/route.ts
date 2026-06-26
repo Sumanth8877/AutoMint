@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/require-auth';
-import { getErrorMessage, parseJsonBody } from '@/lib/api/errors';
+import { getErrorMessage, parseJsonBody, handleRouteError } from '@/lib/api/errors';
 import { removeWallet, updateWallet } from '@/lib/services/wallet.service';
 
 type RouteContext = {
@@ -24,13 +24,7 @@ export async function PATCH(req: Request, context: RouteContext) {
 
     return NextResponse.json({ wallet });
   } catch (error) {
-    const message = getErrorMessage(error, 'Failed to update wallet');
-    const status = message.includes('not found')
-      ? 404
-      : message === 'Invalid JSON request body' || message.includes('Unsupported')
-        ? 400
-        : 500;
-    return NextResponse.json({ error: message }, { status });
+    return handleRouteError(error, 'Failed to process wallet request');
   }
 }
 
@@ -44,8 +38,6 @@ export async function DELETE(_req: Request, context: RouteContext) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    const message = getErrorMessage(error, 'Failed to delete wallet');
-    const status = message.includes('not found') ? 404 : 500;
-    return NextResponse.json({ error: message }, { status });
+    return handleRouteError(error, 'Failed to process wallet request');
   }
 }
