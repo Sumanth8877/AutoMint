@@ -28,10 +28,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(response);
   } catch (error) {
-    const message = getErrorMessage(error);
-    const status = error instanceof AnalyzerResolutionError || error instanceof AnalyzerExecutionError ? error.status : message === 'Invalid JSON request body' ? 400 : 500;
-    if (error instanceof AnalyzerResolutionError) {
-      return NextResponse.json({ error: message, intent: error.intent, logs: error.logs }, { status });
+    return handleRouteError(error, 'Failed to analyze mint URL');
     }
     if (error instanceof AnalyzerExecutionError) {
       return NextResponse.json({ error: message, logs: error.logs }, { status });
