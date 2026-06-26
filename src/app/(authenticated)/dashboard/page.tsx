@@ -24,7 +24,8 @@ import { getRecentActivities } from '@/lib/monitoring';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getDb } from '@/lib/db';
 import { captureException } from '@/lib/observability/sentry';
-import { wallets, collections } from '@/drizzle/schema';
+import { wallets, collections, mintHistory } from '@/drizzle/schema';
+import { gte } from 'drizzle-orm';
 import { eq } from 'drizzle-orm';
 import { formatEther } from 'viem';
 
@@ -35,6 +36,27 @@ async function getDashboardData(userId: string) {
     // Get user's mint tasks
     const tasks = await getUserMintTasks(userId);
     
+    // Build 7-day mint performance chart from task history
+    const last7Labels = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (6 - i));
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    });
+
+    const tasksByDay = tasks.reduce((acc, t) => {
+      const day = new Date(t.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      if (!acc[day]) acc[day] = { completed: 0, failed: 0 };
+      if (t.status === 'completed') acc[day].completed++;
+      else if (t.status === 'failed') acc[day].failed++;
+      return acc;
+    }, {} as Record<string, { completed: number; failed: number }>);
+
+    const chartData = last7Labels.map(day => ({
+      day,
+      completed: tasksByDay[day]?.completed ?? 0,
+      failed: tasksByDay[day]?.failed ?? 0,
+    }));
+
     // Get wallet count and funded status
     const userWallets = await db.select().from(wallets).where(eq(wallets.userId, userId));
     const fundedWallets = userWallets.filter(w => w.balance && parseFloat(w.balance) > 0.001);
@@ -113,6 +135,7 @@ async function getDashboardData(userId: string) {
         eta: task.scheduledTime ? new Date(task.scheduledTime).toLocaleTimeString() : 'N/A',
         risk: task.riskThreshold && task.riskThreshold > 75 ? 'High' : task.riskThreshold && task.riskThreshold > 50 ? 'Medium' : 'Low',
       })),
+      chartData,
       riskFeed: [] as Array<{ title: string; source: string; level: string; time: string }>,
       watchlist: userCollections.slice(0, 4).map(col => ({
         name: col.name || 'Unknown',
@@ -138,6 +161,7 @@ async function getDashboardData(userId: string) {
         { label: 'Active Tasks', value: '0', detail: '0 other', icon: Zap, tone: 'primary' as const },
         { label: 'Funded Wallets', value: '0/0', detail: 'No wallets', icon: AlertTriangle, tone: 'warning' as const },
       ],
+      chartData: last7Labels.map(day => ({ day, completed: 0, failed: 0 })),
       tasks: [],
       riskFeed: [],
       watchlist: [],
@@ -208,7 +232,7 @@ export default async function DashboardPage() {
           </div>
           <div className="grid gap-4 lg:grid-cols-3">
             {[
-              ['Success rate', 'N/A', 'Last 30 days'],
+              ['Success rate', completedTasks + failedTasks > 0 ? \`\${Math.round((completedTasks / (completedTasks + failedTasks)) * 100)}%\` : 'N/A', 'Last 30 days'],
               ['Avg execution', 'N/A', 'Intent to broadcast'],
               ['Total tasks', data.tasks.length.toString(), 'All time'],
             ].map(([label, value, detail]) => (
@@ -220,17 +244,29 @@ export default async function DashboardPage() {
             ))}
           </div>
           <div className="mt-5 h-28 rounded-lg border border-border bg-background/60 p-4">
-            <div className="flex h-full items-end gap-2">
-              {data.tasks.length > 0 ? data.tasks.map((_, index) => (
-                <div key={index} className="flex flex-1 items-end">
-                  <div className="w-full rounded-t bg-accent/70" style={{ height: `${((index * 37) % 60) + 20}%` }} />
-                </div>
-              )) : (
-                <div className="flex h-full w-full items-center justify-center text-muted">
-                  No data available
-                </div>
-              )}
-            </div>
+            {data.chartData.some(d => d.completed > 0 || d.failed > 0) ? (
+              <div className="flex h-full items-end gap-1">
+                {data.chartData.map((d) => {
+                  const maxVal = Math.max(...data.chartData.map(x => x.completed + x.failed), 1);
+                  const totalH = ((d.completed + d.failed) / maxVal) * 100;
+                  const failedH = d.failed > 0 ? ((d.failed) / maxVal) * 100 : 0;
+                  const completedH = totalH - failedH;
+                  return (
+                    <div key={d.day} className="flex flex-1 flex-col items-center gap-0.5" title={`\${d.day}: \${d.completed} ok / \${d.failed} failed`}>
+                      <div className="flex w-full flex-1 items-end flex-col justify-end gap-0">
+                        {d.failed > 0 && <div className="w-full rounded-t-sm bg-danger/60" style={{ height: `\${failedH}%` }} />}
+                        {d.completed > 0 && <div className="w-full bg-success/60" style={{ height: `\${completedH}%` }} />}
+                      </div>
+                      <span className="text-[8px] text-muted whitespace-nowrap">{d.day.split(' ')[1]}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-muted text-sm">
+                No mint history yet
+              </div>
+            )}
           </div>
         </Card>
 

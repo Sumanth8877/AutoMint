@@ -5,10 +5,25 @@ import { getDb } from '@/lib/db';
 import { collections, mintHistory, mintTasks, wallets } from '@/drizzle/schema';
 import { logActivity } from '@/lib/monitoring';
 import { getMintState } from '@/lib/services/mint-state.service';
-import { applyRiskWeights, getRiskWeights } from '@/lib/services/risk-learning.service';
 import { addBreadcrumb, captureException, startSpan } from '@/lib/observability/sentry';
 import { isTelegramEnabled } from '@/lib/services/telegram.service';
 import { checkTokenSecurity } from '@/lib/services/goplus-security.service';
+
+// Inline fixed-weight scorer — adaptive learning removed
+function applyRiskWeights(
+  raw: { contractAnalysis: number; trustedWalletActivity: number; socialAnalysis: number; domainAge: number },
+  weights: { contractAnalysis: number; trustedWalletActivity: number; socialAnalysis: number; domainAge: number },
+): number {
+  const total = weights.contractAnalysis + weights.trustedWalletActivity + weights.socialAnalysis + weights.domainAge;
+  if (total === 0) return 0;
+  return (
+    raw.contractAnalysis * weights.contractAnalysis +
+    raw.trustedWalletActivity * weights.trustedWalletActivity +
+    raw.socialAnalysis * weights.socialAnalysis +
+    raw.domainAge * weights.domainAge
+  ) / total;
+}
+
 
 const RISK_THRESHOLD = 75;
 
@@ -344,18 +359,8 @@ export async function analyzeAnalyzerRisk(params: {
     socialAnalysis: social.score,
     domainAge: domainAge.score,
   };
-  let configuredWeights: Awaited<ReturnType<typeof getRiskWeights>>;
-  try {
-    configuredWeights = await getRiskWeights();
-  } catch (weightsError) {
-    addBreadcrumb({
-      category: 'risk',
-      message: 'getAdaptiveRiskWeights failed — using default weights',
-      level: 'warning',
-      data: { error: weightsError instanceof Error ? weightsError.message : String(weightsError) },
-    });
-    configuredWeights = { contractAnalysis: 1, trustedWalletActivity: 1, socialAnalysis: 1, domainAge: 1 };
-  }
+  // Fixed equal weights — adaptive learning removed
+  const configuredWeights = { contractAnalysis: 1, trustedWalletActivity: 1, socialAnalysis: 1, domainAge: 1 };
   const riskScore = clampScore(applyRiskWeights(rawWeights, configuredWeights));
   const riskFactors = [
     ...contract.reasons,
@@ -407,18 +412,8 @@ export async function analyzeMintRisk(taskId: string): Promise<RiskAnalysis> {
     socialAnalysis: social.score,
     domainAge: domainAge.score,
   };
-  let configuredWeights: Awaited<ReturnType<typeof getRiskWeights>>;
-  try {
-    configuredWeights = await getRiskWeights();
-  } catch (weightsError) {
-    addBreadcrumb({
-      category: 'risk',
-      message: 'getAdaptiveRiskWeights failed — using default weights',
-      level: 'warning',
-      data: { error: weightsError instanceof Error ? weightsError.message : String(weightsError) },
-    });
-    configuredWeights = { contractAnalysis: 1, trustedWalletActivity: 1, socialAnalysis: 1, domainAge: 1 };
-  }
+  // Fixed equal weights — adaptive learning removed
+  const configuredWeights = { contractAnalysis: 1, trustedWalletActivity: 1, socialAnalysis: 1, domainAge: 1 };
   const riskScore = clampScore(applyRiskWeights(rawWeights, configuredWeights));
   const riskReasons = [
     ...contract.reasons,

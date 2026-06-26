@@ -905,21 +905,9 @@ async function handleConsensusCallback(callback: TelegramCallbackQuery) {
     }
 
     if (action === 'copy') {
-      const { executeConsensusCopyMint } = await import('@/lib/services/whale-consensus.service');
-      const result = await executeConsensusCopyMint({
-        userId: account.userId,
-        collection,
-        chain: 'ethereum',
-      });
-
-      await answerCallbackQuery(callback.id, result.success ? 'Copy mint started.' : 'Copy mint failed.');
-      const txHash = 'txHash' in result ? result.txHash : undefined;
-      await sendTelegramMessage(
-        account.chatId,
-        result.success
-          ? `Copy mint triggered.\nCollection: ${collection}${txHash ? `\nTx: ${txHash}` : ''}`
-          : `Copy mint failed.\nCollection: ${collection}\nReason: ${result.error || 'Unknown error'}`,
-      );
+      // Consensus copy-mint removed — use the whale tracker to copy mints manually
+      await answerCallbackQuery(callback.id, 'Copy mint not available. Use the whale tracker.');
+      await sendTelegramMessage(account.chatId, `\u26a0️ Consensus copy-mint is disabled.\nCollection: ${collection}\n\nUse the AutoMint dashboard to add a mint task manually.`);
       return { handled: true };
     }
 

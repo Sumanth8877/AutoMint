@@ -252,7 +252,11 @@ export const collections = pgTable('collections', {
   lastSyncedAt: timestamp('last_synced_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  userIdIdx: index('idx_collections_user_id').on(table.userId),
+  contractChainIdx: uniqueIndex('idx_collections_contract_chain').on(table.userId, table.contractAddress, table.chain),
+  contractAddressIdx: index('idx_collections_contract_address').on(table.contractAddress),
+}));
 
 // ─── Wallet Permissions ──────────────────────────────
 export const walletPermissions = pgTable('wallet_permissions', {

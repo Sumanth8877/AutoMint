@@ -369,21 +369,7 @@ export async function handleAlchemyWalletWebhook(payload: AlchemyWebhookPayload)
       const trustedType = classifyActivity(activity, address);
       const trustedContract = getActivityContract(activity);
       if (trustedType === 'mint' && trustedContract) {
-        try {
-          const { recordTrustedWalletMintEvent } = await import('@/lib/services/whale-consensus.service');
-          await recordTrustedWalletMintEvent({
-            walletAddress: address,
-            chain,
-            collection: trustedContract,
-            transactionHash: getActivityHash(activity),
-          });
-        } catch (error) {
-          await captureException(error, {
-            area: 'wallet-tracker',
-            context: { wallet: address, chain, collection: trustedContract, transactionHash: getActivityHash(activity) },
-            fingerprint: ['wallet-tracker', 'whale-consensus'],
-          });
-        }
+        // Whale consensus copy-mint removed — whale tracker handles monitoring
       }
 
       const watcher = watcherByAddress.get(address);

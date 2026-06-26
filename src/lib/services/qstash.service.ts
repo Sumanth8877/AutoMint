@@ -13,7 +13,7 @@ import { requireRiskApproval } from '@/lib/services/risk.service';
 import { addBreadcrumb, captureException, captureMessage } from '@/lib/observability/sentry';
 import { acquireLock, releaseLock } from '@/lib/services/mint-lock.service';
 import { executeScheduledRiskCheck, hasBlockingRiskChange, storeOriginalRiskSnapshot } from '@/lib/services/scheduled-risk-check.service';
-import { sendMintFailedEmail, sendMintScheduledEmail, sendSystemErrorEmail } from '@/lib/services/email-notification.service';
+import { sendMintFailedEmail, sendMintScheduledEmail, sendMintSuccessEmail, sendSystemErrorEmail } from '@/lib/services/email-notification.service';
 import { getClient } from '@/lib/blockchain/client';
 import type { Hex } from 'viem';
 
@@ -918,6 +918,14 @@ export async function executeReceiptRecheck(taskId: string) {
       taskId,
       txHash: hash,
     });
+
+    if (confirmed) {
+      await sendMintSuccessEmail(task.userId, {
+        taskId,
+        txHash: hash,
+        status: 'Confirmed (recheck)',
+      });
+    }
 
     addBreadcrumb({
       category: 'qstash',
