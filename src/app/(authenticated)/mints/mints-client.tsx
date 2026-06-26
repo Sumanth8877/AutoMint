@@ -178,7 +178,7 @@ export default function MintsClient() {
     },
   });
 
-  // Cancel task mutation
+  // Cancel task mutation — optimistic: flip status to 'cancelled' immediately, rollback on error
   const cancelTaskMutation = useMutation({
     mutationFn: async ({ id, action }: { id: string; action: string }) => {
       return apiRequest<MintActionResponse>('/api/mints', {
@@ -186,12 +186,25 @@ export default function MintsClient() {
         body: { id, action },
       });
     },
-    onSuccess: () => {
+    onMutate: async ({ id }) => {
+      await queryClient.cancelQueries({ queryKey: ['mints'] });
+      const previous = queryClient.getQueryData<{ tasks: MintTask[] }>(['mints']);
+      queryClient.setQueryData<{ tasks: MintTask[] }>(['mints'], (old) => ({
+        tasks: (old?.tasks ?? []).map((t) => t.id === id ? { ...t, status: 'cancelled' } : t),
+      }));
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(['mints'], context.previous);
+      setError('Failed to cancel task.');
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['mints'] });
+      setUpdatingId(null);
     },
   });
 
-  // Delete task mutation
+  // Delete task mutation — optimistic: remove from list immediately, rollback on error
   const deleteTaskMutation = useMutation({
     mutationFn: async (id: string) => {
       return apiRequest<{ success: true }>('/api/mints', {
@@ -199,8 +212,21 @@ export default function MintsClient() {
         body: { id },
       });
     },
-    onSuccess: () => {
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['mints'] });
+      const previous = queryClient.getQueryData<{ tasks: MintTask[] }>(['mints']);
+      queryClient.setQueryData<{ tasks: MintTask[] }>(['mints'], (old) => ({
+        tasks: (old?.tasks ?? []).filter((t) => t.id !== id),
+      }));
+      return { previous };
+    },
+    onError: (_err, _id, context) => {
+      if (context?.previous) queryClient.setQueryData(['mints'], context.previous);
+      setError('Failed to delete task. It has been restored.');
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['mints'] });
+      setDeletingId(null);
     },
   });
 
