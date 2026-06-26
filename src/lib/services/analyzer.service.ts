@@ -57,6 +57,9 @@ import {
 
 export type { AnalyzerSocials };
 
+// Re-export for callers that import normalizeAnalyzerInput from this module
+export { normalizeAnalyzerInput } from '@/lib/services/analyzer-resolver.service';
+
 type AnalyzerSocialHealth = { detectedCount: number; missing: AnalyzerSocialKey[] };
 type AnalyzerSettings = Awaited<ReturnType<typeof getEffectiveExecutionDefaults>>;
 
