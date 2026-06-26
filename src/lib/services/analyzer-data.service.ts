@@ -315,7 +315,7 @@ type SaveAnalyzerHistoryParams = {
     };
     socials: AnalyzerSocials;
     socialHealth: { detectedCount: number };
-    providerChain: unknown[];
+    providerChain: Array<{ provider: string; status: 'success' | 'failed'; durationMs: number }>;
     providerUsed: string;
     cacheUsed: boolean;
     rpcProviderUsed: string | null;
