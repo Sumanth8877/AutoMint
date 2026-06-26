@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/require-auth';
-import { getErrorMessage } from '@/lib/api/errors';
+import { getErrorMessage, handleRouteError } from '@/lib/api/errors';
 import { setDefaultWallet } from '@/lib/services/wallet.service';
 
 type RouteContext = {
@@ -17,12 +17,6 @@ export async function PATCH(_req: Request, context: RouteContext) {
 
     return NextResponse.json({ wallet });
   } catch (error) {
-    const message = getErrorMessage(error, 'Failed to set default wallet');
-    const status = message.includes('not found')
-      ? 404
-      : message.includes('must be')
-        ? 400
-        : 500;
-    return NextResponse.json({ error: message }, { status });
+    return handleRouteError(error, 'Failed to update default wallet');
   }
 }
