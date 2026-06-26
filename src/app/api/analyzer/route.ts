@@ -1,13 +1,9 @@
 import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/require-auth';
-import { parseJsonBody } from '@/lib/api/errors';
+import { parseJsonBody, handleRouteError } from '@/lib/api/errors';
 import { enforceRateLimit, RATE_LIMITS } from '@/lib/api/rate-limit';
 import { captureException } from '@/lib/observability/sentry';
 import { AnalyzerExecutionError, AnalyzerResolutionError, runAnalyzer } from '@/lib/services/analyzer.service';
-
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : 'Analyzer request failed';
-}
 
 export async function POST(req: Request) {
   try {
@@ -28,11 +24,17 @@ export async function POST(req: Request) {
 
     return NextResponse.json(response);
   } catch (error) {
-    return handleRouteError(error, 'Failed to analyze mint URL');
-    }
+    const status =
+      error instanceof AnalyzerResolutionError ? 422 :
+      error instanceof AnalyzerExecutionError  ? 500 : 500;
+
+    const message =
+      error instanceof Error ? error.message : 'Analyzer request failed';
+
     if (error instanceof AnalyzerExecutionError) {
       return NextResponse.json({ error: message, logs: error.logs }, { status });
     }
+
     if (status >= 500) {
       await captureException(error, {
         area: 'discovery',
@@ -40,6 +42,7 @@ export async function POST(req: Request) {
         fingerprint: ['analyzer', 'route'],
       });
     }
+
     return NextResponse.json({ error: message }, { status });
   }
 }
