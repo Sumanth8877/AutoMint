@@ -30,19 +30,19 @@ import { eq } from 'drizzle-orm';
 import { formatEther } from 'viem';
 
 async function getDashboardData(userId: string) {
+  // Hoisted — used in both try{} and catch{} blocks
+  const last7Labels = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (6 - i));
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  });
+
   try {
     const db = getDb();
     
     // Get user's mint tasks
     const tasks = await getUserMintTasks(userId);
     
-    // Build 7-day mint performance chart from task history
-    const last7Labels = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() - (6 - i));
-      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    });
-
     const tasksByDay = tasks.reduce((acc, t) => {
       const day = new Date(t.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
       if (!acc[day]) acc[day] = { completed: 0, failed: 0 };
