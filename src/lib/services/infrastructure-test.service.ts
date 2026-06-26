@@ -19,7 +19,6 @@ export type InfrastructureService =
   | 'QStash'
   | 'Database'
   | 'Alchemy'
-  | 'QuickNode'
   | 'RPC Failover'
   | 'Jina'
   | 'Firecrawl'
@@ -157,7 +156,7 @@ function getQStashProbeUrl() {
   return `${baseUrl.replace(/\/$/, '')}/api/admin/testing/infrastructure/qstash-probe`;
 }
 
-function getProviderUrl(provider: 'alchemy' | 'quicknode', chain: string) {
+function getProviderUrl(provider: 'alchemy' | 'infura', chain: string) {
   if (provider === 'alchemy') {
     const specific = process.env[`ALCHEMY_${chain.toUpperCase()}_RPC_URL`];
     if (specific) return specific;
@@ -169,10 +168,10 @@ function getProviderUrl(provider: 'alchemy' | 'quicknode', chain: string) {
     return process.env.ALCHEMY_RPC_URL;
   }
 
-  return process.env[`QUICKNODE_${chain.toUpperCase()}_RPC_URL`] || process.env.QUICKNODE_RPC_URL;
+  return process.env[`INFURA_${chain.toUpperCase()}_RPC_URL`] || process.env.INFURA_RPC_URL;
 }
 
-function createDirectRpcClient(provider: 'alchemy' | 'quicknode') {
+function createDirectRpcClient(provider: 'alchemy' | 'infura') {
   const url = getProviderUrl(provider, 'ethereum');
   if (!url) throw new Error(`${provider} RPC is not configured for ethereum`);
   return createPublicClient({
@@ -181,7 +180,7 @@ function createDirectRpcClient(provider: 'alchemy' | 'quicknode') {
   });
 }
 
-async function testDirectRpc(provider: 'alchemy' | 'quicknode') {
+async function testDirectRpc(provider: 'alchemy' | 'infura') {
   const client = createDirectRpcClient(provider);
   const [chainId, blockNumber, balance] = await Promise.all([
     client.getChainId(),
@@ -312,9 +311,6 @@ export async function testAlchemy() {
   return executeTest('Alchemy', () => testDirectRpc('alchemy'), 'Alchemy latest block and wallet balance requests succeeded.');
 }
 
-export async function testQuickNode() {
-  return executeTest('QuickNode', () => testDirectRpc('quicknode'), 'QuickNode latest block and wallet balance requests succeeded.');
-}
 
 export async function testRpcFailover() {
   return executeTest('RPC Failover', async () => {
@@ -323,7 +319,7 @@ export async function testRpcFailover() {
       throw new Error(`Chain mapping returned ${ethereum.id}; expected Ethereum mainnet (${ETHEREUM_CHAIN_ID})`);
     }
 
-    const attempts: Array<'alchemy' | 'quicknode'> = [];
+    const attempts: Array<'alchemy' | 'infura'> = [];
     const result = await withRpcFailover('ethereum', 'infrastructureFailoverProbe', async (client: PublicClient, provider) => {
       attempts.push(provider);
       if (provider === 'alchemy') throw new Error('Simulated Alchemy unavailable');
@@ -343,11 +339,11 @@ export async function testRpcFailover() {
         wallet: TEST_WALLET,
         balance: formatEther(balance),
       };
-    }, { providerOrder: ['alchemy', 'quicknode'] });
+    }, { providerOrder: ['alchemy', 'infura'] });
     if (attempts[0] !== 'alchemy') throw new Error('RPC manager did not select Alchemy first for the forced failover probe');
-    if (result.handledBy !== 'quicknode') throw new Error('RPC failover did not route to QuickNode');
+    if (result.handledBy !== 'infura') throw new Error('RPC failover did not route to Infura');
     return { ...result, attempts };
-  }, 'RPC failover routed the request to QuickNode after simulated Alchemy failure.');
+  }, 'RPC failover routed the request to Infura after simulated Alchemy failure.');
 }
 
 export async function testJina() {
@@ -397,7 +393,6 @@ export async function runInfrastructureServiceTests() {
     testQStash(),
     testDatabase(),
     testAlchemy(),
-    testQuickNode(),
     testRpcFailover(),
     testJina(),
     testFirecrawl(),
