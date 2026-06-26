@@ -13,8 +13,9 @@ import { AnalyzerResolutionError, normalizeAnalyzerInput, runAnalyzer, type Anal
 import { analyzeMintRisk } from '@/lib/services/risk.service';
 import { discoverMintRequirements } from '@/lib/services/mint-discovery.service';
 
-// Cache GET requests for 4 hours
-export const revalidate = 14400;
+// Disable cache — mutations need fresh data immediately
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 const SUPPORTED_CHAINS = ['ethereum', 'base', 'polygon'] as const;
 type SupportedChain = (typeof SUPPORTED_CHAINS)[number];
