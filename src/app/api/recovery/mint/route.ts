@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { timingSafeEqual } from 'node:crypto';
 import { executeRecoveryCheck } from '@/lib/services/qstash.service';
 import { addBreadcrumb } from '@/lib/observability/sentry';
 
@@ -19,7 +20,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'CRON_SECRET is not configured' }, { status: 503 });
   }
 
-  if (request.headers.get('authorization') !== `Bearer ${cronSecret}`) {
+  // C-05 Fix: use timingSafeEqual to prevent timing oracle attacks.
+  // A naive string comparison (===) short-circuits on the first mismatched
+  // character, leaking information about how many leading characters match.
+  // A sophisticated attacker measuring response latency could reconstruct
+  // CRON_SECRET character by character.
+  // timingSafeEqual always takes the same time regardless of where the
+  // strings diverge, closing this side channel completely.
+  const provided = request.headers.get('authorization') ?? '';
+  const expected = `Bearer ${cronSecret}`;
+  const providedBuf = Buffer.from(provided);
+  const expectedBuf = Buffer.from(expected);
+  const authorized =
+    providedBuf.length === expectedBuf.length &&
+    timingSafeEqual(providedBuf, expectedBuf);
+
+  if (!authorized) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

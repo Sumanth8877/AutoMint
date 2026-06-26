@@ -275,6 +275,26 @@ export async function executeMint(
     };
   }
 
+  // ── C-01 Fix: MINT_MODE guard ────────────────────────────────────────────────
+  // The test suite asserts that executeMint() must reject execution outside a
+  // live production environment unless MINT_MODE='live' is explicitly set.
+  // Without this check, a staging or CI environment that contains real encrypted
+  // wallet keys would broadcast actual on-chain transactions.
+  //
+  // In production (NODE_ENV='production'), the deployment itself is the gating
+  // signal — MINT_MODE is not required.
+  // In all other environments (test, development, CI), set MINT_MODE=live to
+  // explicitly opt into real transaction broadcast.
+  if (process.env.NODE_ENV !== 'production') {
+    const mintMode = process.env.MINT_MODE;
+    if (mintMode !== 'live') {
+      return {
+        success: false,
+        error: `MINT_MODE guard: execution blocked in non-production environment (MINT_MODE='${mintMode ?? 'unset'}'). Set MINT_MODE=live to allow real transactions.`,
+      };
+    }
+  }
+
     try {
     // ── C-03 Fix + Simulation: all run in parallel ──────────────────────────────────────────────────────────────────────────────────────────
     // eth_call simulation, nonce allocation, and EIP-1559 gas params resolve concurrently.

@@ -407,9 +407,36 @@ export async function POST(request: Request) {
 
     // Now check wallet balance only if mint is live or scheduled
     const mintPrice = analysis?.requirements.mintPrice || '0';
-    const currentBalance = wallet.balance ? parseFloat(wallet.balance) : 0;
+
+    // C-03 Fix: wallet.balance in the DB is only refreshed by Alchemy webhooks
+    // and can be hours stale. A user who just funded their wallet would fail the
+    // balance check even though they have sufficient funds on-chain.
+    //
+    // If balanceUpdatedAt is missing OR older than 60 seconds, fetch the current
+    // on-chain balance before gating. This adds ~100-200ms only when stale.
+    // The on-chain simulation inside executeMint() serves as a final safety net.
+    let currentBalance = wallet.balance ? parseFloat(wallet.balance) : 0;
+    const BALANCE_STALE_MS = 60_000;
+    const isStale =
+      !wallet.balanceUpdatedAt ||
+      Date.now() - new Date(wallet.balanceUpdatedAt).getTime() > BALANCE_STALE_MS;
+
+    if (isStale) {
+      try {
+        const { getWalletBalance } = await import('@/lib/blockchain/wallet');
+        const freshBalance = await getWalletBalance(wallet.address, wallet.chain);
+        currentBalance = parseFloat(freshBalance.balance);
+      } catch {
+        // Non-fatal: fall back to cached value if the RPC is temporarily unavailable.
+        // executeMint()'s on-chain simulation will catch the real shortfall.
+        logger.info('instant-mint', 'Failed to fetch fresh balance — using cached value', {
+          walletId: wallet.id,
+        });
+      }
+    }
+
     const requiredAmount = parseFloat(mintPrice) + 0.01; // mint price + estimated gas
-    
+
     if (currentBalance < requiredAmount) {
       const needed = (requiredAmount - currentBalance).toFixed(4);
       throw new Error(`Insufficient funds in wallet. Current balance: ${currentBalance.toFixed(4)} ${wallet.balanceSymbol || 'ETH'}. Required: ${requiredAmount.toFixed(4)} ${wallet.balanceSymbol || 'ETH'} (mint: ${mintPrice} ETH + gas: ~0.01 ETH). Need ${needed} more.`);
@@ -439,7 +466,11 @@ export async function POST(request: Request) {
         ...collectionValues,
       })
       .onConflictDoUpdate({
-        target: collections.contractAddress,
+        // C-02 Fix: the unique constraint on collections is a composite index
+        // on (userId, contractAddress, chain) — NOT contractAddress alone.
+        // Targeting only contractAddress caused a DB error on every conflict
+        // because PostgreSQL found no matching single-column unique constraint.
+        target: [collections.userId, collections.contractAddress, collections.chain],
         set: collectionValues,
       });
 

@@ -261,8 +261,21 @@ export async function allocateNonce(
     // @upstash/redis 1.30+ pipelines are atomic from the client's perspective —
     // both commands are sent in one HTTP request, halving latency vs two awaits.
     const epochMs = Date.now();
+    // C-04 Fix: add a TTL to the nonce counter key.
+    //
+    // Previously the counter had no TTL so it persisted indefinitely. If the
+    // wallet was used externally (e.g. via MetaMask) the on-chain nonce would
+    // advance but the Redis counter would lag, causing the allocator to produce
+    // sub-chain-pending nonces. max(chainPending, redisCounter+1) prevents
+    // immediate collision, but the counter grows permanently out of sync.
+    //
+    // With a 5-minute TTL: if no mint runs for 5 minutes, the key expires and
+    // the next allocation re-seeds from eth_getTransactionCount('pending'),
+    // eliminating drift without affecting concurrent high-frequency mints
+    // (each allocation resets the TTL via EX on SET, keeping the key alive).
+    const COUNTER_TTL_SECONDS = 5 * 60; // 5 minutes
     const pipeline = redis.pipeline();
-    pipeline.set(counterKey, String(nextNonce));
+    pipeline.set(counterKey, String(nextNonce), { ex: COUNTER_TTL_SECONDS });
     pipeline.zadd(inflightKey, { score: epochMs, member: String(nextNonce) });
     await pipeline.exec();
 
