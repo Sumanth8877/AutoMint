@@ -237,7 +237,7 @@ export default function HomePage() {
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <Button type="button" size="lg" onClick={copyUrl} disabled={!url}>
                   {copied ? <CheckCircle2 className="h-4 w-4" aria-hidden="true" /> : <Layers3 className="h-4 w-4" aria-hidden="true" />}
-                  {copied ? 'Copied' : 'Stage Analysis'}
+                  {copied ? 'Copied' : 'Copy URL'}
                 </Button>
                 <Button
                   type="button"
@@ -267,16 +267,7 @@ export default function HomePage() {
               </form>
 
               <div className="mt-6 grid gap-3 sm:grid-cols-3">
-                {[
-                  { label: 'Risk', value: 'Low', color: 'text-success' },
-                  { label: 'Demand', value: 'High', color: 'text-accent' },
-                  { label: 'Readiness', value: '92%', color: 'text-warning' },
-                ].map((item) => (
-                  <div key={item.label} className="rounded-lg border border-border bg-white/5 p-3">
-                    <p className="text-xs text-muted">{item.label}</p>
-                    <p className={`mt-1 font-mono text-lg ${item.color}`}>{item.value}</p>
-                  </div>
-                ))}
+                {/* Removed hardcoded Risk/Demand/Readiness mock data — analyzer page shows real metrics */}
               </div>
             </Card>
           </motion.div>
