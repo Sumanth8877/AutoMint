@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/require-auth';
-import { getErrorMessage, parseJsonBody } from '@/lib/api/errors';
+import { getErrorMessage, parseJsonBody, handleRouteError } from '@/lib/api/errors';
 import { addCollection, getUserCollections, removeCollection } from '@/lib/services/collection.service';
 
-// Cache GET requests for 4 hours
-export const revalidate = 14400;
+// Collections change on add/remove — disable ISR so React Query always gets fresh data
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 // GET /api/collections
 export async function GET() {
@@ -36,9 +37,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ collection }, { status: 201 });
   } catch (error) {
-    const message = getErrorMessage(error, 'Failed to create collection');
-    const status = message === 'Collection already added' ? 409 : message === 'Invalid JSON request body' ? 400 : message.includes('required') || message.includes('Invalid') || message.includes('Unsupported') ? 400 : 500;
-    return NextResponse.json({ error: message }, { status });
+    return handleRouteError(error, 'Failed to create collection');
   }
 }
 
