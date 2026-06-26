@@ -327,7 +327,7 @@ async function runNonEvmPath(params: {
   const riskAnalysis = await runAnalyzerRisk({
     userId: p.userId, contractAddress: intent.contractAddress, chain: intent.chain,
     mintFunction: 'unknown', mintPrice: '0', collectionName: intent.collectionName ?? 'Resolved Collection',
-    owner: intent.contractAddress, tokenStandard: 'Unknown', totalSupply: '0',
+    owner: intent.contractAddress ?? '', tokenStandard: 'Unknown', totalSupply: '0',
     socials: socialDiscovery.socials, collectionIntelligence, log, timingBreakdown: telemetry.timingBreakdown,
   });
 
