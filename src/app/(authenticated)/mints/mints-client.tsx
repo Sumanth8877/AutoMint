@@ -24,6 +24,8 @@ type MintTask = {
   status: string;
   contractAddress: string | null;
   mintPrice: string | null;
+  scheduledTime: string | null;       // #8 — when upcoming mint will fire
+  lastError: string | null;            // U3 — failure reason
   createdAt: string;
 };
 
@@ -76,7 +78,7 @@ export default function MintsClient() {
   const [queueOpen, setQueueOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
-  const [form, setForm] = useState({ walletId: '', mintUrl: '' });
+  const [form, setForm] = useState({ walletId: '', mintUrl: '', scheduleTime: '' });
   const [analyzedUrl, setAnalyzedUrl] = useState<string | null>(null);
 
   // Fetch data with React Query
@@ -140,7 +142,7 @@ export default function MintsClient() {
 
   // Create task mutation
   const createTaskMutation = useMutation({
-    mutationFn: async (data: { walletId: string; mintUrl: string; analysisConfirmed: boolean; quantity: string }) => {
+    mutationFn: async (data: { walletId: string; mintUrl: string; analysisConfirmed: boolean; quantity: string; scheduleTime?: string }) => {
       return apiRequest<MintActionResponse>('/api/mints', {
         method: 'POST',
         body: data,
@@ -238,8 +240,9 @@ export default function MintsClient() {
         mintUrl: mintUrl,
         analysisConfirmed: true,
         quantity: '1',
+        scheduleTime: form.scheduleTime || undefined,
       });
-      setForm({ walletId: '', mintUrl: '' });
+      setForm({ walletId: '', mintUrl: '', scheduleTime: '' });
       setAnalyzedUrl(null);
       setModalOpen(false);
       if (payload.analyzerRequired) {
@@ -347,6 +350,18 @@ export default function MintsClient() {
                   <div className="col-span-5 min-w-0">
                     <p className="truncate font-medium text-text">{title}</p>
                     <p className="mt-1 text-xs text-muted">{collection?.chain ?? wallet?.chain ?? 'unknown'} / fee {task.mintPrice ?? 'unset'}</p>
+                    {/* #8 — show scheduled time for upcoming mints */}
+                    {task.scheduledTime && (task.status === 'pending' || task.status === 'monitoring') ? (
+                      <p className="mt-1 text-xs text-accent">
+                        Scheduled: {new Date(task.scheduledTime).toLocaleString()}
+                      </p>
+                    ) : null}
+                    {/* U3 — show error reason for failed tasks */}
+                    {task.status === 'failed' && task.lastError ? (
+                      <p className="mt-1 text-xs text-danger truncate" title={task.lastError}>
+                        Error: {task.lastError}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="col-span-2 hidden md:block">
                     <Badge variant={statusVariant(task.status) as 'success' | 'warning' | 'danger' | 'info'}>{task.status}</Badge>
@@ -357,8 +372,19 @@ export default function MintsClient() {
                   </div>
                   <p className="col-span-2 hidden font-mono text-sm text-text sm:block">{task.quantity}</p>
                   <div className="col-span-7 flex justify-end gap-1 sm:col-span-1">
-                    <button type="button" onClick={() => startTask(task)} disabled={updatingId === task.id || task.status === 'running' || task.status === 'completed'} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-white/5 hover:text-text disabled:opacity-50" aria-label={`${task.status === 'failed' || task.status === 'cancelled' ? 'Retry' : 'Start'} ${title}`}>
-                      <Play className="h-4 w-4" aria-hidden="true" />
+                    <button
+                      type="button"
+                      onClick={() => startTask(task)}
+                      disabled={updatingId === task.id || task.status === 'running' || task.status === 'completed'}
+                      className={`flex h-8 w-8 items-center justify-center rounded-lg disabled:opacity-50 ${
+                        task.status === 'failed'
+                          ? 'text-warning hover:bg-warning/10'
+                          : 'text-muted hover:bg-white/5 hover:text-text'
+                      }`}
+                      aria-label={`${task.status === 'failed' || task.status === 'cancelled' ? 'Retry' : 'Start'} ${title}`}
+                      title={task.status === 'failed' ? 'Retry' : task.status === 'cancelled' ? 'Restart' : 'Start'}
+                    >
+                      {task.status === 'failed' ? <RotateCcw className="h-4 w-4" aria-hidden="true" /> : <Play className="h-4 w-4" aria-hidden="true" />}
                     </button>
                     <button type="button" onClick={() => cancelTask(task)} disabled={updatingId === task.id || task.status === 'completed' || task.status === 'cancelled'} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-white/5 hover:text-warning disabled:opacity-50" aria-label={`Cancel ${title}`}>
                       <XCircle className="h-4 w-4" aria-hidden="true" />
@@ -443,6 +469,17 @@ export default function MintsClient() {
               </div>
             )}
           </div>
+          {/* #9 — optional manual schedule override (auto-detected if blank) */}
+          <label className="block text-sm font-medium text-muted">
+            Schedule Time (optional)
+            <input
+              type="datetime-local"
+              value={form.scheduleTime}
+              onChange={(event) => setForm((current) => ({ ...current, scheduleTime: event.target.value }))}
+              className="mt-2 h-11 w-full rounded-lg border border-border bg-background/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            />
+            <p className="mt-1 text-xs text-muted">Leave blank to auto-detect from the mint page.</p>
+          </label>
           {formError ? <div className="rounded-lg border border-danger/20 bg-danger/10 p-3 text-sm text-danger" role="alert">{formError}</div> : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>
