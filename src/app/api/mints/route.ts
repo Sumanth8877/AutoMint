@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
 import { requireApiUser } from '@/lib/auth/require-auth';
-import { getErrorMessage, parseJsonBody } from '@/lib/api/errors';
+import { getErrorMessage, parseJsonBody, handleRouteError } from '@/lib/api/errors';
 import { addMintTask, executeMintTask, getMintTaskById, getUserMintTasks, removeMintTask, updateMintTaskStatus } from '@/lib/services/mint.service';
 import { cancelScheduledMint, scheduleMint } from '@/lib/services/qstash.service';
 import { getMintState } from '@/lib/services/mint-state.service';
@@ -282,12 +282,7 @@ export async function POST(req: Request) {
     const readyTask = await updateMintTaskStatus(preparedTask.id, authResult.userId, 'ready');
     return NextResponse.json({ task: readyTask, collection }, { status: 201 });
   } catch (error) {
-    const message = getErrorMessage(error, 'Failed to create mint task');
-    if (error instanceof AnalyzerResolutionError) {
-      return NextResponse.json({ error: message, intent: error.intent }, { status: error.status });
-    }
-    const status = message.includes('not found') ? 404 : message === 'Invalid JSON request body' || message.startsWith('Unsupported chain') ? 400 : 500;
-    return NextResponse.json({ error: message }, { status });
+    return handleRouteError(error, 'Failed to process mint request');
   }
 }
 
@@ -321,9 +316,7 @@ export async function PATCH(req: Request) {
 
     return NextResponse.json({ task, result });
   } catch (error) {
-    const message = getErrorMessage(error, 'Failed to update mint task');
-    const status = message.includes('not found') ? 404 : message === 'Invalid JSON request body' ? 400 : 500;
-    return NextResponse.json({ error: message }, { status });
+    return handleRouteError(error, 'Failed to process mint request');
   }
 }
 
@@ -350,8 +343,6 @@ export async function DELETE(req: Request) {
     await removeMintTask(id, authResult.userId);
     return NextResponse.json({ success: true });
   } catch (error) {
-    const message = getErrorMessage(error, 'Failed to delete mint task');
-    const status = message.includes('not found') ? 404 : message === 'Invalid JSON request body' ? 400 : 500;
-    return NextResponse.json({ error: message }, { status });
+    return handleRouteError(error, 'Failed to process mint request');
   }
 }
