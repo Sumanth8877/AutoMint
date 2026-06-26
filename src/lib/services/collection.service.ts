@@ -4,6 +4,7 @@ import { eq, and } from 'drizzle-orm';
 import { getCollectionMetadata } from '@/lib/blockchain/collections';
 import { logActivity } from '@/lib/monitoring';
 import { captureException } from '@/lib/observability/sentry';
+import { ConflictError, NotFoundError } from '@/lib/api/errors';
 
 const SUPPORTED_CHAINS = ['ethereum', 'base', 'polygon'] as const;
 type SupportedChain = (typeof SUPPORTED_CHAINS)[number];
@@ -35,7 +36,7 @@ export async function addCollection(userId: string, data: { name: string; contra
     .limit(1);
 
   if (existing) {
-    throw new Error('Collection already added');
+    throw new ConflictError('Collection already added');
   }
 
   let [collection] = await getDb().insert(collections).values({
@@ -75,7 +76,7 @@ export async function addCollection(userId: string, data: { name: string; contra
 
 export async function removeCollection(id: string, userId: string) {
   const existing = await getDb().select().from(collections).where(and(eq(collections.id, id), eq(collections.userId, userId))).limit(1);
-  if (existing.length === 0) throw new Error('Collection not found');
+  if (existing.length === 0) throw new NotFoundError('Collection not found');
 
   await getDb().delete(collections).where(and(eq(collections.id, id), eq(collections.userId, userId)));
   return { success: true };
