@@ -92,7 +92,7 @@ export const rpcProviderSettings = pgTable('rpc_provider_settings', {
   id: uuid('id').defaultRandom().primaryKey(),
   userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
   routingMode: text('routing_mode').default('SMART').notNull().$type<'SMART' | 'MANUAL'>(),
-  preferredProvider: text('preferred_provider').$type<'ALCHEMY' | 'QUICKNODE' | null>(),
+  preferredProvider: text('preferred_provider').$type<'ALCHEMY' | 'INFURA' | 'DRPC' | 'CHAINSTACK' | null>(),
   autoFailover: boolean('auto_failover').default(true).notNull(),
   rpcTimeoutSeconds: integer('rpc_timeout_seconds').default(45).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
