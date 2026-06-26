@@ -15,7 +15,7 @@ export async function POST(request: Request) {
   const rawBody = await request.text();
 
   try {
-    verifyQStashSignature(request.headers, rawBody);
+    await verifyQStashSignature(request.headers, rawBody);
 
     let payload: ScheduledMintPayload;
     try {

@@ -5,7 +5,6 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Show, SignInButton, SignUpButton } from '@clerk/nextjs';
-import { motion } from 'framer-motion';
 import {
   ArrowRight,
   BarChart3,
@@ -163,11 +162,7 @@ export default function HomePage() {
         </header>
 
         <div className="relative z-10 mx-auto grid min-h-[calc(100vh-64px)] max-w-[1280px] items-center gap-10 px-4 py-10 sm:px-6 lg:grid-cols-[1.02fr_0.98fr] lg:py-14">
-          <motion.div
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45 }}
-          >
+          <div style={{ animation: 'am-fade-in-up 0.45s ease-out both' }}>
             <div className="mb-5 flex flex-wrap gap-2">
               {badges.map((badge) => (
                 <Badge key={badge} variant="info">{badge}</Badge>
@@ -194,13 +189,9 @@ export default function HomePage() {
                 View Dashboard
               </Link>
             </div>
-          </motion.div>
+          </div>
 
-          <motion.div
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: 0.12 }}
-          >
+          <div style={{ animation: 'am-fade-in-up 0.45s ease-out 0.12s both' }}>
             <Card tone="elevated" className="p-4 sm:p-6">
               <div className="mb-5 flex items-center justify-between gap-4">
                 <div>
@@ -270,7 +261,7 @@ export default function HomePage() {
                 {/* Removed hardcoded Risk/Demand/Readiness mock data — analyzer page shows real metrics */}
               </div>
             </Card>
-          </motion.div>
+          </div>
         </div>
       </section>
 

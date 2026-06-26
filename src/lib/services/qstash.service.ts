@@ -1,6 +1,6 @@
 import 'server-only';
 
-import crypto from 'crypto';
+import { Client, Receiver } from '@upstash/qstash';
 import { and, eq, inArray } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
 import { getWalletBalance } from '@/lib/blockchain/wallet';
@@ -17,25 +17,11 @@ import { sendMintFailedEmail, sendMintScheduledEmail, sendMintSuccessEmail, send
 import { getClient } from '@/lib/blockchain/client';
 import type { Hex } from 'viem';
 
-const QSTASH_BASE_URL = process.env.QSTASH_URL || process.env.QSTASH_BASE_URL || 'https://qstash.upstash.io';
 // Monitoring fix: reduced from 60s to 30s.
 // WebSocket monitoring watches for 25s per invocation;
 // if no mint-live event is detected, we reschedule at 30s for the next window.
 // Total latency: 0–2s on Base (vs 0–60s before), 0–12s on Ethereum (vs 0–60s before).
 const DEFAULT_SCHEDULE_DELAY_MS = 30_000;
-
-type QStashPublishResponse = {
-  messageId?: string;
-  scheduleId?: string;
-  url?: string;
-};
-
-type QStashJwtPayload = {
-  body?: string;
-  exp?: number;
-  nbf?: number;
-  sub?: string;
-};
 
 export type ScheduledMintPayload = {
   taskId: string;
@@ -93,16 +79,7 @@ function getWebhookUrl() {
   throw new Error('APP_URL, NEXT_PUBLIC_APP_URL, or VERCEL_URL is required');
 }
 
-function getSigningKeys() {
-  return [
-    process.env.QSTASH_CURRENT_SIGNING_KEY,
-    process.env.QSTASH_NEXT_SIGNING_KEY,
-  ].filter((key): key is string => Boolean(key));
-}
 
-function encodePublishUrl(url: string) {
-  return encodeURIComponent(url);
-}
 
 function secondsFromDate(date: Date) {
   return Math.floor(date.getTime() / 1000);
@@ -119,112 +96,53 @@ function isImmediateDelivery(date: Date): boolean {
   return date.getTime() <= Date.now() + 2_000;
 }
 
-function base64UrlDecode(value: string) {
-  return Buffer.from(value, 'base64url').toString('utf8');
-}
 
-function timingSafeEqualString(left: string, right: string) {
-  const leftBuffer = Buffer.from(left);
-  const rightBuffer = Buffer.from(right);
-  return leftBuffer.length === rightBuffer.length && crypto.timingSafeEqual(leftBuffer, rightBuffer);
-}
 
-function verifyJwtSignature(token: string, signingKey: string) {
-  const [header, payload, signature] = token.split('.');
-  if (!header || !payload || !signature) return null;
 
-  const expected = crypto
-    .createHmac('sha256', signingKey)
-    .update(`${header}.${payload}`)
-    .digest('base64url');
-
-  if (!timingSafeEqualString(signature, expected)) return null;
-  return JSON.parse(base64UrlDecode(payload)) as QStashJwtPayload;
-}
-
-export function verifyQStashSignature(headers: Headers, rawBody: string) {
+export async function verifyQStashSignature(headers: Headers, rawBody: string) {
   const signature = headers.get('upstash-signature');
   if (!signature) throw new Error('Missing QStash signature');
 
-  const keys = getSigningKeys();
-  if (keys.length === 0) throw new Error('QStash signing keys are not configured');
+  const currentKey = process.env.QSTASH_CURRENT_SIGNING_KEY;
+  const nextKey    = process.env.QSTASH_NEXT_SIGNING_KEY;
+  if (!currentKey) throw new Error('QStash signing keys are not configured');
 
-  const now = Math.floor(Date.now() / 1000);
-  const bodyHash = crypto.createHash('sha256').update(rawBody).digest('base64url');
-
-  const expectedWebhookUrl = getWebhookUrl();
-
-  for (const key of keys) {
-    const payload = verifyJwtSignature(signature, key);
-    if (!payload) continue;
-    if (payload.exp && payload.exp < now) continue;
-    if (payload.nbf && payload.nbf > now) continue;
-    if (payload.body && payload.body !== bodyHash) continue;
-    // C-7 fix: reject JWT whose sub does not match this endpoint's URL.
-    // Prevents cross-endpoint replay of a valid QStash signature.
-    if (payload.sub && payload.sub !== expectedWebhookUrl) continue;
-    return payload;
-  }
-
-  throw new Error('Invalid QStash signature');
+  // Verifies: HMAC-SHA256 signature, exp, nbf, body hash, and sub claim
+  // (URL match — equivalent to the C-7 cross-endpoint replay fix).
+  const receiver = new Receiver({
+    currentSigningKey: currentKey,
+    nextSigningKey: nextKey ?? currentKey,
+  });
+  await receiver.verify({ signature, body: rawBody, url: getWebhookUrl() });
 }
 
-async function publishQStashMessage(taskId: string, scheduledTime: Date, type: ScheduledMintPayload['type'] = 'execute') {
-  addBreadcrumb({
-    category: 'qstash',
-    message: 'scheduling started',
-    level: 'info',
-    data: { taskId, scheduledTime: scheduledTime.toISOString(), type },
-  });
-  const webhookUrl = getWebhookUrl();
-  // P-5 fix: add 30s timeout to prevent a hung QStash API from blocking
-  // the Telegram webhook handler or any other synchronous caller indefinitely.
-  const response = await fetch(`${QSTASH_BASE_URL}/v2/publish/${encodePublishUrl(webhookUrl)}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${getQStashToken()}`,
-      'Content-Type': 'application/json',
-      // Speed fix: omit Not-Before entirely for live/instant mints.
-      // Sending Not-Before: now+1 forces a minimum 1s queue delay even for
-      // mints that should execute immediately. Omitting it lets QStash deliver
-      // the message as fast as possible (typically <200ms).
-      // For future-scheduled mints we still send the unix-seconds value.
-      ...(!isImmediateDelivery(scheduledTime) && {
-        'Upstash-Not-Before': String(secondsFromDate(scheduledTime)),
-      }),
-    },
-    signal: AbortSignal.timeout(30_000),
-    body: JSON.stringify({ taskId, type } satisfies ScheduledMintPayload),
+function getQStashClient() {
+  return new Client({ token: getQStashToken() });
+}
+
+async function publishQStashMessage(
+  taskId: string,
+  scheduledTime: Date,
+  type: ScheduledMintPayload['type'] = 'execute',
+) {
+  addBreadcrumb({ category: 'qstash', message: 'scheduling started', level: 'info',
+    data: { taskId, scheduledTime: scheduledTime.toISOString(), type } });
+
+  const result = await getQStashClient().publishJSON({
+    url: getWebhookUrl(),
+    body: { taskId, type } satisfies ScheduledMintPayload,
+    // Speed fix: omit notBefore for immediate delivery so QStash fires ASAP.
+    // For future-scheduled mints pass the unix-seconds timestamp.
+    ...(!isImmediateDelivery(scheduledTime) && { notBefore: secondsFromDate(scheduledTime) }),
   });
 
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    const error = new Error(text || `QStash publish failed with status ${response.status}`);
-    const { trackAnalyticsEvent } = await import('@/lib/services/analytics.service');
-    await trackAnalyticsEvent({
-      eventType: 'qstash',
-      status: 'failed',
-      provider: type,
-      metadata: { taskId, scheduledTime: scheduledTime.toISOString() },
-    });
-    await captureException(error, {
-      area: 'qstash',
-      context: { taskId, scheduledTime: scheduledTime.toISOString(), type },
-      fingerprint: ['qstash', 'publish'],
-    });
-    throw error;
-  }
-
-  const result = await response.json() as QStashPublishResponse;
   const { trackAnalyticsEvent } = await import('@/lib/services/analytics.service');
-  await trackAnalyticsEvent({
-    eventType: 'qstash',
-    status: 'scheduled',
-    provider: type,
-    metadata: { taskId, scheduledTime: scheduledTime.toISOString(), messageId: result.messageId, scheduleId: result.scheduleId },
-  });
+  await trackAnalyticsEvent({ eventType: 'qstash', status: 'scheduled', provider: type,
+    metadata: { taskId, scheduledTime: scheduledTime.toISOString(), messageId: result.messageId } });
+
   return result;
 }
+
 
 function getRiskCheckTime(scheduledTime: Date) {
   const oneHourBefore = new Date(scheduledTime.getTime() - 60 * 60 * 1000);
@@ -232,16 +150,12 @@ function getRiskCheckTime(scheduledTime: Date) {
 }
 
 async function deleteQStashMessage(messageId: string) {
-  const response = await fetch(`${QSTASH_BASE_URL}/v2/messages/${encodeURIComponent(messageId)}`, {
-    method: 'DELETE',
-    headers: {
-      Authorization: `Bearer ${getQStashToken()}`,
-    },
-  });
-
-  if (!response.ok && response.status !== 404) {
-    const text = await response.text().catch(() => '');
-    throw new Error(text || `QStash cancel failed with status ${response.status}`);
+  try {
+    await getQStashClient().messages.delete(messageId);
+  } catch (error) {
+    // 404 = already delivered / cancelled — not an error
+    const msg = error instanceof Error ? error.message : String(error);
+    if (!msg.includes('404') && !msg.toLowerCase().includes('not found')) throw error;
   }
 }
 
