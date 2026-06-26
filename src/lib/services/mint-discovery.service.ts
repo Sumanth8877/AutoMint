@@ -458,27 +458,6 @@ function computeConfidence(req: Partial<DiscoveredRequirements>): number {
 /**
  * discoverMintRequirements
  *
- * The single entry point for mint requirement discovery across all 3 flows:
- *   - Telegram bot (mint-orchestrator.service.ts)
- *   - Home page instant mint (api/instant-mint/route.ts)
- *   - Mints page create task (api/mints/route.ts)
- *
- * @param url         The launchpad or mint URL
- * @param knownPartial  Fields already resolved by Tier 1 (URL resolver + on-chain RPC).
- *                    Pass everything you already have. Only missing fields escalate.
- *
- * @returns DiscoveredRequirements with all fields filled in (or still undefined if
- *          all 3 tiers exhausted), plus `missingFields` array and `confidence` score.
- *
- * ESCALATION LOGIC:
- *   - If ALL critical fields are already in knownPartial → skip Tier 2+3, return immediately.
- *   - If ANY critical field is missing → run Tier 2 (Jina + Firecrawl parallel).
- *   - If critical fields still missing after Tier 2 → run Tier 3 (Browserbase).
- *   - If contractAddress still missing after Tier 3 → throw (unresolvable URL).
- */
-/**
- * discoverMintRequirements
- *
  * Tiered discovery (Tier 1 caller → Tier 2 Jina+Firecrawl → Tier 3 Browserbase).
  * Wrapped in a hard timeout so it never blocks the API response longer than
  * `maxTimeMs` — critical for Vercel hobby plan (10s function limit).
