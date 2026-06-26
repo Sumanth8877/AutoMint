@@ -3,12 +3,13 @@ import { and, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
 import { collections, mintHistory, mintTasks, wallets } from '@/drizzle/schema';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getDb } from '@/lib/db';
-import { getErrorMessage, parseJsonBody } from '@/lib/api/errors';
+import { getErrorMessage, parseJsonBody, handleRouteError } from '@/lib/api/errors';
 import { addMintTask } from '@/lib/services/mint.service';
 import { cancelScheduledMint, scheduleMint } from '@/lib/services/qstash.service';
 
 // Cache GET requests for 4 hours
-export const revalidate = 14400;
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 const MAX_LIMIT = 50;
 const DEFAULT_LIMIT = 20;
@@ -295,8 +296,6 @@ export async function PATCH(req: Request) {
 
     return NextResponse.json({ task });
   } catch (error) {
-    const message = getErrorMessage(error, 'Failed to update history task');
-    const status = message === 'Invalid JSON request body' ? 400 : message.includes('not found') ? 404 : 500;
-    return NextResponse.json({ error: message }, { status });
+    return handleRouteError(error, 'Failed to process history request');
   }
 }
