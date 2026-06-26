@@ -247,7 +247,7 @@ async function deleteQStashMessage(messageId: string) {
 
 async function sendScheduledMintNotification(
   userId: string,
-  type: 'mint_scheduled' | 'mint_failed' | 'wallet_balance_low',
+  type: 'mint_scheduled' | 'mint_failed' | 'wallet_balance_low' | 'mint_live_detected',
   payload: {
     taskId?: string;
     contractAddress?: string;
