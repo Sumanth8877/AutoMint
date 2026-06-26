@@ -155,7 +155,7 @@ export async function runAnalyzer(params: {
     log('info', 'rpc', 'RPC Provider Selection');
     const rpcProviderUsed = rpcProviderLabel(rpcSnapshot.currentActiveProvider);
     for (const provider of rpcSnapshot.providers) {
-      const providerName = provider.provider === 'ALCHEMY' ? 'Alchemy' : 'QuickNode';
+      const providerName = rpcProviderLabel(provider.provider) ?? provider.provider;
       log(provider.configured && provider.healthy ? 'success' : 'warning', 'rpc',
         provider.configured
           ? `${providerName} ${provider.healthy ? 'succeeded' : 'failed'}${provider.latency !== null ? ` latency: ${provider.latency}ms` : ''}`
@@ -167,7 +167,7 @@ export async function runAnalyzer(params: {
       log('success', 'rpc', `${rpcProviderUsed} selected${sel?.latency != null ? ` (${sel.latency}ms latency)` : ''}`);
     }
     const rpcProviders = rpcSnapshot.providers.map((p) => ({
-      provider: p.provider === 'ALCHEMY' ? 'Alchemy' : 'QuickNode',
+      provider: rpcProviderLabel(p.provider) ?? p.provider,
       selected: p.provider === rpcSnapshot.currentActiveProvider,
       configured: p.configured, healthy: p.healthy, latencyMs: p.latency, status: p.status,
     }));
