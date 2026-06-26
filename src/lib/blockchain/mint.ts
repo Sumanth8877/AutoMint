@@ -346,6 +346,8 @@ export async function executeMint(
       allocateNonce(account.address, chain).catch(() => null),
       resolveGasParams(chain, userId),
     ]);
+    const allocatedNonce: number | undefined = nonceResult?.nonce;
+    const value = params.mintPrice ? parseEther(params.mintPrice) : BigInt(0);
 
     // Gate on simulation AFTER all three have resolved.
     // Release the inflight nonce if simulation failed so it doesn't create a gap.
