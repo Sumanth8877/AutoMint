@@ -1,7 +1,7 @@
 import MintsClient from './mints-client';
 
-// Cache this page for 4 hours
-export const revalidate = 14400;
+// Disable cache so UI reflects mutations immediately
+export const revalidate = 0;
 
 export default function MintsPage() {
   return <MintsClient />;
