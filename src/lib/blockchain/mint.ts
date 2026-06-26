@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { parseAbi, parseEther, parseGwei, Hex, encodeFunctionData } from 'viem';
+import { parseAbi, parseEther, parseGwei, Hex, encodeFunctionData, ContractFunctionRevertedError } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { mainnet, base, polygon, type Chain } from 'viem/chains';
 import { getClient } from './client';
@@ -168,6 +168,95 @@ export async function estimateMintGas(
   }
 }
 
+
+// ── Pre-mint simulation (eth_call dry-run) ──────────────────────────────────
+//
+// Runs simulateContract() before any signing or broadcasting. If the simulation
+// reverts, we return a descriptive error immediately — no gas spent, no nonce
+// consumed, no MEV exposure.
+//
+// Known revert reasons we classify:
+//   sold_out           — totalSupply reached maxSupply / mint ended
+//   price_mismatch     — msg.value < mintPrice
+//   paused             — contract is paused / not active
+//   wrong_phase        — whitelist/presale phase, public not open
+//   not_eligible       — wallet not on allowlist
+//   max_per_wallet     — wallet already minted max quantity
+//   generic_revert     — any other contract revert
+//
+// Set SKIP_MINT_SIMULATION=true to bypass (e.g. for contracts with view-
+// function bugs that cause false-positive simulation failures).
+// ─────────────────────────────────────────────────────────────────────────────
+
+type SimulationResult =
+  | { success: true }
+  | { success: false; reason: string; revertReason: string };
+
+const REVERT_CLASSIFIERS: Array<[RegExp, string]> = [
+  [/sold.?out|max.?supply|supply.?exceeded|minted.?out|no.?remaining/i, 'sold_out'],
+  [/insufficient.*value|wrong.*price|incorrect.*price|price.*mismatch|msg\.value/i, 'price_mismatch'],
+  [/paused|not.?active|minting.?disabled|mint.?not.?enabled/i, 'paused'],
+  [/not.?started|too.?early|before.?mint|presale|allowlist.?only|whitelist.?only|public.?not/i, 'wrong_phase'],
+  [/not.*eligible|not.*allowlist|not.*whitelist|not.*allowed/i, 'not_eligible'],
+  [/already.?minted|max.*per.*wallet|limit.*reached|exceed.*limit/i, 'max_per_wallet'],
+];
+
+function classifyRevert(message: string): string {
+  for (const [pattern, label] of REVERT_CLASSIFIERS) {
+    if (pattern.test(message)) return label;
+  }
+  return 'generic_revert';
+}
+
+export async function simulateMint(
+  address: Hex,
+  chain: string,
+  params: MintParams,
+  userId?: string,
+): Promise<SimulationResult> {
+  // Escape hatch: skip simulation for contracts with buggy view functions
+  if (process.env.SKIP_MINT_SIMULATION === 'true') return { success: true };
+
+  try {
+    const client = getClient(chain, userId);
+    const abi = params.mintFunction === 'mint' || !params.mintFunction
+      ? parseAbi(['function mint(uint256 quantity) payable'])
+      : parseAbi([`function ${params.mintFunction}(uint256 quantity) payable`]);
+
+    await client.simulateContract({
+      address: params.contractAddress,
+      abi,
+      functionName: params.mintFunction || 'mint',
+      args: [BigInt(params.quantity)],
+      account: address,
+      value: params.mintPrice ? parseEther(params.mintPrice) : BigInt(0),
+    });
+
+    return { success: true };
+  } catch (error) {
+    // Extract the most useful revert message
+    let revertMsg = '';
+
+    if (error instanceof ContractFunctionRevertedError) {
+      // Viem parses the ABI-encoded revert reason when it can
+      revertMsg = error.reason ?? error.shortMessage ?? error.message ?? '';
+    } else if (error instanceof Error) {
+      revertMsg = error.message ?? '';
+    }
+
+    const reason = classifyRevert(revertMsg);
+
+    addBreadcrumb({
+      category: 'simulation',
+      message: `Mint simulation failed: ${reason}`,
+      level: 'warning',
+      data: { chain, contract: params.contractAddress, revertMsg: revertMsg.slice(0, 200), reason },
+    });
+
+    return { success: false, reason, revertReason: revertMsg.slice(0, 300) };
+  }
+}
+
 export async function executeMint(
   address: Hex,
   chain: string,
@@ -244,6 +333,28 @@ export async function executeMint(
     const mintData = buildMintData(params);
     const account = privateKeyToAccount(privateKey);
     const walletClient = getWalletClient(chain, account, { userId });
+
+    // ── Pre-mint simulation (eth_call dry-run) ─────────────────────────
+    // Simulate the mint transaction before spending gas. If the contract
+    // would revert (sold out, wrong price, paused, wrong phase), abort here.
+    // No nonce consumed, no gas wasted, no MEV exposure.
+    const simulation = await simulateMint(account.address, chain, params, userId);
+    if (!simulation.success) {
+      const labels: Record<string, string> = {
+        sold_out: 'Collection is sold out',
+        price_mismatch: 'Mint price mismatch — check mintPrice config',
+        paused: 'Minting is paused on this contract',
+        wrong_phase: 'Public mint not open yet (whitelist/presale phase)',
+        not_eligible: 'This wallet is not eligible to mint',
+        max_per_wallet: 'This wallet has already reached the per-wallet mint limit',
+        generic_revert: 'Contract simulation reverted',
+      };
+      const label = labels[simulation.reason] ?? labels.generic_revert;
+      return {
+        success: false,
+        error: `SimulationFailed: ${label}${simulation.revertReason ? ` — ${simulation.revertReason}` : ''}`,
+      };
+    }
 
     // ── C-03 Fix: allocate unique nonce ─────────────────────────────────────
     // Speed fix: allocate nonce and resolve EIP-1559 gas params in parallel.
