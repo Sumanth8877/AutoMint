@@ -22,6 +22,7 @@ export async function getNftTransfers(params: {
   fromBlock?: number;
   toBlock?: number;
   limit?: number;
+  tokenId?: string;   // when provided, filters logs to this specific token
 }): Promise<NftTransfer[]> {
   const client = getClient(params.chain);
 
@@ -34,6 +35,12 @@ export async function getNftTransfers(params: {
     event: ERC721_TRANSFER_EVENT,
     fromBlock,
     toBlock,
+    // Filter at RPC level when tokenId is provided — avoids fetching all
+    // transfers and filtering client-side, which returns wrong owner when
+    // the most-recent transfer in the window is for a different tokenId.
+    ...(params.tokenId !== undefined && {
+      args: { tokenId: BigInt(params.tokenId) },
+    }),
   });
 
   return logs.slice(0, params.limit || 100).map((log) => {
@@ -58,6 +65,7 @@ export async function getLatestOwner(params: { chain: string; contract: string; 
     const transfers = await getNftTransfers({
       chain: params.chain,
       contract: params.contract,
+      tokenId: params.tokenId,  // filter to this token — fixes wrong-owner bug
       limit: 1,
     });
 
