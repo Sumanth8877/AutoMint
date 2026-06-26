@@ -112,11 +112,11 @@ async function getDashboardData(userId: string) {
         eta: task.scheduledTime ? new Date(task.scheduledTime).toLocaleTimeString() : 'N/A',
         risk: task.riskThreshold && task.riskThreshold > 75 ? 'High' : task.riskThreshold && task.riskThreshold > 50 ? 'Medium' : 'Low',
       })),
-      riskFeed: [] as Array<{ title: string; source: string; level: string; time: string }>, // TODO: Implement risk feed from risk service
+      riskFeed: [] as Array<{ title: string; source: string; level: string; time: string }>,
       watchlist: userCollections.slice(0, 4).map(col => ({
         name: col.name || 'Unknown',
         chain: col.chain || 'Unknown',
-        score: 75, // TODO: Calculate from analysis
+        score: null as number | null,  // Not yet computed — requires risk analysis integration
         demand: 'Medium',
       })),
       activity: activities.slice(0, 5).map(act => [
@@ -312,7 +312,7 @@ export default async function DashboardPage() {
                   <p className="truncate text-sm font-medium text-text">{item.name}</p>
                   <p className="text-xs text-muted">{item.chain} / {item.demand}</p>
                 </div>
-                <span className="font-mono text-sm text-text">{item.score}</span>
+                <span className="font-mono text-sm text-text">{item.score ?? '—'}</span>
               </div>
             )) : (
               <div className="text-center text-muted text-sm">No collections</div>
