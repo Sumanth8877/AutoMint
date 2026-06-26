@@ -29,9 +29,7 @@ export async function PATCH(req: Request, context: RouteContext) {
     const rule = await updateCopyMintRule(authResult.userId, id, body);
     return NextResponse.json({ rule });
   } catch (error) {
-    const message = getErrorMessage(error);
-    const status = message.includes('not found') ? 404 : message.includes('Invalid') ? 400 : 500;
-    return NextResponse.json({ error: message }, { status });
+    return handleRouteError(error, 'Failed to update copy-mint rule');
   }
 }
 
@@ -44,8 +42,6 @@ export async function DELETE(_req: Request, context: RouteContext) {
     await deleteCopyMintRule(authResult.userId, id);
     return NextResponse.json({ success: true });
   } catch (error) {
-    const message = getErrorMessage(error);
-    const status = message.includes('not found') ? 404 : 500;
-    return NextResponse.json({ error: message }, { status });
+    return handleRouteError(error, 'Failed to update copy-mint rule');
   }
 }
