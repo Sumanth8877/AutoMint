@@ -9,17 +9,22 @@ export async function GET() {
   const authResult = await requireApiUser();
   if ('error' in authResult) return authResult.error;
 
-  const watched = await getUserWatchedWallets(authResult.userId);
-  const addresses = Array.from(new Set(watched.map((wallet) => wallet.walletAddress)));
+  try {
+    const watched = await getUserWatchedWallets(authResult.userId);
+    const addresses = Array.from(new Set(watched.map((wallet) => wallet.walletAddress)));
 
-  if (addresses.length === 0) {
-    return NextResponse.json({ reputations: [] });
+    if (addresses.length === 0) {
+      return NextResponse.json({ reputations: [] });
+    }
+
+    const reputations = await getDb()
+      .select()
+      .from(walletReputation)
+      .where(inArray(walletReputation.walletAddress, addresses));
+
+    return NextResponse.json({ reputations });
+  } catch (error) {
+    console.error('[wallet-reputation] DB query failed:', error);
+    return NextResponse.json({ error: 'Failed to fetch wallet reputations' }, { status: 500 });
   }
-
-  const reputations = await getDb()
-    .select()
-    .from(walletReputation)
-    .where(inArray(walletReputation.walletAddress, addresses));
-
-  return NextResponse.json({ reputations });
 }
