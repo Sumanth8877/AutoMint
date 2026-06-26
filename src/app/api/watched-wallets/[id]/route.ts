@@ -21,9 +21,7 @@ export async function PATCH(req: Request, context: RouteContext) {
     const wallet = await updateWatchedWallet(authResult.userId, id, body);
     return NextResponse.json({ wallet });
   } catch (error) {
-    const message = getErrorMessage(error);
-    const status = message.includes('not found') ? 404 : 500;
-    return NextResponse.json({ error: message }, { status });
+    return handleRouteError(error, 'Failed to process watched wallet');
   }
 }
 
@@ -36,8 +34,6 @@ export async function DELETE(_req: Request, context: RouteContext) {
     await deleteWatchedWallet(authResult.userId, id);
     return NextResponse.json({ success: true });
   } catch (error) {
-    const message = getErrorMessage(error);
-    const status = message.includes('not found') ? 404 : 500;
-    return NextResponse.json({ error: message }, { status });
+    return handleRouteError(error, 'Failed to process watched wallet');
   }
 }
