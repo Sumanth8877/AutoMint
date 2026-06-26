@@ -6,7 +6,7 @@ import { infrastructureTestRuns } from '@/drizzle/schema';
 import { getDb } from '@/lib/db';
 import { getRedisClient } from '@/lib/redis';
 import { getChain } from '@/lib/blockchain/chains';
-import { withRpcFailover } from '@/lib/services/rpc-manager.service';
+import { withRpcFailover, type RpcProvider } from '@/lib/services/rpc-manager.service';
 import { isTelegramEnabled, sendTelegramMessage } from '@/lib/services/telegram.service';
 import { discoverWithJina } from '@/lib/services/jina.provider';
 import { discoverWithFirecrawl } from '@/lib/services/firecrawl.provider';
