@@ -27,6 +27,7 @@ export async function GET() {
   const authResult = await requireApiUser();
   if ('error' in authResult) return authResult.error;
 
+  try {
   const watched = await getUserWatchedWallets(authResult.userId);
   const watchedAddresses = new Set(watched.map((wallet) => wallet.walletAddress.toLowerCase()));
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -93,4 +94,8 @@ export async function GET() {
       copiedMints24h,
     },
   });
+  } catch (error) {
+    console.error('[whale-tracker/activity] DB query failed:', error);
+    return NextResponse.json({ error: 'Failed to fetch whale tracker activity' }, { status: 500 });
+  }
 }
