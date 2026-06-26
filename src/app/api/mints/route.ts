@@ -160,6 +160,7 @@ export async function POST(req: Request) {
       gasStrategy?: 'STANDARD' | 'FAST' | 'AGGRESSIVE';
       maxRetries?: number;
       riskThreshold?: number;
+      scheduleTime?: string;          // #9 — manual schedule override
     }>(req);
     const { quantity, safeModeEnabled } = body;
     const defaults = await getEffectiveExecutionDefaults(authResult.userId);
@@ -237,8 +238,17 @@ export async function POST(req: Request) {
 
     if (mintState.status !== 'LIVE') {
       // UPCOMING — find the best start time available.
-      // Priority: on-chain mintState → collection DB → tiered discoverMintRequirements
-      let detectedStart: Date | undefined =
+      // Priority: #9 user-supplied override → on-chain mintState → collection DB → discovery
+      let detectedStart: Date | undefined;
+      if (body.scheduleTime) {
+        const parsed = new Date(body.scheduleTime);
+        if (!isNaN(parsed.getTime()) && parsed.getTime() > Date.now()) {
+          detectedStart = parsed;
+          console.log('[mints/route] Using user-supplied schedule override:', detectedStart.toISOString());
+        }
+      }
+      detectedStart =
+        detectedStart ??
         mintState.startTime ??
         (collection.mintStart ? new Date(collection.mintStart) : undefined);
 
