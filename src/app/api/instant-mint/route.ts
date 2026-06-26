@@ -12,6 +12,7 @@ import { collections, mintTasks, wallets } from '@/drizzle/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { logger } from '@/lib/logger';
 import { SUPPORTED_CHAINS, type ChainKey } from '@/lib/blockchain/chains';
+import { enforceRateLimit, RATE_LIMITS } from '@/lib/api/rate-limit';
 
 function asSupportedChain(chain: string): ChainKey {
   if (!(chain in SUPPORTED_CHAINS)) {
@@ -316,6 +317,16 @@ export async function POST(request: Request) {
   try {
     const authResult = await requireApiUser();
     if ('error' in authResult) return authResult.error;
+
+    // H-04 Fix: rate-limit instant mint — this route fans out to Jina,
+    // Firecrawl, and Browserbase scrapers and then fires on-chain transactions.
+    // Without a limit a single user can exhaust external API quotas and
+    // simultaneously trigger multiple live mints. Cap at 5 per minute.
+    const limited = await enforceRateLimit(`instant-mint:${authResult.userId}`, {
+      limit: 5,
+      windowSeconds: 60,
+    });
+    if (limited) return limited;
 
     const body = await parseJsonBody(request) as { url: string };
     const { url } = body;

@@ -1,11 +1,7 @@
 import { NextResponse } from 'next/server';
-import { parseJsonBody } from '@/lib/api/errors';
+import { parseJsonBody, handleRouteError } from '@/lib/api/errors';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getCopyMintRules, upsertCopyMintRule } from '@/lib/services/copy-mint.service';
-
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : 'Copy mint rule request failed';
-}
 
 export async function GET() {
   try {
@@ -15,7 +11,7 @@ export async function GET() {
     const rules = await getCopyMintRules(authResult.userId);
     return NextResponse.json({ rules });
   } catch (error) {
-    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+    return handleRouteError(error, 'Failed to fetch copy-mint rules');
   }
 }
 

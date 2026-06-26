@@ -342,11 +342,48 @@ export async function getMintTaskById(id: string, userId: string) {
   return task ?? null;
 }
 
+// H-01 Fix: mint task status state machine.
+// task.service.ts contains a full state machine (VALID_TRANSITIONS) but is
+// scaffolded and not yet wired into the live mint execution path.
+// This guard provides the same protection inline for mintTask statuses,
+// preventing impossible transitions (e.g. completed → running) that could
+// cause double-spend or silent task corruption.
+const VALID_MINT_TRANSITIONS: Record<string, string[]> = {
+  pending:     ['monitoring', 'ready', 'running', 'failed', 'cancelled'],
+  monitoring:  ['ready', 'running', 'failed', 'cancelled'],
+  ready:       ['running', 'failed', 'cancelled'],
+  running:     ['completed', 'failed', 'unconfirmed', 'cancelled'],
+  unconfirmed: ['completed', 'failed'],
+  completed:   [],   // terminal
+  failed:      ['ready', 'cancelled'],
+  cancelled:   [],   // terminal
+};
+
+function assertValidMintTransition(from: string, to: string, taskId: string): void {
+  const allowed = VALID_MINT_TRANSITIONS[from] ?? [];
+  if (!allowed.includes(to)) {
+    throw new Error(
+      `Invalid mint task status transition: ${from} → ${to} (taskId=${taskId}). ` +
+      `Allowed from '${from}': [${allowed.join(', ') || 'none — terminal state'}]`,
+    );
+  }
+}
+
 export async function updateMintTaskStatus(
   id: string,
   userId: string,
   status: 'pending' | 'monitoring' | 'ready' | 'running' | 'completed' | 'failed' | 'cancelled',
 ) {
+  // Fetch current status to validate the transition before writing.
+  const [current] = await getDb()
+    .select({ status: mintTasks.status })
+    .from(mintTasks)
+    .where(and(eq(mintTasks.id, id), eq(mintTasks.userId, userId)))
+    .limit(1);
+
+  if (!current) throw new Error('Task not found');
+  assertValidMintTransition(current.status, status, id);
+
   const [task] = await getDb()
     .update(mintTasks)
     .set({ status, updatedAt: new Date() })
