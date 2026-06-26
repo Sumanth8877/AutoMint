@@ -596,6 +596,11 @@ export async function executeScheduledMint(taskId: string) {
             level: 'info',
             data: { taskId, contractAddress: task.contractAddress },
           });
+          // Notify user that mint just went live and we're executing
+          await sendScheduledMintNotification(task.userId, 'mint_live_detected', {
+            taskId,
+            contractAddress: task.contractAddress || undefined,
+          });
           // Update retry counter and fall through to execution
           await getDb()
             .update(mintTasks)

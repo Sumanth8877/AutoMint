@@ -25,7 +25,7 @@ import { requireApiUser } from '@/lib/auth/require-auth';
 import { getDb } from '@/lib/db';
 import { captureException } from '@/lib/observability/sentry';
 import { wallets, collections, mintHistory } from '@/drizzle/schema';
-import { gte } from 'drizzle-orm';
+import { gte, desc } from 'drizzle-orm';
 import { eq } from 'drizzle-orm';
 import { formatEther } from 'viem';
 
@@ -43,18 +43,24 @@ async function getDashboardData(userId: string) {
     // Get user's mint tasks
     const tasks = await getUserMintTasks(userId);
     
-    const tasksByDay = tasks.reduce((acc, t) => {
-      const day = new Date(t.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    // Build 7-day chart from mintHistory (on-chain confirmed/failed transactions)
+    const since7Days = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const recentHistory = await db.select().from(mintHistory)
+      .where(gte(mintHistory.createdAt, since7Days))
+      .orderBy(desc(mintHistory.createdAt));
+
+    const historyByDay = recentHistory.reduce((acc, h) => {
+      const day = new Date(h.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
       if (!acc[day]) acc[day] = { completed: 0, failed: 0 };
-      if (t.status === 'completed') acc[day].completed++;
-      else if (t.status === 'failed') acc[day].failed++;
+      if (h.status === 'confirmed') acc[day].completed++;
+      else if (h.status === 'failed') acc[day].failed++;
       return acc;
     }, {} as Record<string, { completed: number; failed: number }>);
 
     const chartData = last7Labels.map(day => ({
       day,
-      completed: tasksByDay[day]?.completed ?? 0,
-      failed: tasksByDay[day]?.failed ?? 0,
+      completed: historyByDay[day]?.completed ?? 0,
+      failed: historyByDay[day]?.failed ?? 0,
     }));
 
     // Get wallet count and funded status

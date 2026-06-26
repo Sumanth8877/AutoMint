@@ -85,6 +85,15 @@ export default function MintsClient() {
   const { data: mintsData, isLoading, error: fetchError } = useQuery({
     queryKey: ['mints'],
     queryFn: () => apiRequest<{ tasks: MintTask[] }>('/api/mints'),
+    // Live polling — only while there are active (non-terminal) tasks
+    refetchInterval: (query) => {
+      const activeTasks = query.state.data?.tasks ?? [];
+      return activeTasks.some(t =>
+        ['pending', 'monitoring', 'ready', 'running', 'unconfirmed'].includes(t.status)
+      ) ? 5000 : false;
+    },
+    refetchIntervalInBackground: false,
+    staleTime: 3000,
   });
 
   const { data: walletsData } = useQuery({

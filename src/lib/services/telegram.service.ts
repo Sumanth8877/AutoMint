@@ -24,6 +24,7 @@ export type TelegramNotificationType =
   | 'mint_executing'    // new name for execution start
   | 'mint_success'
   | 'mint_failed'
+  | 'mint_live_detected'
   | 'high_risk_collection'
   | 'risk_analysis_complete'
   | 'wallet_balance_low'
@@ -382,22 +383,47 @@ function formatNotification(type: TelegramNotificationType, payload: Notificatio
 
   switch (type) {
     case 'mint_scheduled':
-      lines.push('Mint Scheduled', truncate(subject));
-      if (payload.taskId) lines.push(`Task: ${payload.taskId}`);
+      lines.push('🕐 Mint Scheduled', truncate(subject));
+      if (payload.taskId) lines.push(`Task: ${payload.taskId.slice(0, 8)}`);
       break;
     case 'mint_started':
     case 'mint_executing':
-      lines.push('Mint Started', truncate(subject));
-      if (payload.taskId) lines.push(`Task: ${payload.taskId}`);
+      lines.push('⚡ Mint Executing', truncate(subject));
+      if (payload.taskId) lines.push(`Task: ${payload.taskId.slice(0, 8)}`);
       break;
     case 'mint_success':
-      lines.push('Mint Success', truncate(subject));
-      if (payload.txHash) lines.push(`Tx: ${payload.txHash}`);
+      lines.push('✅ Mint Success', truncate(subject));
+      if (payload.txHash) lines.push(`Tx: ${payload.txHash.slice(0, 18)}...`);
       break;
-    case 'mint_failed':
-      lines.push('Mint Failed', truncate(subject));
-      if (payload.error) lines.push(`Reason: ${payload.error}`);
+    case 'mint_live_detected':
+      lines.push('🚀 Mint Is Live — Executing Now', truncate(subject));
+      if (payload.contractAddress) lines.push(`Contract: ${String(payload.contractAddress).slice(0, 10)}...`);
       break;
+    case 'mint_failed': {
+      const errMsg = payload.error ?? '';
+      const errLow = errMsg.toLowerCase();
+      let errLabel: string;
+      if (errLow.includes('insufficient funds') || errLow.includes('insufficient balance')) {
+        errLabel = '💸 Insufficient funds';
+      } else if (errLow.includes('balance') || errLow.includes('too low')) {
+        errLabel = '💸 Balance too low';
+      } else if (errLow.includes('reverted') || errLow.includes('execution reverted')) {
+        errLabel = '🔁 Contract reverted';
+      } else if (errLow.includes('nonce') || errLow.includes('replacement transaction')) {
+        errLabel = '🔄 Nonce conflict';
+      } else if (errLow.includes('gas') || errLow.includes('intrinsic')) {
+        errLabel = '⛽ Gas estimation failed';
+      } else if (errLow.includes('timeout') || errLow.includes('timed out')) {
+        errLabel = '⏱ Execution timed out';
+      } else if (errMsg) {
+        errLabel = errMsg.slice(0, 60);
+      } else {
+        errLabel = 'Unknown error';
+      }
+      lines.push('❌ Mint Failed', truncate(subject));
+      lines.push(`Reason: ${errLabel}`);
+      break;
+    }
     case 'high_risk_collection':
       lines.push('High Risk Collection', truncate(subject));
       if (payload.riskReason) lines.push(`Reason: ${payload.riskReason}`);
@@ -435,6 +461,7 @@ const MINT_NOTIFICATION_TYPES: ReadonlySet<TelegramNotificationType> = new Set([
   'mint_started',       // legacy alias for executing
   'mint_success',
   'mint_failed',
+  'mint_live_detected',
 ]);
 
 export async function sendTelegramNotification(
