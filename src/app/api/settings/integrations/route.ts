@@ -9,6 +9,8 @@ import { getDb } from '@/lib/db';
 
 type KnownService =
   | 'Alchemy'
+  | 'Infura'
+  | 'Chainstack'
   | 'Jina'
   | 'Firecrawl'
   | 'Browserbase'
