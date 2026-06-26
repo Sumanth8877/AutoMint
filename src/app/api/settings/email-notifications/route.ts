@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { requireApiUser } from '@/lib/auth/require-auth';
-import { getErrorMessage, parseJsonBody } from '@/lib/api/errors';
+import { getErrorMessage, parseJsonBody, handleRouteError } from '@/lib/api/errors';
 import { getDb } from '@/lib/db';
 import { users } from '@/drizzle/schema';
 import {
@@ -71,8 +71,6 @@ export async function PATCH(req: Request) {
 
     return NextResponse.json(await getResponse(authResult.userId));
   } catch (error) {
-    const message = getErrorMessage(error, 'Failed to update email notification settings');
-    const status = message.includes('must be true or false') || message === 'Invalid JSON request body' ? 400 : 500;
-    return NextResponse.json({ error: message }, { status });
+    return handleRouteError(error, 'Failed to update email notification settings');
   }
 }
