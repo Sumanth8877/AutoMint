@@ -181,7 +181,7 @@ export async function runAnalyzer(params: {
             (v) => `Collection metadata loaded: ${v.name}`,
             () => runTimed(telemetry.timingBreakdown, 'Metadata Fetch',
               () => getCachedCollectionMetadata({ contractAddress, chain, cacheStats, log })))
-        : Promise.resolve({ name: 'Unknown Collection', symbol: 'UNKNOWN', totalSupply: BigInt(0), tokenStandard: 'Unknown' as const, owner: intent.contractAddress }),
+        : Promise.resolve({ name: 'Unknown Collection', symbol: 'UNKNOWN', totalSupply: BigInt(0), tokenStandard: 'Unknown' as const, owner: intent.contractAddress ?? '' }),
       settings.autoDetectMintDetails
         ? runLogged(log, 'metadata', 'Inspecting contract mint state',
             (v) => `Mint state loaded: ${v.status}`,
@@ -320,7 +320,7 @@ async function runNonEvmPath(params: {
     input: p.input, intent, enabled: settings.autoDetectSocials,
     cacheStats, log, timingBreakdown: telemetry.timingBreakdown,
   });
-  const fallbackMetadata = { name: intent.collectionName ?? 'Resolved Collection', symbol: intent.chain.toUpperCase(), totalSupply: '0', tokenStandard: 'Unknown' as const, owner: intent.contractAddress };
+  const fallbackMetadata = { name: intent.collectionName ?? 'Resolved Collection', symbol: intent.chain.toUpperCase(), totalSupply: '0', tokenStandard: 'Unknown' as const, owner: intent.contractAddress ?? '' };
   const collectionIntelligence = await fetchCollectionIntelligenceWithCache({
     intent, metadata: fallbackMetadata, cacheStats, log, timingBreakdown: telemetry.timingBreakdown,
   });
