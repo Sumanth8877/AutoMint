@@ -275,56 +275,8 @@ export async function executeMint(
     };
   }
 
-  try {
-    // ── Decrypt per-user signing key ──────────────────────────────
-    // getDecryptedPrivateKey(walletId, userId) enforces ownership at the
-    // DB layer: it only returns a key when wallets.id = walletId AND
-    // wallets.userId = userId. Cross-user access returns "Wallet not found".
-    //
-    // The decrypted key is used immediately to build the account object
-    // and is never stored, logged, or returned to the caller.
-    let privateKey: Hex;
     try {
-      const decrypted = await getDecryptedPrivateKey(options.walletId, userId);
-      privateKey = (decrypted.startsWith('0x') ? decrypted : `0x${decrypted}`) as Hex;
-    } catch (keyError) {
-      // Log full diagnostic detail server-side only — never returned to caller.
-      await captureException(keyError, {
-        area: 'minting',
-        context: { chain, collection: params.contractAddress },
-        fingerprint: ['mint', 'key-decryption'],
-      });
-      // Sanitised error: no walletId, no crypto internals, no stack traces.
-      // Classify error safely: check for ownership/access-related messages.
-      // This set covers messages from wallet DB lookup, access control, and
-      // any middleware that enforces per-user ownership.
-      // All other errors (crypto failures, format errors) fall to the generic path.
-      const OWNERSHIP_ERROR_PATTERNS = [
-        'not found',
-        'access denied',
-        'unauthorized',
-        'permission denied',
-        'belongs to another user',
-      ];
-      const isOwnershipError =
-        keyError instanceof Error &&
-        OWNERSHIP_ERROR_PATTERNS.some((pattern) =>
-          keyError.message.toLowerCase().includes(pattern),
-        );
-      return {
-        success: false,
-        error: isOwnershipError
-          ? 'Wallet not found or access denied.'
-          : 'Wallet key unavailable.',
-      };
-    }
-
-    // ── Build and broadcast transaction ───────────────────────────
-    const mintData = buildMintData(params);
-    const account = privateKeyToAccount(privateKey);
-    const walletClient = getWalletClient(chain, account, { userId });
-
-    // ── C-03 Fix + Simulation: all run in parallel ──────────────────────────────────────────
+    // ── C-03 Fix + Simulation: all run in parallel ──────────────────────────────────────────────────────────────────────────────────────────
     // eth_call simulation, nonce allocation, and EIP-1559 gas params resolve concurrently.
     // This means simulation adds ZERO net latency on live mints — it completes during
     // the same ~100–300ms RPC window as nonce allocation and gas estimation.
@@ -332,8 +284,8 @@ export async function executeMint(
     // Sequential simulation (the naive approach) would gate broadcast behind an extra
     // round-trip, adding ~100–300ms per mint — critical when racing bots on a live drop.
     const [simulation, nonceResult, gasParams] = await Promise.all([
-      simulateMint(account.address, chain, params, userId),
-      allocateNonce(account.address, chain).catch(() => null),
+      simulateMint(address, chain, params, userId),
+      allocateNonce(address, chain).catch(() => null),
       resolveGasParams(chain, userId),
     ]);
     const allocatedNonce: number | undefined = nonceResult?.nonce;
@@ -343,7 +295,7 @@ export async function executeMint(
     // Release the inflight nonce if simulation failed so it doesn't create a gap.
     if (!simulation.success) {
       if (nonceResult?.nonce !== undefined) {
-        void releaseInflightNonce(account.address, chain, nonceResult.nonce).catch(() => undefined);
+        void releaseInflightNonce(address, chain, nonceResult.nonce).catch(() => undefined);
       }
       const labels: Record<string, string> = {
         sold_out: 'Collection is sold out',
@@ -360,6 +312,47 @@ export async function executeMint(
         error: `SimulationFailed: ${label}${simulation.revertReason ? ` — ${simulation.revertReason}` : ''}`,
       };
     }
+
+
+    // ── Decrypt per-user signing key (deferred until after simulation) ─────────
+    // getDecryptedPrivateKey(walletId, userId) enforces ownership at the
+    // DB layer: it only returns a key when wallets.id = walletId AND
+    // wallets.userId = userId. Cross-user access returns "Wallet not found".
+    //
+    // Deferring decryption minimises the key's memory window to the sign +
+    // broadcast phase (~5–20ms). During the ~100–300ms simulation window the
+    // key does not exist in memory. If simulation fails, it is never decrypted.
+    let privateKey: Hex;
+    try {
+      const decrypted = await getDecryptedPrivateKey(options.walletId, userId);
+      privateKey = (decrypted.startsWith('0x') ? decrypted : `0x${decrypted}`) as Hex;
+    } catch (keyError) {
+      // Release the nonce before returning — can't sign without the key.
+      if (nonceResult?.nonce !== undefined) {
+        void releaseInflightNonce(address, chain, nonceResult.nonce).catch(() => undefined);
+      }
+      await captureException(keyError, {
+        area: 'minting',
+        context: { chain, collection: params.contractAddress },
+        fingerprint: ['mint', 'key-decryption'],
+      });
+      const OWNERSHIP_ERROR_PATTERNS = [
+        'not found', 'access denied', 'unauthorized',
+        'permission denied', 'belongs to another user',
+      ];
+      const isOwnershipError =
+        keyError instanceof Error &&
+        OWNERSHIP_ERROR_PATTERNS.some((p) => keyError.message.toLowerCase().includes(p));
+      return {
+        success: false,
+        error: isOwnershipError ? 'Wallet not found or access denied.' : 'Wallet key unavailable.',
+      };
+    }
+
+    // ── Build and broadcast transaction ──────────────────────────────────────
+    const mintData = buildMintData(params);
+    const account = privateKeyToAccount(privateKey);
+    const walletClient = getWalletClient(chain, account, { userId });
 
     // C-04: hoist hash before the broadcast try so the catch block can always return it.
     let hash: Hex | undefined;
