@@ -321,7 +321,7 @@ async function fetchViaJina(
       ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
       Accept: 'text/plain',
     },
-    signal: AbortSignal.timeout(12_000),
+    signal: AbortSignal.timeout(4_000),
   });
 
   if (!res.ok) throw new Error(`Jina ${res.status}: ${res.statusText}`);
@@ -349,7 +349,7 @@ async function fetchViaFirecrawl(
       // Include script tags and structured data for richer extraction
       includeTags: ['script', 'meta'],
     }),
-    signal: AbortSignal.timeout(15_000),
+    signal: AbortSignal.timeout(5_000),
   });
 
   if (!res.ok) throw new Error(`Firecrawl ${res.status}: ${res.statusText}`);
@@ -387,7 +387,7 @@ async function fetchViaBrowserbase(
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({ url }),
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(6_000),
     });
     if (!navRes.ok) throw new Error(`Browserbase navigate ${navRes.status}`);
 
@@ -476,9 +476,142 @@ function computeConfidence(req: Partial<DiscoveredRequirements>): number {
  *   - If critical fields still missing after Tier 2 → run Tier 3 (Browserbase).
  *   - If contractAddress still missing after Tier 3 → throw (unresolvable URL).
  */
+/**
+ * discoverMintRequirements
+ *
+ * Tiered discovery (Tier 1 caller → Tier 2 Jina+Firecrawl → Tier 3 Browserbase).
+ * Wrapped in a hard timeout so it never blocks the API response longer than
+ * `maxTimeMs` — critical for Vercel hobby plan (10s function limit).
+ *
+ * If the timeout fires, returns whatever was resolved so far + a warning log.
+ * Tier 3 (Browserbase) is automatically skipped when only <3s remain.
+ */
 export async function discoverMintRequirements(
   url: string,
   knownPartial: Partial<Omit<DiscoveredRequirements, 'confidence' | 'source' | 'missingFields'>> = {},
+  options: { maxTimeMs?: number } = {},
+): Promise<DiscoveredRequirements> {
+  const maxTimeMs = options.maxTimeMs ?? 7000;        // 7s default — Vercel hobby safe
+  const deadline = Date.now() + maxTimeMs;
+  let current: Partial<DiscoveredRequirements> = { ...knownPartial };
+
+  // Fast path: everything already known
+  const initialMissing = computeMissing(current);
+  if (initialMissing.length === 0) {
+    console.log('[mint-discovery] All critical fields already resolved — skipping scraper tiers');
+    return {
+      ...current,
+      confidence: 1.0,
+      source: 'url-resolver',
+      missingFields: [],
+    } as DiscoveredRequirements;
+  }
+
+  console.log('[mint-discovery] Missing critical fields:', initialMissing, `— running Tier 2 (budget: ${maxTimeMs}ms)`);
+
+  // ── Tier 2: Jina + Firecrawl in parallel, with budget check ───────────────
+  let tier2Source: DiscoverySource = 'merged';
+  try {
+    const tier2Budget = Math.min(deadline - Date.now(), 6000);
+    if (tier2Budget > 1500) {
+      const timeoutPromise = new Promise<null>((resolve) =>
+        setTimeout(() => resolve(null), tier2Budget),
+      );
+
+      const tier2Promise = Promise.allSettled([fetchViaJina(url), fetchViaFirecrawl(url)]);
+      const result = await Promise.race([tier2Promise, timeoutPromise]);
+
+      if (result !== null) {
+        const [jinaResult, firecrawlResult] = result;
+        let scraperMerged: Partial<DiscoveredRequirements> = {};
+
+        if (jinaResult.status === 'fulfilled') {
+          scraperMerged = merge(scraperMerged, jinaResult.value);
+          tier2Source = 'jina';
+        } else {
+          console.warn('[mint-discovery] Jina failed:', jinaResult.reason);
+        }
+        if (firecrawlResult.status === 'fulfilled') {
+          scraperMerged = merge(scraperMerged, firecrawlResult.value);
+          if (tier2Source !== 'jina') tier2Source = 'firecrawl';
+        } else {
+          console.warn('[mint-discovery] Firecrawl failed:', firecrawlResult.reason);
+        }
+        current = merge(current, scraperMerged);
+      } else {
+        console.warn('[mint-discovery] Tier 2 budget exceeded — skipping Tier 3');
+      }
+    } else {
+      console.warn('[mint-discovery] Insufficient budget for Tier 2 — skipping all scrapers');
+    }
+  } catch (err) {
+    console.warn('[mint-discovery] Tier 2 threw:', err);
+  }
+
+  // ── Check Tier 3 budget ───────────────────────────────────────────────────
+  const afterTier2Missing = computeMissing(current);
+  const remainingMs = deadline - Date.now();
+
+  if (afterTier2Missing.length === 0) {
+    return {
+      ...current,
+      confidence: computeConfidence(current),
+      source: tier2Source,
+      missingFields: [],
+    } as DiscoveredRequirements;
+  }
+
+  if (remainingMs < 3000) {
+    // Skip Tier 3 — not enough budget for a full browser render
+    console.warn('[mint-discovery] Skipping Tier 3 (Browserbase) — insufficient remaining budget:', remainingMs, 'ms');
+    return {
+      ...current,
+      confidence: computeConfidence(current),
+      source: tier2Source,
+      missingFields: afterTier2Missing,
+    } as DiscoveredRequirements;
+  }
+
+  console.log('[mint-discovery] Still missing after Tier 2:', afterTier2Missing, `— running Tier 3 (${remainingMs}ms left)`);
+
+  // ── Tier 3: Browserbase + Playwright (with remaining time as timeout) ────
+  try {
+    const tier3Promise = fetchViaBrowserbase(url);
+    const tier3Timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), remainingMs - 500));
+    const bbResult = await Promise.race([tier3Promise, tier3Timeout]);
+    if (bbResult !== null) {
+      current = merge(current, bbResult);
+      console.log('[mint-discovery] Tier 3 complete');
+    } else {
+      console.warn('[mint-discovery] Tier 3 timed out');
+    }
+  } catch (err) {
+    console.warn('[mint-discovery] Tier 3 (Browserbase) failed:', err);
+  }
+
+  const finalMissing = computeMissing(current);
+  const confidence = computeConfidence(current);
+
+  if (!current.contractAddress) {
+    throw new Error(
+      `Could not resolve a contract address from this URL after all discovery tiers. ` +
+      `URL: ${url}. ` +
+      `Still missing: ${finalMissing.join(', ')}. ` +
+      `Please verify this is a valid mint page.`,
+    );
+  }
+
+  if (finalMissing.length > 0) {
+    console.warn('[mint-discovery] Some fields still unresolved after all tiers:', finalMissing);
+  }
+
+  return {
+    ...current,
+    confidence,
+    source: 'merged',
+    missingFields: finalMissing,
+  } as DiscoveredRequirements;
+},
 ): Promise<DiscoveredRequirements> {
   let current: Partial<DiscoveredRequirements> = { ...knownPartial };
 
