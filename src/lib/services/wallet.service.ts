@@ -7,6 +7,7 @@ import { getCache, setCache } from '@/lib/redis';
 import { logActivity } from '@/lib/monitoring';
 import { deriveWalletFromPrivateKey, type ImportWalletType } from '@/lib/wallets/private-key';
 import { addBreadcrumb } from '@/lib/observability/sentry';
+import { ConflictError, NotFoundError } from '@/lib/api/errors';
 
 const DEFAULT_EVM_CHAIN = 'ethereum' as const;
 
@@ -198,7 +199,7 @@ export async function importWallet(userId: string, data: { walletType: ImportWal
     .where(and(eq(wallets.userId, userId), eq(wallets.address, derived.address)))
     .limit(1);
 
-  if (existing) throw new Error('Wallet already added');
+  if (existing) throw new ConflictError('Wallet already added');
 
   const [existingUserWallet] = await getDb()
     .select({ id: wallets.id })
@@ -318,7 +319,7 @@ export async function getDecryptedPrivateKey(walletId: string, userId: string): 
     .where(and(eq(wallets.id, walletId), eq(wallets.userId, userId)))
     .limit(1);
 
-  if (!wallet) throw new Error('Wallet not found');
+  if (!wallet) throw new NotFoundError('Wallet not found');
   if (!wallet.encryptedPrivateKey) throw new Error('Wallet does not have an imported private key');
 
   return decryptPrivateKey(wallet.encryptedPrivateKey);
@@ -326,7 +327,7 @@ export async function getDecryptedPrivateKey(walletId: string, userId: string): 
 
 export async function removeWallet(id: string, userId: string) {
   const existing = await getWalletById(id, userId);
-  if (!existing) throw new Error('Wallet not found');
+  if (!existing) throw new NotFoundError('Wallet not found');
 
   await getDb().delete(wallets).where(and(eq(wallets.id, id), eq(wallets.userId, userId)));
 
@@ -348,7 +349,7 @@ export async function removeWallet(id: string, userId: string) {
 
 export async function updateWallet(id: string, userId: string, data: { nickname?: string | null }) {
   const existing = await getWalletById(id, userId);
-  if (!existing) throw new Error('Wallet not found');
+  if (!existing) throw new NotFoundError('Wallet not found');
 
   const [updated] = await getDb()
     .update(wallets)
@@ -360,13 +361,13 @@ export async function updateWallet(id: string, userId: string, data: { nickname?
     .returning();
 
   const publicWallet = await getPublicWalletById(updated.id, userId);
-  if (!publicWallet) throw new Error('Wallet not found');
+  if (!publicWallet) throw new NotFoundError('Wallet not found');
   return publicWallet;
 }
 
 export async function setDefaultWallet(id: string, userId: string) {
   const existing = await getWalletById(id, userId);
-  if (!existing) throw new Error('Wallet not found');
+  if (!existing) throw new NotFoundError('Wallet not found');
 
   await getDb()
     .update(wallets)
@@ -388,13 +389,13 @@ export async function setDefaultWallet(id: string, userId: string) {
     });
 
   const publicWallet = await getPublicWalletById(updated.id, userId);
-  if (!publicWallet) throw new Error('Wallet not found');
+  if (!publicWallet) throw new NotFoundError('Wallet not found');
   return publicWallet;
 }
 
 export async function refreshWalletBalance(id: string, userId: string) {
   const wallet = await getWalletById(id, userId);
-  if (!wallet) throw new Error('Wallet not found');
+  if (!wallet) throw new NotFoundError('Wallet not found');
 
   const snapshot = await fetchWalletBalanceSnapshot(wallet);
   const updated = await storeBalance(id, userId, snapshot);
