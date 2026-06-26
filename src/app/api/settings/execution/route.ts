@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/require-auth';
-import { getErrorMessage, parseJsonBody } from '@/lib/api/errors';
+import { getErrorMessage, parseJsonBody, handleRouteError } from '@/lib/api/errors';
 import {
   getExecutionSettingsPayload,
   updateExecutionSettings,
@@ -27,8 +27,6 @@ export async function PATCH(req: Request) {
 
     return NextResponse.json(await getExecutionSettingsPayload(authResult.userId));
   } catch (error) {
-    const message = getErrorMessage(error, 'Failed to update execution settings');
-    const status = message.includes('must be') || message.includes('not found') || message === 'Invalid JSON request body' ? 400 : 500;
-    return NextResponse.json({ error: message }, { status });
+    return handleRouteError(error, 'Failed to update execution settings');
   }
 }
