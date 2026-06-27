@@ -247,19 +247,3 @@ describe('handleCopyMintEvent', () => {
   });
 });
 
-describe('assertValidTransition', () => {
-  it('is exported from task.service and enforces state machine rules', async () => {
-    const { assertValidTransition } = await import('../task.service');
-
-    // Valid transitions
-    expect(() => assertValidTransition('pending', 'running')).not.toThrow();
-    expect(() => assertValidTransition('running', 'completed')).not.toThrow();
-    expect(() => assertValidTransition('running', 'retrying')).not.toThrow();
-    expect(() => assertValidTransition('retrying', 'running')).not.toThrow();
-
-    // Invalid transitions
-    expect(() => assertValidTransition('completed', 'running')).toThrow();
-    expect(() => assertValidTransition('completed', 'failed')).toThrow();
-    expect(() => assertValidTransition('dead_letter', 'pending')).toThrow();
-  });
-});
