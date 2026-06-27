@@ -94,7 +94,7 @@ export async function POST(request: Request) {
       .orderBy(desc(mintTasks.createdAt));
 
     // Determine which phases have already been minted
-    const mintedPhases = new Set(
+    const mintedPhases = new Set<string>(
       existingTasks
         .filter(t => t.status === 'completed')
         .map(t => t.phase || 'public')
