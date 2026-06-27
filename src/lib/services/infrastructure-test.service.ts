@@ -341,7 +341,7 @@ export async function testRpcFailover() {
       };
     }, { providerOrder: ['alchemy', 'infura'] });
     if (attempts[0] !== 'alchemy') throw new Error('RPC manager did not select Alchemy first for the forced failover probe');
-    if (result.handledBy === 'alchemy') throw new Error('RPC failover did not leave Alchemy');
+    if ((result.handledBy as string) === 'alchemy') throw new Error('RPC failover did not leave Alchemy');
     return { ...result, attempts };
   }, 'RPC failover routed the request away from Alchemy after simulated failure.');
 }

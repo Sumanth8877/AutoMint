@@ -33,8 +33,8 @@ vi.mock('@/lib/observability/sentry', () => ({
   captureException: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('crypto', () => {
-  const actual = require('crypto') as typeof import('crypto');
+vi.mock('crypto', async () => {
+  const actual = await import('crypto');
   return {
     ...actual,
     timingSafeEqual: vi.fn(actual.timingSafeEqual),

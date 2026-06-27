@@ -2,7 +2,7 @@ import 'server-only';
 
 import { and, isNotNull, lt, sql } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
-import { monitoredWebsites } from '@/drizzle/schema';
+import { monitoredWebsites } from '@/drizzle/schema/monitoring';
 import { addBreadcrumb } from '@/lib/observability/sentry';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -55,9 +55,9 @@ export async function pruneMonitoredWebsiteSnapshots(): Promise<CleanupResult> {
       and(
         isNotNull(monitoredWebsites.lastSnapshot),
         sql`(
-          ${monitoredWebsites.lastChecked} < ${snapshotCutoff}
-          OR ${monitoredWebsites.lastChecked} < ${staleCutoff}
-          OR ${monitoredWebsites.lastChecked} IS NULL
+          ${monitoredWebsites.lastCheckedAt} < ${snapshotCutoff}
+          OR ${monitoredWebsites.lastCheckedAt} < ${staleCutoff}
+          OR ${monitoredWebsites.lastCheckedAt} IS NULL
         )`,
       ),
     )

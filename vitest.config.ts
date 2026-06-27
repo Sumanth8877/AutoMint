@@ -12,7 +12,7 @@ export default defineConfig({
     // Timeout generous enough for async blockchain mocks
     testTimeout: 15_000,
     // Suppress verbose output in CI
-    reporter: process.env.CI ? 'verbose' : 'default',
+    reporters: process.env.CI ? ['verbose'] : ['default'],
   },
   resolve: {
     alias: {

@@ -56,13 +56,13 @@ export async function releaseCronLock(lockName: string, token: string): Promise<
     const key = `${LOCK_PREFIX}${lockName}`;
     // Atomic Lua CAS: only DEL if the stored value matches our token.
     // Prevents deleting a lock acquired by a new process after ours expired/crashed.
-    const luaRelease = \`
+    const luaRelease = `
       if redis.call("GET", KEYS[1]) == ARGV[1] then
         return redis.call("DEL", KEYS[1])
       else
         return 0
       end
-    \`;
+    `;
     const deleted = await client.eval(luaRelease, [key], [token]) as number;
     if (deleted === 0) {
       addBreadcrumb({ category: 'redis-lock', message: `Cron lock release skipped — token mismatch or already expired for "${lockName}"`, level: 'warning', data: { lockName } });

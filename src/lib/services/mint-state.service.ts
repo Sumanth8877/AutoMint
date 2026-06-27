@@ -75,13 +75,14 @@ async function fetchOpenSeaMintMeta(contractAddress: string): Promise<OpenSeaMin
         setTimeout(() => reject(new Error('OpenSea JSON parse timeout')), 5_000),
       ),
     ]);
-    const stats = json?.collection?.stats ?? json?.stats;
+    const j = json as { collection?: { stats?: Record<string, unknown>; created_at?: string }; stats?: Record<string, unknown> } | undefined;
+    const stats = j?.collection?.stats ?? j?.stats;
     if (!stats) return undefined;
 
     return {
       maxSupply: stats.max_supply ? Number(stats.max_supply) : undefined,
       totalMinted: stats.total_supply ? Number(stats.total_supply) : undefined,
-      startTime: json?.collection?.created_at ?? stats.created_at,
+      startTime: (j?.collection?.created_at ?? (stats as Record<string, unknown>).created_at) as string | undefined,
       endTime: undefined,
     };
   } catch {

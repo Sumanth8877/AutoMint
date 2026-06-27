@@ -219,7 +219,7 @@ export async function scheduleMint(params: {
   }
 
   const qstash = await publishQStashMessage(task.id, scheduledTime, 'execute');
-  const qstashMessageId = qstash.messageId || qstash.scheduleId;
+  const qstashMessageId = qstash.messageId || (qstash as unknown as { scheduleId?: string }).scheduleId;
   if (!qstashMessageId) throw new Error('QStash response did not include a message id');
   addBreadcrumb({
     category: 'qstash',

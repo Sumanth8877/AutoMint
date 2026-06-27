@@ -119,7 +119,8 @@ async function getChainstackUrl(chain: string): Promise<string | undefined> {
   // Chainstack: supports either a full node URL (CHAINSTACK_RPC_URL / chain-specific)
   // or an API key (CHAINSTACK_API_KEY) from which we build the endpoint automatically.
   const chainName = normalizeChainName(chain);
-  const settings = await getStoredIntegrationSettings();
+  const rawSettings = await getStoredIntegrationSettings();
+  const settings = rawSettings as Record<string, { value: string } | undefined>;
 
   // 1. Chain-specific full URL (highest priority)
   const chainSpecificUrl = settings[`CHAINSTACK_${chainName.toUpperCase()}_RPC_URL`]?.value
