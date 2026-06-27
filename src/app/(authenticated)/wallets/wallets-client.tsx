@@ -290,7 +290,7 @@ export default function WalletsClient() {
       if (context?.previous) queryClient.setQueryData(['wallets'], context.previous);
       setError('Failed to remove wallet. It has been restored.');
     },
-    onSettled: (_, _err, id) => {
+    onSettled: (_, _err, _id) => {
       queryClient.invalidateQueries({ queryKey: ['wallets'] });
       setDeleteWallet(null);
       setBusyId(null);

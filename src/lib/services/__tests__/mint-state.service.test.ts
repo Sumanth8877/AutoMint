@@ -7,7 +7,6 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { MintState } from '@/lib/services/mint-state.service';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 

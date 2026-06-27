@@ -7,14 +7,12 @@ import 'server-only';
 
 import { getCollectionMetadata, type CollectionMetadata } from '@/lib/blockchain/collections';
 import { type MintIntent } from '@/lib/resolve-mint-intent';
-import { addBreadcrumb } from '@/lib/observability/sentry';
 import { analyzeAnalyzerRisk, type AnalyzerRiskAnalysis } from '@/lib/services/risk.service';
 import { fetchCollectionIntelligence, type AnalyzerCollectionIntelligence } from '@/lib/services/analyzer-market-intelligence.service';
 import {
   ANALYZER_CACHE_KEYS,
   ANALYZER_CACHE_TTL,
   cacheHitRate,
-  createAnalyzerCacheStats,
   readAnalyzerCache,
   writeAnalyzerCache,
   type AnalyzerCacheStats,

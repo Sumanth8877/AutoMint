@@ -3,7 +3,7 @@ import 'server-only';
 import { and, eq } from 'drizzle-orm';
 import { executionSettings, wallets } from '@/drizzle/schema';
 import { getDb } from '@/lib/db';
-import { CACHE_KEYS, CACHE_TTL, cacheWithTTL, invalidateCache } from '@/lib/redis';
+import { cacheWithTTL, invalidateCache } from '@/lib/redis';
 
 export const GAS_STRATEGIES = ['STANDARD', 'FAST', 'AGGRESSIVE'] as const;
 

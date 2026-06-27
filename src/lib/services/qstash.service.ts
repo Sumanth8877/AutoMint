@@ -10,7 +10,7 @@ import { executeMintTask } from '@/lib/services/mint.service';
 import { prewarmWalletKey } from '@/lib/services/wallet.service';
 import { getMintState } from '@/lib/services/mint-state.service';
 import { requireRiskApproval } from '@/lib/services/risk.service';
-import { addBreadcrumb, captureException, captureMessage } from '@/lib/observability/sentry';
+import { addBreadcrumb, captureMessage } from '@/lib/observability/sentry';
 import { logger } from '@/lib/logger';
 import { acquireLock, releaseLock } from '@/lib/services/mint-lock.service';
 import { executeScheduledRiskCheck, hasBlockingRiskChange, storeOriginalRiskSnapshot } from '@/lib/services/scheduled-risk-check.service';

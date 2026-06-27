@@ -9,12 +9,11 @@ import {
   resolveMintIntent,
   type AnalyzerDebugLogEntry,
   type AnalyzerDebugLogLevel,
-  type AnalyzerProviderAttempt,
+  type,
   type AnalyzerResolutionTelemetry,
   type AnalyzerTiming,
   type MintIntent,
 } from '@/lib/resolve-mint-intent';
-import { addBreadcrumb } from '@/lib/observability/sentry';
 import { discoverWithFirecrawl } from '@/lib/services/firecrawl.provider';
 import { discoverWithJina, extractDiscoveryFields, type DiscoveryProviderResult, type DiscoverySocials } from '@/lib/services/jina.provider';
 import {

@@ -15,6 +15,19 @@ const eslintConfig = defineConfig([
     "public/wasm/**",
     "src/lib/wasm/pkg/**",
   ]),
+  // Allow _ prefixed identifiers to be intentionally unused
+  {
+    rules: {
+      '@typescript-eslint/no-unused-vars': ['warn', {
+        vars: 'all',
+        args: 'after-used',
+        ignoreRestSiblings: true,
+        varsIgnorePattern: '^_',
+        argsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+      }],
+    },
+  },
 ]);
 
 export default eslintConfig;

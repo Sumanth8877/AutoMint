@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { parseJsonBody, handleRouteError } from '@/lib/api/errors';
+import { parseJsonBody } from '@/lib/api/errors';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { deleteCopyMintRule, updateCopyMintRule } from '@/lib/services/copy-mint.service';
 

@@ -4,7 +4,6 @@ import { getDb } from '@/lib/db';
 import { mintTasks } from '@/drizzle/schema';
 import { eq, and, isNull, isNotNull, lt } from 'drizzle-orm';
 import { addBreadcrumb, captureException, captureMessage } from '@/lib/observability/sentry';
-import { pruneMonitoredWebsiteSnapshots } from '@/lib/services/monitored-website-cleanup.service';
 
 // Tasks stuck in 'running' longer than this are assumed to have crashed
 const STUCK_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes

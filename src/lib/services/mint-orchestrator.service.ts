@@ -114,10 +114,10 @@ export async function createMintTaskFromUrl(
   // Merge: on-chain values win; discovery fills gaps
   const mintFunction = onChainRequirements.mintFunction ?? discovered.mintFunction ?? 'mint';
   const mintPrice = onChainRequirements.mintPrice ?? discovered.mintPrice ?? '0';
-  const maxPerWallet = onChainRequirements.maxPerWallet ?? discovered.maxPerWallet;
-  const maxPerTx = onChainRequirements.maxPerTx ?? discovered.maxPerTx;
+  const _maxPerWallet = onChainRequirements.maxPerWallet ?? discovered.maxPerWallet;
+  const _maxPerTx = onChainRequirements.maxPerTx ?? discovered.maxPerTx;
   const mintStartTime = mintState.startTime ?? onChainRequirements.mintStartTime ?? discovered.mintStartTime ?? undefined;
-  const mintEndTime = mintState.endTime ?? onChainRequirements.mintEndTime ?? discovered.mintEndTime ?? undefined;
+  const _mintEndTime = mintState.endTime ?? onChainRequirements.mintEndTime ?? discovered.mintEndTime ?? undefined;
 
   if (discovered.missingFields.length > 0) {
     console.warn(

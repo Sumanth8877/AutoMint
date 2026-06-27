@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/require-auth';
-import { parseJsonBody, handleRouteError } from '@/lib/api/errors';
+import { parseJsonBody } from '@/lib/api/errors';
 import { enforceRateLimit, RATE_LIMITS } from '@/lib/api/rate-limit';
 import { captureException } from '@/lib/observability/sentry';
 import { AnalyzerExecutionError, AnalyzerResolutionError, runAnalyzer } from '@/lib/services/analyzer.service';

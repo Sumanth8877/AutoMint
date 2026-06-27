@@ -20,7 +20,7 @@
 
 // ── Module mocks ──────────────────────────────────────────────────────
 
-import { vi, type MockedFunction } from 'vitest';
+import { vi } from 'vitest';
 
 vi.mock('@/lib/observability/sentry', () => ({
   captureException: vi.fn().mockResolvedValue(undefined),

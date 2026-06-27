@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/require-auth';
-import { getErrorMessage, handleRouteError } from '@/lib/api/errors';
+import { handleRouteError } from '@/lib/api/errors';
 import { setDefaultWallet } from '@/lib/services/wallet.service';
 
 type RouteContext = {

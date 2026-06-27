@@ -21,7 +21,6 @@ import { getEffectiveExecutionDefaults } from '@/lib/services/execution-settings
 import { refreshRpcProviderLatency } from '@/lib/services/rpc-manager.service';
 import { type AnalyzerRiskAnalysis } from '@/lib/services/risk.service';
 import { type AnalyzerCollectionIntelligence } from '@/lib/services/analyzer-market-intelligence.service';
-import { createAnalyzerCacheStats } from '@/lib/services/analyzer-cache.service';
 
 import {
   normalizeAnalyzerInput,
@@ -32,7 +31,6 @@ import {
   runTimed,
   resolveIntentWithCache,
   runSocialDiscoveryWithCache,
-  getSocialHealth,
   type AnalyzerSocials,
   type AnalyzerSocialKey,
   type AnalyzerDebugLogEntry,

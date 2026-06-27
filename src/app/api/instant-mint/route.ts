@@ -16,7 +16,6 @@ import { estimateGas } from '@/lib/blockchain/gas';
 
 import type { MintPhase } from '@/types/mint';
 import { instantMintSchema, formatZodError } from '@/lib/api/schemas';
-import { z } from 'zod';
 
 function asSupportedChain(chain: string): ChainKey {
   if (!(chain in SUPPORTED_CHAINS)) {

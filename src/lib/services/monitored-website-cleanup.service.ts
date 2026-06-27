@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, isNotNull, lt, sql } from 'drizzle-orm';
+import { and, isNotNull, sql } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
 import { monitoredWebsites } from '@/drizzle/schema/monitoring';
 import { addBreadcrumb } from '@/lib/observability/sentry';

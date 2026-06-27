@@ -62,7 +62,7 @@ describe('broadcast race — Promise.any provider fanout', () => {
   const MOCK_TX_HASH = '0x' + 'b'.repeat(64) as `0x${string}`;
   const MOCK_RECEIPT = { transactionHash: MOCK_TX_HASH, status: 'success', blockNumber: 100n };
 
-  const baseMintParams = {
+  const _baseMintParams = {
     contractAddress: '0x' + 'c'.repeat(40) as `0x${string}`,
     quantity: 1,
     mintPrice: '0',

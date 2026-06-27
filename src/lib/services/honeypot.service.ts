@@ -79,7 +79,7 @@ export async function checkHoneypot(params: {
       outputs: [],
     }];
 
-    const callArgs = abiEntry.inputs.length > 0
+    const _callArgs = abiEntry.inputs.length > 0
       ? { args: [BigInt(quantity)] }
       : {};
 

@@ -38,7 +38,7 @@ vi.mock('@/lib/observability/sentry', () => ({
 
 describe('mint-lock — Redis CAS lock', () => {
   const TASK_ID  = 'task-test-123';
-  const LOCK_KEY = `mint:lock:${TASK_ID}`;
+  const _LOCK_KEY = `mint:lock:${TASK_ID}`;
 
   beforeEach(() => {
     vi.clearAllMocks();
