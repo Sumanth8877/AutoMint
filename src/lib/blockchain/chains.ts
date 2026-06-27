@@ -1,24 +1,27 @@
 // ── Single source of truth for supported chains ─────────────────────────────
 // All chain lists across the codebase (route handlers, Drizzle enums, UI) must
 // derive from these constants. Do NOT redeclare ['ethereum','base','polygon'].
-import { Chain, mainnet, base, polygon } from 'viem/chains';
+import { Chain, mainnet, base, polygon, arbitrum } from 'viem/chains';
 
 export const SUPPORTED_CHAINS: Record<string, Chain> = {
   ethereum: mainnet,
   base: base,
   polygon: polygon,
+  arbitrum: arbitrum,
 };
 
 export const CHAIN_NAMES = {
   ethereum: 'Ethereum',
   base: 'Base',
   polygon: 'Polygon',
+  arbitrum: 'Arbitrum',
 } as const;
 
 export const CHAIN_NATIVE_TOKENS = {
   ethereum: 'ETH',
   base: 'ETH',
   polygon: 'POL',
+  arbitrum: 'ETH',
 } as const;
 
 export type ChainKey = keyof typeof CHAIN_NAMES;

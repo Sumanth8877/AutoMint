@@ -14,6 +14,7 @@ import { AnalyzerResolutionError, normalizeAnalyzerInput, runAnalyzer, type Anal
 import { analyzeMintRisk } from '@/lib/services/risk.service';
 import { discoverMintRequirements } from '@/lib/services/mint-discovery.service';
 import { logger } from '@/lib/logger';
+import { mintCreateSchema, mintActionSchema, mintDeleteSchema, formatZodError } from '@/lib/api/schemas';
 
 // Disable cache — mutations need fresh data immediately
 export const dynamic = 'force-dynamic';
@@ -152,18 +153,12 @@ export async function POST(req: Request) {
     if ('error' in authResult) return authResult.error;
 
 
-    const body = await parseJsonBody<{
-      walletId?: string;
-      collectionId?: string;
-      mintUrl?: string;
-      analysisConfirmed?: boolean;
-      quantity?: string | number;
-      safeModeEnabled?: boolean;
-      gasStrategy?: 'STANDARD' | 'FAST' | 'AGGRESSIVE';
-      maxRetries?: number;
-      riskThreshold?: number;
-      scheduleTime?: string;          // #9 — manual schedule override
-    }>(req);
+    const rawBody = await parseJsonBody(req);
+    const bodyParsed = mintCreateSchema.safeParse(rawBody);
+    if (!bodyParsed.success) {
+      return NextResponse.json({ error: formatZodError(bodyParsed.error) }, { status: 400 });
+    }
+    const body = bodyParsed.data;
     const { quantity, safeModeEnabled } = body;
     const defaults = await getEffectiveExecutionDefaults(authResult.userId);
     const walletId = body.walletId || defaults.defaultWalletId || undefined;
@@ -293,23 +288,20 @@ export async function PATCH(req: Request) {
     const authResult = await requireApiUser();
     if ('error' in authResult) return authResult.error;
 
-    const body = await parseJsonBody<{ id?: string; action?: 'start' | 'cancel' }>(req);
-
-    if (!body.id) {
-      return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
+    const rawPatch = await parseJsonBody(req);
+    const patchParsed = mintActionSchema.safeParse(rawPatch);
+    if (!patchParsed.success) {
+      return NextResponse.json({ error: formatZodError(patchParsed.error) }, { status: 400 });
     }
-
-    if (body.action !== 'start' && body.action !== 'cancel') {
-      return NextResponse.json({ error: 'Action must be start or cancel' }, { status: 400 });
-    }
+    const body = patchParsed.data;
 
     if (body.action === 'cancel') {
-      const task = await cancelScheduledMint(body.id, authResult.userId);
+      const task = await cancelScheduledMint(id, authResult.userId);
       return NextResponse.json({ task });
     }
 
-    const result = await executeMintTask(body.id, authResult.userId);
-    const task = await getMintTaskById(body.id, authResult.userId);
+    const result = await executeMintTask(id, authResult.userId);
+    const task = await getMintTaskById(id, authResult.userId);
 
     if (!task) {
       return NextResponse.json({ error: 'Task not found' }, { status: 404 });
@@ -328,10 +320,12 @@ export async function DELETE(req: Request) {
     if ('error' in authResult) return authResult.error;
 
 
-    const body = await parseJsonBody<{ id?: string }>(req);
-    const { id } = body;
-
-    if (!id) return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
+    const rawDel = await parseJsonBody(req);
+    const delParsed = mintDeleteSchema.safeParse(rawDel);
+    if (!delParsed.success) {
+      return NextResponse.json({ error: formatZodError(delParsed.error) }, { status: 400 });
+    }
+    const { id } = delParsed.data;
 
     const existing = await getMintTaskById(id, authResult.userId);
     if (!existing) {

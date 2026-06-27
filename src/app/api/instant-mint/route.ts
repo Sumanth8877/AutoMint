@@ -14,12 +14,9 @@ import { logger } from '@/lib/logger';
 import { SUPPORTED_CHAINS, type ChainKey } from '@/lib/blockchain/chains';
 import { estimateGas } from '@/lib/blockchain/gas';
 
-type MintPhase = {
-  type: 'whitelist' | 'allowlist' | 'public';
-  proofRequired?: boolean;
-  startTime?: Date;
-  price?: string;
-};
+import type { MintPhase } from '@/types/mint';
+import { instantMintSchema, formatZodError } from '@/lib/api/schemas';
+import { z } from 'zod';
 
 function asSupportedChain(chain: string): ChainKey {
   if (!(chain in SUPPORTED_CHAINS)) {
@@ -66,12 +63,12 @@ export async function POST(request: Request) {
     const authResult = await requireApiUser();
     if ('error' in authResult) return authResult.error;
 
-    const body = await parseJsonBody(request) as { url: string };
-    const { url } = body;
-
-    if (!url || typeof url !== 'string') {
-      return NextResponse.json({ error: 'URL is required' }, { status: 400 });
+    const rawBody = await parseJsonBody(request);
+    const parsed = instantMintSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
     }
+    const { url } = parsed.data;
 
     // Resolve mint URL with fallback chain to get mint phases
     const resolved = await resolveMintUrl(url);

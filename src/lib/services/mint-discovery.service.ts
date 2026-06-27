@@ -52,12 +52,7 @@ export interface DiscoveredRequirements {
   mintEndTime?: Date;
 
   // Mint phases (optional enrichment)
-  mintPhases?: Array<{
-    type: 'whitelist' | 'allowlist' | 'public';
-    startTime?: Date;
-    price?: string;
-    proofRequired?: boolean;
-  }>;
+  mintPhases?: import('@/types/mint').MintPhase[];
 
   // Meta
   collectionName?: string;

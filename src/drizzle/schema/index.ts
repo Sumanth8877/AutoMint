@@ -2,7 +2,7 @@ import { pgTable, text, timestamp, uuid, integer, pgEnum, json, boolean, index, 
 import { relations, sql } from 'drizzle-orm';
 
 // ─── Enums ───────────────────────────────────────────
-export const chainEnum = pgEnum('chain', ['ethereum', 'base', 'polygon']);
+export const chainEnum = pgEnum('chain', ['ethereum', 'base', 'polygon', 'arbitrum']);
 export const mintStatusEnum = pgEnum('mint_status', ['pending', 'monitoring', 'ready', 'running', 'completed', 'failed', 'cancelled', 'unconfirmed']);
 export const mintHistoryStatusEnum = pgEnum('mint_history_status', ['pending', 'confirmed', 'failed']);
 export const infrastructureTestStatusEnum = pgEnum('infrastructure_test_status', ['passed', 'failed', 'warning', 'skipped']);

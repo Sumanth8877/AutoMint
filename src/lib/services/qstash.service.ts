@@ -678,6 +678,41 @@ export async function executeScheduledMint(taskId: string) {
       metadata: { taskId },
     });
     lockReleased = true;
+
+    // ── Honeypot check ───────────────────────────────────────────────────────
+    // Simulate the mint function on-chain before submitting the real TX.
+    // If the contract reverts in simulation it's likely a honeypot or misconfigured
+    // contract — abort early and save the user's gas.
+    if (task.contractAddress && wallet) {
+      const { checkHoneypot } = await import('@/lib/services/honeypot.service');
+      const honeypot = await checkHoneypot({
+        contractAddress: task.contractAddress,
+        chain:           wallet.chain,
+        mintFunction:    task.mintFunction ?? 'mint',
+        mintPrice:       effectiveMintPrice ?? task.mintPrice ?? '0',
+        quantity:        task.quantity,
+        walletAddress:   wallet.address,
+      });
+
+      if (!honeypot.isSafe && !honeypot.skipped) {
+        await getDb()
+          .update(mintTasks)
+          .set({ status: 'failed', updatedAt: new Date() })
+          .where(eq(mintTasks.id, taskId));
+        await sendScheduledMintNotification(task.userId, 'mint_failed', {
+          taskId,
+          contractAddress: task.contractAddress,
+          error: honeypot.reason ?? 'Honeypot detected — mint simulation reverted',
+        });
+        await sendMintFailedEmail(task.userId, {
+          taskId,
+          contractAddress: task.contractAddress,
+          error: honeypot.reason ?? 'Honeypot detected — mint simulation reverted',
+        });
+        return { success: false, error: honeypot.reason ?? 'Honeypot detected' };
+      }
+    }
+
     // Speed fix: fire-and-forget wallet key pre-warm so the decryption cache is
     // hot by the time executeMintTask reaches getDecryptedPrivateKey().
     // This runs concurrently with executeMintTask's internal DB status claims.
