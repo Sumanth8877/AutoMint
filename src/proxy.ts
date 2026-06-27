@@ -1,3 +1,10 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Next.js 16+ runs the Clerk middleware from `src/proxy.ts` (the renamed
+// convention that replaced `src/middleware.ts` in v16). DO NOT rename this
+// file back to `middleware.ts` on Next 16+ — and if you ever downgrade to
+// Next ≤ 15, rename it back, otherwise Clerk auth + CSP nonce generation
+// will silently stop running.
+// ─────────────────────────────────────────────────────────────────────────────
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
@@ -14,7 +21,6 @@ const isProtectedRoute = createRouteMatcher([
   '/api/settings(.*)', '/api/whale-tracker(.*)', '/api/watched-wallets(.*)',
   '/api/collections(.*)', '/api/activities(.*)', '/api/blockchain(.*)',
   '/api/telegram/link-token(.*)', '/api/wallet-reputation(.*)',
-  '/api/api-keys(.*)',
 ]);
 
 // ─── CSP nonce ────────────────────────────────────────────────────────

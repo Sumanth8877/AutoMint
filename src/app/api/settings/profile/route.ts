@@ -8,6 +8,16 @@ export async function DELETE() {
     const authResult = await requireApiUser();
     if ('error' in authResult) return authResult.error;
 
+    // Account deletion requires a real Clerk session — refuse the destructive
+    // action when the caller authenticated via the env-var API key (clerkId
+    // is null in that flow).
+    if (!authResult.clerkId) {
+      return NextResponse.json(
+        { error: 'Account deletion requires an interactive session.' },
+        { status: 403 },
+      );
+    }
+
     await deleteAccount({
       userId: authResult.userId,
       clerkId: authResult.clerkId,

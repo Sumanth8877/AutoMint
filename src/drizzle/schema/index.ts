@@ -406,25 +406,6 @@ export const integrationSettings = pgTable('integration_settings', {
 });
 
 
-// ─── API Keys ───────────────────────────────────────────────
-export const apiKeys = pgTable('api_keys', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
-  name: text('name').notNull(),
-  prefix: text('prefix').notNull(),
-  hash: text('hash').notNull(),
-  scopes: json('scopes').$type<string[]>().default(['*']).notNull(),
-  lastUsedAt: timestamp('last_used_at'),
-  expiresAt: timestamp('expires_at'),
-  revokedAt: timestamp('revoked_at'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-}, (table) => ({
-  hashIdx: uniqueIndex('idx_api_keys_hash').on(table.hash),
-  userIdIdx: index('idx_api_keys_user_id').on(table.userId),
-  prefixIdx: index('idx_api_keys_prefix').on(table.prefix),
-}));
-
 // ─── Relations ───────────────────────────────────────
 export const usersRelations = relations(users, ({ many }) => ({
   wallets: many(wallets),
@@ -438,7 +419,6 @@ export const usersRelations = relations(users, ({ many }) => ({
   telegramAccounts: many(telegramAccounts),
   emailNotificationPreferences: many(emailNotificationPreferences),
   executionSettings: many(executionSettings),
-  apiKeys: many(apiKeys),
   rpcProviderSettings: many(rpcProviderSettings),
 }));
 
@@ -504,6 +484,3 @@ export const collectionSyncsRelations = relations(collectionSyncs, ({ one }) => 
   collection: one(collections, { fields: [collectionSyncs.collectionId], references: [collections.id] }),
 }));
 
-export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
-  user: one(users, { fields: [apiKeys.userId], references: [users.id] }),
-}));
