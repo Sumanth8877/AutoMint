@@ -15,8 +15,10 @@ import { SUPPORTED_CHAINS, type ChainKey } from '@/lib/blockchain/chains';
 import { estimateGas } from '@/lib/blockchain/gas';
 
 type MintPhase = {
-  type: string;
-  proofRequired: boolean;
+  type: 'whitelist' | 'allowlist' | 'public' | string;
+  proofRequired?: boolean;
+  startTime?: Date;
+  price?: string;
 };
 
 function asSupportedChain(chain: string): ChainKey {
