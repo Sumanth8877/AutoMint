@@ -157,12 +157,16 @@ function statusVariant(status: string) {
 
 // ── CountdownTimer ─────────────────────────────────────────────────────────
 // Live countdown for upcoming scheduled mints. Updates every second.
-function CountdownTimer({ targetTime }: { targetTime: string }) {
+function CountdownTimer({ targetTime, monitoringStatus = false }: { targetTime: string; monitoringStatus?: boolean }) {
   const [label, setLabel] = useState('');
   useEffect(() => {
     const tick = () => {
       const diff = new Date(targetTime).getTime() - Date.now();
-      if (diff <= 0) { setLabel('Executing now…'); return; }
+      if (diff <= 30_000) {
+        // scheduledTime is in the past or very near — show context-aware label
+        setLabel(monitoringStatus ? '' : 'Executing now…');
+        return;
+      }
       const h = Math.floor(diff / 3_600_000);
       const m = Math.floor((diff % 3_600_000) / 60_000);
       const s = Math.floor((diff % 60_000) / 1_000);
@@ -171,7 +175,8 @@ function CountdownTimer({ targetTime }: { targetTime: string }) {
     tick();
     const id = setInterval(tick, 1_000);
     return () => clearInterval(id);
-  }, [targetTime]);
+  }, [targetTime, monitoringStatus]);
+  if (!label && monitoringStatus) return null; // rendered by the monitoring fallback
   return <span className="font-mono tabular-nums">{label}</span>;
 }
 
@@ -510,17 +515,24 @@ export default function MintsClient() {
                         </span>
                       ) : null}
                     </p>
-                    {/* countdown for scheduled/pending mints; monitoring message when phase timing unknown */}
-                    {task.scheduledTime && new Date(task.scheduledTime).getTime() > Date.now() + 30_000 ? (
-                      // Real future schedule (>30s from now) — show countdown
-                      <p className="mt-1 text-xs text-accent">
-                        {task.status === 'pending' || task.status === 'monitoring'
-                          ? <span>⏱ Mints in: <CountdownTimer targetTime={task.scheduledTime} /></span>
-                          : <span>⏰ {task.status === 'running' ? 'Executing at' : 'Fires at'}: {new Date(task.scheduledTime).toLocaleString()}</span>
-                        }
-                      </p>
+                    {/* countdown or monitoring indicator */}
+                    {task.scheduledTime ? (
+                      task.status === 'pending' || task.status === 'monitoring' ? (
+                        // CountdownTimer returns null when time is past + monitoring → show fallback
+                        <>
+                          <p className="mt-1 text-xs text-accent">
+                            <span>⏱ Mints in: <CountdownTimer targetTime={task.scheduledTime} monitoringStatus={task.status === 'monitoring'} /></span>
+                          </p>
+                          {task.status === 'monitoring' ? (
+                            <p className="mt-1 text-xs text-muted">🔍 Monitoring for public phase start…</p>
+                          ) : null}
+                        </>
+                      ) : (
+                        <p className="mt-1 text-xs text-accent">
+                          <span>⏰ {task.status === 'running' ? 'Executing at' : 'Fires at'}: {new Date(task.scheduledTime).toLocaleString()}</span>
+                        </p>
+                      )
                     ) : task.status === 'monitoring' ? (
-                      // scheduledTime is past or absent — monitoring loop is active
                       <p className="mt-1 text-xs text-muted">🔍 Monitoring for public phase start…</p>
                     ) : null}
                     {/* U3 — show error reason for failed tasks */}
