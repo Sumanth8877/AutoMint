@@ -119,11 +119,25 @@ async function applyAnalyzerResultToTask(
     };
   }
 
+  // Determine which mint phase this task targets.
+  // Priority: active phase (startTime <= now) → first listed phase → LIVE default → null
+  const mintPhases = analysis.requirements?.mintPhases ?? [];
+  let detectedPhase: 'whitelist' | 'allowlist' | 'public' | undefined;
+  if (mintPhases.length > 0) {
+    const now = Date.now();
+    const active = mintPhases.find(p => !p.startTime || p.startTime.getTime() <= now);
+    detectedPhase = (active?.type ?? mintPhases[0]?.type) as typeof detectedPhase;
+  } else if (analysis.mintState?.status === 'LIVE') {
+    // Live mint with no specific phases → public
+    detectedPhase = 'public';
+  }
+
   const [task] = await getDb()
     .update(mintTasks)
     .set({
       mintFunction: finalRequirements.mintFunction ?? 'mint',
       mintPrice: finalRequirements.mintPrice ?? '0',
+      ...(detectedPhase ? { phase: detectedPhase } : {}),
       updatedAt: new Date(),
     })
     .where(eq(mintTasks.id, taskId))
