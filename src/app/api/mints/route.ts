@@ -4,6 +4,7 @@ import { requireApiUser } from '@/lib/auth/require-auth';
 import { getErrorMessage, parseJsonBody, handleRouteError } from '@/lib/api/errors';
 import { addMintTask, executeMintTask, getMintTaskById, getUserMintTasks, removeMintTask } from '@/lib/services/mint.service';
 import { cancelScheduledMint, scheduleMint } from '@/lib/services/qstash.service';
+import { registerContractForMonitoring, unregisterContract } from '@/lib/services/alchemy-webhook.service';
 import { getMintState, fetchOpenSeaDropPhases } from '@/lib/services/mint-state.service';
 import { getDb } from '@/lib/db';
 import { collections, mintTasks } from '@/drizzle/schema';
@@ -204,6 +205,12 @@ export async function POST(req: Request) {
 
       const collection = await upsertCollectionFromMintIntent(authResult.userId, intent, analysis);
       collectionId = collection.id;
+
+      // Auto-register the contract with Alchemy webhook for instant Transfer detection.
+      // Fire-and-forget — never blocks mint task creation.
+      if (intent.contractAddress) {
+        void registerContractForMonitoring(intent.contractAddress).catch(() => {});
+      }
     }
 
     if (!collectionId) {
