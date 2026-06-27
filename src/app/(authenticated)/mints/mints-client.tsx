@@ -238,7 +238,7 @@ export default function MintsClient() {
 
   // Create task mutation
   const createTaskMutation = useMutation({
-    mutationFn: async (data: { mintUrl: string; quantity: number }) => {
+    mutationFn: async (data: { mintUrl: string; quantity: number; wlMode?: boolean }) => {
       return apiRequest<MintActionResponse>('/api/mints', {
         method: 'POST',
         body: data,

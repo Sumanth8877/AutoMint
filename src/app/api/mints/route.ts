@@ -15,6 +15,7 @@ import { analyzeMintRisk } from '@/lib/services/risk.service';
 import { discoverMintRequirements } from '@/lib/services/mint-discovery.service';
 import { logger } from '@/lib/logger';
 import { mintCreateSchema, mintActionSchema, mintDeleteSchema, formatZodError } from '@/lib/api/schemas';
+import type { MintPhase } from '@/types/mint';
 
 // Disable cache — mutations need fresh data immediately
 export const dynamic = 'force-dynamic';
@@ -121,15 +122,15 @@ async function applyAnalyzerResultToTask(
 
   // Determine which mint phase this task targets.
   // Priority: active phase (startTime <= now) → first listed phase → LIVE default → null
-  const mintPhases = analysis.requirements?.mintPhases ?? [];
-  let detectedPhase: 'whitelist' | 'allowlist' | 'public' | undefined;
-  if (mintPhases.length > 0) {
-    const now = Date.now();
-    const active = mintPhases.find(p => !p.startTime || p.startTime.getTime() <= now);
-    detectedPhase = (active?.type ?? mintPhases[0]?.type) as typeof detectedPhase;
-  } else if (analysis.mintState?.status === 'LIVE') {
-    // Live mint with no specific phases → public
+  // Note: MintRequirements does not expose mintPhases; we infer from mintState + discovery.
+  type PhaseType = 'whitelist' | 'allowlist' | 'public';
+  let detectedPhase: PhaseType | undefined;
+  if (analysis.mintState?.status === 'LIVE') {
+    // Live mint with no specific phase data → default to public
     detectedPhase = 'public';
+  } else if (analysis.mintState?.status === 'NOT_STARTED') {
+    // Use whatever finalRequirements discovered (mintStartTime hints at upcoming non-public)
+    detectedPhase = undefined; // phase set separately in NOT_STARTED branch
   }
 
   const [task] = await getDb()
@@ -292,7 +293,7 @@ export async function POST(req: Request) {
           contractAddress: collection.contractAddress,
           chain: collection.chain,
         });
-        const nonPublicPhases = (discovered?.mintPhases ?? []).filter(p => p.type !== 'public');
+        const nonPublicPhases = (discovered?.mintPhases ?? []).filter((p: MintPhase) => p.type !== 'public');
         if (nonPublicPhases.length === 0) {
           await removeMintTask(preparedTask.id, authResult.userId).catch(() => {});
           return NextResponse.json(
@@ -387,7 +388,7 @@ export async function POST(req: Request) {
         chain: collection.chain,
       }) : null;
 
-      const nonPublicPhases = (discovered?.mintPhases ?? []).filter(p => p.type !== 'public');
+      const nonPublicPhases = (discovered?.mintPhases ?? []).filter((p: MintPhase) => p.type !== 'public');
       if (nonPublicPhases.length === 0) {
         await removeMintTask(preparedTask.id, authResult.userId).catch(() => {});
         return NextResponse.json(
