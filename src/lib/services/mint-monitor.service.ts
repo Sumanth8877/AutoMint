@@ -111,6 +111,7 @@ export async function watchForMintLive(
   return new Promise<MonitorResult>((resolve) => {
     let settled = false;
     let unwatch: (() => void) | null = null;
+    let unwatchTransfer: (() => void) | null = null;  // Transfer event subscription
     let client: ReturnType<typeof createPublicClient> | null = null;
 
     function settle(result: MonitorResult) {
@@ -118,8 +119,9 @@ export async function watchForMintLive(
       settled = true;
       clearTimeout(timer);
 
-      // Cleanup WebSocket subscription and client
+      // Cleanup both subscriptions and client
       try { unwatch?.(); } catch {}
+      try { unwatchTransfer?.(); } catch {}
       try { (client as unknown as { destroy?: () => void })?.destroy?.(); } catch {}
 
       addBreadcrumb({
@@ -217,11 +219,6 @@ export async function watchForMintLive(
       return;
     }
 
-    // Patch settle to also tear down the Transfer subscription
-    const _origSettle = settle;
-    settle = (result: MonitorResult) => { try { unwatchTransfer?.(); } catch {} _origSettle(result); };
-    // Re-apply the timeout with the patched settle
-    clearTimeout(timer);
-    setTimeout(() => settle('timeout'), timeoutMs);
+    // settle() already handles unwatchTransfer cleanup via closure (declared above)
   });
 }

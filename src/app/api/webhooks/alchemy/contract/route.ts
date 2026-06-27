@@ -3,7 +3,7 @@ import { verifyAlchemyWebhookSignature } from '@/lib/services/wallet-tracker.ser
 import { captureException } from '@/lib/observability/sentry';
 import { getDb } from '@/lib/db';
 import { mintTasks } from '@/drizzle/schema';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, inArray } from 'drizzle-orm';
 import { scheduleMint } from '@/lib/services/qstash.service';
 import { logger } from '@/lib/logger';
 
