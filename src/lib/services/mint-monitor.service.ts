@@ -164,8 +164,6 @@ export async function watchForMintLive(
     //
     // Both run simultaneously. Whichever detects live first wins.
 
-    let unwatchTransfer: (() => void) | null = null;
-
     const TRANSFER_ABI = [{ type: 'event' as const, name: 'Transfer', inputs: [
       { name: 'from',    type: 'address' as const, indexed: true },
       { name: 'to',      type: 'address' as const, indexed: true },
