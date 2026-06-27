@@ -62,11 +62,43 @@ export class ForbiddenError extends AppError {
   }
 }
 
+// ── DB error detection ────────────────────────────────────────────────────────
+//
+// Drizzle / node-postgres / Neon errors stringify to messages like:
+//   "Failed query: select \"id\", ... from \"api_keys\" where ... params: <uuid>"
+// or carry SQLSTATE codes / driver-specific names. We must NEVER forward those
+// to the client — they leak schema, query shape, and parameter values.
+
+function isDbError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+
+  // Driver class names (node-postgres, Neon serverless, postgres.js, Drizzle)
+  const driverNames = new Set([
+    'DatabaseError',     // node-postgres / pg
+    'NeonDbError',       // @neondatabase/serverless
+    'PostgresError',     // postgres.js
+    'DrizzleError',
+    'DrizzleQueryError',
+  ]);
+  if (driverNames.has(error.name)) return true;
+
+  // Postgres SQLSTATE codes are 5 chars (e.g. "42P01" = undefined_table)
+  const code = (error as { code?: unknown }).code;
+  if (typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code)) return true;
+
+  // Last-resort: Drizzle prefixes raw query errors with "Failed query:"
+  if (error.message.startsWith('Failed query:')) return true;
+
+  return false;
+}
+
 // ── Route error handler ───────────────────────────────────────────────────────
 //
 // Typed AppError subclasses carry their own status code — no string matching.
 // Plain Error fallback infers status from common message patterns so services
 // that haven't yet adopted AppError still return the right HTTP code.
+// DB errors are NEVER forwarded verbatim — they're logged server-side and the
+// client receives the generic `fallback` string with a 500.
 //
 // Usage in a route catch block:
 //   } catch (err) {
@@ -76,6 +108,13 @@ export class ForbiddenError extends AppError {
 export function handleRouteError(error: unknown, fallback: string): NextResponse {
   if (error instanceof AppError) {
     return NextResponse.json({ error: error.message }, { status: error.status });
+  }
+
+  // Database errors leak query text + params — log full detail server-side,
+  // return only the generic fallback to the client.
+  if (isDbError(error)) {
+    console.error(`[handleRouteError] ${fallback}:`, error);
+    return NextResponse.json({ error: fallback }, { status: 500 });
   }
 
   const message = getErrorMessage(error, fallback);
