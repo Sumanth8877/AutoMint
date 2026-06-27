@@ -11,7 +11,7 @@ import { logger } from '@/lib/logger';
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
-const MODEL = 'gemini-2.5-flash';
+const MODEL = 'gemini-3.5-flash';
 const MAX_TOOL_ROUNDS = 6;
 
 // ── System Prompt ────────────────────────────────────────────────────────────
