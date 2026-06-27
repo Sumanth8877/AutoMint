@@ -256,7 +256,7 @@ export async function POST(req: Request) {
 
       if (!detectedStart && mintUrl) {
         // On-chain RPC + analyzer both missed the startTime — run tiered discovery
-        logger.info('mints/route', 'startTime missing — running discoverMintRequirements for timing');
+        logger.info('startTime missing — running discoverMintRequirements for timing', { area: 'mints/route' });
         const discovered = await discoverMintRequirements(mintUrl, {
           contractAddress: collection.contractAddress,
           chain: collection.chain,
