@@ -584,6 +584,7 @@ export async function executeScheduledMint(taskId: string) {
     // Re-read publicMintPrice() on-chain (fast RPC call, ~100ms) so the balance
     // check and transaction use the CURRENT contract price, not a stale one.
     // A wrong price would cause an on-chain revert and waste the user's gas.
+    let effectiveMintPrice: string | null = task.mintPrice;
     try {
       const { fetchMintRequirements } = await import('@/lib/services/mint-requirements.service');
       const liveReqs = await fetchMintRequirements(task.contractAddress!, wallet.chain);
