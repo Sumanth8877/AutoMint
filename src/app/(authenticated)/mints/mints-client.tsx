@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useReducer } from 'react';
+import { useEffect, useMemo, useReducer, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { CalendarClock, LinkIcon, MoreHorizontal, Play, Plus, RotateCcw, ShieldCheck, Trash2, XCircle, Zap } from 'lucide-react';
@@ -50,10 +50,12 @@ type MintActionResponse = {
   task: MintTask;
   collection?: CollectionRecord;
   analyzerRequired?: boolean;
-  /** 'live' | 'upcoming' — returned by POST /api/mints to describe what happened */
   mintStatus?: 'live' | 'upcoming';
-  /** ISO string of the scheduled execution time, if upcoming */
   scheduledTime?: string | null;
+  /** true when the server auto-scheduled execution (no manual play click needed) */
+  autoTriggered?: boolean;
+  /** which non-public phase was targeted in WL mode */
+  wlPhase?: string;
   result?: {
     success: boolean;
     txHash?: string;
@@ -68,7 +70,7 @@ type MintActionResponse = {
 //   because both are set via dispatched actions, not ad-hoc setters.
 // ---------------------------------------------------------------------------
 
-type MintsForm = { mintUrl: string };
+type MintsForm = { mintUrl: string; wlMode: boolean };
 
 type MintsState = {
   /** True while the create-mint POST is in-flight */
@@ -110,7 +112,7 @@ const initialState: MintsState = {
   error: null,
   success: null,
   formError: null,
-  form: { mintUrl: '' },
+  form: { mintUrl: '', wlMode: false },
 };
 
 function mintsReducer(state: MintsState, action: MintsAction): MintsState {
@@ -315,13 +317,18 @@ export default function MintsClient() {
       const payload = await createTaskMutation.mutateAsync({
         mintUrl: mintUrl,
         quantity: 1,
+        wlMode: form.wlMode,
       });
       dispatch({ type: 'RESET_FORM' });
       if (payload.mintStatus === 'upcoming') {
+        const phaseLabel = payload.wlPhase ? `${payload.wlPhase.toUpperCase()} phase` : 'Public phase';
         const schedMsg = payload.scheduledTime
-          ? `Upcoming mint scheduled for ${new Date(payload.scheduledTime).toLocaleString()}.`
-          : 'Upcoming mint queued for monitoring — will execute when the mint goes live.';
+          ? `${phaseLabel} scheduled — minting at ${new Date(payload.scheduledTime).toLocaleString()}.`
+          : `${phaseLabel} queued for monitoring — will execute when the mint goes live.`;
         dispatch({ type: 'SET_SUCCESS', message: schedMsg });
+      } else if (payload.autoTriggered) {
+        const phaseLabel = payload.wlPhase ? `${payload.wlPhase.toUpperCase()} phase` : 'Public mint';
+        dispatch({ type: 'SET_SUCCESS', message: `⚡ ${phaseLabel} is live — auto-executing now. Check status below.` });
       } else {
         dispatch({ type: 'SET_SUCCESS', message: 'Live mint — task is ready for immediate execution.' });
       }
@@ -407,10 +414,24 @@ export default function MintsClient() {
             Mint
           </Button>
         </form>
+        {/* WL / Allowlist checkbox */}
+        <label className="mt-3 flex cursor-pointer items-start gap-2.5">
+          <input
+            type="checkbox"
+            checked={form.wlMode}
+            onChange={(e) => dispatch({ type: 'PATCH_FORM', patch: { wlMode: e.target.checked } })}
+            className="mt-0.5 h-4 w-4 cursor-pointer rounded border-border accent-accent"
+          />
+          <span className="text-sm text-text">
+            I have a <span className="font-medium text-accent">WL / Allowlist / Free-mint</span> allocation
+            <span className="ml-1 text-xs text-muted">(skips public mint — checks your eligibility &amp; proof)</span>
+          </span>
+        </label>
+
         <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted">
           <span>Wallet: {defaultWallet ? `${defaultWallet.nickname || shortAddress(defaultWallet.address)} / ${defaultWallet.chain}` : 'Set a default wallet first'}</span>
           <span>Quantity: 1</span>
-          <span>Live mints are prepared immediately; upcoming mints are analyzed and scheduled.</span>
+          <span>{form.wlMode ? 'WL mode: will check eligibility and skip public mint.' : 'Live mints execute instantly; upcoming mints are scheduled automatically.'}</span>
         </div>
         {formError ? <div className="mt-3 rounded-lg border border-danger/20 bg-danger/10 p-3 text-sm text-danger" role="alert">{formError}</div> : null}
       </Card>
@@ -467,11 +488,13 @@ export default function MintsClient() {
                         </span>
                       ) : null}
                     </p>
-                    {/* show scheduled time whenever it is set */}
+                    {/* countdown for scheduled/pending mints; timestamp for others */}
                     {task.scheduledTime ? (
                       <p className="mt-1 text-xs text-accent">
-                        ⏰ {task.status === 'ready' || task.status === 'running' ? 'Fires at' : 'Scheduled'}:{' '}
-                        {new Date(task.scheduledTime).toLocaleString()}
+                        {task.status === 'pending' || task.status === 'monitoring'
+                          ? <span>⏱ Mints in: <CountdownTimer targetTime={task.scheduledTime} /></span>
+                          : <span>⏰ {task.status === 'running' ? 'Executing at' : 'Fires at'}: {new Date(task.scheduledTime).toLocaleString()}</span>
+                        }
                       </p>
                     ) : null}
                     {/* U3 — show error reason for failed tasks */}

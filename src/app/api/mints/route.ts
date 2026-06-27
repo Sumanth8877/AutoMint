@@ -173,7 +173,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: formatZodError(bodyParsed.error) }, { status: 400 });
     }
     const body = bodyParsed.data;
-    const { quantity, safeModeEnabled } = body;
+    const { quantity, safeModeEnabled, wlMode = false } = body;
     const defaults = await getEffectiveExecutionDefaults(authResult.userId);
     const walletId = body.walletId || defaults.defaultWalletId || undefined;
     let collectionId = body.collectionId;
@@ -286,6 +286,42 @@ export async function POST(req: Request) {
 
     // NOT_STARTED (upcoming): schedule for mint start time.
     if (mintState.status === 'NOT_STARTED') {
+      // WL mode: look for non-public phase and use ITS start time
+      if (wlMode && mintUrl) {
+        const discovered = await discoverMintRequirements(mintUrl, {
+          contractAddress: collection.contractAddress,
+          chain: collection.chain,
+        });
+        const nonPublicPhases = (discovered?.mintPhases ?? []).filter(p => p.type !== 'public');
+        if (nonPublicPhases.length === 0) {
+          await removeMintTask(preparedTask.id, authResult.userId).catch(() => {});
+          return NextResponse.json(
+            { error: 'No upcoming WL / Allowlist phase found. The mint may only have a public phase.' },
+            { status: 422 },
+          );
+        }
+        const wlPhase = nonPublicPhases[0];
+        const wlStartTime = wlPhase.startTime ?? mintState.startTime;
+        await getDb().update(mintTasks)
+          .set({ phase: wlPhase.type, mintPrice: wlPhase.price ?? collection.mintPrice ?? '0', updatedAt: new Date() })
+          .where(eq(mintTasks.id, preparedTask.id));
+
+        const scheduledWlTask = await scheduleMint({
+          taskId: preparedTask.id,
+          userId: authResult.userId,
+          scheduledTime: wlStartTime && wlStartTime.getTime() > Date.now() ? wlStartTime : undefined,
+        });
+        return NextResponse.json(
+          {
+            task: scheduledWlTask,
+            collection,
+            mintStatus: 'upcoming',
+            scheduledTime: wlStartTime?.toISOString() ?? null,
+            wlPhase: wlPhase.type,
+          },
+          { status: 201 },
+        );
+      }
       if (mintUrl && !analysis) {
         const normalizedInput = normalizeAnalyzerInput(mintUrl);
         analysis = await runAnalyzer({
@@ -343,10 +379,52 @@ export async function POST(req: Request) {
       );
     }
 
-    // LIVE — mark ready for immediate execution.
-    const readyTask = await updateMintTaskStatus(preparedTask.id, authResult.userId, 'ready');
+    // LIVE mint ──────────────────────────────────────────────────────────────
+    if (wlMode) {
+      // WL mode: scrape the site to find non-public phases + eligibility
+      const discovered = mintUrl ? await discoverMintRequirements(mintUrl, {
+        contractAddress: collection.contractAddress,
+        chain: collection.chain,
+      }) : null;
+
+      const nonPublicPhases = (discovered?.mintPhases ?? []).filter(p => p.type !== 'public');
+      if (nonPublicPhases.length === 0) {
+        await removeMintTask(preparedTask.id, authResult.userId).catch(() => {});
+        return NextResponse.json(
+          { error: 'No WL / Allowlist / Free-mint phase found for this collection. Uncheck the box and use the public mint instead.' },
+          { status: 422 },
+        );
+      }
+
+      const wlPhase = nonPublicPhases[0];
+      const [wlTask] = await getDb()
+        .update(mintTasks)
+        .set({ phase: wlPhase.type, mintPrice: wlPhase.price ?? '0', updatedAt: new Date() })
+        .where(eq(mintTasks.id, preparedTask.id))
+        .returning();
+
+      // Schedule immediately — WL mint is live now
+      const wlExecuteTime = new Date(Date.now() + 5_000);
+      const scheduledWlTask = await scheduleMint({
+        taskId: wlTask.id,
+        userId: authResult.userId,
+        scheduledTime: wlExecuteTime,
+      });
+      return NextResponse.json(
+        { task: scheduledWlTask, collection, mintStatus: 'live', autoTriggered: true, wlPhase: wlPhase.type },
+        { status: 201 },
+      );
+    }
+
+    // Public LIVE mint: auto-execute via QStash (no manual play click needed)
+    const executionTime = new Date(Date.now() + 5_000);
+    const autoTask = await scheduleMint({
+      taskId: preparedTask.id,
+      userId: authResult.userId,
+      scheduledTime: executionTime,
+    });
     return NextResponse.json(
-      { task: readyTask, collection, mintStatus: 'live' },
+      { task: autoTask, collection, mintStatus: 'live', autoTriggered: true },
       { status: 201 },
     );
   } catch (error) {
