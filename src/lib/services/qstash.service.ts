@@ -626,7 +626,7 @@ export async function executeScheduledMint(taskId: string) {
     }
 
     const balance = await getWalletBalance(wallet.address, wallet.chain);
-    if (!hasEnoughBalance(balance.balance, task.mintPrice, task.quantity)) {
+    if (!hasEnoughBalance(balance.balance, effectiveMintPrice, task.quantity)) {
       await getDb()
         .update(mintTasks)
         .set({ status: 'failed', qstashMessageId: null, scheduledTime: null, updatedAt: new Date() })
