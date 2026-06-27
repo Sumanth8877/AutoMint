@@ -52,8 +52,8 @@ export interface AuthenticatedApiKey {
 function generateApiKey(): { plainText: string; prefix: string; hash: string } {
   const raw = randomBytes(KEY_BYTES);
   const secret = raw.toString('base64url');
-  const plainText = \`\${KEY_PREFIX}_\${secret}\`;
-  const prefix = \`\${KEY_PREFIX}_\${secret.slice(0, PREFIX_LENGTH)}\`;
+  const plainText = `${KEY_PREFIX}_${secret}`;
+  const prefix = `${KEY_PREFIX}_${secret.slice(0, PREFIX_LENGTH)}`;
   const hash = hashKey(plainText);
   return { plainText, prefix, hash };
 }
@@ -82,7 +82,7 @@ export async function createApiKey(
     .where(and(eq(apiKeys.userId, userId), isNull(apiKeys.revokedAt)));
 
   if (existing.length >= MAX_KEYS_PER_USER) {
-    throw new Error(\`Maximum of \${MAX_KEYS_PER_USER} active API keys allowed per user\`);
+    throw new Error(`Maximum of ${MAX_KEYS_PER_USER} active API keys allowed per user`);
   }
 
   const { plainText, prefix, hash } = generateApiKey();
