@@ -173,16 +173,17 @@ export async function POST(req: Request) {
     if (mintUrl) {
       const normalizedInput = normalizeAnalyzerInput(mintUrl);
 
-      let intent = await resolveMintIntent(normalizedInput);
-      if (!intent.contractAddress) {
-        analysis = await runAnalyzer({
-          userId: authResult.userId,
-          input: normalizedInput,
-          settings: defaults,
-          notify: true,
-        });
-        intent = analysis.intent ?? intent;
-      }
+      // Always run the analyzer for URL-based mints so we get phase, price,
+      // and accurate mint state regardless of whether the contract address
+      // was resolved from the URL alone. For a 2-user tool the cost is fine,
+      // and the analyzer uses Redis caching so repeat calls are fast.
+      analysis = await runAnalyzer({
+        userId: authResult.userId,
+        input: normalizedInput,
+        settings: defaults,
+        notify: true,
+      });
+      const intent = analysis.intent ?? await resolveMintIntent(normalizedInput);
 
       const collection = await upsertCollectionFromMintIntent(authResult.userId, intent, analysis);
       collectionId = collection.id;
