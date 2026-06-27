@@ -3,7 +3,7 @@ import { parseJsonBody, handleRouteError } from '@/lib/api/errors';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { deleteWatchedWallet, updateWatchedWallet } from '@/lib/services/wallet-tracker.service';
 
-function(error: unknown) {
+function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Watched wallet request failed';
 }
 

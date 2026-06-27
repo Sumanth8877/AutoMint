@@ -3,9 +3,6 @@ import { parseJsonBody } from '@/lib/api/errors';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { deleteCopyMintRule, updateCopyMintRule } from '@/lib/services/copy-mint.service';
 
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : 'Copy mint rule request failed';
-}
 
 type RouteContext = {
   params: Promise<{ id: string }>;
