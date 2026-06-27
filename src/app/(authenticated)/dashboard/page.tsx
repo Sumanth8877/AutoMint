@@ -89,9 +89,9 @@ async function getDashboardData(userId: string) {
     const failedTasks = tasks.filter(t => t.status === 'failed').length;
     
     // Get recent activities
-    let recentActivities: Awaited<ReturnType<typeof getRecentActivities>> = [];
+    let _recentActivities: Awaited<ReturnType<typeof getRecentActivities>> = [];
     try {
-      recentActivities = await getRecentActivities(userId);
+      _recentActivities = await getRecentActivities(userId);
     } catch {
       // Skip activities if fetch fails
     }

@@ -9,7 +9,6 @@ import {
   resolveMintIntent,
   type AnalyzerDebugLogEntry,
   type AnalyzerDebugLogLevel,
-  type,
   type AnalyzerResolutionTelemetry,
   type AnalyzerTiming,
   type MintIntent,

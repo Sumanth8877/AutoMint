@@ -46,7 +46,7 @@ const providerLabels: Record<ProviderName, string> = {
   CHAINSTACK: 'Chainstack',
 };
 
-const providerDescriptions: Record<ProviderName, string> = {
+const _providerDescriptions: Record<ProviderName, string> = {
   ALCHEMY: 'Primary provider — 300M CU/month free. Add ALCHEMY_API_KEY to settings.',
   INFURA: 'Secondary — 100K req/day free. Add INFURA_API_KEY to settings.',
   CHAINSTACK: 'Enterprise-grade — add CHAINSTACK_API_KEY to settings.',
