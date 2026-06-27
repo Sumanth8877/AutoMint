@@ -11,6 +11,7 @@ import { prewarmWalletKey } from '@/lib/services/wallet.service';
 import { getMintState } from '@/lib/services/mint-state.service';
 import { requireRiskApproval } from '@/lib/services/risk.service';
 import { addBreadcrumb, captureException, captureMessage } from '@/lib/observability/sentry';
+import { logger } from '@/lib/logger';
 import { acquireLock, releaseLock } from '@/lib/services/mint-lock.service';
 import { executeScheduledRiskCheck, hasBlockingRiskChange, storeOriginalRiskSnapshot } from '@/lib/services/scheduled-risk-check.service';
 import { sendMintFailedEmail, sendMintScheduledEmail, sendMintSuccessEmail, sendSystemErrorEmail } from '@/lib/services/email-notification.service';
@@ -575,6 +576,53 @@ export async function executeScheduledMint(taskId: string) {
           return { success: false, skipped: true, error: `Mint not live: ${mintState.status}` };
         }
       }
+    }
+
+    // ── Live price re-fetch ──────────────────────────────────────────────────
+    // The stored mintPrice was fetched at task-creation time. The project owner
+    // may have changed the price (or made it free) between then and now.
+    // Re-read publicMintPrice() on-chain (fast RPC call, ~100ms) so the balance
+    // check and transaction use the CURRENT contract price, not a stale one.
+    // A wrong price would cause an on-chain revert and waste the user's gas.
+    try {
+      const { fetchMintRequirements } = await import('@/lib/services/mint-requirements.service');
+      const liveReqs = await fetchMintRequirements(task.contractAddress!, wallet.chain);
+      const livePrice = liveReqs.mintPrice;
+
+      if (livePrice !== task.mintPrice) {
+        addBreadcrumb({
+          category: 'qstash',
+          message: 'Mint price changed since task creation — updating task',
+          level: 'warning',
+          data: { taskId, oldPrice: task.mintPrice, newPrice: livePrice },
+        });
+
+        await getDb()
+          .update(mintTasks)
+          .set({ mintPrice: livePrice, updatedAt: new Date() })
+          .where(eq(mintTasks.id, taskId));
+
+        // Log price change — user will see updated price reflected in the task
+        logger.info('Mint price updated from on-chain re-fetch', {
+          area: 'qstash/execute',
+          taskId,
+          oldPrice: task.mintPrice,
+          newPrice: livePrice,
+        });
+
+        // Use fresh price for the balance check below
+        task = { ...task, mintPrice: livePrice };
+      }
+    } catch {
+      // Non-fatal: if the on-chain read fails, fall back to the stored price.
+      // The simulation inside executeMintTask() will catch any mismatch before
+      // the real transaction is sent.
+      addBreadcrumb({
+        category: 'qstash',
+        message: 'Live price re-fetch failed — using stored price as fallback',
+        level: 'warning',
+        data: { taskId, storedPrice: task.mintPrice },
+      });
     }
 
     const balance = await getWalletBalance(wallet.address, wallet.chain);
