@@ -1,150 +1,444 @@
 import 'server-only';
 
+import {
+  GoogleGenerativeAI,
+  SchemaType,
+  type FunctionDeclarationsTool,
+  type Part,
+} from '@google/generative-ai';
 import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
 import { logger } from '@/lib/logger';
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
-const GUMLOOP_API_BASE = 'https://api.gumloop.com/api/v1';
-const POLL_INTERVAL_MS = 1_500;
-const MAX_WAIT_MS = 25_000;
+const MODEL = 'gemini-2.5-flash';
+const MAX_TOOL_ROUNDS = 6;
+
+// ── System Prompt ────────────────────────────────────────────────────────────
+
+const SYSTEM_PROMPT = `You are AutoMint AI — an NFT minting assistant running inside a Telegram bot.
+You interpret natural language and execute actions using the available tools.
+
+CAPABILITIES:
+• Watch wallets (whale tracking) via Alchemy webhooks
+• Set up copy-mint rules — auto-mint when a watched wallet mints
+• Create instant mint tasks from collection URLs
+• Check mint task status and cancel tasks
+• Check wallet balance
+
+COPY-MINT RULES:
+• walletAddress — the whale wallet to monitor
+• maxPrice — maximum mint price in ETH (convert from USD if needed: assume 1 ETH ≈ $2500)
+• quantity — how many NFTs YOUR user wants to mint when the rule triggers
+• minMintCount — minimum mints by the whale in the same collection before the rule fires (default 1)
+• autoMint — true = execute immediately without confirmation
+• riskThreshold — max risk score to allow (0-100, default 75)
+
+RULES:
+• Be concise — this is Telegram, not email
+• Use emoji sparingly for clarity
+• Prices are in ETH unless the user says otherwise — convert USD to ETH using ~$2500/ETH
+• If you need more info to proceed, ask the user
+• After executing tools, summarize what you did in plain language
+• When the user provides a wallet address, validate it looks like 0x... (42 chars) before using it
+• Always call the appropriate tools — never just describe what you would do`;
+
+// ── Tool Declarations ────────────────────────────────────────────────────────
+
+const TOOLS: FunctionDeclarationsTool[] = [
+  {
+    functionDeclarations: [
+      {
+        name: 'watch_wallet',
+        description:
+          'Add a wallet address to the whale tracker. Monitors on-chain activity (mints, purchases, transfers) via Alchemy webhooks.',
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {
+            walletAddress: {
+              type: SchemaType.STRING,
+              description: 'The EVM wallet address (0x...)',
+            },
+            chain: {
+              type: SchemaType.STRING,
+              description:
+                'Chain to monitor: ethereum, base, polygon, or arbitrum. Default: ethereum',
+            },
+            walletName: {
+              type: SchemaType.STRING,
+              description: 'Optional friendly label for the wallet',
+            },
+          },
+          required: ['walletAddress'],
+        },
+      },
+      {
+        name: 'create_copy_mint_rule',
+        description:
+          'Create or update a copy-mint rule for a watched wallet. When the wallet mints NFTs matching the conditions, AutoMint will auto-mint for the user.',
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {
+            walletAddress: {
+              type: SchemaType.STRING,
+              description: 'The watched wallet address (0x...)',
+            },
+            maxPrice: {
+              type: SchemaType.STRING,
+              description:
+                'Maximum mint price in ETH (e.g. "0.002" for ~$5). Omit for no limit.',
+            },
+            quantity: {
+              type: SchemaType.NUMBER,
+              description: 'How many NFTs to mint when triggered (default: 1)',
+            },
+            minMintCount: {
+              type: SchemaType.NUMBER,
+              description:
+                'Minimum number of mints by the whale in the same collection before triggering (default: 1). Set to 5 if user says "if they mint 5+".',
+            },
+            autoMint: {
+              type: SchemaType.BOOLEAN,
+              description:
+                'true = mint automatically without confirmation. false = notify only.',
+            },
+            riskThreshold: {
+              type: SchemaType.NUMBER,
+              description:
+                'Maximum risk score to allow (0-100, default 75). Higher = more permissive.',
+            },
+          },
+          required: ['walletAddress'],
+        },
+      },
+      {
+        name: 'mint_from_url',
+        description:
+          'Create an instant mint task from a collection URL (OpenSea, Etherscan, or any mint page).',
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {
+            url: {
+              type: SchemaType.STRING,
+              description: 'The mint page URL',
+            },
+            quantity: {
+              type: SchemaType.NUMBER,
+              description: 'Number of NFTs to mint (default: 1)',
+            },
+          },
+          required: ['url'],
+        },
+      },
+      {
+        name: 'get_active_mints',
+        description: 'Get the status of active/pending mint tasks.',
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {},
+        },
+      },
+      {
+        name: 'cancel_mint',
+        description: 'Cancel a pending or scheduled mint task by its task ID.',
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {
+            taskId: {
+              type: SchemaType.STRING,
+              description: 'The mint task ID to cancel',
+            },
+          },
+          required: ['taskId'],
+        },
+      },
+      {
+        name: 'get_watched_wallets',
+        description: 'List all currently watched wallets and their status.',
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {},
+        },
+      },
+      {
+        name: 'get_copy_mint_rules',
+        description: 'List all active copy-mint rules.',
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {},
+        },
+      },
+      {
+        name: 'get_wallet_balance',
+        description: "Check the ETH balance of the user's wallet.",
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {
+            chain: {
+              type: SchemaType.STRING,
+              description:
+                'Chain to check: ethereum, base, polygon, or arbitrum. Default: ethereum',
+            },
+          },
+        },
+      },
+    ],
+  },
+];
+
+// ── Tool Executor ────────────────────────────────────────────────────────────
+
+async function executeTool(
+  userId: string,
+  toolName: string,
+  input: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  switch (toolName) {
+    case 'watch_wallet': {
+      const { watchWallet } = await import(
+        '@/lib/services/wallet-tracker.service'
+      );
+      const result = await watchWallet(userId, {
+        walletAddress: String(input.walletAddress),
+        chain: String(input.chain ?? 'ethereum'),
+        walletName: input.walletName ? String(input.walletName) : null,
+      });
+      return { success: true, ...result };
+    }
+
+    case 'create_copy_mint_rule': {
+      const { upsertCopyMintRule } = await import(
+        '@/lib/services/copy-mint.service'
+      );
+      const result = await upsertCopyMintRule(userId, {
+        walletAddress: String(input.walletAddress),
+        maxPrice: input.maxPrice !== undefined ? String(input.maxPrice) : null,
+        quantity: input.quantity !== undefined ? Number(input.quantity) : 1,
+        minMintCount:
+          input.minMintCount !== undefined ? Number(input.minMintCount) : 1,
+        autoMint:
+          input.autoMint !== undefined ? Boolean(input.autoMint) : false,
+        riskThreshold:
+          input.riskThreshold !== undefined
+            ? Number(input.riskThreshold)
+            : undefined,
+      });
+      return {
+        success: true,
+        ruleId: result.id,
+        walletAddress: result.walletAddress,
+      };
+    }
+
+    case 'mint_from_url': {
+      const { createMintTaskFromUrl } = await import(
+        '@/lib/services/mint-orchestrator.service'
+      );
+      const { getDb: getDb2 } = await import('@/lib/db');
+      const { wallets: walletsTable } = await import('@/drizzle/schema');
+      const { eq: eq2 } = await import('drizzle-orm');
+      const [defaultWallet] = await getDb2()
+        .select({ id: walletsTable.id })
+        .from(walletsTable)
+        .where(eq2(walletsTable.userId, userId))
+        .limit(1);
+      if (!defaultWallet)
+        return { error: 'No wallet configured. Add a wallet first.' };
+      const result = await createMintTaskFromUrl(
+        String(input.url),
+        defaultWallet.id,
+        userId,
+        input.quantity ? Number(input.quantity) : 1,
+      );
+      return {
+        success: true,
+        action: result.action,
+        taskId: result.taskId,
+        error: result.error,
+      };
+    }
+
+    case 'get_active_mints': {
+      const { getDb } = await import('@/lib/db');
+      const { mintTasks } = await import('@/drizzle/schema');
+      const { and, eq, inArray, desc } = await import('drizzle-orm');
+      const tasks = await getDb()
+        .select({
+          id: mintTasks.id,
+          status: mintTasks.status,
+          contractAddress: mintTasks.contractAddress,
+          quantity: mintTasks.quantity,
+          mintPrice: mintTasks.mintPrice,
+          createdAt: mintTasks.createdAt,
+          scheduledTime: mintTasks.scheduledTime,
+        })
+        .from(mintTasks)
+        .where(
+          and(
+            eq(mintTasks.userId, userId),
+            inArray(mintTasks.status, [
+              'pending',
+              'monitoring',
+              'ready',
+              'running',
+            ]),
+          ),
+        )
+        .orderBy(desc(mintTasks.createdAt))
+        .limit(10);
+      return { tasks, count: tasks.length };
+    }
+
+    case 'cancel_mint': {
+      const { getDb } = await import('@/lib/db');
+      const { mintTasks } = await import('@/drizzle/schema');
+      const { and, eq, inArray } = await import('drizzle-orm');
+      const [updated] = await getDb()
+        .update(mintTasks)
+        .set({ status: 'cancelled' })
+        .where(
+          and(
+            eq(mintTasks.id, String(input.taskId)),
+            eq(mintTasks.userId, userId),
+            inArray(mintTasks.status, ['pending', 'monitoring', 'ready']),
+          ),
+        )
+        .returning({ id: mintTasks.id });
+      if (!updated)
+        return { success: false, error: 'Task not found or not cancellable' };
+      return { success: true, cancelledTaskId: updated.id };
+    }
+
+    case 'get_watched_wallets': {
+      const { getUserWatchedWallets } = await import(
+        '@/lib/services/wallet-tracker.service'
+      );
+      const walletsList = await getUserWatchedWallets(userId);
+      return { wallets: walletsList, count: walletsList.length };
+    }
+
+    case 'get_copy_mint_rules': {
+      const { getCopyMintRules } = await import(
+        '@/lib/services/copy-mint.service'
+      );
+      const rules = await getCopyMintRules(userId);
+      return { rules, count: rules.length };
+    }
+
+    case 'get_wallet_balance': {
+      const { getDb } = await import('@/lib/db');
+      const { wallets } = await import('@/drizzle/schema');
+      const { eq, and } = await import('drizzle-orm');
+      const chain = String(input.chain ?? 'ethereum') as
+        | 'ethereum'
+        | 'base'
+        | 'polygon'
+        | 'arbitrum';
+      const [wallet] = await getDb()
+        .select({
+          address: wallets.address,
+          balance: wallets.balance,
+          balanceSymbol: wallets.balanceSymbol,
+          chain: wallets.chain,
+        })
+        .from(wallets)
+        .where(and(eq(wallets.userId, userId), eq(wallets.chain, chain)))
+        .limit(1);
+      if (!wallet) return { error: `No wallet found on ${chain}` };
+      return {
+        address: wallet.address,
+        balance: wallet.balance,
+        symbol: wallet.balanceSymbol,
+        chain: wallet.chain,
+      };
+    }
+
+    default:
+      return { error: `Unknown tool: ${toolName}` };
+  }
+}
 
 // ── Main Interpreter ─────────────────────────────────────────────────────────
 
-/**
- * Forwards a Telegram message to the Gumloop agent for AI interpretation.
- *
- * Flow:
- *  1. POST /start_agent → kicks off the Gumloop agent with the user's message
- *  2. Poll GET /agent_status/{interaction_id} until COMPLETED or FAILED
- *  3. Extract the last assistant message and return it
- *
- * Required env vars (set in Vercel):
- *  - GUMLOOP_API_KEY     — Gumloop API key (Bearer token)
- *  - GUMLOOP_USER_ID     — Gumloop user ID (owner of the agent)
- *  - GUMLOOP_GUMMIE_ID   — The Gumloop agent/gummie ID to call
- */
 export async function interpretTelegramMessage(
   message: string,
   userId: string,
 ): Promise<string> {
-  const apiKey = process.env.GUMLOOP_API_KEY;
-  const gummieId = process.env.GUMLOOP_GUMMIE_ID;
-  const gumloopUserId = process.env.GUMLOOP_USER_ID;
-
-  if (!apiKey || !gummieId || !gumloopUserId) {
-    return 'AI features not configured. Use slash commands:\n/mint <url> • /watch <address> • /status • /cancel • /settings';
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return 'AI features are not configured. Set GEMINI_API_KEY in your environment.\n\nUse slash commands instead:\n/mint <url> • /watch <address> • /status • /cancel • /settings';
   }
 
   addBreadcrumb({
     category: 'ai-interpreter',
-    message: 'Forwarding to Gumloop agent',
+    message: 'Starting Gemini interpretation',
     level: 'info',
     data: { userId, messageLength: message.length },
   });
 
   try {
-    // ── Step 1: Start the agent ────────────────────────────────────────
-    const startRes = await fetch(`${GUMLOOP_API_BASE}/start_agent`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        gummie_id: gummieId,
-        user_id: gumloopUserId,
-        message: `[AutoMint Telegram — user: ${userId}]\n\n${message}`,
-      }),
-      signal: AbortSignal.timeout(10_000),
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
+      model: MODEL,
+      systemInstruction: SYSTEM_PROMPT,
+      tools: TOOLS,
     });
 
-    if (!startRes.ok) {
-      const errorText = await startRes.text().catch(() => 'unknown');
-      logger.warn('Gumloop start_agent failed', {
-        area: 'ai-interpreter',
-        status: startRes.status,
-        error: errorText,
-      });
-      throw new Error(`Gumloop API error: ${startRes.status}`);
-    }
+    const chat = model.startChat();
+    let result = await chat.sendMessage(message);
 
-    const startData = (await startRes.json()) as { interaction_id: string };
-    const interactionId = startData.interaction_id;
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      const calls = result.response.functionCalls();
+      if (!calls || calls.length === 0) break;
 
-    logger.info('Gumloop agent started', {
-      area: 'ai-interpreter',
-      interactionId,
-      userId,
-    });
+      const responseParts: Part[] = [];
 
-    // ── Step 2: Poll for completion ────────────────────────────────────
-    const deadline = Date.now() + MAX_WAIT_MS;
-
-    while (Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-
-      const statusRes = await fetch(
-        `${GUMLOOP_API_BASE}/agent_status/${interactionId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          signal: AbortSignal.timeout(5_000),
-        },
-      );
-
-      if (!statusRes.ok) continue;
-
-      const status = (await statusRes.json()) as {
-        state: string;
-        messages?: Array<{ role: string; content: string }>;
-        error_message?: string;
-      };
-
-      if (status.state === 'COMPLETED') {
-        const assistantMessages =
-          status.messages?.filter((m) => m.role === 'assistant') ?? [];
-        const lastReply = assistantMessages.at(-1)?.content;
-
-        logger.info('Gumloop agent completed', {
+      for (const call of calls) {
+        logger.info('AI tool call', {
           area: 'ai-interpreter',
-          interactionId,
-          responseLength: lastReply?.length ?? 0,
+          tool: call.name,
+          input: call.args,
+          userId,
         });
 
-        return lastReply || 'Done.';
+        try {
+          const toolResult = await executeTool(
+            userId,
+            call.name,
+            (call.args ?? {}) as Record<string, unknown>,
+          );
+          responseParts.push({
+            functionResponse: {
+              name: call.name,
+              response: toolResult,
+            },
+          });
+        } catch (error) {
+          const errMsg =
+            error instanceof Error ? error.message : String(error);
+          logger.warn('AI tool error', {
+            area: 'ai-interpreter',
+            tool: call.name,
+            error: errMsg,
+          });
+          responseParts.push({
+            functionResponse: {
+              name: call.name,
+              response: { error: errMsg },
+            },
+          });
+        }
       }
 
-      if (status.state === 'FAILED') {
-        logger.warn('Gumloop agent failed', {
-          area: 'ai-interpreter',
-          interactionId,
-          error: status.error_message,
-        });
-        return (
-          status.error_message ??
-          'AI processing failed. Try a slash command instead.'
-        );
-      }
-
-      // Still PROCESSING — keep polling
+      result = await chat.sendMessage(responseParts);
     }
 
-    // Timed out waiting for the agent
-    logger.warn('Gumloop agent timeout', {
-      area: 'ai-interpreter',
-      interactionId,
-      maxWaitMs: MAX_WAIT_MS,
-    });
-
-    return '⏳ Still processing your request. Check /status in a moment.';
+    return result.response.text() || 'Done.';
   } catch (error) {
     await captureException(error, {
       area: 'ai-interpreter',
       context: { userId, messagePreview: message.slice(0, 100) },
-      fingerprint: ['ai-interpreter', 'gumloop'],
+      fingerprint: ['ai-interpreter', 'gemini'],
     });
     throw error;
   }
