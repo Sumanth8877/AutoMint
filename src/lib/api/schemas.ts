@@ -50,6 +50,24 @@ export const analyzerSchema = z.object({
   autoDetectSocials: z.boolean().optional(),
 });
 
+
+// ── POST /api/api-keys ──────────────────────────────────────────────────────────
+export const apiKeyCreateSchema = z.object({
+  name:          z.string().min(1, 'Key name is required').max(64),
+  scopes:        z.array(z.string()).optional(),
+  expiresInDays: z.number().int().min(1).max(365).nullable().optional(),
+});
+
+export const apiKeyActionSchema = z.object({
+  id:     z.string().uuid('Must be a valid UUID'),
+  action: z.enum(['revoke', 'rename']),
+  name:   z.string().min(1).max(64).optional(),
+});
+
+export const apiKeyDeleteSchema = z.object({
+  id: z.string().uuid('Must be a valid UUID'),
+});
+
 // ── Helper ───────────────────────────────────────────────────────────────────
 export function formatZodError(error: z.ZodError): string {
   return error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
