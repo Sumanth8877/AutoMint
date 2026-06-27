@@ -603,6 +603,12 @@ export async function DELETE(req: Request) {
     }
 
     await removeMintTask(id, authResult.userId);
+
+    // Unregister from Alchemy webhook — best-effort, non-blocking
+    if (existing.contractAddress) {
+      void unregisterContract(existing.contractAddress).catch(() => {});
+    }
+
     return NextResponse.json({ success: true });
   } catch (error) {
     return handleRouteError(error, 'Failed to process mint request');
