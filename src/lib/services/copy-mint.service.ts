@@ -262,21 +262,21 @@ export async function handleCopyMintEvent(event: CopyMintEvent) {
   try {
   const contractAddress = normalizeAddress(event.contractAddress);
   if (!isValidEvmAddress(contractAddress)) {
-    return { action: 'skipped' as const, reason: 'invalid_contract' };
+    return { status: 'skipped' as const, reason: 'invalid_contract' };
   }
 
   const rule = await findRule(event.userId, event.watchedWalletAddress);
   if (!rule) {
-    return { action: 'skipped' as const, reason: 'no_enabled_rule' };
+    return { status: 'skipped' as const, reason: 'no_enabled_rule' };
   }
 
   // H-5 fix: lock key uses only userId+ruleId+contractAddress.
   // Including transactionHash caused different Alchemy webhook retries
   // (same contract, different txHash) to bypass the lock and create duplicate tasks.
   const lockName = `copy-mint:${event.userId}:${rule.id}:${contractAddress}`;
-  const mintLock = await acquireLock(lockName);
-  if (!mintLock.acquired) {
-    return { action: 'skipped' as const, reason: 'locked' };
+  const lockAcquired = await acquireLock(lockName);
+  if (!lockAcquired) {
+    return { status: 'skipped' as const, reason: 'locked' };
   }
 
   try {
@@ -307,7 +307,7 @@ export async function handleCopyMintEvent(event: CopyMintEvent) {
             currentCount,
             requiredCount: rule.minMintCount,
           });
-          return { action: 'skipped' as const, reason: `mint_count_below_threshold:${currentCount}/${rule.minMintCount}` };
+          return { status: 'skipped' as const, reason: `mint_count_below_threshold:${currentCount}/${rule.minMintCount}` };
         }
 
         addBreadcrumb({
@@ -332,13 +332,21 @@ export async function handleCopyMintEvent(event: CopyMintEvent) {
       fetchMintRequirements(contractAddress, event.chain),
     ]);
 
-    if (mintState.status !== 'LIVE') {
+    if (mintState.status !== 'LIVE' && mintState.status !== 'ACTIVE') {
       await logActivity(event.userId, 'mint_status_changed', 'Copy mint skipped: mint unavailable', {
         ruleId: rule.id,
         contractAddress,
         mintStatus: mintState.status,
       });
-      return { action: 'skipped' as const, reason: `mint_not_live:${mintState.status}` };
+      return { status: 'skipped' as const, reason: `mint_not_live:${mintState.status}` };
+    }
+
+    if (requirements.isSoldOut) {
+      await logActivity(event.userId, 'mint_status_changed', 'Copy mint skipped: collection sold out', {
+        ruleId: rule.id,
+        contractAddress,
+      });
+      return { status: 'skipped' as const, reason: 'sold_out' };
     }
 
     if (!priceAllowed(requirements.mintPrice, rule.maxPrice)) {
@@ -353,7 +361,7 @@ export async function handleCopyMintEvent(event: CopyMintEvent) {
         contractAddress,
         error: 'Copy mint price exceeds rule maxPrice',
       });
-      return { action: 'skipped' as const, reason: 'price_exceeds_rule' };
+      return { status: 'skipped' as const, reason: 'price_exceeds_rule' };
     }
 
     await sendCopyMintNotification(event.userId, 'copy_mint_triggered', {
@@ -373,7 +381,7 @@ export async function handleCopyMintEvent(event: CopyMintEvent) {
         ruleId: rule.id,
         contractAddress,
       });
-      return { action: 'detected' as const, reason: 'auto_mint_disabled' };
+      return { status: 'skipped' as const, reason: 'auto_mint_disabled' };
     }
 
     const wallet = await loadDefaultMintWallet(event.userId, event.chain, rule.destinationWalletId);
@@ -383,7 +391,7 @@ export async function handleCopyMintEvent(event: CopyMintEvent) {
         contractAddress,
         error: 'No AutoMint wallet available for copy mint',
       });
-      return { action: 'failed' as const, error: 'no_mint_wallet' };
+      return { status: 'skipped' as const, reason: 'no_mint_wallet' };
     }
 
     const [task] = await getDb()
@@ -415,7 +423,7 @@ export async function handleCopyMintEvent(event: CopyMintEvent) {
         taskId: task.id,
         txHash: result.txHash,
       });
-      return { action: 'executed' as const, taskId: task.id, txHash: result.txHash };
+      return { status: 'completed' as const, taskId: task.id, txHash: result.txHash };
     }
 
     await sendCopyMintNotification(event.userId, 'mint_failed', {
@@ -424,9 +432,9 @@ export async function handleCopyMintEvent(event: CopyMintEvent) {
       taskId: task.id,
       error: result.error,
     });
-    return { action: 'failed' as const, taskId: task.id, error: result.error };
+    return { status: 'failed' as const, taskId: task.id, error: result.error };
   } finally {
-    await releaseLock(lockName, mintLock.token);
+    await releaseLock(lockName);
   }
   } catch (error) {
     await captureException(error, {

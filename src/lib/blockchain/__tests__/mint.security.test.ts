@@ -39,6 +39,7 @@ vi.mock('@/lib/services/wallet.service', () => ({
 
 vi.mock('@/lib/services/rpc-manager.service', () => ({
   getWalletClient: vi.fn(),
+  broadcastRawTransaction: vi.fn(),
 }));
 
 vi.mock('../client', () => ({
@@ -51,12 +52,19 @@ vi.mock('@/lib/observability/sentry', () => ({
   captureMessage: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('@/lib/services/nonce-allocator.service', () => ({
+  allocateNonce: vi.fn().mockResolvedValue({ nonce: 42, release: vi.fn() }),
+  releaseInflightNonce: vi.fn().mockResolvedValue(undefined),
+  scanAndFillGaps: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { getDecryptedPrivateKey } from '@/lib/services/wallet.service';
-import { getWalletClient } from '@/lib/services/rpc-manager.service';
+import { getWalletClient, broadcastRawTransaction } from '@/lib/services/rpc-manager.service';
 import { getClient } from '../client';
 
 const mockGetDecryptedPrivateKey = getDecryptedPrivateKey as MockedFunction<typeof getDecryptedPrivateKey>;
 const mockGetWalletClient = getWalletClient as MockedFunction<typeof getWalletClient>;
+const mockBroadcastRawTransaction = broadcastRawTransaction as MockedFunction<typeof broadcastRawTransaction>;
 const mockGetClient = getClient as MockedFunction<typeof getClient>;
 
 // ── Test fixtures ─────────────────────────────────────────────────────────────
@@ -85,19 +93,23 @@ function setupPublicClientMocks(status: 'success' | 'reverted' = 'success') {
   mockGetClient.mockReturnValue({
     call: vi.fn().mockResolvedValue({}),
     estimateGas: vi.fn().mockResolvedValue(BigInt(21000)),
+    simulateContract: vi.fn().mockResolvedValue({ request: {} }),
     waitForTransactionReceipt: vi.fn().mockResolvedValue({
       status,
       gasUsed: BigInt(21000),
       blockNumber: BigInt(100),
     }),
     readContract: vi.fn().mockResolvedValue(true),
+    getBlock: vi.fn().mockResolvedValue({ baseFeePerGas: BigInt(1000000000) }),
   } as unknown as Parameters<typeof mockGetClient.mockReturnValue>[0]);
 }
 
 function setupWalletClientMock(txHash: `0x${string}` = TX_HASH) {
   mockGetWalletClient.mockReturnValue({
     sendTransaction: vi.fn().mockResolvedValue(txHash),
+    signTransaction: vi.fn().mockResolvedValue('0xsigned' as `0x${string}`),
   } as unknown as Parameters<typeof mockGetWalletClient.mockReturnValue>[0]);
+  mockBroadcastRawTransaction.mockResolvedValue(txHash);
 }
 
 // ── Suite ─────────────────────────────────────────────────────────────────────

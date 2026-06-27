@@ -48,7 +48,18 @@ vi.mock('@/lib/services/mint-requirements.service', () => ({
 }));
 
 vi.mock('@/lib/services/mint-state.service', () => ({
-  getMintState: vi.fn().mockResolvedValue({ status: 'ACTIVE', isMintable: true }),
+  getMintState: vi.fn().mockResolvedValue({ status: 'LIVE', isMintable: true }),
+}));
+
+vi.mock('@/lib/services/analytics.service', () => ({
+  trackAnalyticsEvent: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('@/lib/redis', () => ({
+  getRedisClient: () => ({
+    incr: vi.fn().mockResolvedValue(1),
+    expire: vi.fn().mockResolvedValue(1),
+  }),
 }));
 
 import { handleCopyMintEvent } from '../copy-mint.service';
@@ -58,16 +69,16 @@ import { executeMintTask } from '@/lib/services/mint.service';
 // ─── Test fixtures ─────────────────────────────────────────────────
 const mockCopyMintEvent = {
   userId: 'user-123',
-  watchedWalletAddress: '0xwhale0000000000000000000000000000000000',
+  watchedWalletAddress: '0xaaaa000000000000000000000000000000000001',
   chain: 'ethereum' as const,
-  contractAddress: '0xcontract000000000000000000000000000000',
+  contractAddress: '0xbbbb000000000000000000000000000000000002',
   transactionHash: '0xtxhash',
 };
 
 const mockWallet = {
   id: 'wallet-1',
   userId: 'user-123',
-  address: '0xmywallet000000000000000000000000000000',
+  address: '0xcccc000000000000000000000000000000000003',
   walletType: 'EVM',
   chain: 'ethereum',
   encryptedPrivateKey: 'v1:encrypted',
@@ -78,13 +89,14 @@ const mockWallet = {
 const mockRule = {
   id: 'rule-1',
   userId: 'user-123',
-  walletAddress: '0xwhale0000000000000000000000000000000000',
+  walletAddress: '0xaaaa000000000000000000000000000000000001',
   enabled: true,
   autoMint: true,
   maxPrice: '0.1',
   quantity: 1,
   riskThreshold: 75,
   destinationWalletId: null,
+  minMintCount: 1,
   createdAt: new Date(),
 };
 
@@ -135,7 +147,7 @@ describe('handleCopyMintEvent', () => {
       buildDbMock([mockRule], mockWallet, mockMintTask)
     );
     (executeMintTask as MockedFunction<typeof executeMintTask>).mockResolvedValue({
-      status: 'completed',
+      success: true,
       txHash: '0xabc',
     } as ReturnType<typeof executeMintTask> extends Promise<infer T> ? T : never);
 
@@ -155,9 +167,9 @@ describe('handleCopyMintEvent', () => {
   });
 
   it('skips mint when rule is disabled', async () => {
-    const disabledRule = { ...mockRule, enabled: false };
+    // Simulate DB returning no rules (the enabled:true WHERE clause filters it out)
     (getDb as unknown as MockedFunction<() => unknown>).mockReturnValue(
-      buildDbMock([disabledRule], mockWallet, mockMintTask)
+      buildDbMock([], mockWallet, mockMintTask)
     );
 
     const result = await handleCopyMintEvent(mockCopyMintEvent);
@@ -223,7 +235,7 @@ describe('handleCopyMintEvent', () => {
       buildDbMock([mockRule], mockWallet, mockMintTask)
     );
     (executeMintTask as MockedFunction<typeof executeMintTask>).mockResolvedValue({
-      status: 'completed',
+      success: true,
       txHash: '0xabc',
     } as Awaited<ReturnType<typeof executeMintTask>>);
 
@@ -235,6 +247,11 @@ describe('handleCopyMintEvent', () => {
 
   it('releases lock even when executeMintTask throws', async () => {
     const { releaseLock } = await import('@/lib/services/mint-lock.service');
+    const { fetchMintRequirements } = await import('@/lib/services/mint-requirements.service');
+    (fetchMintRequirements as MockedFunction<typeof fetchMintRequirements>).mockResolvedValue({
+      mintPrice: '0.05',
+      isSoldOut: false,
+    } as Awaited<ReturnType<typeof fetchMintRequirements>>);
     (getDb as unknown as MockedFunction<() => unknown>).mockReturnValue(
       buildDbMock([mockRule], mockWallet, mockMintTask)
     );

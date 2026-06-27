@@ -529,6 +529,36 @@ export async function getRpcHealthSnapshot() {
   return { alchemy, infura, chainstack };
 }
 
+/**
+ * Record a single RPC failure for a provider (for testing / external callers).
+ * Updates the health snapshot and trips the circuit breaker if threshold is reached.
+ */
+export async function recordRpcFailure(provider: RpcProvider): Promise<void> {
+  const previous = await getHealth(provider);
+  const consecutiveFailures = previous.consecutiveFailures + 1;
+  const unhealthyUntil = consecutiveFailures >= CIRCUIT_FAILURE_THRESHOLD
+    ? Date.now() + CIRCUIT_OPEN_MS
+    : previous.unhealthyUntil;
+  const health: RpcHealth = {
+    ...previous,
+    errorCount: previous.errorCount + 1,
+    consecutiveFailures,
+    lastFailure: 'manual failure record',
+    lastFailureAt: new Date().toISOString(),
+    unhealthyUntil,
+  };
+  await setHealth(health);
+}
+
+/**
+ * Returns true if the circuit breaker for a provider is currently open (provider is unhealthy).
+ */
+export async function isCircuitOpen(provider: RpcProvider): Promise<boolean> {
+  const health = await getHealth(provider);
+  if (!health.unhealthyUntil) return false;
+  return Date.now() < health.unhealthyUntil;
+}
+
 export async function getRpcRoutingSnapshot(userId?: string, chain = 'ethereum') {
   const normalizedChain = normalizeChainName(chain);
   const [settings, health] = await Promise.all([

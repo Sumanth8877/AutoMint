@@ -21,7 +21,7 @@ function createToken() {
   return crypto.randomBytes(24).toString('base64url');
 }
 
-export async function acquireLock(mintId: string, ttlSeconds = LOCK_TTL_SECONDS): Promise<MintLock> {
+export async function acquireLock(mintId: string, ttlSeconds = LOCK_TTL_SECONDS): Promise<boolean> {
   const key = lockKey(mintId);
   const token = createToken();
 
@@ -40,18 +40,18 @@ export async function acquireLock(mintId: string, ttlSeconds = LOCK_TTL_SECONDS)
         context: { taskId: mintId },
         fingerprint: ['mint-lock', 'exists'],
       });
-      return { acquired: false, mintId, key };
+      return false;
     }
 
     addBreadcrumb({ category: 'mint-lock', message: 'Lock acquired', level: 'info', data: { mintId, key } });
-    return { acquired: true, mintId, key, token };
+    return true;
   } catch (error) {
     await captureException(error, {
       area: 'mint-lock',
       context: { taskId: mintId, key },
       fingerprint: ['mint-lock', 'acquire'],
     });
-    throw error;
+    return false;
   }
 }
 
@@ -77,10 +77,9 @@ export async function releaseLock(mintId: string, token?: string) {
         return false;
       }
     } else {
-      // No token — cannot safely release without risking clobbering another holder's lock.
-      // Callers should only call releaseLock when acquired:true (which always provides a token).
-      addBreadcrumb({ category: 'mint-lock', message: 'releaseLock called without token — skipped to prevent unsafe DEL', level: 'warning', data: { mintId, key } });
-      return false;
+      // No token — fall back to plain DEL (best-effort release).
+      addBreadcrumb({ category: 'mint-lock', message: 'releaseLock called without token — plain DEL fallback', level: 'warning', data: { mintId, key } });
+      await getRedisClient().del(key);
     }
 
     addBreadcrumb({ category: 'mint-lock', message: 'Lock released', level: 'info', data: { mintId, key } });

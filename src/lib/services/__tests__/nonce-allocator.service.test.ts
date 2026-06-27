@@ -46,9 +46,19 @@ const createMockRedis = () => {
       store.delete(key);
       return 1;
     }),
-    eval: vi.fn(async () => {
-      // Lua CAS delete: if value matches, delete and return 1
-      // For the lock release script
+    eval: vi.fn(async (script: string, keys: string[], args: string[]) => {
+      // Simulate the Lua CAS lock release: GET → compare → DEL
+      // If value matches, delete the key and return 1; else return 0.
+      if (keys && keys.length > 0 && args && args.length > 0) {
+        const key = keys[0];
+        const expectedVal = args[0];
+        const currentVal = store.get(key);
+        if (currentVal === expectedVal) {
+          store.delete(key);
+          return 1;
+        }
+        return 0;
+      }
       return 1;
     }),
     zadd: vi.fn(async (key: string, { score, member }: { score: number; member: string }) => {
@@ -74,6 +84,24 @@ const createMockRedis = () => {
       }
       return result;
     }),
+    zrange: vi.fn(async (key: string, min: number | string, max: number | string, opts?: { byScore?: boolean }) => {
+      const set = sortedSets.get(key);
+      if (!set) return [];
+      if (opts?.byScore) {
+        const minN = min === '-inf' ? -Infinity : Number(min);
+        const maxN = max === '+inf' ? Infinity : Number(max);
+        const result: string[] = [];
+        for (const [member, score] of set.entries()) {
+          if (score >= minN && score <= maxN) result.push(member);
+        }
+        return result;
+      }
+      // By rank (index range)
+      const entries = [...set.entries()].sort((a, b) => a[1] - b[1]);
+      const from = Number(min);
+      const to = max === '+inf' ? entries.length - 1 : Number(max);
+      return entries.slice(from, to + 1).map(([m]) => m);
+    }),
     zremrangebyscore: vi.fn(async (key: string, min: number | string, max: number | string) => {
       const set = sortedSets.get(key);
       if (!set) return 0;
@@ -87,6 +115,34 @@ const createMockRedis = () => {
         }
       }
       return removed;
+    }),
+    pipeline: vi.fn(function(this: ReturnType<typeof createMockRedis>) {
+      // Return a chainable pipeline that executes commands immediately (synchronously queued)
+      const commands: Array<() => Promise<unknown>> = [];
+      const self = this;
+      const pipe = {
+        set: vi.fn((key: string, value: string, opts?: { ex?: number; nx?: boolean; px?: number }) => {
+          commands.push(() => self.set(key, value, opts));
+          return pipe;
+        }),
+        zadd: vi.fn((key: string, opts: { score: number; member: string }) => {
+          commands.push(() => self.zadd(key, opts));
+          return pipe;
+        }),
+        zrem: vi.fn((key: string, member: string) => {
+          commands.push(() => self.zrem(key, member));
+          return pipe;
+        }),
+        del: vi.fn((key: string) => {
+          commands.push(() => self.del(key));
+          return pipe;
+        }),
+        exec: vi.fn(async () => {
+          const results = await Promise.all(commands.map(fn => fn()));
+          return results;
+        }),
+      };
+      return pipe;
     }),
   };
 };
@@ -122,9 +178,9 @@ const ADDR = '0x1234567890abcdef1234567890abcdef12345678';
 const CHAIN = 'ethereum';
 
 function resetMocks() {
+  vi.clearAllMocks();
   mockRedis = createMockRedis();
   mockChainPendingNonce = 0;
-  vi.clearAllMocks();
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────
