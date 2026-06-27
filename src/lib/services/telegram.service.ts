@@ -1080,7 +1080,12 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
         const { interpretTelegramMessage } = await import('@/lib/services/ai-interpreter.service');
         const aiReply = await interpretTelegramMessage(text, aiAccount.userId);
         await reply(message, aiReply);
-      } catch {
+      } catch (aiError) {
+        await captureException(aiError instanceof Error ? aiError : new Error(String(aiError)), {
+          area: 'telegram',
+          context: { telegramId: String(message.from.id), messagePreview: text.slice(0, 100) },
+          fingerprint: ['telegram', 'ai-interpreter-failed'],
+        });
         await reply(
           message,
           'AI processing failed. Try a slash command:\n/mint <url> • /watch <address> • /status • /cancel • /settings',
@@ -1130,7 +1135,12 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
         const { interpretTelegramMessage } = await import('@/lib/services/ai-interpreter.service');
         const aiReply = await interpretTelegramMessage(message.text ?? '', account.userId);
         await reply(message, aiReply);
-      } catch {
+      } catch (aiError) {
+        await captureException(aiError instanceof Error ? aiError : new Error(String(aiError)), {
+          area: 'telegram',
+          context: { telegramId: String(message.from?.id), command: command },
+          fingerprint: ['telegram', 'ai-interpreter-failed'],
+        });
         await reply(message, 'Unknown command. Use /settings to see available commands.');
       }
       break;
