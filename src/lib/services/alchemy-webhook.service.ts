@@ -110,7 +110,7 @@ export async function unregisterIfIdle(
 ): Promise<void> {
   try {
     const db = getDb();
-    const activeStatuses = ['pending', 'monitoring', 'ready', 'running'];
+    const activeStatuses: ('pending' | 'monitoring' | 'ready' | 'running')[] = ['pending', 'monitoring', 'ready', 'running'];
 
     // Check if any OTHER active tasks still need this contract watched
     const query = db

@@ -10,6 +10,7 @@ import { requireRiskApproval } from '@/lib/services/risk.service';
 import { addBreadcrumb, captureException, captureMessage, startSpan } from '@/lib/observability/sentry';
 import { acquireLock, releaseLock } from '@/lib/services/mint-lock.service';
 import type { Hex } from 'viem';
+import { unregisterIfIdle } from '@/lib/services/alchemy-webhook.service';
 
 export async function getUserMintTasks(userId: string) {
   const result = await getDb().select().from(mintTasks).where(eq(mintTasks.userId, userId)).orderBy(desc(mintTasks.createdAt));
@@ -238,6 +239,10 @@ export async function executeMintTask(
         contractAddress: claimed.contractAddress,
         error: result.error,
       });
+      // Cleanup: mint failed — unregister from Alchemy webhook if no other tasks watch this contract
+      if (claimed.contractAddress) {
+        void unregisterIfIdle(claimed.contractAddress, taskId).catch(() => {});
+      }
       await sendSystemErrorEmail(claimed.userId, {
         taskId,
         title: 'Mint Transaction Error',
@@ -294,6 +299,10 @@ export async function executeMintTask(
       contractAddress: claimed.contractAddress,
       txHash: result.txHash,
     });
+    // Cleanup: mint completed — unregister from Alchemy webhook if no other tasks watch this contract
+    if (claimed.contractAddress) {
+      void unregisterIfIdle(claimed.contractAddress, taskId).catch(() => {});
+    }
   }
 
   addBreadcrumb({
