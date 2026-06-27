@@ -638,8 +638,8 @@ export async function executeScheduledMint(taskId: string) {
       });
       await sendScheduledMintNotification(task.userId, 'wallet_balance_low', {
         wallet: wallet.address,
-        balance: balance.balance,
-        symbol: balance.symbol,
+        balance: balance.balance ?? undefined,
+        symbol: balance.symbol ?? undefined,
       });
       await sendScheduledMintNotification(task.userId, 'mint_failed', {
         taskId,
