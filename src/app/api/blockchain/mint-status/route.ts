@@ -92,7 +92,7 @@ export async function GET(req: Request) {
       status = 'NOT_STARTED'; reason = 'sale_inactive';
     }
 
-    logger.info('mint-status', 'Probed contract status', { chain, status, reason, contractAddress });
+    logger.info('Probed contract status', { area: 'mint-status',  chain, status, reason, contractAddress });
 
     return NextResponse.json({
       status,
