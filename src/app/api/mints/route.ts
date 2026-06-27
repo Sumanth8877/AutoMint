@@ -102,7 +102,9 @@ async function applyAnalyzerResultToTask(
   const hasCriticalGaps =
     !knownFromAnalyzer.mintFunction ||
     !knownFromAnalyzer.mintPrice ||
-    (!knownFromAnalyzer.mintStartTime && analysis.mintState?.status !== 'LIVE');
+    // Always discover for timing: even when LIVE another phase (holder/WL) may be active
+    // while the PUBLIC phase is still upcoming. We need mintPhases to detect this.
+    !knownFromAnalyzer.mintStartTime;
 
   let finalRequirements = knownFromAnalyzer;
 
@@ -381,14 +383,18 @@ export async function POST(req: Request) {
     }
 
     // LIVE mint ──────────────────────────────────────────────────────────────
-    if (wlMode) {
-      // WL mode: scrape the site to find non-public phases + eligibility
-      const discovered = mintUrl ? await discoverMintRequirements(mintUrl, {
-        contractAddress: collection.contractAddress,
-        chain: collection.chain,
-      }) : null;
+    // IMPORTANT: The contract may be LIVE because a HOLDER / WL phase is active,
+    // while the PUBLIC phase is still upcoming. We must check public phase timing
+    // before deciding to auto-execute vs schedule.
+    const discoveredForPhase = mintUrl ? await discoverMintRequirements(mintUrl, {
+      contractAddress: collection.contractAddress,
+      chain: collection.chain,
+    }) : null;
+    const allPhases = discoveredForPhase?.mintPhases ?? [];
 
-      const nonPublicPhases = (discovered?.mintPhases ?? []).filter((p: MintPhase) => p.type !== 'public');
+    if (wlMode) {
+      // WL mode: find non-public phases (holder pass, allowlist, free mint, etc.)
+      const nonPublicPhases = allPhases.filter((p: MintPhase) => p.type !== 'public');
       if (nonPublicPhases.length === 0) {
         await removeMintTask(preparedTask.id, authResult.userId).catch(() => {});
         return NextResponse.json(
@@ -398,26 +404,70 @@ export async function POST(req: Request) {
       }
 
       const wlPhase = nonPublicPhases[0];
-      const [wlTask] = await getDb()
+      const wlPhaseIsLive = !wlPhase.startTime || wlPhase.startTime.getTime() <= Date.now();
+
+      await getDb()
         .update(mintTasks)
         .set({ phase: wlPhase.type, mintPrice: wlPhase.price ?? '0', updatedAt: new Date() })
-        .where(eq(mintTasks.id, preparedTask.id))
-        .returning();
+        .where(eq(mintTasks.id, preparedTask.id));
 
-      // Schedule immediately — WL mint is live now
-      const wlExecuteTime = new Date(Date.now() + 5_000);
-      const scheduledWlTask = await scheduleMint({
-        taskId: wlTask.id,
+      if (wlPhaseIsLive) {
+        // WL phase is live now — auto-execute immediately
+        const wlExecuteTime = new Date(Date.now() + 5_000);
+        const scheduledWlTask = await scheduleMint({
+          taskId: preparedTask.id,
+          userId: authResult.userId,
+          scheduledTime: wlExecuteTime,
+        });
+        return NextResponse.json(
+          { task: scheduledWlTask, collection, mintStatus: 'live', autoTriggered: true, wlPhase: wlPhase.type },
+          { status: 201 },
+        );
+      } else {
+        // WL phase is upcoming — schedule for its start time
+        const scheduledWlTask = await scheduleMint({
+          taskId: preparedTask.id,
+          userId: authResult.userId,
+          scheduledTime: wlPhase.startTime,
+        });
+        return NextResponse.json(
+          { task: scheduledWlTask, collection, mintStatus: 'upcoming', scheduledTime: wlPhase.startTime!.toISOString(), wlPhase: wlPhase.type },
+          { status: 201 },
+        );
+      }
+    }
+
+    // Public mint mode ─────────────────────────────────────────────────────────
+    // Check if the PUBLIC phase specifically is still upcoming
+    // (contract may be LIVE for a holder phase while public hasn't started yet)
+    const publicPhase = allPhases.find((p: MintPhase) => p.type === 'public');
+    const publicPhaseStart = publicPhase?.startTime
+      ?? (collection.mintStart ? new Date(collection.mintStart) : undefined);
+
+    if (publicPhaseStart && publicPhaseStart.getTime() > Date.now()) {
+      // Public phase is upcoming — schedule for its exact start time
+      await getDb()
+        .update(mintTasks)
+        .set({ phase: 'public', mintPrice: publicPhase?.price ?? preparedTask.mintPrice ?? '0', updatedAt: new Date() })
+        .where(eq(mintTasks.id, preparedTask.id));
+
+      const scheduledTask = await scheduleMint({
+        taskId: preparedTask.id,
         userId: authResult.userId,
-        scheduledTime: wlExecuteTime,
+        scheduledTime: publicPhaseStart,
       });
       return NextResponse.json(
-        { task: scheduledWlTask, collection, mintStatus: 'live', autoTriggered: true, wlPhase: wlPhase.type },
+        { task: scheduledTask, collection, mintStatus: 'upcoming', scheduledTime: publicPhaseStart.toISOString() },
         { status: 201 },
       );
     }
 
-    // Public LIVE mint: auto-execute via QStash (no manual play click needed)
+    // Public mint is truly live now — auto-execute via QStash (~5s delay)
+    await getDb()
+      .update(mintTasks)
+      .set({ phase: 'public', updatedAt: new Date() })
+      .where(eq(mintTasks.id, preparedTask.id));
+
     const executionTime = new Date(Date.now() + 5_000);
     const autoTask = await scheduleMint({
       taskId: preparedTask.id,
