@@ -42,15 +42,29 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true, result });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'QStash webhook failed';
-    const status = message.toLowerCase().includes('signature') || message.includes('Signing') ? 401 : 500;
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    let status: number;
+    let publicError: string;
+    if (message.includes('signature') || message.includes('signing')) {
+      status = 401;
+      publicError = 'Invalid webhook signature';
+    } else if (message.includes('not configured')) {
+      // H1: don't leak the fact that QStash signing keys aren't configured.
+      status = 503;
+      publicError = 'Webhook signature verification unavailable';
+    } else {
+      status = 500;
+      publicError = 'QStash webhook failed';
+    }
     if (status >= 500) {
       await captureException(error, {
         area: 'qstash',
         context: { route: '/api/webhooks/qstash' },
         fingerprint: ['qstash', 'webhook'],
       });
+    } else {
+      console.warn('[qstash] webhook rejected', { status, message });
     }
-    return NextResponse.json({ error: message }, { status });
+    return NextResponse.json({ error: publicError }, { status });
   }
 }

@@ -17,6 +17,9 @@ const eslintConfig = defineConfig([
   ]),
   // Allow _ prefixed identifiers to be intentionally unused
   {
+    // Pin the React version so eslint-plugin-react's auto-detect path (which
+    // crashes on ESLint 10's flat-config context API) is skipped entirely.
+    settings: { react: { version: '19.2' } },
     rules: {
       '@typescript-eslint/no-unused-vars': ['warn', {
         vars: 'all',

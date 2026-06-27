@@ -23,15 +23,29 @@ export async function POST(request: Request) {
     const result = await handleAlchemyWalletWebhook(payload as Parameters<typeof handleAlchemyWalletWebhook>[0]);
     return NextResponse.json({ ok: true, result });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Alchemy wallet webhook failed';
-    const status = message.toLowerCase().includes('signature') ? 401 : 500;
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    let status: number;
+    let publicError: string;
+    if (message.includes('signature')) {
+      status = 401;
+      publicError = 'Invalid webhook signature';
+    } else if (message.includes('not configured')) {
+      // H1: don't leak the fact that the signing key env-var is missing.
+      status = 503;
+      publicError = 'Webhook signature verification unavailable';
+    } else {
+      status = 500;
+      publicError = 'Alchemy wallet webhook failed';
+    }
     if (status >= 500) {
       await captureException(error, {
         area: 'wallet-tracker',
         context: { route: '/api/webhooks/alchemy/wallet', provider: 'alchemy' },
         fingerprint: ['wallet-tracker', 'webhook'],
       });
+    } else {
+      console.warn('[alchemy/wallet] webhook rejected', { status, message });
     }
-    return NextResponse.json({ error: message }, { status });
+    return NextResponse.json({ error: publicError }, { status });
   }
 }
