@@ -105,7 +105,7 @@ async function applyAnalyzerResultToTask(
   let finalRequirements = knownFromAnalyzer;
 
   if (hasCriticalGaps && mintUrl) {
-    logger.info('mints/route', 'Analyzer left gaps — running discoverMintRequirements', { mintUrl });
+    logger.info('Analyzer left gaps — running discoverMintRequirements', { area: 'mints/route',  mintUrl });
     const discovered = await discoverMintRequirements(mintUrl, knownFromAnalyzer);
     finalRequirements = {
       contractAddress: knownFromAnalyzer.contractAddress ?? discovered.contractAddress,
@@ -246,7 +246,7 @@ export async function POST(req: Request) {
         const parsed = new Date(body.scheduleTime);
         if (!isNaN(parsed.getTime()) && parsed.getTime() > Date.now()) {
           detectedStart = parsed;
-          logger.info('mints/route', 'Using user-supplied schedule override', { startTime: detectedStart.toISOString() });
+          logger.info('Using user-supplied schedule override', { area: 'mints/route',  startTime: detectedStart.toISOString() });
         }
       }
       detectedStart =
@@ -263,7 +263,7 @@ export async function POST(req: Request) {
         });
         if (discovered.mintStartTime) {
           detectedStart = discovered.mintStartTime;
-          logger.info('mints/route', 'Discovery found startTime', { startTime: detectedStart.toISOString() });
+          logger.info('Discovery found startTime', { area: 'mints/route',  startTime: detectedStart.toISOString() });
         }
       }
 
