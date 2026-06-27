@@ -155,6 +155,26 @@ function statusVariant(status: string) {
 // Component
 // ---------------------------------------------------------------------------
 
+// ── CountdownTimer ─────────────────────────────────────────────────────────
+// Live countdown for upcoming scheduled mints. Updates every second.
+function CountdownTimer({ targetTime }: { targetTime: string }) {
+  const [label, setLabel] = useState('');
+  useEffect(() => {
+    const tick = () => {
+      const diff = new Date(targetTime).getTime() - Date.now();
+      if (diff <= 0) { setLabel('Executing now…'); return; }
+      const h = Math.floor(diff / 3_600_000);
+      const m = Math.floor((diff % 3_600_000) / 60_000);
+      const s = Math.floor((diff % 60_000) / 1_000);
+      setLabel(h > 0 ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`);
+    };
+    tick();
+    const id = setInterval(tick, 1_000);
+    return () => clearInterval(id);
+  }, [targetTime]);
+  return <span className="font-mono tabular-nums">{label}</span>;
+}
+
 export default function MintsClient() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();

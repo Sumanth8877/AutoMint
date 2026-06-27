@@ -24,6 +24,8 @@ export const mintCreateSchema = z.object({
   maxRetries:        z.number().int().min(0).max(100).optional(),
   riskThreshold:     z.number().int().min(0).max(100).optional(),
   scheduleTime:      z.string().optional(),
+  /** true = skip public; check WL/AL/Free-mint eligibility + proof instead */
+  wlMode:            z.boolean().optional().default(false),
 });
 
 export const mintActionSchema = z.object({
