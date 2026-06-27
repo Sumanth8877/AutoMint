@@ -296,12 +296,12 @@ export async function PATCH(req: Request) {
     const body = patchParsed.data;
 
     if (body.action === 'cancel') {
-      const task = await cancelScheduledMint(id, authResult.userId);
+      const task = await cancelScheduledMint(body.id, authResult.userId);
       return NextResponse.json({ task });
     }
 
-    const result = await executeMintTask(id, authResult.userId);
-    const task = await getMintTaskById(id, authResult.userId);
+    const result = await executeMintTask(body.id, authResult.userId);
+    const task = await getMintTaskById(body.id, authResult.userId);
 
     if (!task) {
       return NextResponse.json({ error: 'Task not found' }, { status: 404 });

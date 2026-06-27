@@ -10,7 +10,7 @@ import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
-type SupportedChain = 'ethereum' | 'base' | 'polygon';
+type SupportedChain = 'ethereum' | 'base' | 'polygon' | 'arbitrum';
 export type WatchedWalletNetworkType = 'EVM' | 'SOLANA' | 'BITCOIN';
 
 type AlchemyWebhookActivity = {

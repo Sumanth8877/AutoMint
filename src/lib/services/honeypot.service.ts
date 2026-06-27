@@ -75,7 +75,7 @@ export async function checkHoneypot(params: {
       type: 'function' as const,
       name: abiEntry.name,
       stateMutability: 'payable' as const,
-      inputs: abiEntry.inputs as { name: string; type: string }[],
+      inputs: abiEntry.inputs as unknown as { name: string; type: string }[],
       outputs: [],
     }];
 

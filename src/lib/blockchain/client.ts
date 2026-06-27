@@ -66,7 +66,9 @@ function buildTransport(chainName: string) {
 const publicClients = new Map<string, PublicClient>();
 const walletClients = new Map<string, WalletClient>();
 
-export function getClient(chain: string): PublicClient {
+// _userId is accepted for backward compatibility (callers pass it for RPC routing context)
+// but is unused since Viem's fallback() handles provider selection automatically.
+export function getClient(chain: string, _userId?: string): PublicClient {
   const key = chain.toLowerCase();
   if (!publicClients.has(key)) {
     publicClients.set(key, createPublicClient({
