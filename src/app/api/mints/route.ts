@@ -499,11 +499,39 @@ export async function POST(req: Request) {
     const trulyLive = allPhases.length > 0 && (
       allPhases.some((p: MintPhase) => p.type === 'public' && (!p.startTime || p.startTime.getTime() <= Date.now()))
     );
+
+    // For the monitoring case, try once more to pin down the public phase start
+    // time so we can display a real countdown. Priority:
+    //   1. user-supplied scheduleTime override
+    //   2. allPhases from discoverMintRequirements (already tried above)
+    //   3. OpenSea Drops API (already tried in publicPhaseStart check above)
+    //   4. collection.mintStart (could be the public phase in some contracts)
+    //
+    // If we find a future time here, update the task scheduledTime in the DB
+    // so the UI can show the countdown even after a page refresh.
+    let monitoringScheduledTime: Date | undefined;
+    if (!trulyLive) {
+      monitoringScheduledTime =
+        (body.scheduleTime ? new Date(body.scheduleTime) : undefined) ??
+        allPhases.find((p: MintPhase) => p.type === 'public' && p.startTime && p.startTime.getTime() > Date.now())?.startTime ??
+        (collection.mintStart && new Date(collection.mintStart).getTime() > Date.now()
+          ? new Date(collection.mintStart) : undefined);
+
+      if (monitoringScheduledTime) {
+        // Store the real public phase time on the task for countdown display
+        await getDb()
+          .update(mintTasks)
+          .set({ scheduledTime: monitoringScheduledTime, updatedAt: new Date() })
+          .where(eq(mintTasks.id, preparedTask.id));
+      }
+    }
+
     return NextResponse.json(
       {
-        task: autoTask,
+        task: { ...autoTask, ...(monitoringScheduledTime ? { scheduledTime: monitoringScheduledTime.toISOString() } : {}) },
         collection,
         mintStatus: trulyLive ? 'live' : 'monitoring',
+        scheduledTime: monitoringScheduledTime?.toISOString() ?? null,
         autoTriggered: true,
       },
       { status: 201 },

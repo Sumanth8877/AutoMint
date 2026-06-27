@@ -105,49 +105,74 @@ interface OpenSeaDropPhase {
   mintPrice?: string;
 }
 
+// ─── Normalise a raw OpenSea phase/stage entry into OpenSeaDropPhase ─────────
+function normalisePhase(raw: Record<string, unknown>): OpenSeaDropPhase {
+  const label = String(raw.stage ?? raw.name ?? raw.phase ?? raw.type ?? raw.label ?? '').toLowerCase();
+  const type = label.includes('public') ? 'public'
+    : label.includes('allow') || label.includes('whitelist') || label.includes('wl') ? 'allowlist'
+    : label.includes('presale') || label.includes('holder') ? 'presale'
+    : label || 'unknown';
+
+  // OpenSea uses camelCase AND snake_case in different API versions
+  const startTime = String(
+    raw.startTime ?? raw.start_time ?? raw.start ?? raw.startDate ?? raw.start_date ?? ''
+  ) || undefined;
+  const endTime = String(
+    raw.endTime ?? raw.end_time ?? raw.end ?? raw.endDate ?? raw.end_date ?? ''
+  ) || undefined;
+  const mintPrice = raw.mintPrice ?? raw.mint_price ?? raw.price ?? undefined;
+
+  return { type, startTime, endTime, mintPrice: mintPrice !== undefined ? String(mintPrice) : undefined };
+}
+
 export async function fetchOpenSeaDropPhases(collectionSlug: string): Promise<OpenSeaDropPhase[]> {
-  try {
-    const apiKey = process.env.OPENSEA_API_KEY;
-    const headers: Record<string, string> = { Accept: 'application/json' };
-    if (apiKey) headers['X-API-KEY'] = apiKey;
+  const apiKey = process.env.OPENSEA_API_KEY;
+  const reqHeaders: Record<string, string> = { Accept: 'application/json' };
+  if (apiKey) reqHeaders['X-API-KEY'] = apiKey;
 
-    const url = `https://api.opensea.io/api/v2/collections/${encodeURIComponent(collectionSlug)}`;
-    const res = await fetch(url, { headers, signal: AbortSignal.timeout(4_000) });
-    if (!res.ok) return [];
-
-    const json = await Promise.race<unknown>([
+  async function fetchJson(url: string): Promise<unknown> {
+    const res = await fetch(url, { headers: reqHeaders, signal: AbortSignal.timeout(4_000) });
+    if (!res.ok) return null;
+    return Promise.race<unknown>([
       res.json(),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 5_000)),
-    ]);
+      new Promise<null>((_, reject) => setTimeout(() => reject(new Error('timeout')), 5_000)),
+    ]).catch(() => null);
+  }
 
-    const j = json as {
-      drop?: {
-        stages?: Array<{
-          stage?: string;
-          startTime?: string;
-          endTime?: string;
-          mintPrice?: string | number;
-        }>;
-      };
-      stages?: Array<{
-        stage?: string;
-        startTime?: string;
-        endTime?: string;
-        mintPrice?: string | number;
-      }>;
-    } | undefined;
+  try {
+    // Attempt 1: /api/v2/collections/{slug} — check all known phase fields
+    const col = await fetchJson(`https://api.opensea.io/api/v2/collections/${encodeURIComponent(collectionSlug)}`) as Record<string, unknown> | null;
+    if (col) {
+      const rawStages: unknown[] =
+        (col.stages ?? col.drop_stages ?? (col.drop as Record<string, unknown>)?.stages ?? []) as unknown[];
+      if (Array.isArray(rawStages) && rawStages.length > 0) {
+        return rawStages.map(s => normalisePhase(s as Record<string, unknown>));
+      }
+    }
 
-    const stages = j?.drop?.stages ?? j?.stages ?? [];
+    // Attempt 2: /api/v2/drops — dedicated drops listing
+    const drops = await fetchJson(
+      `https://api.opensea.io/api/v2/drops?chain=ethereum&collection_slug=${encodeURIComponent(collectionSlug)}`
+    ) as Record<string, unknown> | null;
 
-    return stages.map((s) => ({
-      type: (s.stage ?? 'unknown').toLowerCase().includes('public') ? 'public'
-           : (s.stage ?? 'unknown').toLowerCase().includes('allow') ? 'allowlist'
-           : (s.stage ?? 'unknown').toLowerCase().includes('presale') ? 'presale'
-           : s.stage ?? 'unknown',
-      startTime: s.startTime,
-      endTime: s.endTime,
-      mintPrice: s.mintPrice !== undefined ? String(s.mintPrice) : undefined,
-    }));
+    if (drops) {
+      const dropList: unknown[] = (drops.drops ?? drops.results ?? [drops]) as unknown[];
+      const phases: OpenSeaDropPhase[] = [];
+      for (const drop of dropList) {
+        const d = drop as Record<string, unknown>;
+        const stagesRaw: unknown[] = (d.stages ?? d.mint_stages ?? d.phases ?? []) as unknown[];
+        if (Array.isArray(stagesRaw) && stagesRaw.length > 0) {
+          phases.push(...stagesRaw.map(s => normalisePhase(s as Record<string, unknown>)));
+        }
+        // Some drops have top-level startTime for the public phase
+        if (d.startTime ?? d.start_time) {
+          phases.push(normalisePhase({ ...d, stage: 'public' }));
+        }
+      }
+      if (phases.length > 0) return phases;
+    }
+
+    return [];
   } catch {
     return [];
   }

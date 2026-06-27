@@ -70,7 +70,7 @@ type MintActionResponse = {
 //   because both are set via dispatched actions, not ad-hoc setters.
 // ---------------------------------------------------------------------------
 
-type MintsForm = { mintUrl: string; wlMode: boolean };
+type MintsForm = { mintUrl: string; wlMode: boolean; scheduleTime: string };
 
 type MintsState = {
   /** True while the create-mint POST is in-flight */
@@ -112,7 +112,7 @@ const initialState: MintsState = {
   error: null,
   success: null,
   formError: null,
-  form: { mintUrl: '', wlMode: false },
+  form: { mintUrl: '', wlMode: false, scheduleTime: '' },
 };
 
 function mintsReducer(state: MintsState, action: MintsAction): MintsState {
@@ -343,6 +343,7 @@ export default function MintsClient() {
         mintUrl: mintUrl,
         quantity: 1,
         wlMode: form.wlMode,
+        ...(form.scheduleTime ? { scheduleTime: new Date(form.scheduleTime).toISOString() } : {}),
       });
       dispatch({ type: 'RESET_FORM' });
       if (payload.mintStatus === 'upcoming') {
@@ -352,7 +353,10 @@ export default function MintsClient() {
           : `${phaseLabel} queued for monitoring — will execute when the mint goes live.`;
         dispatch({ type: 'SET_SUCCESS', message: schedMsg });
       } else if (payload.mintStatus === 'monitoring') {
-        dispatch({ type: 'SET_SUCCESS', message: '🔍 A holder / WL phase is currently live. Monitoring for public phase start — will auto-mint when public opens.' });
+        const monitorMsg = payload.scheduledTime
+          ? `🔍 Holder/WL phase live — public phase scheduled at ${new Date(payload.scheduledTime).toLocaleString()}. Auto-minting when live.`
+          : '🔍 A holder / WL phase is currently live. Monitoring for public phase start — will auto-mint when public opens. Set "Schedule at" time above for a precise countdown.';
+        dispatch({ type: 'SET_SUCCESS', message: monitorMsg });
       } else if (payload.autoTriggered) {
         const phaseLabel = payload.wlPhase ? `${payload.wlPhase.toUpperCase()} phase` : 'Public mint';
         dispatch({ type: 'SET_SUCCESS', message: `⚡ ${phaseLabel} is live — auto-executing now. Check status below.` });
@@ -455,7 +459,24 @@ export default function MintsClient() {
           </span>
         </label>
 
-        <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted">
+        {/* Optional schedule time override — shown when upcoming timing is needed */}
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-1.5 text-xs text-muted">
+            <span>Schedule at (optional):</span>
+            <input
+              type="datetime-local"
+              value={form.scheduleTime}
+              onChange={(e) => dispatch({ type: 'PATCH_FORM', patch: { scheduleTime: e.target.value } })}
+              className="rounded border border-border bg-surface px-2 py-0.5 text-xs text-text focus:outline-none focus:ring-1 focus:ring-accent"
+              title="Override auto-detection — set exact public mint start time"
+            />
+            {form.scheduleTime ? (
+              <button type="button" onClick={() => dispatch({ type: 'PATCH_FORM', patch: { scheduleTime: '' } })} className="text-muted hover:text-danger" title="Clear">✕</button>
+            ) : null}
+          </label>
+        </div>
+
+        <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted">
           <span>Wallet: {defaultWallet ? `${defaultWallet.nickname || shortAddress(defaultWallet.address)} / ${defaultWallet.chain}` : 'Set a default wallet first'}</span>
           <span>Quantity: 1</span>
           <span>{form.wlMode ? 'WL mode: will check eligibility and skip public mint.' : 'Live mints execute instantly; upcoming mints are scheduled automatically.'}</span>
