@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { randomBytes } from 'node:crypto';
 
-// ─── Protected routes ─────────────────────────────────────────────
+// ─── Protected routes ─────────────────────────────────────────────────
 const isProtectedRoute = createRouteMatcher([
   '/dashboard(.*)', '/mints(.*)', '/wallets(.*)', '/analytics(.*)',
   '/settings(.*)', '/history(.*)', '/collections(.*)', '/analyzer(.*)',
@@ -14,18 +14,31 @@ const isProtectedRoute = createRouteMatcher([
   '/api/settings(.*)', '/api/whale-tracker(.*)', '/api/watched-wallets(.*)',
   '/api/collections(.*)', '/api/activities(.*)', '/api/blockchain(.*)',
   '/api/telegram/link-token(.*)', '/api/wallet-reputation(.*)',
+  '/api/api-keys(.*)',
 ]);
 
-// ─── CSP nonce ────────────────────────────────────────────────────
-// Generates a unique nonce per request and attaches it via x-nonce header.
-// layout.tsx reads this to pass nonce={nonce} to <ClerkProvider> and any
-// inline scripts — replacing the blanket 'unsafe-inline' with targeted allow.
+// ─── CSP nonce ────────────────────────────────────────────────────────
 function generateNonce(): string {
   return randomBytes(16).toString('base64');
 }
 
+// ─── Bearer token detection ───────────────────────────────────────────
+// API routes that carry a Bearer token (e.g. "am_..." from the API key system)
+// should NOT be blocked by Clerk's auth.protect(). Instead, they pass through
+// to the route handler where requireApiUser() validates the token.
+function hasBearerToken(request: NextRequest): boolean {
+  const authHeader = request.headers.get('authorization');
+  return Boolean(authHeader?.startsWith('Bearer '));
+}
+
+function isApiRoute(request: NextRequest): boolean {
+  return request.nextUrl.pathname.startsWith('/api/');
+}
+
 export default clerkMiddleware(async (auth, request: NextRequest) => {
-  if (isProtectedRoute(request)) {
+  // API routes with Bearer tokens bypass Clerk protection —
+  // requireApiUser() in the route handler validates the token.
+  if (isProtectedRoute(request) && !(isApiRoute(request) && hasBearerToken(request))) {
     await auth.protect();
   }
 
@@ -40,7 +53,6 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
     },
   });
 
-  // Expose nonce to RSC (readable via headers() in layout.tsx)
   response.headers.set('x-nonce', nonce);
 
   return response;
