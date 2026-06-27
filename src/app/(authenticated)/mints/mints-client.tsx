@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useReducer } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
-import { CalendarClock, MoreHorizontal, Play, Plus, RotateCcw, ShieldCheck, Trash2, XCircle, Zap } from 'lucide-react';
+import { CalendarClock, LinkIcon, MoreHorizontal, Play, Plus, RotateCcw, ShieldCheck, Trash2, XCircle, Zap } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -63,19 +63,15 @@ type MintActionResponse = {
 //   because both are set via dispatched actions, not ad-hoc setters.
 // ---------------------------------------------------------------------------
 
-type MintsForm = { walletId: string; mintUrl: string; scheduleTime: string };
+type MintsForm = { mintUrl: string };
 
 type MintsState = {
   /** True while the create-mint POST is in-flight */
   saving: boolean;
-  /** True while the analyze POST is in-flight */
-  analyzing: boolean;
   /** ID of the task currently being started/cancelled, or null */
   updatingId: string | null;
   /** ID of the task currently being deleted, or null */
   deletingId: string | null;
-  /** Whether the New Mint modal is open */
-  modalOpen: boolean;
   /** Whether the Queue Settings modal is open */
   queueOpen: boolean;
   /** Top-level error banner (fetch/mutation failures) */
@@ -84,69 +80,45 @@ type MintsState = {
   formError: string | null;
   /** Controlled form values */
   form: MintsForm;
-  /** The URL that was last successfully analyzed (used to guard submitMint) */
-  analyzedUrl: string | null;
 };
 
 type MintsAction =
   | { type: 'START_SAVING' }
   | { type: 'STOP_SAVING' }
-  | { type: 'START_ANALYZING' }
-  | { type: 'STOP_ANALYZING' }
   | { type: 'SET_UPDATING_ID'; id: string | null }
   | { type: 'SET_DELETING_ID'; id: string | null }
-  | { type: 'OPEN_MODAL' }
-  | { type: 'CLOSE_MODAL' }
   | { type: 'OPEN_QUEUE' }
   | { type: 'CLOSE_QUEUE' }
   | { type: 'SET_ERROR'; message: string | null }
   | { type: 'SET_FORM_ERROR'; message: string | null }
   | { type: 'PATCH_FORM'; patch: Partial<MintsForm> }
-  | { type: 'SET_ANALYZED_URL'; url: string | null }
   | { type: 'RESET_FORM' };
 
 const initialState: MintsState = {
   saving: false,
-  analyzing: false,
   updatingId: null,
   deletingId: null,
-  modalOpen: false,
   queueOpen: false,
   error: null,
   formError: null,
-  form: { walletId: '', mintUrl: '', scheduleTime: '' },
-  analyzedUrl: null,
+  form: { mintUrl: '' },
 };
 
 function mintsReducer(state: MintsState, action: MintsAction): MintsState {
   switch (action.type) {
     case 'START_SAVING':    return { ...state, saving: true };
     case 'STOP_SAVING':     return { ...state, saving: false };
-    case 'START_ANALYZING': return { ...state, analyzing: true };
-    case 'STOP_ANALYZING':  return { ...state, analyzing: false };
     case 'SET_UPDATING_ID': return { ...state, updatingId: action.id };
     case 'SET_DELETING_ID': return { ...state, deletingId: action.id };
-    case 'OPEN_MODAL':      return { ...state, modalOpen: true };
-    case 'CLOSE_MODAL':     return {
-      ...state,
-      modalOpen: false,
-      saving: false,
-      analyzing: false,
-      formError: null,
-      form: initialState.form,
-      analyzedUrl: null,
-    };
     case 'OPEN_QUEUE':      return { ...state, queueOpen: true };
     case 'CLOSE_QUEUE':     return { ...state, queueOpen: false };
     case 'SET_ERROR':       return { ...state, error: action.message };
     case 'SET_FORM_ERROR':  return { ...state, formError: action.message };
     case 'PATCH_FORM':      return { ...state, form: { ...state.form, ...action.patch } };
-    case 'SET_ANALYZED_URL': return { ...state, analyzedUrl: action.url };
     case 'RESET_FORM':      return {
       ...state,
       form: initialState.form,
       formError: null,
-      analyzedUrl: null,
     };
     default: return state;
   }
@@ -175,7 +147,7 @@ export default function MintsClient() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const [state, dispatch] = useReducer(mintsReducer, initialState);
-  const { saving, analyzing, updatingId, deletingId, modalOpen, queueOpen, error, formError, form, analyzedUrl } = state;
+  const { saving, updatingId, deletingId, queueOpen, error, formError, form } = state;
 
   // Fetch data with React Query
   const { data: mintsData, isLoading, error: fetchError } = useQuery({
@@ -208,7 +180,6 @@ export default function MintsClient() {
 
   const collectionById = useMemo(() => new Map(collections.map((collection) => [collection.id, collection])), [collections]);
   const walletById = useMemo(() => new Map(wallets.map((wallet) => [wallet.id, wallet])), [wallets]);
-  const evmWallets = useMemo(() => wallets.filter((wallet) => wallet.walletType === 'EVM'), [wallets]);
   const defaultWallet = useMemo(() => wallets.find((wallet) => wallet.isDefault), [wallets]);
   const runningCount = tasks.filter((task) => task.status === 'running').length;
   const queuedCount = tasks.filter((task) => task.status === 'pending' || task.status === 'monitoring').length;
@@ -219,17 +190,9 @@ export default function MintsClient() {
   useEffect(() => {
     const mintUrlParam = searchParams.get('mintUrl');
     if (mintUrlParam) {
-      dispatch({ type: 'PATCH_FORM', patch: { mintUrl: mintUrlParam, walletId: defaultWallet?.id ?? '' } });
-      dispatch({ type: 'OPEN_MODAL' });
+      dispatch({ type: 'PATCH_FORM', patch: { mintUrl: mintUrlParam } });
     }
-  }, [searchParams, defaultWallet?.id]);
-
-  // Set default wallet when modal opens
-  useEffect(() => {
-    if (modalOpen && defaultWallet && !form.walletId) {
-      dispatch({ type: 'PATCH_FORM', patch: { walletId: defaultWallet.id } });
-    }
-  }, [modalOpen, defaultWallet, form.walletId]);
+  }, [searchParams]);
 
   // Mirror React Query fetch failures into the error banner
   useEffect(() => {
@@ -243,7 +206,7 @@ export default function MintsClient() {
 
   // Create task mutation
   const createTaskMutation = useMutation({
-    mutationFn: async (data: { walletId: string; mintUrl: string; analysisConfirmed: boolean; quantity: string; scheduleTime?: string }) => {
+    mutationFn: async (data: { mintUrl: string; quantity: number }) => {
       return apiRequest<MintActionResponse>('/api/mints', {
         method: 'POST',
         body: data,
@@ -322,40 +285,6 @@ export default function MintsClient() {
     },
   });
 
-  const handleMintUrlChange = (value: string) => {
-    dispatch({ type: 'PATCH_FORM', patch: { mintUrl: value } });
-    // Clear analyzed state if the URL has changed
-    if (analyzedUrl !== value.trim()) {
-      dispatch({ type: 'SET_ANALYZED_URL', url: null });
-    }
-  };
-
-  const analyzeMintUrl = async () => {
-    const mintUrl = form.mintUrl.trim();
-    if (!mintUrl) {
-      dispatch({ type: 'SET_FORM_ERROR', message: 'Paste a mint URL before running analysis.' });
-      return;
-    }
-
-    dispatch({ type: 'START_ANALYZING' });
-    dispatch({ type: 'SET_FORM_ERROR', message: null });
-
-    try {
-      await apiRequest('/api/analyzer', {
-        method: 'POST',
-        body: { input: mintUrl },
-      });
-      dispatch({ type: 'SET_ANALYZED_URL', url: mintUrl });
-    } catch (requestError) {
-      dispatch({
-        type: 'SET_FORM_ERROR',
-        message: requestError instanceof Error ? requestError.message : 'Failed to analyze mint URL.',
-      });
-    } finally {
-      dispatch({ type: 'STOP_ANALYZING' });
-    }
-  };
-
   const submitMint = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     dispatch({ type: 'START_SAVING' });
@@ -363,22 +292,27 @@ export default function MintsClient() {
 
     try {
       const mintUrl = form.mintUrl.trim();
-      if (!analyzedUrl || analyzedUrl !== mintUrl) {
-        dispatch({ type: 'SET_FORM_ERROR', message: 'Please analyze the URL before creating a mint task' });
+      if (!mintUrl) {
+        dispatch({ type: 'SET_FORM_ERROR', message: 'Paste a mint URL before creating a mint task.' });
+        return;
+      }
+
+      if (!defaultWallet) {
+        dispatch({ type: 'SET_FORM_ERROR', message: 'Set a default wallet before creating a mint task.' });
         return;
       }
 
       const payload = await createTaskMutation.mutateAsync({
-        walletId: form.walletId,
         mintUrl: mintUrl,
-        analysisConfirmed: true,
-        quantity: '1',
-        scheduleTime: form.scheduleTime || undefined,
+        quantity: 1,
       });
-      dispatch({ type: 'CLOSE_MODAL' });
-      if (payload.analyzerRequired) {
-        dispatch({ type: 'SET_ERROR', message: 'Mint task created from URL. Run analysis before scheduling this mint.' });
-      }
+      dispatch({ type: 'RESET_FORM' });
+      dispatch({
+        type: 'SET_ERROR',
+        message: payload.task.status === 'monitoring' || payload.task.status === 'pending'
+          ? 'Mint task created and scheduled or queued for monitoring.'
+          : 'Mint task created with your default wallet.',
+      });
     } catch (requestError) {
       dispatch({
         type: 'SET_FORM_ERROR',
@@ -436,14 +370,38 @@ export default function MintsClient() {
       <PageHeader
         eyebrow="Execution"
         title="Mints"
-        description="Plan, monitor, pause, and retry mint execution tasks with clear risk state and wallet assignment."
+        description="Paste a mint URL to create a task with your default wallet and quantity 1."
         actions={
-          <Button type="button" onClick={() => dispatch({ type: 'OPEN_MODAL' })}>
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            New Mint
-          </Button>
+          defaultWallet ? (
+            <Badge variant="info">Default: {defaultWallet.nickname || shortAddress(defaultWallet.address)}</Badge>
+          ) : null
         }
       />
+
+      <Card className="mb-6 p-4" tone="elevated">
+        <form onSubmit={submitMint} className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-end">
+          <Input
+            label="Mint URL"
+            value={form.mintUrl}
+            onChange={(event) => {
+              dispatch({ type: 'PATCH_FORM', patch: { mintUrl: event.target.value } });
+              dispatch({ type: 'SET_FORM_ERROR', message: null });
+            }}
+            placeholder="Paste mint page URL"
+            required
+          />
+          <Button type="submit" loading={saving} disabled={!form.mintUrl.trim() || !defaultWallet}>
+            <LinkIcon className="h-4 w-4" aria-hidden="true" />
+            Mint
+          </Button>
+        </form>
+        <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted">
+          <span>Wallet: {defaultWallet ? `${defaultWallet.nickname || shortAddress(defaultWallet.address)} / ${defaultWallet.chain}` : 'Set a default wallet first'}</span>
+          <span>Quantity: 1</span>
+          <span>Live mints are prepared immediately; upcoming mints are analyzed and scheduled.</span>
+        </div>
+        {formError ? <div className="mt-3 rounded-lg border border-danger/20 bg-danger/10 p-3 text-sm text-danger" role="alert">{formError}</div> : null}
+      </Card>
 
       <div className="grid gap-4 md:grid-cols-4">
         <MetricCard label="Executing" value={String(runningCount)} detail="Currently running" icon={Zap} tone="primary" />
@@ -537,9 +495,12 @@ export default function MintsClient() {
               <EmptyState
                 icon={Zap}
                 title="No mint tasks"
-                description="Create a mint task after adding at least one wallet and one collection."
+                description="Paste a mint URL above to create a task with your default wallet."
                 action={
-                  <Button type="button" onClick={() => dispatch({ type: 'OPEN_MODAL' })}>
+                  <Button type="button" onClick={() => {
+                    const input = document.querySelector<HTMLInputElement>('input[placeholder="Paste mint page URL"]');
+                    input?.focus();
+                  }}>
                     <Plus className="h-4 w-4" aria-hidden="true" />
                     New Mint
                   </Button>
@@ -562,69 +523,6 @@ export default function MintsClient() {
           </Button>
         </div>
       </Card>
-
-      <Modal open={modalOpen} title="New Mint" onClose={() => dispatch({ type: 'CLOSE_MODAL' })}>
-        <form onSubmit={submitMint} className="space-y-4">
-          <label className="block text-sm font-medium text-muted">
-            Wallet
-            <select
-              value={form.walletId}
-              onChange={(event) => dispatch({ type: 'PATCH_FORM', patch: { walletId: event.target.value } })}
-              className="mt-2 h-11 w-full rounded-lg border border-border bg-background/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-              required
-            >
-              <option value="">Select wallet</option>
-              {evmWallets.map((wallet) => (
-                <option key={wallet.id} value={wallet.id}>{wallet.nickname || shortAddress(wallet.address)} / {wallet.walletType} / {wallet.chain}</option>
-              ))}
-            </select>
-          </label>
-          <div className="space-y-2">
-            <Input
-              label="Mint URL"
-              value={form.mintUrl}
-              onChange={(event) => handleMintUrlChange(event.target.value)}
-              placeholder="https://..."
-              required
-            />
-            <div className="flex items-center justify-between gap-3">
-              {analyzedUrl === form.mintUrl.trim() && form.mintUrl.trim() ? (
-                <span className="text-xs text-success">Analysis ready</span>
-              ) : (
-                <span className="text-xs text-muted">Paste a URL to analyze</span>
-              )}
-              <Button type="button" variant="secondary" onClick={analyzeMintUrl} loading={analyzing} disabled={!form.mintUrl.trim()}>
-                <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-                Analyze
-              </Button>
-            </div>
-            {analyzedUrl === form.mintUrl.trim() && form.mintUrl.trim() && (
-              <div className="flex items-center gap-2 rounded-lg bg-background/50 p-3">
-                <ShieldCheck className="h-4 w-4 text-success" aria-hidden="true" />
-                <span className="text-sm font-medium text-success">Safe to mint</span>
-              </div>
-            )}
-          </div>
-          {/* #9 — optional manual schedule override (auto-detected if blank) */}
-          <label className="block text-sm font-medium text-muted">
-            Schedule Time (optional)
-            <input
-              type="datetime-local"
-              value={form.scheduleTime}
-              onChange={(event) => dispatch({ type: 'PATCH_FORM', patch: { scheduleTime: event.target.value } })}
-              className="mt-2 h-11 w-full rounded-lg border border-border bg-background/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-            />
-            <p className="mt-1 text-xs text-muted">Leave blank to auto-detect from the mint page.</p>
-          </label>
-          {formError ? <div className="rounded-lg border border-danger/20 bg-danger/10 p-3 text-sm text-danger" role="alert">{formError}</div> : null}
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={() => dispatch({ type: 'CLOSE_MODAL' })}>Cancel</Button>
-            <Button type="submit" loading={saving} disabled={!analyzedUrl || analyzedUrl !== form.mintUrl.trim()}>
-              Create Mint
-            </Button>
-          </div>
-        </form>
-      </Modal>
 
       <Modal open={queueOpen} title="Queue Settings" onClose={() => dispatch({ type: 'CLOSE_QUEUE' })}>
         <div className="space-y-4">

@@ -170,20 +170,20 @@ export async function POST(req: Request) {
     }
 
     let analysis: AnalyzerResult | null = null;
-    let shouldScheduleFromUrl = false;
     if (mintUrl) {
       const normalizedInput = normalizeAnalyzerInput(mintUrl);
-      if (defaults.autoRunAnalyzer || body.analysisConfirmed) {
+
+      let intent = await resolveMintIntent(normalizedInput);
+      if (!intent.contractAddress) {
         analysis = await runAnalyzer({
           userId: authResult.userId,
           input: normalizedInput,
           settings: defaults,
           notify: true,
         });
-        shouldScheduleFromUrl = true;
+        intent = analysis.intent ?? intent;
       }
 
-      const intent = analysis?.intent ?? await resolveMintIntent(normalizedInput);
       const collection = await upsertCollectionFromMintIntent(authResult.userId, intent, analysis);
       collectionId = collection.id;
     }
@@ -192,7 +192,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Collection ID could not be resolved' }, { status: 400 });
     }
 
-    const qty = Math.max(1, parseInt(String(quantity ?? defaults.defaultMintQuantity), 10) || defaults.defaultMintQuantity);
+    const fallbackQuantity = mintUrl ? 1 : defaults.defaultMintQuantity;
+    const qty = Math.max(1, parseInt(String(quantity ?? fallbackQuantity), 10) || fallbackQuantity);
     const task = await addMintTask(authResult.userId, {
       walletId,
       collectionId,
@@ -203,8 +204,7 @@ export async function POST(req: Request) {
       riskThreshold: body.riskThreshold ?? defaults.riskThreshold,
     });
 
-    const analyzedTask = analysis ? await applyAnalyzerResultToTask(task.id, analysis, mintUrl ?? '') : null;
-    const preparedTask = analyzedTask ?? task;
+    let preparedTask = analysis ? await applyAnalyzerResultToTask(task.id, analysis, mintUrl ?? '') : task;
 
     const [collection] = await getDb()
       .select()
@@ -214,10 +214,6 @@ export async function POST(req: Request) {
 
     if (!collection) {
       return NextResponse.json({ task: preparedTask }, { status: 201 });
-    }
-
-    if (mintUrl && !shouldScheduleFromUrl) {
-      return NextResponse.json({ task: preparedTask, collection, analyzerRequired: true }, { status: 201 });
     }
 
     const mintState = analysis?.mintState ?? await getMintState(collection.contractAddress, collection.chain);
@@ -234,6 +230,16 @@ export async function POST(req: Request) {
     }
 
     if (mintState.status !== 'LIVE') {
+      if (mintUrl && !analysis) {
+        const normalizedInput = normalizeAnalyzerInput(mintUrl);
+        analysis = await runAnalyzer({
+          userId: authResult.userId,
+          input: normalizedInput,
+          settings: defaults,
+          notify: true,
+        });
+        preparedTask = await applyAnalyzerResultToTask(preparedTask.id, analysis, mintUrl);
+      }
       // UPCOMING — find the best start time available.
       // Priority: #9 user-supplied override → on-chain mintState → collection DB → discovery
       let detectedStart: Date | undefined;
