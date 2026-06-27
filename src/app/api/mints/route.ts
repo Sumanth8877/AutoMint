@@ -314,7 +314,7 @@ export async function POST(req: Request) {
     let publicPhaseStart: Date | undefined = publicPhase?.startTime
       ?? (collection.mintStart ? new Date(collection.mintStart) : undefined);
 
-    if (!publicPhaseStart && mintUrl) {
+    if ((!publicPhaseStart || publicPhaseStart.getTime() <= Date.now()) && mintUrl) {
       const slug = mintUrl.match(/opensea\.io\/collection\/([^/?#]+)/)?.[1];
       if (slug) {
         const dropPhases = await fetchOpenSeaDropPhases(slug);
@@ -363,10 +363,26 @@ export async function POST(req: Request) {
 
     let monitoringScheduledTime: Date | undefined;
     if (!trulyLive) {
+      // Try allPhases → collection.mintStart → OpenSea Drops API (last resort)
       monitoringScheduledTime =
         allPhases.find((p: MintPhase) => p.type === 'public' && p.startTime && p.startTime.getTime() > Date.now())?.startTime ??
         (collection.mintStart && new Date(collection.mintStart).getTime() > Date.now()
           ? new Date(collection.mintStart) : undefined);
+
+      // If still no timing, try OpenSea Drops API for the public phase countdown
+      if (!monitoringScheduledTime && mintUrl) {
+        const slug = mintUrl.match(/opensea\.io\/collection\/([^/?#]+)/)?.[1];
+        if (slug) {
+          const dropPhases = await fetchOpenSeaDropPhases(slug);
+          const openSeaPublic = dropPhases.find(p => p.type === 'public');
+          if (openSeaPublic?.startTime) {
+            const parsed = new Date(openSeaPublic.startTime);
+            if (!isNaN(parsed.getTime()) && parsed.getTime() > Date.now()) {
+              monitoringScheduledTime = parsed;
+            }
+          }
+        }
+      }
 
       if (monitoringScheduledTime) {
         await getDb()
