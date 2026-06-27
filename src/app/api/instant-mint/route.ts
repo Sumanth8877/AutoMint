@@ -14,6 +14,11 @@ import { logger } from '@/lib/logger';
 import { SUPPORTED_CHAINS, type ChainKey } from '@/lib/blockchain/chains';
 import { estimateGas } from '@/lib/blockchain/gas';
 
+type MintPhase = {
+  type: string;
+  proofRequired: boolean;
+};
+
 function asSupportedChain(chain: string): ChainKey {
   if (!(chain in SUPPORTED_CHAINS)) {
     throw new Error(`Unsupported chain. Supported: ${Object.keys(SUPPORTED_CHAINS).join(', ')}`);
