@@ -8,6 +8,7 @@ import { getMintState } from '@/lib/services/mint-state.service';
 import { getDb } from '@/lib/db';
 import { collections, mintTasks } from '@/drizzle/schema';
 import { getEffectiveExecutionDefaults } from '@/lib/services/execution-settings.service';
+import { SUPPORTED_CHAINS, type ChainKey } from '@/lib/blockchain/chains';
 import { resolveMintIntent, type MintIntent } from '@/lib/resolve-mint-intent';
 import { AnalyzerResolutionError, normalizeAnalyzerInput, runAnalyzer, type AnalyzerResult } from '@/lib/services/analyzer.service';
 import { analyzeMintRisk } from '@/lib/services/risk.service';
@@ -18,14 +19,11 @@ import { logger } from '@/lib/logger';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-const SUPPORTED_CHAINS = ['ethereum', 'base', 'polygon'] as const;
-type SupportedChain = (typeof SUPPORTED_CHAINS)[number];
-
-function asSupportedChain(chain: string): SupportedChain {
-  if (!SUPPORTED_CHAINS.includes(chain as SupportedChain)) {
-    throw new Error(`Unsupported chain. Supported: ${SUPPORTED_CHAINS.join(', ')}`);
+function asSupportedChain(chain: string): ChainKey {
+  if (!(chain in SUPPORTED_CHAINS)) {
+    throw new Error(`Unsupported chain. Supported: ${Object.keys(SUPPORTED_CHAINS).join(', ')}`);
   }
-  return chain as SupportedChain;
+  return chain as ChainKey;
 }
 
 async function upsertCollectionFromMintIntent(userId: string, intent: MintIntent, analysis: AnalyzerResult | null) {
@@ -55,7 +53,10 @@ async function upsertCollectionFromMintIntent(userId: string, intent: MintIntent
     .limit(1);
 
   if (existing) {
-    if (!analysis) return existing;
+    if (!analysis) {
+      logger.info('mints', `Skipping collection update for ${contractAddress} — analysis is null`);
+      return existing;
+    }
 
     const [updated] = await getDb()
       .update(collections)
