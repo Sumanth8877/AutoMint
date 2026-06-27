@@ -15,7 +15,7 @@ import { SUPPORTED_CHAINS, type ChainKey } from '@/lib/blockchain/chains';
 import { estimateGas } from '@/lib/blockchain/gas';
 
 type MintPhase = {
-  type: 'whitelist' | 'allowlist' | 'public' | string;
+  type: 'whitelist' | 'allowlist' | 'public';
   proofRequired?: boolean;
   startTime?: Date;
   price?: string;
