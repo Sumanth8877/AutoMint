@@ -5,7 +5,6 @@ import { relations, sql } from 'drizzle-orm';
 export const chainEnum = pgEnum('chain', ['ethereum', 'base', 'polygon', 'arbitrum']);
 export const mintStatusEnum = pgEnum('mint_status', ['pending', 'monitoring', 'ready', 'running', 'completed', 'failed', 'cancelled', 'unconfirmed']);
 export const mintHistoryStatusEnum = pgEnum('mint_history_status', ['pending', 'confirmed', 'failed']);
-export const infrastructureTestStatusEnum = pgEnum('infrastructure_test_status', ['passed', 'failed', 'warning', 'skipped']);
 export const activityTypeEnum = pgEnum('activity_type', [
   'wallet_added',
   'wallet_removed',
@@ -397,23 +396,6 @@ export const collectionSyncs = pgTable('collection_syncs', {
   message: text('message'),
   syncedAt: timestamp('synced_at').defaultNow().notNull(),
 });
-
-export const infrastructureTestRuns = pgTable('infrastructure_test_runs', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  service: text('service').notNull(),
-  status: infrastructureTestStatusEnum('status').notNull(),
-  score: integer('score').notNull(),
-  latency: integer('latency').notNull(),
-  summary: text('summary').notNull(),
-  reasoning: text('reasoning').notNull(),
-  rootCause: text('root_cause').notNull(),
-  fixRecommendation: text('fix_recommendation').notNull(),
-  response: json('response').$type<Record<string, unknown>>(),
-  testedAt: timestamp('tested_at').defaultNow().notNull(),
-}, (table) => ({
-  serviceIdx: index('idx_infrastructure_test_runs_service').on(table.service),
-  testedAtIdx: index('idx_infrastructure_test_runs_tested_at').on(table.testedAt),
-}));
 
 export const integrationSettings = pgTable('integration_settings', {
   id: uuid('id').defaultRandom().primaryKey(),

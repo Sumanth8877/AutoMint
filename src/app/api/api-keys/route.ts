@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { parseJsonBody, handleRouteError } from '@/lib/api/errors';
-import { enforceRateLimit } from '@/lib/api/rate-limit';
 import {
   createApiKey,
   listApiKeys,
@@ -32,13 +31,6 @@ export async function POST(req: Request) {
   try {
     const authResult = await requireApiUser();
     if ('error' in authResult) return authResult.error;
-
-    // Rate-limit key creation
-    const limited = await enforceRateLimit(
-      `api-keys:create:${authResult.userId}`,
-      { limit: 10, windowSeconds: 3600 },
-    );
-    if (limited) return limited;
 
     const body = await parseJsonBody<CreateApiKeyInput>(req);
 

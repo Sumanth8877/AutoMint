@@ -1,15 +1,11 @@
 import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/require-auth';
-import { enforceRateLimit, RATE_LIMITS } from '@/lib/api/rate-limit';
 import { createTelegramLinkToken, getTelegramAccountByUserId, isTelegramEnabled } from '@/lib/services/telegram.service';
 
 export async function GET() {
   try {
     const authResult = await requireApiUser();
     if ('error' in authResult) return authResult.error;
-
-    const limited = await enforceRateLimit(`telegram:link-token:${authResult.userId}`, RATE_LIMITS.tokenGeneration);
-    if (limited) return limited;
 
     if (!isTelegramEnabled()) {
       return NextResponse.json({

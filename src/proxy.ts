@@ -7,7 +7,7 @@ import { randomBytes } from 'node:crypto';
 const isProtectedRoute = createRouteMatcher([
   '/dashboard(.*)', '/mints(.*)', '/wallets(.*)', '/analytics(.*)',
   '/settings(.*)', '/history(.*)', '/collections(.*)', '/analyzer(.*)',
-  '/whale-tracker(.*)', '/admin(.*)',
+  '/whale-tracker(.*)',
   '/api/mints(.*)', '/api/wallets(.*)', '/api/analytics(.*)',
   '/api/analyzer(.*)', '/api/copy-mint(.*)', '/api/discovery(.*)',
   '/api/history(.*)', '/api/monitoring(.*)', '/api/search(.*)',
