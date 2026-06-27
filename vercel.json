@@ -3,11 +3,15 @@
   "framework": "nextjs",
   "installCommand": "npm install",
   "outputDirectory": ".next",
+  "ignoreCommand": "git diff HEAD~1 --name-only | grep -qvE '(README|\\.md|docs/|\\.gitignore|wasm-crypto/target)'",
   "functions": {
     "src/app/api/webhooks/qstash/route.ts": {
       "maxDuration": 10
     },
     "src/app/api/analyzer/stream/route.ts": {
+      "maxDuration": 10
+    },
+    "src/app/api/instant-mint/route.ts": {
       "maxDuration": 10
     }
   }
