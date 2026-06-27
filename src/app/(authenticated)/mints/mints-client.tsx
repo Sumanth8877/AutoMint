@@ -49,6 +49,10 @@ type MintActionResponse = {
   task: MintTask;
   collection?: CollectionRecord;
   analyzerRequired?: boolean;
+  /** 'live' | 'upcoming' — returned by POST /api/mints to describe what happened */
+  mintStatus?: 'live' | 'upcoming';
+  /** ISO string of the scheduled execution time, if upcoming */
+  scheduledTime?: string | null;
   result?: {
     success: boolean;
     txHash?: string;
@@ -76,6 +80,8 @@ type MintsState = {
   queueOpen: boolean;
   /** Top-level error banner (fetch/mutation failures) */
   error: string | null;
+  /** Top-level success banner (task created confirmations) */
+  success: string | null;
   /** Inline form error shown inside the modal */
   formError: string | null;
   /** Controlled form values */
@@ -90,6 +96,7 @@ type MintsAction =
   | { type: 'OPEN_QUEUE' }
   | { type: 'CLOSE_QUEUE' }
   | { type: 'SET_ERROR'; message: string | null }
+  | { type: 'SET_SUCCESS'; message: string | null }
   | { type: 'SET_FORM_ERROR'; message: string | null }
   | { type: 'PATCH_FORM'; patch: Partial<MintsForm> }
   | { type: 'RESET_FORM' };
@@ -100,6 +107,7 @@ const initialState: MintsState = {
   deletingId: null,
   queueOpen: false,
   error: null,
+  success: null,
   formError: null,
   form: { mintUrl: '' },
 };
@@ -112,7 +120,8 @@ function mintsReducer(state: MintsState, action: MintsAction): MintsState {
     case 'SET_DELETING_ID': return { ...state, deletingId: action.id };
     case 'OPEN_QUEUE':      return { ...state, queueOpen: true };
     case 'CLOSE_QUEUE':     return { ...state, queueOpen: false };
-    case 'SET_ERROR':       return { ...state, error: action.message };
+    case 'SET_ERROR':       return { ...state, error: action.message, success: null };
+    case 'SET_SUCCESS':     return { ...state, success: action.message, error: null };
     case 'SET_FORM_ERROR':  return { ...state, formError: action.message };
     case 'PATCH_FORM':      return { ...state, form: { ...state.form, ...action.patch } };
     case 'RESET_FORM':      return {
@@ -147,7 +156,7 @@ export default function MintsClient() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const [state, dispatch] = useReducer(mintsReducer, initialState);
-  const { saving, updatingId, deletingId, queueOpen, error, formError, form } = state;
+  const { saving, updatingId, deletingId, queueOpen, error, success, formError, form } = state;
 
   // Fetch data with React Query
   const { data: mintsData, isLoading, error: fetchError } = useQuery({
@@ -307,12 +316,14 @@ export default function MintsClient() {
         quantity: 1,
       });
       dispatch({ type: 'RESET_FORM' });
-      dispatch({
-        type: 'SET_ERROR',
-        message: payload.task.status === 'monitoring' || payload.task.status === 'pending'
-          ? 'Mint task created and scheduled or queued for monitoring.'
-          : 'Mint task created with your default wallet.',
-      });
+      if (payload.mintStatus === 'upcoming') {
+        const schedMsg = payload.scheduledTime
+          ? `Upcoming mint scheduled for ${new Date(payload.scheduledTime).toLocaleString()}.`
+          : 'Upcoming mint queued for monitoring — will execute when the mint goes live.';
+        dispatch({ type: 'SET_SUCCESS', message: schedMsg });
+      } else {
+        dispatch({ type: 'SET_SUCCESS', message: 'Live mint — task is ready for immediate execution.' });
+      }
     } catch (requestError) {
       dispatch({
         type: 'SET_FORM_ERROR',
@@ -409,6 +420,12 @@ export default function MintsClient() {
         <MetricCard label="Ready" value={String(readyCount)} detail="Strategy approved" icon={ShieldCheck} tone="success" />
         <MetricCard label="Retries" value={String(retryCount)} detail="Failed tasks" icon={RotateCcw} tone="warning" />
       </div>
+
+      {success ? (
+        <div className="mt-6 rounded-lg border border-green-500/20 bg-green-500/10 p-3 text-sm text-green-700 dark:text-green-400" role="status">
+          {success}
+        </div>
+      ) : null}
 
       {error ? (
         <div className="mt-6 rounded-lg border border-danger/20 bg-danger/10 p-3 text-sm text-danger" role="alert">

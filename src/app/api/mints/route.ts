@@ -218,9 +218,11 @@ export async function POST(req: Request) {
 
     const mintState = analysis?.mintState ?? await getMintState(collection.contractAddress, collection.chain);
 
-    // Bug #7 Fixed: Explicitly reject ENDED mints before the LIVE/scheduling branches.
-    // Previously ENDED fell through both checks and returned 201 with a pending task
-    // that had no QStash message and would never execute.
+    // ── Mint state gating ──────────────────────────────────────────────────────
+    // Priority: ENDED → UNKNOWN → NOT_STARTED → LIVE
+    // Each branch either rejects with a clear error or creates the right task.
+
+    // ENDED: reject immediately — nothing to do.
     if (mintState.status === 'ENDED') {
       await removeMintTask(preparedTask.id, authResult.userId).catch(() => {});
       return NextResponse.json(
@@ -229,7 +231,9 @@ export async function POST(req: Request) {
       );
     }
 
-    if (mintState.status !== 'LIVE') {
+    // UNKNOWN: on-chain state could not be determined.
+    // Run full analyzer + tiered discovery to resolve. If still unknown, reject.
+    if (mintState.status === 'UNKNOWN') {
       if (mintUrl && !analysis) {
         const normalizedInput = normalizeAnalyzerInput(mintUrl);
         analysis = await runAnalyzer({
@@ -240,14 +244,51 @@ export async function POST(req: Request) {
         });
         preparedTask = await applyAnalyzerResultToTask(preparedTask.id, analysis, mintUrl);
       }
-      // UPCOMING — find the best start time available.
-      // Priority: #9 user-supplied override → on-chain mintState → collection DB → discovery
+
+      const resolvedStatus = analysis?.mintState.status ?? 'UNKNOWN';
+      if (resolvedStatus === 'ENDED') {
+        await removeMintTask(preparedTask.id, authResult.userId).catch(() => {});
+        return NextResponse.json(
+          { error: 'This mint has already ended and is no longer mintable.' },
+          { status: 422 },
+        );
+      }
+      if (resolvedStatus === 'UNKNOWN') {
+        await removeMintTask(preparedTask.id, authResult.userId).catch(() => {});
+        return NextResponse.json(
+          {
+            error:
+              'Mint status could not be determined for this collection. ' +
+              'It may be closed, not yet announced, or use a custom contract. ' +
+              'Please verify the mint page and try again.',
+          },
+          { status: 422 },
+        );
+      }
+      // Resolved to LIVE or NOT_STARTED — fall through with updated mintState
+      Object.assign(mintState, analysis!.mintState);
+    }
+
+    // NOT_STARTED (upcoming): schedule for mint start time.
+    if (mintState.status === 'NOT_STARTED') {
+      if (mintUrl && !analysis) {
+        const normalizedInput = normalizeAnalyzerInput(mintUrl);
+        analysis = await runAnalyzer({
+          userId: authResult.userId,
+          input: normalizedInput,
+          settings: defaults,
+          notify: true,
+        });
+        preparedTask = await applyAnalyzerResultToTask(preparedTask.id, analysis, mintUrl);
+      }
+
+      // Priority: user override → on-chain → collection DB → tiered discovery
       let detectedStart: Date | undefined;
       if (body.scheduleTime) {
         const parsed = new Date(body.scheduleTime);
         if (!isNaN(parsed.getTime()) && parsed.getTime() > Date.now()) {
           detectedStart = parsed;
-          logger.info('Using user-supplied schedule override', { area: 'mints/route',  startTime: detectedStart.toISOString() });
+          logger.info('Using user-supplied schedule override', { area: 'mints/route', startTime: detectedStart.toISOString() });
         }
       }
       detectedStart =
@@ -256,7 +297,6 @@ export async function POST(req: Request) {
         (collection.mintStart ? new Date(collection.mintStart) : undefined);
 
       if (!detectedStart && mintUrl) {
-        // On-chain RPC + analyzer both missed the startTime — run tiered discovery
         logger.info('startTime missing — running discoverMintRequirements for timing', { area: 'mints/route' });
         const discovered = await discoverMintRequirements(mintUrl, {
           contractAddress: collection.contractAddress,
@@ -264,7 +304,7 @@ export async function POST(req: Request) {
         });
         if (discovered.mintStartTime) {
           detectedStart = discovered.mintStartTime;
-          logger.info('Discovery found startTime', { area: 'mints/route',  startTime: detectedStart.toISOString() });
+          logger.info('Discovery found startTime', { area: 'mints/route', startTime: detectedStart.toISOString() });
         }
       }
 
@@ -277,12 +317,23 @@ export async function POST(req: Request) {
         scheduledTime,
       });
 
-      return NextResponse.json({ task: scheduledTask, collection }, { status: 201 });
+      return NextResponse.json(
+        {
+          task: scheduledTask,
+          collection,
+          mintStatus: 'upcoming',
+          scheduledTime: scheduledTime?.toISOString() ?? null,
+        },
+        { status: 201 },
+      );
     }
 
     // LIVE — mark ready for immediate execution.
     const readyTask = await updateMintTaskStatus(preparedTask.id, authResult.userId, 'ready');
-    return NextResponse.json({ task: readyTask, collection }, { status: 201 });
+    return NextResponse.json(
+      { task: readyTask, collection, mintStatus: 'live' },
+      { status: 201 },
+    );
   } catch (error) {
     return handleRouteError(error, 'Failed to process mint request');
   }
