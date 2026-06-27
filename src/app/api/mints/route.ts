@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getErrorMessage, parseJsonBody, handleRouteError } from '@/lib/api/errors';
-import { addMintTask, executeMintTask, getMintTaskById, getUserMintTasks, removeMintTask, updateMintTaskStatus } from '@/lib/services/mint.service';
+import { addMintTask, executeMintTask, getMintTaskById, getUserMintTasks, removeMintTask } from '@/lib/services/mint.service';
 import { cancelScheduledMint, scheduleMint } from '@/lib/services/qstash.service';
 import { getMintState } from '@/lib/services/mint-state.service';
 import { getDb } from '@/lib/db';
