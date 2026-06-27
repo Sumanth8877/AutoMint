@@ -24,7 +24,8 @@ type MintTask = {
   status: string;
   contractAddress: string | null;
   mintPrice: string | null;
-  scheduledTime: string | null;       // #8 — when upcoming mint will fire
+  scheduledTime: string | null;       // when upcoming mint will fire
+  phase: 'whitelist' | 'allowlist' | 'public' | null;  // which mint phase this task targets
   riskReasons: string[] | null;       // U3 — failure reasons from execution
   createdAt: string;
 };
@@ -458,11 +459,19 @@ export default function MintsClient() {
                 <div key={task.id} className="grid grid-cols-12 gap-4 px-5 py-4">
                   <div className="col-span-5 min-w-0">
                     <p className="truncate font-medium text-text">{title}</p>
-                    <p className="mt-1 text-xs text-muted">{collection?.chain ?? wallet?.chain ?? 'unknown'} / fee {task.mintPrice ?? 'unset'}</p>
-                    {/* #8 — show scheduled time for upcoming mints */}
-                    {task.scheduledTime && (task.status === 'pending' || task.status === 'monitoring') ? (
+                    <p className="mt-1 text-xs text-muted">
+                      {collection?.chain ?? wallet?.chain ?? 'unknown'} / fee {task.mintPrice ?? 'unset'}
+                      {task.phase ? (
+                        <span className="ml-2 inline-flex items-center rounded-full border border-accent/30 bg-accent/10 px-2 py-0.5 font-medium capitalize text-accent">
+                          {task.phase}
+                        </span>
+                      ) : null}
+                    </p>
+                    {/* show scheduled time whenever it is set */}
+                    {task.scheduledTime ? (
                       <p className="mt-1 text-xs text-accent">
-                        Scheduled: {new Date(task.scheduledTime).toLocaleString()}
+                        ⏰ {task.status === 'ready' || task.status === 'running' ? 'Fires at' : 'Scheduled'}:{' '}
+                        {new Date(task.scheduledTime).toLocaleString()}
                       </p>
                     ) : null}
                     {/* U3 — show error reason for failed tasks */}
