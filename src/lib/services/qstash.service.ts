@@ -23,7 +23,7 @@ import { unregisterIfIdle } from '@/lib/services/alchemy-webhook.service';
 // WebSocket monitoring watches for 25s per invocation;
 // if no mint-live event is detected, we reschedule at 30s for the next window.
 // Total latency: 0–2s on Base (vs 0–60s before), 0–12s on Ethereum (vs 0–60s before).
-const DEFAULT_SCHEDULE_DELAY_MS = 30_000;
+const DEFAULT_SCHEDULE_DELAY_MS = 0;
 
 export type ScheduledMintPayload = {
   taskId: string;
