@@ -2,6 +2,9 @@ import 'server-only';
 
 import { logger } from '@/lib/logger';
 import { captureException } from '@/lib/observability/sentry';
+import { getDb } from '@/lib/db';
+import { mintTasks } from '@/drizzle/schema';
+import { and, eq, inArray, ne } from 'drizzle-orm';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 // ALCHEMY_AUTH_TOKEN  — Team auth token (not the API key).
@@ -82,6 +85,69 @@ export async function registerContractForMonitoring(
       area: 'alchemy-webhook',
       context: { contractAddress },
       fingerprint: ['alchemy-webhook', 'registration-error'],
+    }).catch(() => {});
+  }
+}
+
+/**
+ * unregisterIfIdle
+ *
+ * Smart cleanup — only removes a contract from the webhook when there are
+ * NO other active tasks monitoring it (excluding the task that just finished).
+ *
+ * This prevents the 1000-address Alchemy limit from filling up over time:
+ * - Completes a mint → removed immediately (no need to watch anymore)
+ * - Fails permanently → removed (won't retry)
+ * - Cancelled → removed
+ * - But if 2 tasks watch the same contract → keeps it until BOTH are done
+ *
+ * @param contractAddress  - Contract to potentially unregister
+ * @param excludeTaskId    - The task that just finished (exclude from active check)
+ */
+export async function unregisterIfIdle(
+  contractAddress: string,
+  excludeTaskId?: string,
+): Promise<void> {
+  try {
+    const db = getDb();
+    const activeStatuses = ['pending', 'monitoring', 'ready', 'running'];
+
+    // Check if any OTHER active tasks still need this contract watched
+    const query = db
+      .select({ id: mintTasks.id })
+      .from(mintTasks)
+      .where(
+        and(
+          eq(mintTasks.contractAddress, contractAddress.toLowerCase()),
+          inArray(mintTasks.status, activeStatuses),
+          ...(excludeTaskId ? [ne(mintTasks.id, excludeTaskId)] : []),
+        ),
+      )
+      .limit(1);
+
+    const [stillActive] = await query;
+
+    if (stillActive) {
+      logger.info('Contract still has active tasks — keeping webhook registration', {
+        area: 'alchemy-webhook',
+        contract: contractAddress,
+        activeTaskId: stillActive.id,
+      });
+      return; // Keep watching
+    }
+
+    // No active tasks remain — safe to unregister
+    await unregisterContract(contractAddress);
+    logger.info('Contract unregistered from Alchemy webhook (no more active tasks)', {
+      area: 'alchemy-webhook',
+      contract: contractAddress,
+    });
+  } catch (error) {
+    // Best-effort cleanup — never let this break the calling code
+    await captureException(error, {
+      area: 'alchemy-webhook',
+      context: { contractAddress },
+      fingerprint: ['alchemy-webhook', 'idle-cleanup-error'],
     }).catch(() => {});
   }
 }

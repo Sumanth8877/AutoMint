@@ -17,6 +17,7 @@ import { executeScheduledRiskCheck, hasBlockingRiskChange, storeOriginalRiskSnap
 import { sendMintFailedEmail, sendMintScheduledEmail, sendMintSuccessEmail, sendSystemErrorEmail } from '@/lib/services/email-notification.service';
 import { getClient } from '@/lib/blockchain/client';
 import type { Hex } from 'viem';
+import { unregisterIfIdle } from '@/lib/services/alchemy-webhook.service';
 
 // Monitoring fix: reduced from 60s to 30s.
 // WebSocket monitoring watches for 25s per invocation;
@@ -495,6 +496,10 @@ export async function executeScheduledMint(taskId: string) {
             .update(mintTasks)
             .set({ status: 'failed', qstashMessageId: null, scheduledTime: null, updatedAt: new Date() })
             .where(eq(mintTasks.id, taskId));
+          // Cleanup: mint ended — unregister from Alchemy webhook
+          if (task.contractAddress) {
+            void unregisterIfIdle(task.contractAddress, taskId).catch(() => {});
+          }
           await sendScheduledMintNotification(task.userId, 'mint_failed', {
             taskId,
             contractAddress: task.contractAddress || undefined,
