@@ -169,7 +169,7 @@ export async function POST(request: Request) {
       } catch {
         // Non-fatal: fall back to cached value if the RPC is temporarily unavailable.
         // executeMint()'s on-chain simulation will catch the real shortfall.
-        logger.info('instant-mint', 'Failed to fetch fresh balance — using cached value', {
+        logger.info('Failed to fetch fresh balance — using cached value', { area: 'instant-mint', 
           walletId: wallet.id,
         });
       }
