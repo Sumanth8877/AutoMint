@@ -1,32 +1,12 @@
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
+import { clerkMiddleware } from '@clerk/nextjs/server';
 
-// Routes that should be accessible without Clerk session authentication.
-// API routes use their own Bearer-token auth via requireApiUser(),
-// so Clerk should not block them.
-const isPublicRoute = createRouteMatcher([
-  // Auth pages
-  '/sign-in(.*)',
-  '/sign-up(.*)',
-  // Public API routes — health, webhooks, keepalive
-  '/api/health',
-  '/api/webhooks/(.*)',
-  '/api/system/alchemy-webhook',
-  '/api/system/keepalive',
-  '/api/telegram/webhook',
-  // All API routes — requireApiUser() handles Bearer token auth internally
-  '/api/(.*)',
-]);
-
-export default clerkMiddleware(async (auth, request) => {
-  if (!isPublicRoute(request)) {
-    await auth.protect();
-  }
-});
+// Minimal middleware scoped to API routes ONLY.
+// - Pages are NOT affected (no skeleton loading issues)
+// - API routes get Clerk's auth state without forced protection
+// - requireApiUser() in each route handler enforces Bearer token auth
+export default clerkMiddleware();
 
 export const config = {
-  // Match all routes except static files and Next.js internals
-  matcher: [
-    '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
-    '/(api|trpc)(.*)',
-  ],
+  // ONLY match API routes — pages never hit this middleware
+  matcher: ['/(api)(.*)'],
 };
