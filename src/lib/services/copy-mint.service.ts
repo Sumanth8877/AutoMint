@@ -14,7 +14,7 @@ import { normalizeAddress, isValidEvmAddress } from '@/lib/utils/address';
 type CopyMintEvent = {
   userId: string;
   watchedWalletAddress: string;
-  chain: 'ethereum' | 'base' | 'polygon';
+  chain: 'ethereum' | 'base' | 'polygon' | 'arbitrum';
   contractAddress: string;
   tokenId?: string;
   transactionHash?: string;
