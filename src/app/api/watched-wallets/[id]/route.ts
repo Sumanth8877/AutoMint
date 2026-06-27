@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { parseJsonBody } from '@/lib/api/errors';
+import { parseJsonBody, handleRouteError } from '@/lib/api/errors';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { deleteWatchedWallet, updateWatchedWallet } from '@/lib/services/wallet-tracker.service';
 
