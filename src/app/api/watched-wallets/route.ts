@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { desc, eq, inArray } from 'drizzle-orm';
 import { activities, copyMintRules, walletReputation } from '@/drizzle/schema';
-import { parseJsonBody } from '@/lib/api/errors';
+import { parseJsonBody, handleRouteError } from '@/lib/api/errors';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getDb } from '@/lib/db';
 import { getUserWatchedWallets, watchWallet } from '@/lib/services/wallet-tracker.service';
