@@ -480,7 +480,7 @@ export async function discoverMintRequirements(
   // Fast path: everything already known
   const initialMissing = computeMissing(current);
   if (initialMissing.length === 0) {
-    logger.info('mint-discovery', 'All critical fields resolved — skipping Tier 2+3');
+    logger.info('All critical fields resolved — skipping Tier 2+3', { area: 'mint-discovery' });
     return {
       ...current,
       confidence: 1.0,
@@ -564,7 +564,7 @@ export async function discoverMintRequirements(
     const bbResult = await Promise.race([tier3Promise, tier3Timeout]);
     if (bbResult !== null) {
       current = merge(current, bbResult);
-      logger.info('mint-discovery', 'Tier 3 complete');
+      logger.info('Tier 3 complete', { area: 'mint-discovery' });
     } else {
       console.warn('[mint-discovery] Tier 3 timed out');
     }
