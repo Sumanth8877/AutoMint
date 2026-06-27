@@ -847,8 +847,79 @@ async function handleSettingsCommand(message: TelegramMessage, account: { userna
     `Username: ${username}`,
     `Chat ID: ${account.chatId}`,
     'Notifications: enabled',
-    'Commands: /mint <url>, /schedule <url>, /watch <wallet>, /status, /cancel, /settings',
+    'Commands: /mint <url>, /schedule <url>, /watch <wallet>, /status, /cancel, /settings, /model',
   ].join('\n'));
+}
+
+async function handleModelCommand(message: TelegramMessage, userId: string) {
+  const { AVAILABLE_MODELS, getUserModel } = await import('@/lib/services/ai-interpreter.service');
+  const current = await getUserModel(userId);
+  const currentInfo = AVAILABLE_MODELS.find(m => m.id === current);
+
+  const keyboard: InlineKeyboardMarkup = {
+    inline_keyboard: AVAILABLE_MODELS.map(m => [{
+      text: m.id === current ? `✅ ${m.label}` : m.label,
+      callback_data: `model:select:${m.id}`,
+    }]),
+  };
+
+  if (!message.chat?.id) return;
+  await sendTelegramMessage(
+    String(message.chat.id),
+    [
+      '🤖 *AI Model Selection*',
+      '',
+      `Current: *${currentInfo?.label ?? current}*`,
+      `${currentInfo?.description ?? ''}`,
+      '',
+      'Tap a model to switch:',
+    ].join('\n'),
+    { replyMarkup: keyboard },
+  );
+}
+
+async function handleModelCallback(callback: TelegramCallbackQuery) {
+  const [scope, action, ...rest] = (callback.data || '').split(':');
+  if (scope !== 'model' || action !== 'select') return { handled: false };
+
+  const modelId = rest.join(':');
+  const { AVAILABLE_MODELS, setUserModel, getUserModel } = await import('@/lib/services/ai-interpreter.service');
+
+  const modelInfo = AVAILABLE_MODELS.find(m => m.id === modelId);
+  if (!modelInfo) {
+    await answerCallbackQuery(callback.id, '❌ Unknown model');
+    return { handled: true };
+  }
+
+  const account = await getTelegramAccountByTelegramId(String(callback.from.id));
+  if (!account) {
+    await answerCallbackQuery(callback.id, 'Telegram is not linked.');
+    return { handled: true };
+  }
+
+  await setUserModel(account.userId, modelInfo.id);
+
+  // Update the keyboard so the newly selected model gets a ✅
+  const current = modelInfo.id;
+  const updatedKeyboard: InlineKeyboardMarkup = {
+    inline_keyboard: AVAILABLE_MODELS.map(m => [{
+      text: m.id === current ? `✅ ${m.label}` : m.label,
+      callback_data: `model:select:${m.id}`,
+    }]),
+  };
+
+  try {
+    await telegramRequest('editMessageReplyMarkup', {
+      chat_id: account.chatId,
+      message_id: callback.message?.message_id,
+      reply_markup: updatedKeyboard,
+    });
+  } catch {
+    // Non-fatal if message edit fails (e.g. message too old)
+  }
+
+  await answerCallbackQuery(callback.id, `✅ Switched to ${modelInfo.label}`);
+  return { handled: true };
 }
 
 async function handleRiskCallback(callback: TelegramCallbackQuery) {
@@ -1028,6 +1099,9 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
   if (!isTelegramEnabled()) return { handled: false, disabled: true };
 
   if (update.callback_query?.data) {
+    // Model selection callback
+    const modelResult = await handleModelCallback(update.callback_query);
+    if (modelResult.handled) return modelResult;
     // Check schedule:cancel callbacks first (highest priority — user-initiated cancel)
     const scheduleResult = await handleScheduledMintCallback(update.callback_query);
     if (scheduleResult.handled) return scheduleResult;
@@ -1129,6 +1203,9 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
       break;
     case '/settings':
       await handleSettingsCommand(message, account);
+      break;
+    case '/model':
+      await handleModelCommand(message, account.userId);
       break;
     default: {
       try {

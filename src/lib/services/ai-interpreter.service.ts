@@ -369,17 +369,19 @@ export async function interpretTelegramMessage(
     return 'AI features are not configured. Set GEMINI_API_KEY in your environment.\n\nUse slash commands instead:\n/mint <url> • /watch <address> • /status • /cancel • /settings';
   }
 
+  const selectedModel = await getUserModel(userId);
+
   addBreadcrumb({
     category: 'ai-interpreter',
     message: 'Starting Gemini interpretation',
     level: 'info',
-    data: { userId, messageLength: message.length },
+    data: { userId, messageLength: message.length, model: selectedModel },
   });
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
-      model: MODEL,
+      model: selectedModel,
       systemInstruction: SYSTEM_PROMPT,
       tools: TOOLS,
     });
