@@ -611,7 +611,7 @@ export async function executeScheduledMint(taskId: string) {
         });
 
         // Use fresh price for the balance check below
-        task = { ...task, mintPrice: livePrice };
+        effectiveMintPrice = livePrice;
       }
     } catch {
       // Non-fatal: if the on-chain read fails, fall back to the stored price.
