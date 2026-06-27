@@ -10,6 +10,7 @@ import { getMintState } from '@/lib/services/mint-state.service';
 import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
 import { acquireLock, releaseLock } from '@/lib/services/mint-lock.service';
 import { normalizeAddress, isValidEvmAddress } from '@/lib/utils/address';
+import { getRedisClient } from '@/lib/redis';
 
 type CopyMintEvent = {
   userId: string;
@@ -27,6 +28,7 @@ type CopyMintRuleInput = {
   riskThreshold?: string | number | null;
   destinationWalletId?: string | null;
   autoMint?: boolean;
+  minMintCount?: string | number | null;
   enabled?: boolean;
 };
 
@@ -46,6 +48,12 @@ function normalizeMaxPrice(maxPrice: string | number | null | undefined) {
   const value = Number(maxPrice);
   if (!Number.isFinite(value) || value < 0) throw new Error('maxPrice must be a positive number');
   return String(value);
+}
+
+function normalizeMinMintCount(minMintCount: string | number | null | undefined) {
+  const value = parseInt(String(minMintCount ?? '1'), 10);
+  if (!Number.isFinite(value)) return 1;
+  return Math.max(1, value);
 }
 
 function parsePrice(value: string | null | undefined) {
@@ -144,6 +152,7 @@ export async function upsertCopyMintRule(userId: string, data: CopyMintRuleInput
       riskThreshold: normalizeRiskThreshold(data.riskThreshold),
       destinationWalletId,
       autoMint: data.autoMint ?? false,
+      minMintCount: normalizeMinMintCount(data.minMintCount),
       enabled: data.enabled ?? true,
       updatedAt: new Date(),
     })
@@ -155,6 +164,7 @@ export async function upsertCopyMintRule(userId: string, data: CopyMintRuleInput
         riskThreshold: normalizeRiskThreshold(data.riskThreshold),
         destinationWalletId,
         autoMint: data.autoMint ?? false,
+        minMintCount: normalizeMinMintCount(data.minMintCount),
         enabled: data.enabled ?? true,
         updatedAt: new Date(),
       },
@@ -276,6 +286,47 @@ export async function handleCopyMintEvent(event: CopyMintEvent) {
       level: 'info',
       data: { userId: event.userId, wallet: event.watchedWalletAddress, chain: event.chain, contractAddress },
     });
+
+    // ── Min Mint Count Gate ──────────────────────────────────────────────
+    // If the rule requires the whale to mint N+ times in the same collection
+    // before triggering, count mints using a Redis counter with a 24h rolling window.
+    if (rule.minMintCount > 1) {
+      try {
+        const redis = getRedisClient();
+        const countKey = `copy-mint-count:${event.watchedWalletAddress}:${contractAddress}`;
+        const currentCount = await redis.incr(countKey);
+        // Set 24h TTL on first increment
+        if (currentCount === 1) {
+          await redis.expire(countKey, 86_400);
+        }
+
+        if (currentCount < rule.minMintCount) {
+          await logActivity(event.userId, 'mint_status_changed', `Copy mint waiting: ${currentCount}/${rule.minMintCount} mints by whale`, {
+            ruleId: rule.id,
+            contractAddress,
+            currentCount,
+            requiredCount: rule.minMintCount,
+          });
+          return { action: 'skipped' as const, reason: `mint_count_below_threshold:${currentCount}/${rule.minMintCount}` };
+        }
+
+        addBreadcrumb({
+          category: 'copy-mint',
+          message: `Whale mint count threshold reached: ${currentCount}/${rule.minMintCount}`,
+          level: 'info',
+          data: { contractAddress, currentCount, requiredCount: rule.minMintCount },
+        });
+      } catch {
+        // Redis error — fail-open and proceed with copy-mint evaluation
+        addBreadcrumb({
+          category: 'copy-mint',
+          message: 'Redis mint count check failed — proceeding anyway (fail-open)',
+          level: 'warning',
+          data: { contractAddress },
+        });
+      }
+    }
+
     const [mintState, requirements] = await Promise.all([
       getMintState(contractAddress, event.chain),
       fetchMintRequirements(contractAddress, event.chain),

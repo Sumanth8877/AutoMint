@@ -1065,11 +1065,28 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
       return { handled: true };
     }
 
-    // Non-URL, non-command text — guide the user instead of ghosting them.
-    await reply(
-      message,
-      'Paste a mint URL to start, or use /mint <url>.\n\nOther commands: /schedule /watch /status /cancel /settings',
-    );
+    // Non-URL, non-command text — route to AI interpreter.
+    if (!message.from) {
+      await reply(message, 'Unable to process message without a Telegram user ID.');
+      return { handled: true };
+    }
+    {
+      const aiAccount = await getTelegramAccountByTelegramId(String(message.from.id));
+      if (!aiAccount) {
+        await reply(message, accountRequiredText());
+        return { handled: true };
+      }
+      try {
+        const { interpretTelegramMessage } = await import('@/lib/services/ai-interpreter.service');
+        const aiReply = await interpretTelegramMessage(text, aiAccount.userId);
+        await reply(message, aiReply);
+      } catch {
+        await reply(
+          message,
+          'AI processing failed. Try a slash command:\n/mint <url> • /watch <address> • /status • /cancel • /settings',
+        );
+      }
+    }
     return { handled: true };
   }
 
@@ -1108,9 +1125,16 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
     case '/settings':
       await handleSettingsCommand(message, account);
       break;
-    default:
-      await reply(message, 'Unknown command. Use /settings to see available commands.');
+    default: {
+      try {
+        const { interpretTelegramMessage } = await import('@/lib/services/ai-interpreter.service');
+        const aiReply = await interpretTelegramMessage(message.text ?? '', account.userId);
+        await reply(message, aiReply);
+      } catch {
+        await reply(message, 'Unknown command. Use /settings to see available commands.');
+      }
       break;
+    }
   }
 
   return { handled: true };

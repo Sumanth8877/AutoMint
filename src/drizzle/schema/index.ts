@@ -144,6 +144,7 @@ export const copyMintRules = pgTable('copy_mint_rules', {
   riskThreshold: integer('risk_threshold').default(75).notNull(),
   destinationWalletId: uuid('destination_wallet_id').references(() => wallets.id, { onDelete: 'set null' }),
   autoMint: boolean('auto_mint').default(false).notNull(),
+  minMintCount: integer('min_mint_count').default(1).notNull(),
   enabled: boolean('enabled').default(true).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
