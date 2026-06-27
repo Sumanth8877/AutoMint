@@ -54,7 +54,7 @@ async function upsertCollectionFromMintIntent(userId: string, intent: MintIntent
 
   if (existing) {
     if (!analysis) {
-      logger.info('mints', `Skipping collection update for ${contractAddress} — analysis is null`);
+      logger.info('Skipping collection update — analysis is null', { area: 'mints/route', contractAddress });
       return existing;
     }
 
