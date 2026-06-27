@@ -34,7 +34,7 @@ async function resolveMintUrl(url: string): Promise<MintIntent & { mintPhases: M
       };
     }
   } catch {
-    logger.info('instant-mint', 'resolveMintIntent failed — discovery tiers will handle it');
+    logger.info('resolveMintIntent failed — discovery tiers will handle it', { area: 'instant-mint' });
   }
 
   // Tiers 2→3: Jina/Firecrawl in parallel → Browserbase if still missing
