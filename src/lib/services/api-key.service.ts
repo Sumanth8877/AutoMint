@@ -3,7 +3,7 @@ import 'server-only';
 import { randomBytes, createHash } from 'node:crypto';
 import { and, eq, isNull, desc } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
-import { apiKeys, users } from '@/drizzle/schema';
+import { apiKeys } from '@/drizzle/schema';
 import { logger } from '@/lib/logger';
 
 // ─── Constants ──────────────────────────────────────────────

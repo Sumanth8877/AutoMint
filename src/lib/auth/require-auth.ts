@@ -112,6 +112,10 @@ export async function requireApiUser(): Promise<ApiAuthResult<ApiUserSuccess>> {
 
   const dbUser = await syncUser(session.userId);
 
+  if (!dbUser) {
+    return { error: jsonError('User not found', 401) };
+  }
+
   return {
     clerkId: session.userId,
     sessionClaims: session.sessionClaims as SessionClaims,

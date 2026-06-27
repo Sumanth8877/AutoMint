@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { parseJsonBody, handleRouteError } from '@/lib/api/errors';
-import { enforceRateLimit, RATE_LIMITS } from '@/lib/api/rate-limit';
+import { enforceRateLimit } from '@/lib/api/rate-limit';
 import {
   createApiKey,
   listApiKeys,
