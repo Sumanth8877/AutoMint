@@ -90,6 +90,69 @@ async function fetchOpenSeaMintMeta(contractAddress: string): Promise<OpenSeaMin
   }
 }
 
+// ─── OpenSea Drops API — phase-specific timing ─────────────────────────────
+//
+// Fetches structured drop phase data from the OpenSea collection API.
+// Returns public-phase start time when a holder/WL phase is currently live
+// but the public phase has a future start time. This fixes the CHILL BUGS
+// scenario where getMintState() returns LIVE (holder phase) but we need to
+// schedule for the upcoming public phase.
+
+interface OpenSeaDropPhase {
+  type: 'public' | 'allowlist' | 'presale' | string;
+  startTime?: string;   // ISO string
+  endTime?: string;
+  mintPrice?: string;
+}
+
+export async function fetchOpenSeaDropPhases(collectionSlug: string): Promise<OpenSeaDropPhase[]> {
+  try {
+    const apiKey = process.env.OPENSEA_API_KEY;
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    if (apiKey) headers['X-API-KEY'] = apiKey;
+
+    const url = `https://api.opensea.io/api/v2/collections/${encodeURIComponent(collectionSlug)}`;
+    const res = await fetch(url, { headers, signal: AbortSignal.timeout(4_000) });
+    if (!res.ok) return [];
+
+    const json = await Promise.race<unknown>([
+      res.json(),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 5_000)),
+    ]);
+
+    const j = json as {
+      drop?: {
+        stages?: Array<{
+          stage?: string;
+          startTime?: string;
+          endTime?: string;
+          mintPrice?: string | number;
+        }>;
+      };
+      stages?: Array<{
+        stage?: string;
+        startTime?: string;
+        endTime?: string;
+        mintPrice?: string | number;
+      }>;
+    } | undefined;
+
+    const stages = j?.drop?.stages ?? j?.stages ?? [];
+
+    return stages.map((s) => ({
+      type: (s.stage ?? 'unknown').toLowerCase().includes('public') ? 'public'
+           : (s.stage ?? 'unknown').toLowerCase().includes('allow') ? 'allowlist'
+           : (s.stage ?? 'unknown').toLowerCase().includes('presale') ? 'presale'
+           : s.stage ?? 'unknown',
+      startTime: s.startTime,
+      endTime: s.endTime,
+      mintPrice: s.mintPrice !== undefined ? String(s.mintPrice) : undefined,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 // ─── Main resolver ────────────────────────────────────────────────────────────
 
 export async function getMintState(contractAddress: string, chain: string): Promise<MintState> {

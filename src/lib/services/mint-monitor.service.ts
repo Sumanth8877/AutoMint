@@ -151,49 +151,77 @@ export async function watchForMintLive(
       return;
     }
 
-    // Subscribe to new block headers
-    // On each new block, check mint state — a mint can only go live on a block boundary
+    // ── Dual-subscription strategy ────────────────────────────────────────────
+    // Strategy 1: watchContractEvent('Transfer') — sub-second detection.
+    //   ERC-721 mints always emit Transfer(from=address(0), to=minter, tokenId).
+    //   This fires the instant the first mint tx is included in a block — 0ms latency.
+    //
+    // Strategy 2: watchBlockNumber + getMintState() — reliable fallback.
+    //   Checks on-chain state each block for contracts with non-standard events.
+    //   Latency: 0–12s (ETH 12s blocks) / 0–2s (Base 2s blocks).
+    //
+    // Both run simultaneously. Whichever detects live first wins.
+
+    let unwatchTransfer: (() => void) | null = null;
+
+    const TRANSFER_ABI = [{ type: 'event' as const, name: 'Transfer', inputs: [
+      { name: 'from',    type: 'address' as const, indexed: true },
+      { name: 'to',      type: 'address' as const, indexed: true },
+      { name: 'tokenId', type: 'uint256' as const, indexed: true },
+    ]}];
+
+    // Strategy 1: Transfer event watcher
+    try {
+      unwatchTransfer = client.watchContractEvent({
+        address: contractAddress as `0x${string}`,
+        abi: TRANSFER_ABI,
+        eventName: 'Transfer',
+        onLogs: (logs) => {
+          if (settled) return;
+          const isMint = logs.some(
+            (log) => (log as { args?: { from?: string } }).args?.from === '0x0000000000000000000000000000000000000000'
+          );
+          if (isMint) {
+            addBreadcrumb({ category: 'mint-monitor', message: 'Transfer(from=0x0) detected — mint is live', level: 'info', data: { contractAddress, chain } });
+            settle('live');
+          }
+        },
+        onError: () => { /* silent — block watcher is the fallback */ },
+      });
+    } catch { /* Transfer watch unavailable — rely on block watcher */ }
+
+    // Strategy 2: Block-level state check
     try {
       unwatch = client.watchBlockNumber({
         onBlockNumber: async (blockNumber: bigint) => {
           if (settled) return;
-
           try {
             const state = await getMintState(contractAddress, chain);
-
-            addBreadcrumb({
-              category: 'mint-monitor',
-              message: `Block ${blockNumber}: mint state = ${state.status}`,
-              level: 'info',
-              data: { contractAddress, chain, blockNumber: blockNumber.toString(), status: state.status },
-            });
-
-            if (state.status === 'LIVE') {
-              settle('live');
-            } else if (state.status === 'ENDED') {
-              settle('ended');
-            }
-            // NOT_STARTED or UNKNOWN — keep watching
-          } catch {
-            // Ignore individual block check errors — keep watching
-          }
+            addBreadcrumb({ category: 'mint-monitor', message: `Block ${blockNumber}: mint state = ${state.status}`, level: 'info', data: { contractAddress, chain, blockNumber: blockNumber.toString(), status: state.status } });
+            if (state.status === 'LIVE')  { settle('live');  }
+            if (state.status === 'ENDED') { settle('ended'); }
+          } catch { /* ignore per-block errors */ }
         },
         onError: (error: Error) => {
           if (settled) return;
-          addBreadcrumb({
-            category: 'mint-monitor',
-            message: 'WebSocket subscription error',
-            level: 'warning',
-            data: { error: String(error) },
-          });
-          settle('error'); // Fall back to HTTP polling
+          addBreadcrumb({ category: 'mint-monitor', message: 'WebSocket block subscription error', level: 'warning', data: { error: String(error) } });
+          if (!unwatchTransfer) settle('error');
         },
-        emitOnBegin: true, // Check immediately on subscription (no wait for next block)
+        emitOnBegin: true,
       } as Parameters<ReturnType<typeof createPublicClient>['watchBlockNumber']>[0]);
     } catch (err) {
       clearTimeout(timer);
+      try { unwatchTransfer?.(); } catch {}
       captureException(err, { area: 'mint-monitor', context: { chain }, fingerprint: ['mint-monitor', 'subscribe-error'] });
       resolve('error');
+      return;
     }
+
+    // Patch settle to also tear down the Transfer subscription
+    const _origSettle = settle;
+    settle = (result: MonitorResult) => { try { unwatchTransfer?.(); } catch {} _origSettle(result); };
+    // Re-apply the timeout with the patched settle
+    clearTimeout(timer);
+    setTimeout(() => settle('timeout'), timeoutMs);
   });
 }

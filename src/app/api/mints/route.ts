@@ -4,7 +4,7 @@ import { requireApiUser } from '@/lib/auth/require-auth';
 import { getErrorMessage, parseJsonBody, handleRouteError } from '@/lib/api/errors';
 import { addMintTask, executeMintTask, getMintTaskById, getUserMintTasks, removeMintTask } from '@/lib/services/mint.service';
 import { cancelScheduledMint, scheduleMint } from '@/lib/services/qstash.service';
-import { getMintState } from '@/lib/services/mint-state.service';
+import { getMintState, fetchOpenSeaDropPhases } from '@/lib/services/mint-state.service';
 import { getDb } from '@/lib/db';
 import { collections, mintTasks } from '@/drizzle/schema';
 import { getEffectiveExecutionDefaults } from '@/lib/services/execution-settings.service';
@@ -441,8 +441,25 @@ export async function POST(req: Request) {
     // Check if the PUBLIC phase specifically is still upcoming
     // (contract may be LIVE for a holder phase while public hasn't started yet)
     const publicPhase = allPhases.find((p: MintPhase) => p.type === 'public');
-    const publicPhaseStart = publicPhase?.startTime
+
+    // If discoverMintRequirements didn't find the public phase timing,
+    // try the OpenSea Drops API (structured data, more reliable than scraping)
+    let publicPhaseStart: Date | undefined = publicPhase?.startTime
       ?? (collection.mintStart ? new Date(collection.mintStart) : undefined);
+
+    if (!publicPhaseStart && mintUrl) {
+      const slug = mintUrl.match(/opensea\.io\/collection\/([^/?#]+)/)?.[1];
+      if (slug) {
+        const dropPhases = await fetchOpenSeaDropPhases(slug);
+        const openSeaPublic = dropPhases.find(p => p.type === 'public');
+        if (openSeaPublic?.startTime) {
+          const parsed = new Date(openSeaPublic.startTime);
+          if (!isNaN(parsed.getTime()) && parsed.getTime() > Date.now()) {
+            publicPhaseStart = parsed;
+          }
+        }
+      }
+    }
 
     if (publicPhaseStart && publicPhaseStart.getTime() > Date.now()) {
       // Public phase is upcoming — schedule for its exact start time

@@ -190,7 +190,13 @@ export async function executeMintTask(
     quantity: claimed.quantity,
   };
 
-  const result = await executeMint(wallet.address as Hex, chain, params, claimed.userId, { walletId: wallet.id, privateMempool: options.privateMempool ?? false });
+  const result = await executeMint(wallet.address as Hex, chain, params, claimed.userId, { 
+      walletId: wallet.id,
+      // Auto-enable Flashbots Protect for Ethereum mainnet — prevents frontrunning at no cost.
+      // User can force-disable via options.privateMempool = false (e.g. if Flashbots latency
+      // is unacceptable for high-speed mint races where speed > protection).
+      privateMempool: options.privateMempool ?? (chain === 'ethereum'),
+    });
 
   if (!result.success) {
       // C-04: If txHash is present the transaction was broadcast but receipt
