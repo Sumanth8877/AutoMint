@@ -474,8 +474,21 @@ export async function POST(req: Request) {
       userId: authResult.userId,
       scheduledTime: executionTime,
     });
+
+    // If we found a public phase that is truly live → mintStatus:'live'
+    // If we couldn't determine public phase timing (discoverMintRequirements returned
+    // no public phase), another phase (holder/WL) is active and the public mint may
+    // still be upcoming. Return 'monitoring' so the UI shows the correct state.
+    const trulyLive = allPhases.length > 0 && (
+      allPhases.some((p: MintPhase) => p.type === 'public' && (!p.startTime || p.startTime.getTime() <= Date.now()))
+    );
     return NextResponse.json(
-      { task: autoTask, collection, mintStatus: 'live', autoTriggered: true },
+      {
+        task: autoTask,
+        collection,
+        mintStatus: trulyLive ? 'live' : 'monitoring',
+        autoTriggered: true,
+      },
       { status: 201 },
     );
   } catch (error) {

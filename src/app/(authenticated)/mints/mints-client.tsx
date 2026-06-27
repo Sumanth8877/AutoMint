@@ -50,7 +50,7 @@ type MintActionResponse = {
   task: MintTask;
   collection?: CollectionRecord;
   analyzerRequired?: boolean;
-  mintStatus?: 'live' | 'upcoming';
+  mintStatus?: 'live' | 'upcoming' | 'monitoring';
   scheduledTime?: string | null;
   /** true when the server auto-scheduled execution (no manual play click needed) */
   autoTriggered?: boolean;
@@ -346,6 +346,8 @@ export default function MintsClient() {
           ? `${phaseLabel} scheduled — minting at ${new Date(payload.scheduledTime).toLocaleString()}.`
           : `${phaseLabel} queued for monitoring — will execute when the mint goes live.`;
         dispatch({ type: 'SET_SUCCESS', message: schedMsg });
+      } else if (payload.mintStatus === 'monitoring') {
+        dispatch({ type: 'SET_SUCCESS', message: '🔍 A holder / WL phase is currently live. Monitoring for public phase start — will auto-mint when public opens.' });
       } else if (payload.autoTriggered) {
         const phaseLabel = payload.wlPhase ? `${payload.wlPhase.toUpperCase()} phase` : 'Public mint';
         dispatch({ type: 'SET_SUCCESS', message: `⚡ ${phaseLabel} is live — auto-executing now. Check status below.` });
@@ -508,14 +510,18 @@ export default function MintsClient() {
                         </span>
                       ) : null}
                     </p>
-                    {/* countdown for scheduled/pending mints; timestamp for others */}
-                    {task.scheduledTime ? (
+                    {/* countdown for scheduled/pending mints; monitoring message when phase timing unknown */}
+                    {task.scheduledTime && new Date(task.scheduledTime).getTime() > Date.now() + 30_000 ? (
+                      // Real future schedule (>30s from now) — show countdown
                       <p className="mt-1 text-xs text-accent">
                         {task.status === 'pending' || task.status === 'monitoring'
                           ? <span>⏱ Mints in: <CountdownTimer targetTime={task.scheduledTime} /></span>
                           : <span>⏰ {task.status === 'running' ? 'Executing at' : 'Fires at'}: {new Date(task.scheduledTime).toLocaleString()}</span>
                         }
                       </p>
+                    ) : task.status === 'monitoring' ? (
+                      // scheduledTime is past or absent — monitoring loop is active
+                      <p className="mt-1 text-xs text-muted">🔍 Monitoring for public phase start…</p>
                     ) : null}
                     {/* U3 — show error reason for failed tasks */}
                     {task.status === 'failed' && task.riskReasons && task.riskReasons.length > 0 ? (
