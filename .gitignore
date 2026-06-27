@@ -48,3 +48,6 @@ next-env.d.ts
 # C-6 fix: Never commit patch or diff files - they expose vulnerability history
 *.patch
 *.diff
+
+# Rust build artifacts
+wasm-crypto/target/
