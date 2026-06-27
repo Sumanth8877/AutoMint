@@ -13,6 +13,7 @@ import {
   type AnalyzerProviderAttempt,
 } from '@/lib/resolve-mint-intent';
 import { addBreadcrumb } from '@/lib/observability/sentry';
+import { createAnalyzerCacheStats } from '@/lib/services/analyzer-cache.service';
 import { discoverContractABI, discoverMintFunction } from '@/lib/services/mint-abi-discovery.service';
 import { fetchMintRequirements, type MintRequirements } from '@/lib/services/mint-requirements.service';
 import { getMintState, type MintState } from '@/lib/services/mint-state.service';
