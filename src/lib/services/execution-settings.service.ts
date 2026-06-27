@@ -3,6 +3,7 @@ import 'server-only';
 import { and, eq } from 'drizzle-orm';
 import { executionSettings, wallets } from '@/drizzle/schema';
 import { getDb } from '@/lib/db';
+import { CACHE_KEYS, CACHE_TTL, cacheWithTTL, invalidateCache } from '@/lib/redis';
 
 export const GAS_STRATEGIES = ['STANDARD', 'FAST', 'AGGRESSIVE'] as const;
 
@@ -126,23 +127,39 @@ export async function updateExecutionSettings(userId: string, input: Record<stri
     .where(eq(executionSettings.userId, userId))
     .returning();
 
+  // Invalidate cached defaults so the next request fetches fresh settings.
+  await invalidateCache(execDefaultsCacheKey(userId));
+
   return updated;
 }
 
-export async function getEffectiveExecutionDefaults(userId: string) {
-  const settings = await getExecutionSettings(userId);
-  const defaultWalletId = settings.defaultWalletId ?? await getCurrentDefaultWalletId(userId);
+// Cache TTL for execution defaults: 60 seconds.
+// Settings change rarely (only when user saves the settings page).
+// The cache is invalidated immediately on updateExecutionSettings().
+const EXEC_DEFAULTS_TTL = 60;
 
-  return {
-    defaultMintQuantity: settings.defaultMintQuantity,
-    defaultWalletId,
-    gasStrategy: settings.gasStrategy,
-    maxRetries: settings.maxRetries,
-    riskThreshold: settings.riskThreshold,
-    autoRunAnalyzer: settings.autoRunAnalyzer,
-    autoDetectSocials: settings.autoDetectSocials,
-    autoDetectContractInfo: settings.autoDetectContractInfo,
-    autoDetectMintDetails: settings.autoDetectMintDetails,
-    riskAnalysisEnabled: settings.riskAnalysisEnabled,
-  };
+const execDefaultsCacheKey = (userId: string) => `exec-defaults:${userId}`;
+
+export async function getEffectiveExecutionDefaults(userId: string) {
+  return cacheWithTTL(
+    execDefaultsCacheKey(userId),
+    async () => {
+      const settings = await getExecutionSettings(userId);
+      const defaultWalletId = settings.defaultWalletId ?? await getCurrentDefaultWalletId(userId);
+
+      return {
+        defaultMintQuantity: settings.defaultMintQuantity,
+        defaultWalletId,
+        gasStrategy: settings.gasStrategy,
+        maxRetries: settings.maxRetries,
+        riskThreshold: settings.riskThreshold,
+        autoRunAnalyzer: settings.autoRunAnalyzer,
+        autoDetectSocials: settings.autoDetectSocials,
+        autoDetectContractInfo: settings.autoDetectContractInfo,
+        autoDetectMintDetails: settings.autoDetectMintDetails,
+        riskAnalysisEnabled: settings.riskAnalysisEnabled,
+      };
+    },
+    EXEC_DEFAULTS_TTL,
+  );
 }
