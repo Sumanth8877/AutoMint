@@ -78,15 +78,15 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  logger.info('telegram-webhook', 'Webhook received');
+  logger.info('Webhook received', { area: 'telegram-webhook' });
   
   if (!isTelegramEnabled()) {
-    logger.info('telegram-webhook', 'Telegram disabled by configuration');
+    logger.info('Telegram disabled by configuration', { area: 'telegram-webhook' });
     return NextResponse.json({ ok: true, disabled: true, reason: 'Telegram disabled by configuration' });
   }
 
   if (!isAuthorized(request)) {
-    logger.warn('telegram-webhook', 'Unauthorized webhook request');
+    logger.warn('Unauthorized webhook request', { area: 'telegram-webhook' });
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
