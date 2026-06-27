@@ -7,6 +7,7 @@ import { syncUser } from '@/lib/auth/sync-user';
 import { getDb } from '@/lib/db';
 import { users } from '@/drizzle/schema';
 import { eq } from 'drizzle-orm';
+import { authenticateApiKey } from '@/lib/services/api-key.service';
 
 type SessionClaims = Record<string, unknown> | null;
 
@@ -25,19 +26,16 @@ function jsonError(error: string, status: number) {
   return NextResponse.json({ error }, { status });
 }
 
-// ── API Key authentication ──────────────────────────────────────────────────
-// Simple env-var-based API key for programmatic access (Gumloop, scripts, etc.)
-//
-// Set on Vercel:
-//   AUTOMINT_API_KEY       = <random-secret>
-//   AUTOMINT_API_KEY_USER  = <your-clerk-user-id>  (from Clerk dashboard)
+// ── API Key authentication (DB-backed) ──────────────────────────────
+// Keys are created via /settings/api-keys and stored as SHA-256 hashes.
 //
 // Usage:
-//   curl -H "Authorization: Bearer <AUTOMINT_API_KEY>" https://your-app.vercel.app/api/mints
+//   curl -H "Authorization: Bearer am_<secret>" https://your-app.vercel.app/api/mints
 //
-// The key is compared in constant time to prevent timing attacks.
-// No DB table needed — this is a 2-person tool.
-// ─────────────────────────────────────────────────────────────────────────────
+// Falls back to the legacy env-var key (AUTOMINT_API_KEY) for backwards
+// compatibility during migration. Remove the fallback once all keys are
+// migrated to the DB.
+// ─────────────────────────────────────────────────────────────────────
 
 function constantTimeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
@@ -48,32 +46,43 @@ function constantTimeEqual(a: string, b: string): boolean {
   return result === 0;
 }
 
-async function authenticateApiKey(): Promise<ApiUserSuccess | null> {
-  const apiKey = process.env.AUTOMINT_API_KEY;
-  const apiKeyClerkId = process.env.AUTOMINT_API_KEY_USER;
-  if (!apiKey || !apiKeyClerkId) return null;
-
+async function authenticateBearer(): Promise<ApiUserSuccess | null> {
   const headersList = await headers();
   const authHeader = headersList.get('authorization');
   if (!authHeader?.startsWith('Bearer ')) return null;
 
   const token = authHeader.slice(7);
-  if (!constantTimeEqual(token, apiKey)) return null;
 
-  // Resolve the user from the Clerk ID tied to this API key
-  const [user] = await getDb()
-    .select()
-    .from(users)
-    .where(eq(users.clerkId, apiKeyClerkId))
-    .limit(1);
+  // ── Primary: DB-backed API keys ──
+  const dbResult = await authenticateApiKey(token);
+  if (dbResult) {
+    return {
+      clerkId: '', // API-key auth doesn't have a Clerk session
+      sessionClaims: null,
+      userId: dbResult.userId,
+    };
+  }
 
-  if (!user) return null;
+  // ── Fallback: legacy env-var key (remove after migration) ──
+  const legacyKey = process.env.AUTOMINT_API_KEY;
+  const legacyClerkId = process.env.AUTOMINT_API_KEY_USER;
+  if (legacyKey && legacyClerkId && constantTimeEqual(token, legacyKey)) {
+    const [user] = await getDb()
+      .select()
+      .from(users)
+      .where(eq(users.clerkId, legacyClerkId))
+      .limit(1);
 
-  return {
-    clerkId: apiKeyClerkId,
-    sessionClaims: null,
-    userId: user.id,
-  };
+    if (user) {
+      return {
+        clerkId: legacyClerkId,
+        sessionClaims: null,
+        userId: user.id,
+      };
+    }
+  }
+
+  return null;
 }
 
 export async function requireApiSession(): Promise<ApiAuthResult<ApiAuthSuccess>> {
@@ -90,22 +99,22 @@ export async function requireApiSession(): Promise<ApiAuthResult<ApiAuthSuccess>
 }
 
 export async function requireApiUser(): Promise<ApiAuthResult<ApiUserSuccess>> {
-  // 1. Try Clerk session first (browser / logged-in user)
-  const session = await auth();
-  if (session.userId) {
-    const user = await syncUser(session.userId);
-    if (user) {
-      return {
-        clerkId: session.userId,
-        sessionClaims: session.sessionClaims as SessionClaims,
-        userId: user.id,
-      };
-    }
-  }
-
-  // 2. Fall back to API key (programmatic access — Gumloop, scripts, cURL)
-  const apiKeyAuth = await authenticateApiKey();
+  // Try Bearer token (API key) first
+  const apiKeyAuth = await authenticateBearer();
   if (apiKeyAuth) return apiKeyAuth;
 
-  return { error: jsonError('Unauthorized', 401) };
+  // Fall back to Clerk session
+  const session = await auth();
+
+  if (!session.userId) {
+    return { error: jsonError('Unauthorized', 401) };
+  }
+
+  const dbUser = await syncUser(session.userId);
+
+  return {
+    clerkId: session.userId,
+    sessionClaims: session.sessionClaims as SessionClaims,
+    userId: dbUser.id,
+  };
 }
