@@ -355,7 +355,7 @@ export default function MintsClient() {
       } else if (payload.mintStatus === 'monitoring') {
         const monitorMsg = payload.scheduledTime
           ? `🔍 Holder/WL phase live — public phase scheduled at ${new Date(payload.scheduledTime).toLocaleString()}. Auto-minting when live.`
-          : '🔍 A holder / WL phase is currently live. Monitoring for public phase start — will auto-mint when public opens. Set "Schedule at" time above for a precise countdown.';
+          : '🔍 A holder / WL phase is currently live. Monitoring for public phase start — will auto-mint when public opens.';
         dispatch({ type: 'SET_SUCCESS', message: monitorMsg });
       } else if (payload.autoTriggered) {
         const phaseLabel = payload.wlPhase ? `${payload.wlPhase.toUpperCase()} phase` : 'Public mint';
@@ -459,22 +459,7 @@ export default function MintsClient() {
           </span>
         </label>
 
-        {/* Optional schedule time override — shown when upcoming timing is needed */}
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-1.5 text-xs text-muted">
-            <span>Schedule at (optional):</span>
-            <input
-              type="datetime-local"
-              value={form.scheduleTime}
-              onChange={(e) => dispatch({ type: 'PATCH_FORM', patch: { scheduleTime: e.target.value } })}
-              className="rounded border border-border bg-surface px-2 py-0.5 text-xs text-text focus:outline-none focus:ring-1 focus:ring-accent"
-              title="Override auto-detection — set exact public mint start time"
-            />
-            {form.scheduleTime ? (
-              <button type="button" onClick={() => dispatch({ type: 'PATCH_FORM', patch: { scheduleTime: '' } })} className="text-muted hover:text-danger" title="Clear">✕</button>
-            ) : null}
-          </label>
-        </div>
+
 
         <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted">
           <span>Wallet: {defaultWallet ? `${defaultWallet.nickname || shortAddress(defaultWallet.address)} / ${defaultWallet.chain}` : 'Set a default wallet first'}</span>
