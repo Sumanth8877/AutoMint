@@ -330,7 +330,7 @@ async function fetchViaJina(
   if (!res.ok) throw new Error(`Jina ${res.status}: ${res.statusText}`);
   const text = await res.text();
 
-  logger.info('mint-discovery', 'Jina fetch complete', { chars: text.length, url });
+  logger.info('Jina fetch complete', { area: 'mint-discovery',  chars: text.length, url });
   return extractRequirementsFromContent(text, url);
 }
 
@@ -359,7 +359,7 @@ async function fetchViaFirecrawl(
   const data = (await res.json()) as { data?: { markdown?: string; html?: string } };
   const content = data?.data?.markdown ?? data?.data?.html ?? '';
 
-  logger.info('mint-discovery', 'Firecrawl fetch complete', { chars: content.length, url });
+  logger.info('Firecrawl fetch complete', { area: 'mint-discovery',  chars: content.length, url });
   return extractRequirementsFromContent(content, url);
 }
 
@@ -407,7 +407,7 @@ async function fetchViaBrowserbase(
     const data = (await contentRes.json()) as { content?: string };
     const content = data.content ?? '';
 
-    logger.info('mint-discovery', 'Browserbase fetch complete', { chars: content.length, url });
+    logger.info('Browserbase fetch complete', { area: 'mint-discovery',  chars: content.length, url });
     return extractRequirementsFromContent(content, url);
   } finally {
     // Best-effort cleanup — never let session leak block the response
@@ -489,7 +489,7 @@ export async function discoverMintRequirements(
     } as DiscoveredRequirements;
   }
 
-  logger.info('mint-discovery', 'Missing critical fields — running Tier 2', { missing: initialMissing, budgetMs: maxTimeMs });
+  logger.info('Missing critical fields — running Tier 2', { area: 'mint-discovery',  missing: initialMissing, budgetMs: maxTimeMs });
 
   // ── Tier 2: Jina + Firecrawl in parallel, with budget check ───────────────
   let tier2Source: DiscoverySource = 'merged';
@@ -527,7 +527,7 @@ export async function discoverMintRequirements(
       console.warn('[mint-discovery] Insufficient budget for Tier 2 — skipping all scrapers');
     }
   } catch (err) {
-    logger.warn('mint-discovery', 'Tier 2 threw unexpectedly', { error: String(err) });
+    logger.warn('Tier 2 threw unexpectedly', { area: 'mint-discovery',  error: String(err) });
     void captureException(err, { area: 'mint-discovery', extra: { tier: 2 } });
   }
 
@@ -555,7 +555,7 @@ export async function discoverMintRequirements(
     } as DiscoveredRequirements;
   }
 
-  logger.info('mint-discovery', 'Still missing after Tier 2 — running Tier 3', { missing: afterTier2Missing, remainingMs });
+  logger.info('Still missing after Tier 2 — running Tier 3', { area: 'mint-discovery',  missing: afterTier2Missing, remainingMs });
 
   // ── Tier 3: Browserbase + Playwright (with remaining time as timeout) ────
   try {
@@ -569,7 +569,7 @@ export async function discoverMintRequirements(
       console.warn('[mint-discovery] Tier 3 timed out');
     }
   } catch (err) {
-    logger.warn('mint-discovery', 'Tier 3 Browserbase failed', { error: String(err) });
+    logger.warn('Tier 3 Browserbase failed', { area: 'mint-discovery',  error: String(err) });
     void captureException(err, { area: 'mint-discovery', extra: { tier: 3 } });
   }
 
@@ -586,7 +586,7 @@ export async function discoverMintRequirements(
   }
 
   if (finalMissing.length > 0) {
-    logger.warn('mint-discovery', 'Some fields still unresolved after all tiers', { missing: finalMissing });
+    logger.warn('Some fields still unresolved after all tiers', { area: 'mint-discovery',  missing: finalMissing });
   }
 
   return {
