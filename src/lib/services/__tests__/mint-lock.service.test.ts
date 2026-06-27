@@ -31,6 +31,7 @@ vi.mock('@/lib/redis', () => ({
 vi.mock('@/lib/observability/sentry', () => ({
   addBreadcrumb:    vi.fn(),
   captureException: vi.fn(),
+  captureMessage:   vi.fn(),
 }));
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

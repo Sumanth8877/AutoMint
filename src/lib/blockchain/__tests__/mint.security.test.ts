@@ -46,6 +46,7 @@ vi.mock('../client', () => ({
 }));
 
 vi.mock('@/lib/observability/sentry', () => ({
+  addBreadcrumb: vi.fn(),
   captureException: vi.fn().mockResolvedValue(undefined),
   captureMessage: vi.fn().mockResolvedValue(undefined),
 }));

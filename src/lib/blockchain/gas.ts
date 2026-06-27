@@ -1,5 +1,89 @@
 import { getClient } from './client';
 import { captureException } from '@/lib/observability/sentry';
+import type { Address, Hex } from 'viem';
+
+export type GasStrategy = 'STANDARD' | 'FAST' | 'AGGRESSIVE';
+
+export interface Eip1559GasParams {
+  maxFeePerGas: bigint;
+  maxPriorityFeePerGas: bigint;
+}
+
+const STRATEGY_MULTIPLIERS: Record<GasStrategy, { base: bigint; priority: bigint }> = {
+  STANDARD: { base: 200n, priority: 100n },
+  FAST: { base: 225n, priority: 125n },
+  AGGRESSIVE: { base: 300n, priority: 150n },
+};
+
+function scale(value: bigint, percent: bigint): bigint {
+  return (value * percent) / 100n;
+}
+
+function average(values: bigint[]): bigint {
+  if (values.length === 0) return 0n;
+  return values.reduce((sum, value) => sum + value, 0n) / BigInt(values.length);
+}
+
+function latestBaseFee(baseFeePerGas: bigint[]): bigint {
+  return baseFeePerGas.at(-1) ?? 0n;
+}
+
+function averagePriorityFee(reward: bigint[][] | undefined): bigint {
+  if (!reward?.length) return 1_500_000_000n;
+
+  const firstPercentileRewards = reward
+    .map((blockRewards) => blockRewards[0])
+    .filter((value): value is bigint => typeof value === 'bigint' && value > 0n);
+
+  return average(firstPercentileRewards) || 1_500_000_000n;
+}
+
+export async function getEip1559GasParams(
+  chain: string,
+  strategy: GasStrategy = 'STANDARD',
+): Promise<Eip1559GasParams> {
+  const client = getClient(chain);
+  const multiplier = STRATEGY_MULTIPLIERS[strategy] ?? STRATEGY_MULTIPLIERS.STANDARD;
+
+  try {
+    const feeHistory = await client.getFeeHistory({
+      blockCount: 5,
+      rewardPercentiles: [50],
+    });
+
+    const baseFee = latestBaseFee(feeHistory.baseFeePerGas);
+    const priorityFee = scale(averagePriorityFee(feeHistory.reward), multiplier.priority);
+
+    return {
+      maxFeePerGas: scale(baseFee, multiplier.base) + priorityFee,
+      maxPriorityFeePerGas: priorityFee,
+    };
+  } catch (error) {
+    await captureException(error, {
+      area: 'gas',
+      context: { chain, strategy },
+      fingerprint: ['gas', 'fee-history-error'],
+    });
+
+    const gasPrice = await client.getGasPrice();
+    const priorityFee = scale(gasPrice / 10n, multiplier.priority);
+    return {
+      maxFeePerGas: scale(gasPrice, multiplier.base),
+      maxPriorityFeePerGas: priorityFee > 0n ? priorityFee : 1n,
+    };
+  }
+}
+
+export async function getGasLimit(
+  chain: string,
+  from: Address,
+  to: Address,
+  data: Hex = '0x',
+  value: bigint = 0n,
+): Promise<bigint> {
+  const client = getClient(chain);
+  return client.estimateGas({ account: from, to, data, value });
+}
 
 export interface GasEstimate {
   gasPrice: string;          // maxFeePerGas (EIP-1559) or gasPrice (legacy)

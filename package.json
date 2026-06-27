@@ -46,7 +46,7 @@
     "patch-package": "^8.0.1",
     "tailwindcss": "^4.3.1",
     "typescript": "^6.0.3",
-    "vitest": "^2.1.0"
+    "vitest": "^4.1.9"
   },
   "overrides": {
     "esbuild": "^0.28.1",
