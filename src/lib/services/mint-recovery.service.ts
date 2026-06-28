@@ -1,9 +1,10 @@
 import 'server-only'; // reliability: r1-r5
 
 import { getDb } from '@/lib/db';
-import { mintTasks } from '@/drizzle/schema';
+import { mintTasks, wallets } from '@/drizzle/schema';
 import { eq, and, isNull, isNotNull, lt, inArray } from 'drizzle-orm';
 import { addBreadcrumb, captureException, captureMessage } from '@/lib/observability/sentry';
+import { getClient } from '@/lib/blockchain/client';
 
 // Tasks stuck in 'running' longer than this are assumed to have crashed
 const STUCK_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
@@ -75,7 +76,7 @@ export async function recoverStuckMintTasks(): Promise<RecoveryResult> {
     for (const task of stuckTasks) {
       try {
         if (!task.txHash) {
-          await recoverPreBroadcastTask(task.id, task.userId);
+          await recoverPreBroadcastTask(task);
           result.preBroadcastRecovered++;
         } else {
           await recoverPostBroadcastTask(task.id, task.txHash);
@@ -115,7 +116,53 @@ export async function recoverStuckMintTasks(): Promise<RecoveryResult> {
 // No txHash means the transaction was never sent.
 // Reset to 'ready' and re-schedule via QStash for immediate re-execution.
 
-async function recoverPreBroadcastTask(taskId: string, userId: string): Promise<void> {
+async function recoverPreBroadcastTask(task: typeof mintTasks.$inferSelect): Promise<void> {
+  const taskId = task.id;
+  const userId = task.userId;
+
+  // H3 defense-in-depth: a task reaches here only with txHash IS NULL, which
+  // normally means the transaction was never broadcast. But there is a tiny
+  // residual window (between broadcastRawTransaction returning and the onBroadcast
+  // txHash persist) where a transaction WAS sent yet no hash was recorded.
+  // Re-executing then would double-spend. Before re-executing, verify on-chain
+  // that the wallet has no transaction in flight beyond its confirmed nonce.
+  if (task.walletId) {
+    try {
+      const [wallet] = await getDb().select().from(wallets).where(eq(wallets.id, task.walletId)).limit(1);
+      if (wallet) {
+        const client = getClient(wallet.chain);
+        const addr = wallet.address as `0x${string}`;
+        const [latest, pending] = await Promise.all([
+          client.getTransactionCount({ address: addr, blockTag: 'latest' }),
+          client.getTransactionCount({ address: addr, blockTag: 'pending' }),
+        ]);
+        if (Number(pending) > Number(latest)) {
+          // A transaction from this wallet is sitting in the mempool — a mint
+          // broadcast may be in flight for this task. Do NOT re-execute; defer to
+          // the next recovery cycle (the mempool clears within minutes). Erring
+          // toward a delayed retry is strictly safer than a double-spend.
+          await captureMessage('Recovery deferred — wallet has an in-flight transaction; not re-executing to avoid double-spend', {
+            area: 'recovery',
+            level: 'warning',
+            context: { taskId, walletId: task.walletId, latest: Number(latest), pending: Number(pending) },
+            fingerprint: ['recovery', 'inflight-defer'],
+          });
+          return;
+        }
+      }
+    } catch (nonceErr) {
+      // Could not verify on-chain state — be conservative and skip re-execution
+      // this cycle (a later cycle retries once RPC recovers). Avoids re-broadcast
+      // when we cannot prove the wallet is idle.
+      await captureException(nonceErr, {
+        area: 'recovery',
+        context: { taskId, walletId: task.walletId },
+        fingerprint: ['recovery', 'nonce-check-failed'],
+      });
+      return;
+    }
+  }
+
   // Atomic update: only succeeds if the task is STILL in running+no-txHash state.
   // Prevents racing with a concurrent legitimate execution that just finished.
   const [reset] = await getDb()

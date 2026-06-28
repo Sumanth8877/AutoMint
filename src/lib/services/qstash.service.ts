@@ -438,8 +438,9 @@ function retryDelayMs(retriesRemaining: number, maxRetries: number): number {
 
 export async function executeScheduledMint(taskId: string) {
   await addTaskLog(taskId, 'qstash_received', 'info', 'QStash webhook received — starting execution pipeline');
-  const lockAcquired = await acquireLock(taskId);
-  if (!lockAcquired) {
+  // H1 fix: capture the lock token so the release uses the atomic Lua CAS path.
+  const lockToken = (await acquireLock(taskId)) ?? undefined;
+  if (!lockToken) {
     await captureMessage('QStash duplicate execution attempt', {
       area: 'qstash',
       level: 'warning',
@@ -760,6 +761,10 @@ export async function executeScheduledMint(taskId: string) {
       provider: 'execute',
       metadata: { taskId },
     });
+    // H1 fix: hand the lock token off to executeMintTask so it does NOT re-acquire
+    // the lock we already hold (the previous empty-options call re-acquired and
+    // failed). executeMintTask now owns the release; lockReleased=true stops this
+    // function's finally from double-releasing.
     lockReleased = true;
 
     // ── Honeypot check ───────────────────────────────────────────────────────
@@ -806,7 +811,7 @@ export async function executeScheduledMint(taskId: string) {
       void prewarmWalletKey(task.walletId, task.userId).catch(() => undefined);
     }
     await addTaskLog(taskId, 'tx_submitting', 'info', 'Submitting mint transaction to blockchain');
-    const mintResult = await executeMintTask(taskId, task.userId, {});
+    const mintResult = await executeMintTask(taskId, task.userId, { existingLockToken: lockToken });
     await addTaskLog(taskId, mintResult.txHash ? 'tx_submitted' : 'task_completed', mintResult.success ? 'success' : 'error', mintResult.txHash ? `Transaction submitted: ${mintResult.txHash}` : mintResult.error ?? 'Unknown error');
 
     // ——— Retry on transient failure ——————————————————————————————
@@ -877,7 +882,7 @@ export async function executeScheduledMint(taskId: string) {
     });
     throw error;
   } finally {
-    if (!lockReleased) await releaseLock(taskId);
+    if (!lockReleased) await releaseLock(taskId, lockToken);
   }
 }
 

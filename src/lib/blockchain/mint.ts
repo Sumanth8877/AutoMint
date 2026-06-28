@@ -31,6 +31,17 @@ import {
 // ─── Config ──────────────────────────────────────────
 
 
+// H2 fix: the in-function receipt wait must fit inside Vercel's function budget.
+// The qstash + instant-mint routes are capped at maxDuration: 10s, so the old
+// 90s waitForTransactionReceipt timeout was always hard-killed on Ethereum
+// (~12s blocks) — the function never returned, so the graceful 'unconfirmed'
+// transition + receipt recheck never fired and reconciliation fell to recovery.
+// We now wait only a few seconds for a fast confirmation (covers Base's ~2s
+// blocks), then return the txHash as 'unconfirmed'. The receipt-recheck QStash
+// job (runs every 30s with its own budget) finalizes confirmation. The txHash is
+// already persisted via onBroadcast (C1), so this never re-broadcasts.
+const RECEIPT_WAIT_TIMEOUT_MS = 6_000;
+
 // ─── Types ───────────────────────────────────────────
 
 export interface MintParams {
@@ -616,8 +627,8 @@ export async function executeMint(
       // timeout is set explicitly so long mints don't hang the serverless function.
       const receipt = await client.waitForTransactionReceipt({
         hash,
-        pollingInterval: 500,   // ms between receipt polls
-        timeout: 90_000,        // 90s hard timeout (was viem default 180s)
+        pollingInterval: 500,             // ms between receipt polls
+        timeout: RECEIPT_WAIT_TIMEOUT_MS, // H2: fit within the serverless budget; recheck job finalizes the rest
       });
 
       if (receipt.status !== 'success') {

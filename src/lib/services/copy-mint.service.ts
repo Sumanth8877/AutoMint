@@ -274,8 +274,9 @@ export async function handleCopyMintEvent(event: CopyMintEvent) {
   // Including transactionHash caused different Alchemy webhook retries
   // (same contract, different txHash) to bypass the lock and create duplicate tasks.
   const lockName = `copy-mint:${event.userId}:${rule.id}:${contractAddress}`;
-  const lockAcquired = await acquireLock(lockName);
-  if (!lockAcquired) {
+  // H1 fix: capture the token so releaseLock uses the atomic Lua CAS path.
+  const lockToken = (await acquireLock(lockName)) ?? undefined;
+  if (!lockToken) {
     return { status: 'skipped' as const, reason: 'locked' };
   }
 
@@ -434,7 +435,7 @@ export async function handleCopyMintEvent(event: CopyMintEvent) {
     });
     return { status: 'failed' as const, taskId: task.id, error: result.error };
   } finally {
-    await releaseLock(lockName);
+    await releaseLock(lockName, lockToken);
   }
   } catch (error) {
     await captureException(error, {

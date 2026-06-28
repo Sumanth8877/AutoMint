@@ -44,7 +44,7 @@ describe('mint-lock — Redis CAS lock', () => {
     vi.clearAllMocks();
   });
 
-  it('acquireLock returns true when Redis SET NX succeeds', async () => {
+  it('acquireLock returns a token string when Redis SET NX succeeds', async () => {
     // Lua CAS script returns 1 on successful lock acquisition
     mockEval.mockResolvedValue(1);
     // Fallback: SET NX also used in some implementations
@@ -53,10 +53,12 @@ describe('mint-lock — Redis CAS lock', () => {
     const { acquireLock } = await import('@/lib/services/mint-lock.service');
     const acquired = await acquireLock(TASK_ID);
 
-    expect(acquired).toBe(true);
+    // H1: acquireLock now returns the lock token (truthy string) on success.
+    expect(typeof acquired).toBe('string');
+    expect(acquired).toBeTruthy();
   });
 
-  it('acquireLock returns false when lock is already held', async () => {
+  it('acquireLock returns null when lock is already held', async () => {
     // Lua CAS returns 0 when key already exists
     mockEval.mockResolvedValue(0);
     mockSet.mockResolvedValue(null);  // SET NX returns null when key exists
@@ -64,7 +66,7 @@ describe('mint-lock — Redis CAS lock', () => {
     const { acquireLock } = await import('@/lib/services/mint-lock.service');
     const acquired = await acquireLock(TASK_ID);
 
-    expect(acquired).toBe(false);
+    expect(acquired).toBeNull();
   });
 
   it('releaseLock deletes the lock key', async () => {
@@ -93,8 +95,8 @@ describe('mint-lock — Redis CAS lock', () => {
     const first  = await acquireLock(TASK_ID);
     const second = await acquireLock(TASK_ID);
 
-    expect(first).toBe(true);
-    expect(second).toBe(false);
+    expect(first).toBeTruthy();      // token string
+    expect(second).toBeNull();       // already held
   });
 
   it('acquireLock does not throw when Redis is unavailable', async () => {
@@ -103,9 +105,10 @@ describe('mint-lock — Redis CAS lock', () => {
 
     const { acquireLock } = await import('@/lib/services/mint-lock.service');
 
-    // Should either return false (safe default) or throw predictably
-    const result = await acquireLock(TASK_ID).catch(() => false);
-    expect(typeof result).toBe('boolean');
+    // H1: acquireLock swallows Redis errors and returns null (never throws) —
+    // the caller treats a null token as "lock not acquired" (safe default).
+    const result = await acquireLock(TASK_ID).catch(() => null);
+    expect(result).toBeNull();
   });
 
   it('lock key is task-scoped — different tasks use different keys', async () => {

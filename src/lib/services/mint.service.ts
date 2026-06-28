@@ -101,13 +101,15 @@ export async function executeMintTask(
   }
 
   return startSpan('mint.execute_task', { area: 'minting', taskId, userId }, async (): Promise<{ success: boolean; txHash?: string; error?: string }> => {
-  const mintLockToken = options.existingLockToken ?? null;
-  const lockAcquired = options.existingLockToken ? true : await acquireLock(taskId);
-  if (!lockAcquired) {
+  // H1 fix: acquireLock now returns the lock token (or null). Capture it so the
+  // release uses the atomic Lua CAS path instead of a plain DEL. When invoked from
+  // executeScheduledMint the token is handed off via options.existingLockToken, so
+  // we do NOT re-acquire a lock the caller already holds (which previously failed
+  // with "already locked" and silently blocked every scheduled mint).
+  const lockToken = options.existingLockToken ?? (await acquireLock(taskId)) ?? undefined;
+  if (!lockToken) {
     return { success: false, error: 'Mint execution already locked' };
   }
-  // Derive the token for release: provided externally or unknown (plain DEL fallback)
-  const lockToken: string | undefined = mintLockToken ?? undefined;
 
   try {
   const riskGate = await requireRiskApproval({ taskId, action: 'mint', userId });

@@ -21,7 +21,19 @@ function createToken() {
   return crypto.randomBytes(24).toString('base64url');
 }
 
-export async function acquireLock(mintId: string, ttlSeconds = LOCK_TTL_SECONDS): Promise<boolean> {
+/**
+ * Acquire the mint lock for `mintId`.
+ *
+ * H1 fix: returns the unique lock TOKEN on success (or null on failure), instead
+ * of a boolean. The token MUST be passed to releaseLock()/extendLock() so they
+ * use the atomic Lua check-and-delete (CAS) path. Previously acquireLock returned
+ * only a boolean, so every caller released without a token and silently fell back
+ * to a plain DEL — which could delete a lock re-acquired by another worker after
+ * the TTL expired, re-opening the duplicate-execution window.
+ *
+ * @returns the lock token string if acquired, or null if already held / on error.
+ */
+export async function acquireLock(mintId: string, ttlSeconds = LOCK_TTL_SECONDS): Promise<string | null> {
   const key = lockKey(mintId);
   const token = createToken();
 
@@ -40,18 +52,18 @@ export async function acquireLock(mintId: string, ttlSeconds = LOCK_TTL_SECONDS)
         context: { taskId: mintId },
         fingerprint: ['mint-lock', 'exists'],
       });
-      return false;
+      return null;
     }
 
     addBreadcrumb({ category: 'mint-lock', message: 'Lock acquired', level: 'info', data: { mintId, key } });
-    return true;
+    return token;
   } catch (error) {
     await captureException(error, {
       area: 'mint-lock',
       context: { taskId: mintId, key },
       fingerprint: ['mint-lock', 'acquire'],
     });
-    return false;
+    return null;
   }
 }
 
