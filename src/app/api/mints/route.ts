@@ -16,6 +16,7 @@ import { discoverMintRequirements } from '@/lib/services/mint-discovery.service'
 import { logger } from '@/lib/logger';
 import { mintCreateSchema, mintActionSchema, mintDeleteSchema, formatZodError } from '@/lib/api/schemas';
 import type { MintPhase } from '@/types/mint';
+import { addTaskLog } from '@/lib/services/task-log.service';
 
 // Disable cache — mutations need fresh data immediately
 export const dynamic = 'force-dynamic';
@@ -132,6 +133,8 @@ export async function POST(req: Request) {
       maxRetries: body.maxRetries ?? defaults.maxRetries,
       riskThreshold: body.riskThreshold ?? defaults.riskThreshold,
     });
+
+    await addTaskLog(task.id, 'task_created', 'info', 'Mint task created');
 
     const [collection] = await getDb()
       .select()
@@ -322,6 +325,7 @@ export async function POST(req: Request) {
     // with zero delay. The on-chain simulation inside executeScheduledMint()
     // serves as the final safety net — if the mint isn't actually open for
     // public, the tx reverts and is retried automatically.
+    await addTaskLog(task.id, 'mint_state_live', 'success', 'Mint is LIVE on-chain — executing immediately');
     await getDb()
       .update(mintTasks)
       .set({ phase: 'public', updatedAt: new Date() })
@@ -333,6 +337,7 @@ export async function POST(req: Request) {
       scheduledTime: new Date(),
       initialStatus: 'ready',
     });
+    await addTaskLog(task.id, 'qstash_published', 'info', 'QStash message published — executing immediately with zero delay');
 
     return NextResponse.json(
       {

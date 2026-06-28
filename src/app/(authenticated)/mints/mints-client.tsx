@@ -12,6 +12,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { MetricCard } from '@/components/ui/metric-card';
 import { Modal } from '@/components/ui/modal';
 import { PageHeader } from '@/components/ui/page-header';
+import { TaskConsole } from '@/components/ui/task-console';
 import { Skeleton } from '@/components/ui/skeleton';
 import { apiRequest } from '@/lib/api/client';
 import type { WalletType } from '@/lib/wallets/detection';
@@ -199,6 +200,7 @@ export default function MintsClient() {
   const searchParams = useSearchParams();
   const [state, dispatch] = useReducer(mintsReducer, initialState);
   const { saving, updatingId, deletingId, queueOpen, error, success, formError, form } = state;
+  const [consoleTaskId, setConsoleTaskId] = useState<string | null>(null);
 
   // Fetch data with React Query
   const { data: mintsData, isLoading, error: fetchError } = useQuery({
@@ -524,7 +526,7 @@ export default function MintsClient() {
               const title = collection?.name || task.contractAddress || `Task ${task.id.slice(0, 8)}`;
 
               return (
-                <div key={task.id} className="grid grid-cols-12 gap-4 px-5 py-4">
+                <div key={task.id} className="grid grid-cols-12 gap-4 px-5 py-4 items-center cursor-pointer hover:bg-white/[0.02] transition-colors" onClick={() => setConsoleTaskId(task.id)}>
                   <div className="col-span-5 min-w-0">
                     <p className="truncate font-medium text-text">{title}</p>
                     <p className="mt-1 text-xs text-muted">
@@ -575,13 +577,13 @@ export default function MintsClient() {
                   <div className="col-span-7 flex justify-end gap-1 sm:col-span-1">
                     {/* Hide play/retry when QStash is already handling execution */}
                     {task.qstashMessageId && (task.status === 'ready' || task.status === 'monitoring') ? (
-                      <span className="flex h-8 w-8 items-center justify-center text-accent" title="Auto-executing via QStash">
+                      <span className="flex h-8 w-8 items-center justify-center text-accent" title="Auto-executing via QStash" onClick={(e) => e.stopPropagation()}>
                         <Zap className="h-4 w-4 animate-pulse" aria-hidden="true" />
                       </span>
                     ) : (
                       <button
                         type="button"
-                        onClick={() => startTask(task)}
+                        onClick={(e) => { e.stopPropagation(); startTask(task); }}
                         disabled={updatingId === task.id || task.status === 'running' || task.status === 'completed'}
                         className={`flex h-8 w-8 items-center justify-center rounded-lg disabled:opacity-50 ${
                           task.status === 'failed'
@@ -594,10 +596,10 @@ export default function MintsClient() {
                         {task.status === 'failed' ? <RotateCcw className="h-4 w-4" aria-hidden="true" /> : <Play className="h-4 w-4" aria-hidden="true" />}
                       </button>
                     )}
-                    <button type="button" onClick={() => cancelTask(task)} disabled={updatingId === task.id || task.status === 'completed' || task.status === 'cancelled'} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-white/5 hover:text-warning disabled:opacity-50" aria-label={`Cancel ${title}`}>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); cancelTask(task); }} disabled={updatingId === task.id || task.status === 'completed' || task.status === 'cancelled'} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-white/5 hover:text-warning disabled:opacity-50" aria-label={`Cancel ${title}`}>
                       <XCircle className="h-4 w-4" aria-hidden="true" />
                     </button>
-                    <button type="button" onClick={() => deleteTask(task)} disabled={deletingId === task.id} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-white/5 hover:text-danger disabled:opacity-50" aria-label={`Delete ${title}`}>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); deleteTask(task); }} disabled={deletingId === task.id} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-white/5 hover:text-danger disabled:opacity-50" aria-label={`Delete ${title}`}>
                       <Trash2 className="h-4 w-4" aria-hidden="true" />
                     </button>
                   </div>
@@ -637,6 +639,17 @@ export default function MintsClient() {
           </Button>
         </div>
       </Card>
+
+      {consoleTaskId ? (
+        <TaskConsole
+          open={!!consoleTaskId}
+          onClose={() => setConsoleTaskId(null)}
+          taskId={consoleTaskId}
+          taskStatus={tasks.find(t => t.id === consoleTaskId)?.status ?? 'unknown'}
+          contractAddress={tasks.find(t => t.id === consoleTaskId)?.contractAddress ?? null}
+          phase={tasks.find(t => t.id === consoleTaskId)?.phase ?? null}
+        />
+      ) : null}
 
       <Modal open={queueOpen} title="Queue Settings" onClose={() => dispatch({ type: 'CLOSE_QUEUE' })}>
         <div className="space-y-4">

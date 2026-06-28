@@ -18,6 +18,7 @@ import { sendMintFailedEmail, sendMintScheduledEmail, sendMintSuccessEmail, send
 import { getClient } from '@/lib/blockchain/client';
 import type { Hex } from 'viem';
 import { unregisterIfIdle } from '@/lib/services/alchemy-webhook.service';
+import { addTaskLog } from '@/lib/services/task-log.service';
 
 // Monitoring fix: reduced from 60s to 30s.
 // WebSocket monitoring watches for 25s per invocation;
@@ -163,7 +164,7 @@ async function deleteQStashMessage(messageId: string) {
 
 async function sendScheduledMintNotification(
   userId: string,
-  type: 'mint_scheduled' | 'mint_failed' | 'wallet_balance_low' | 'mint_live_detected',
+  type: 'mint_scheduled' | 'mint_failed' | 'wallet_balance_low' | 'mint_live_detected' | 'mint_executing',
   payload: {
     taskId?: string;
     contractAddress?: string;
@@ -233,8 +234,8 @@ export async function scheduleMint(params: {
     level: 'info',
     data: { taskId: task.id, qstashMessageId, scheduledTime: scheduledTime.toISOString() },
   });
-
   const effectiveStatus = params.initialStatus ?? 'monitoring';
+  await addTaskLog(task.id, 'qstash_published', 'info', `QStash message published — ${effectiveStatus === 'ready' ? 'executing immediately' : 'monitoring for mint start'}`);
   const [updated] = await getDb()
     .update(mintTasks)
     .set({
@@ -256,14 +257,21 @@ export async function scheduleMint(params: {
     qstashMessageId,
     scheduledTime: scheduledTime.toISOString(),
   });
-  await sendScheduledMintNotification(task.userId, 'mint_scheduled', {
-    taskId: task.id,
-    contractAddress: task.contractAddress || undefined,
-  });
-  await sendMintScheduledEmail(task.userId, {
-    taskId: task.id,
-    contractAddress: task.contractAddress || undefined,
-  });
+  await sendScheduledMintNotification(
+    task.userId,
+    effectiveStatus === 'ready' ? 'mint_live_detected' : 'mint_scheduled',
+    {
+      taskId: task.id,
+      contractAddress: task.contractAddress || undefined,
+    },
+  );
+  if (effectiveStatus !== 'ready') {
+    // Only send the "scheduled" email for future mints — live mints execute immediately
+    await sendMintScheduledEmail(task.userId, {
+      taskId: task.id,
+      contractAddress: task.contractAddress || undefined,
+    });
+  }
 
   return updated;
 }
@@ -406,6 +414,7 @@ function retryDelayMs(retriesRemaining: number, maxRetries: number): number {
 }
 
 export async function executeScheduledMint(taskId: string) {
+  await addTaskLog(taskId, 'qstash_received', 'info', 'QStash webhook received — starting execution pipeline');
   const lockAcquired = await acquireLock(taskId);
   if (!lockAcquired) {
     await captureMessage('QStash duplicate execution attempt', {
@@ -476,6 +485,7 @@ export async function executeScheduledMint(taskId: string) {
         // (may send Telegram notification requesting manual approval)
         const riskGate = await requireRiskApproval({ taskId, action: 'mint' });
         if (!riskGate.approved) {
+          await addTaskLog(taskId, 'risk_check_blocked', 'warning', `Risk approval required: ${riskGate.risk?.riskScore ?? 0}/100`);
           await getDb()
             .update(mintTasks)
             .set({ status: 'ready', qstashMessageId: null, scheduledTime: null, safeModeEnabled: true, updatedAt: new Date() })
@@ -486,9 +496,11 @@ export async function executeScheduledMint(taskId: string) {
             error: `Risk approval required: ${riskGate.risk?.riskScore ?? 0}/100`,
           };
         }
+        await addTaskLog(taskId, 'risk_check_passed', 'success', 'Risk check passed');
       }
 
       const mintState = await getMintState(task.contractAddress, wallet.chain);
+      await addTaskLog(taskId, 'mint_state_check', 'info', `Mint state: ${mintState.status}`);
       if (mintState.status !== 'LIVE') {
         // H-5 fix: cap reschedule attempts to prevent infinite QStash billing.
         // We repurpose maxRetries as a unified attempt counter — each reschedule
@@ -531,12 +543,14 @@ export async function executeScheduledMint(taskId: string) {
         //   Base (2s blocks):      0–2s   (was 0–60s, 30× faster)
         //   Ethereum (12s blocks): 0–12s  (was 0–60s,  5× faster)
         const { watchForMintLive } = await import('@/lib/services/mint-monitor.service');
+        await addTaskLog(taskId, 'websocket_monitoring', 'info', 'WebSocket block monitoring started — watching for mint-live event');
         const monitorResult = await watchForMintLive(
           task.contractAddress!,
           wallet.chain,
         );
 
         if (monitorResult === 'live') {
+          await addTaskLog(taskId, 'websocket_live_detected', 'success', 'Mint went live during watch window — executing immediately');
           // Mint went live during the watch window — execute immediately.
           // Don't reschedule — fall through to the execution path below.
           addBreadcrumb({
@@ -599,8 +613,10 @@ export async function executeScheduledMint(taskId: string) {
       const { fetchMintRequirements } = await import('@/lib/services/mint-requirements.service');
       const liveReqs = await fetchMintRequirements(task.contractAddress!, wallet.chain);
       const livePrice = liveReqs.mintPrice;
+      await addTaskLog(taskId, 'price_refetch', 'info', 'Re-fetching live mint price from on-chain');
 
       if (livePrice !== task.mintPrice) {
+        await addTaskLog(taskId, 'price_changed', 'warning', `Mint price changed: ${task.mintPrice} → ${livePrice}`);
         addBreadcrumb({
           category: 'qstash',
           message: 'Mint price changed since task creation — updating task',
@@ -638,6 +654,7 @@ export async function executeScheduledMint(taskId: string) {
 
     const balance = await getWalletBalance(wallet.address, wallet.chain);
     if (!hasEnoughBalance(balance.balance, effectiveMintPrice, task.quantity)) {
+      await addTaskLog(taskId, 'balance_check_failed', 'error', `Insufficient balance: ${balance.balance} ${balance.symbol}`);
       await getDb()
         .update(mintTasks)
         .set({ status: 'failed', qstashMessageId: null, scheduledTime: null, updatedAt: new Date() })
@@ -664,6 +681,7 @@ export async function executeScheduledMint(taskId: string) {
       });
       return { success: false, error: 'Wallet balance is too low' };
     }
+    await addTaskLog(taskId, 'balance_check_passed', 'success', `Balance check passed: ${balance.balance} ${balance.symbol}`);
 
     const [claimed] = await getDb()
       .update(mintTasks)
@@ -705,6 +723,7 @@ export async function executeScheduledMint(taskId: string) {
       });
 
       if (!honeypot.isSafe && !honeypot.skipped) {
+        await addTaskLog(taskId, 'honeypot_check_failed', 'error', `Honeypot detected: ${honeypot.reason}`);
         await getDb()
           .update(mintTasks)
           .set({ status: 'failed', updatedAt: new Date() })
@@ -721,6 +740,7 @@ export async function executeScheduledMint(taskId: string) {
         });
         return { success: false, error: honeypot.reason ?? 'Honeypot detected' };
       }
+      await addTaskLog(taskId, 'honeypot_check_passed', 'success', 'Honeypot simulation passed — contract is safe');
     }
 
     // Speed fix: fire-and-forget wallet key pre-warm so the decryption cache is
@@ -729,7 +749,9 @@ export async function executeScheduledMint(taskId: string) {
     if (task.walletId) {
       void prewarmWalletKey(task.walletId, task.userId).catch(() => undefined);
     }
+    await addTaskLog(taskId, 'tx_submitting', 'info', 'Submitting mint transaction to blockchain');
     const mintResult = await executeMintTask(taskId, task.userId, {});
+    await addTaskLog(taskId, mintResult.txHash ? 'tx_submitted' : 'task_completed', mintResult.success ? 'success' : 'error', mintResult.txHash ? `Transaction submitted: ${mintResult.txHash}` : mintResult.error ?? 'Unknown error');
 
     // ——— Retry on transient failure ——————————————————————————————
     // C-04: NEVER retry if a txHash is present — the transaction is already
@@ -755,6 +777,7 @@ export async function executeScheduledMint(taskId: string) {
 
         await publishQStashMessage(taskId, retryAt, 'execute');
 
+        await addTaskLog(taskId, 'task_retrying', 'warning', `Retrying in ${Math.round(delay/1000)}s (${retriesRemaining - 1} retries left)`);
         addBreadcrumb({
           category: 'qstash',
           message: 'mint retry scheduled',
