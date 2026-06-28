@@ -1,6 +1,7 @@
 import { getClient } from '@/lib/blockchain/client';
 import type { Hex } from 'viem';
-import { discoverContractABI, discoverMintFunction } from '@/lib/services/mint-abi-discovery.service';
+import { discoverContractABI } from '@/lib/services/mint-abi-discovery.service';
+import { planMintFunction } from '@/lib/services/mint-calldata.service';
 import { getSeaDropPublicDrop, SEADROP_MINT_FUNCTION } from '@/lib/services/seadrop.service';
 
 const CONTRACT_ABI = ['function maxPerWallet() view returns (uint256)', 'function maxPerTx() view returns (uint256)', 'function mintStart() view returns (uint256)', 'function mintEnd() view returns (uint256)'] as const;
@@ -73,10 +74,14 @@ export async function fetchMintRequirements(contractAddress: string, chain: stri
   // off-chain discovery and block rather than minting with a wrong 0 value.
   let mintPrice = typeof priceWei === 'bigint' ? (Number(priceWei) / 1e18).toFixed(6) : null;
 
-  // Use the discovered function name; fall back to 'mint' if discovery failed
-  let mintFunction = abiResult && abiResult.abi.length > 0
-    ? discoverMintFunction(abiResult.abi).functionName
-    : 'mint';
+  // Resolve the real mint function from the ABI. planMintFunction returns either
+  // a full re-parseable signature (generic encoding) or an 'unsupported:<name>'
+  // sentinel when the mechanism needs data we can't synthesise (proofs, ids, …).
+  let mintFunction = 'mint';
+  if (abiResult && abiResult.abi.length > 0) {
+    const plan = planMintFunction(abiResult.abi);
+    if (plan) mintFunction = plan.mintFunction;
+  }
 
   // SeaDrop drop: authoritative on-chain price + correct mint route. This is the
   // path that makes pasting an OpenSea collection URL actually mintable.

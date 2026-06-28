@@ -102,12 +102,52 @@ export function discoverMintFunction(abi: Abi): {
  * Returns an empty ABI for unverified contracts — callers fall back
  * to the default mint(uint256 quantity) encoding via discoverMintFunction().
  */
+const EIP1967_IMPL_SLOT = '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc' as Hex;
+
+function extractEip1167Implementation(bytecode: string): string | null {
+  // Minimal proxy runtime: 363d3d373d3d3d363d73<20-byte impl>5af43d82803e903d91602b57fd5bf3
+  const m = /^0x363d3d373d3d3d363d73([0-9a-fA-F]{40})5af43d82803e903d91602b57fd5bf3$/.exec(bytecode);
+  return m ? `0x${m[1]}` : null;
+}
+
+/**
+ * Resolve a proxy contract to its implementation address. Many NFTs (incl. most
+ * OpenSea/SeaDrop drops) are EIP-1167 minimal-proxy clones or EIP-1967
+ * upgradeable proxies; Etherscan getabi on the proxy returns the wrong ABI.
+ * Returns the original address when it is not a recognised proxy.
+ */
+export async function resolveImplementationAddress(contractAddress: string, chain: string): Promise<string> {
+  try {
+    const client = getClient(chain);
+    const code = await client.getBytecode({ address: contractAddress as Hex });
+    if (code) {
+      const clone = extractEip1167Implementation(code);
+      if (clone && /^0x[0-9a-fA-F]{40}$/.test(clone) && clone !== '0x0000000000000000000000000000000000000000') {
+        return clone;
+      }
+    }
+    const slot = await client.getStorageAt({ address: contractAddress as Hex, slot: EIP1967_IMPL_SLOT });
+    if (slot && slot.length >= 66) {
+      const impl = `0x${slot.slice(-40)}`;
+      if (/^0x[0-9a-fA-F]{40}$/.test(impl) && impl !== '0x0000000000000000000000000000000000000000') {
+        return impl;
+      }
+    }
+  } catch {
+    // fall through to the original address
+  }
+  return contractAddress;
+}
+
 export async function discoverContractABI(
   contractAddress: string,
   chain: string,
 ): Promise<DiscoveredABI> {
   // ── 1. Etherscan (full verified ABI) ─────────────────────────────
-  const etherscanAbi = await fetchAbiFromEtherscan(contractAddress, chain);
+  const implAddress = await resolveImplementationAddress(contractAddress, chain);
+  const etherscanAbi =
+    (await fetchAbiFromEtherscan(implAddress, chain)) ??
+    (implAddress !== contractAddress ? await fetchAbiFromEtherscan(contractAddress, chain) : null);
   if (etherscanAbi && etherscanAbi.length > 0) {
     return { abi: etherscanAbi, source: 'etherscan', confidence: 0.95 };
   }

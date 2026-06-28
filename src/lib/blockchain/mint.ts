@@ -21,6 +21,12 @@ import {
   getSeaDropFeeRecipient,
   isSeaDropMintFunction,
 } from '@/lib/services/seadrop.service';
+import {
+  UNSUPPORTED_MINT_PREFIX,
+  buildGenericMintCalldata,
+  isMintSignature,
+  isUnsupportedMintFunction,
+} from '@/lib/services/mint-calldata.service';
 
 // ─── Config ──────────────────────────────────────────
 
@@ -106,6 +112,31 @@ async function resolveMintTx(
       value: unitPriceWei(params) * BigInt(params.quantity),
     };
   }
+
+  // Contracts whose mint mechanism we cannot encode generically (claim w/ proofs,
+  // ERC-1155 ids, signatures, …) are blocked rather than guessed.
+  if (isUnsupportedMintFunction(params.mintFunction)) {
+    throw new Error(
+      `UnsupportedMint: this contract's mint function (${params.mintFunction?.replace(UNSUPPORTED_MINT_PREFIX, '')}) ` +
+      'needs data AutoMint cannot generate (e.g. allowlist proof, claim conditions, or token id). Mint it manually.',
+    );
+  }
+
+  // Generic ABI-driven path: stored mintFunction is a full signature, e.g.
+  // 'mint(address to, uint256 quantity)'.
+  if (isMintSignature(params.mintFunction)) {
+    const built = buildGenericMintCalldata(params.mintFunction as string, address, params.quantity);
+    if (!built) {
+      throw new Error('UnsupportedMint: the mint function arguments could not be encoded safely.');
+    }
+    return {
+      to: params.contractAddress,
+      data: built.data,
+      value: unitPriceWei(params) * BigInt(built.valueMultiplier),
+    };
+  }
+
+  // Legacy bare-name path: assume fn(uint256 quantity).
   return {
     to: params.contractAddress,
     data: buildMintData(params),
@@ -266,6 +297,25 @@ export async function simulateMint(
       return { success: true };
     }
 
+    // Contracts we can't encode generically: fail simulation with a clear reason
+    // so executeMint blocks instead of guessing.
+    if (isUnsupportedMintFunction(params.mintFunction)) {
+      return { success: false, reason: 'unsupported', revertReason: 'unsupported mint mechanism' };
+    }
+
+    // Generic ABI-driven path: dry-run the exact calldata we would broadcast.
+    if (isMintSignature(params.mintFunction)) {
+      const built = buildGenericMintCalldata(params.mintFunction as string, address, params.quantity);
+      if (!built) return { success: false, reason: 'unsupported', revertReason: 'mint args not encodable' };
+      await client.call({
+        account: address,
+        to: params.contractAddress,
+        data: built.data,
+        value: unitPriceWei(params) * BigInt(built.valueMultiplier),
+      });
+      return { success: true };
+    }
+
     const abi = params.mintFunction === 'mint' || !params.mintFunction
       ? parseAbi(['function mint(uint256 quantity) payable'])
       : parseAbi([`function ${params.mintFunction}(uint256 quantity) payable`]);
@@ -332,6 +382,18 @@ export async function executeMint(
     };
   }
 
+  // ── Guard: unsupported mint mechanism ───────────────────────────────────────
+  // Block contracts whose mint we cannot encode generically (claim w/ proofs,
+  // ERC-1155 ids, signatures, …) before any signing or broadcast.
+  if (isUnsupportedMintFunction(params.mintFunction)) {
+    return {
+      success: false,
+      error:
+        `UnsupportedMint: this contract's mint function (${params.mintFunction?.replace(UNSUPPORTED_MINT_PREFIX, '')}) ` +
+        'needs data AutoMint cannot generate (allowlist proof, claim conditions, or token id). Mint it manually.',
+    };
+  }
+
   // ── C-01 Fix: MINT_MODE guard ────────────────────────────────────────────────
   // The test suite asserts that executeMint() must reject execution outside a
   // live production environment unless MINT_MODE='live' is explicitly set.
@@ -381,6 +443,7 @@ export async function executeMint(
         not_eligible: 'This wallet is not eligible to mint',
         max_per_wallet: 'This wallet has already reached the per-wallet mint limit',
         generic_revert: 'Contract simulation reverted',
+        unsupported: 'Unsupported mint mechanism — needs allowlist proof / claim conditions / token id; mint manually',
       };
       const label = labels[simulation.reason] ?? labels.generic_revert;
       return {

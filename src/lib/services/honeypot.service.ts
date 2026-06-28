@@ -11,6 +11,11 @@ import {
   getSeaDropFeeRecipient,
   isSeaDropMintFunction,
 } from '@/lib/services/seadrop.service';
+import {
+  buildGenericMintCalldata,
+  isMintSignature,
+  isUnsupportedMintFunction,
+} from '@/lib/services/mint-calldata.service';
 
 /**
  * honeypot.service.ts
@@ -90,6 +95,34 @@ export async function checkHoneypot(params: {
       addBreadcrumb({
         category: 'honeypot',
         message:  'SeaDrop simulation passed — contract appears safe',
+        level:    'info',
+        data: { contractAddress, chain, mintFunction, mintPrice, quantity },
+      });
+      return { isSafe: true };
+    }
+
+    // Mechanisms we can't encode generically are validated/blocked at execution
+    // time — skip the honeypot simulation rather than false-flagging.
+    if (isUnsupportedMintFunction(mintFunction)) {
+      return { isSafe: true, skipped: true, reason: 'Unsupported mint mechanism — validated at execution' };
+    }
+
+    // Generic ABI-driven path: simulate the exact calldata we would broadcast.
+    if (isMintSignature(mintFunction)) {
+      const built = buildGenericMintCalldata(mintFunction, walletAddress as Hex, quantity);
+      if (!built) {
+        return { isSafe: true, skipped: true, reason: 'Mint args not encodable — validated at execution' };
+      }
+      const unitWei = BigInt(Math.round(parseFloat(mintPrice) * 1e18));
+      await client.call({
+        account: walletAddress as Hex,
+        to:      contractAddress as Hex,
+        data:    built.data,
+        value:   unitWei * BigInt(built.valueMultiplier),
+      });
+      addBreadcrumb({
+        category: 'honeypot',
+        message:  'Generic simulation passed — contract appears safe',
         level:    'info',
         data: { contractAddress, chain, mintFunction, mintPrice, quantity },
       });
