@@ -8,7 +8,7 @@ import { mintTasks, telegramAccounts, wallets } from '@/drizzle/schema';
 import { resolveMintIntent } from '@/lib/resolve-mint-intent';
 import { getMintState } from '@/lib/services/mint-state.service';
 import { fetchMintRequirements } from '@/lib/services/mint-requirements.service';
-import { createMintTaskFromUrl } from '@/lib/services/mint-orchestrator.service';
+import { createMintTaskFromUrl, withMintTaskCreationLock } from '@/lib/services/mint-orchestrator.service';
 import { cancelScheduledMint, scheduleMint } from '@/lib/services/qstash.service';
 import { watchWallet } from '@/lib/services/wallet-tracker.service';
 import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
@@ -726,15 +726,35 @@ async function handleScheduleCommand(message: TelegramMessage, userId: string, u
     return;
   }
 
-  const [task] = await getDb().insert(mintTasks).values({
-    userId,
-    walletId: wallet.id,
-    quantity: 1,
-    status: mintState.status === 'LIVE' ? 'ready' : 'pending',
-    contractAddress: intent.contractAddress,
-    mintFunction: requirements.mintFunction,
-    mintPrice: requirements.mintPrice,
-  }).returning();
+  // C3 fix: the /schedule command previously inserted with no dedup at all —
+  // two quick /schedule commands for the same URL created two tasks and minted
+  // twice. Serialize the check-then-insert per (user, contract) and return the
+  // existing active task if one already exists for this wallet.
+  const contractAddress = intent.contractAddress;
+  const task = await withMintTaskCreationLock(userId, contractAddress, async () => {
+    const [existing] = await getDb()
+      .select()
+      .from(mintTasks)
+      .where(and(
+        eq(mintTasks.userId, userId),
+        eq(mintTasks.walletId, wallet.id),
+        eq(mintTasks.contractAddress, contractAddress),
+        inArray(mintTasks.status, ['pending', 'monitoring', 'ready', 'running', 'unconfirmed']),
+      ))
+      .limit(1);
+    if (existing) return existing;
+
+    const [created] = await getDb().insert(mintTasks).values({
+      userId,
+      walletId: wallet.id,
+      quantity: 1,
+      status: mintState.status === 'LIVE' ? 'ready' : 'pending',
+      contractAddress,
+      mintFunction: requirements.mintFunction,
+      mintPrice: requirements.mintPrice,
+    }).returning();
+    return created;
+  });
 
   if (mintState.status !== 'LIVE') {
     const scheduledTime = mintState.startTime && mintState.startTime.getTime() > Date.now()

@@ -8,6 +8,48 @@ import { getMintState } from './mint-state.service';
 import { fetchMintRequirements } from './mint-requirements.service';
 import { scheduleMint } from './qstash.service';
 import { discoverMintRequirements } from '@/lib/services/mint-discovery.service';
+import { acquireCronLock, releaseCronLock } from '@/lib/redis/lock';
+
+// C3 fix: serialize the check-then-insert critical section per (user, contract)
+// so two near-simultaneous creation requests (e.g. duplicate Telegram messages)
+// cannot both pass the "does an active task already exist?" check and create
+// duplicate tasks — which would schedule two QStash messages and mint twice.
+//
+// This is intentionally NOT a DB unique constraint: mint-fanout legitimately
+// creates multiple tasks for one contract across different wallets, and
+// instant-mint creates one task per phase. A (userId, contractAddress) unique
+// index would break those flows and silently drop legitimate tasks.
+const TASK_CREATE_LOCK_TTL = 30;        // seconds — auto-expires on crash
+const TASK_CREATE_LOCK_RETRIES = 25;    // ~3s max wait (25 * 120ms)
+const TASK_CREATE_LOCK_RETRY_MS = 120;
+
+/**
+ * Run `fn` while holding a short per-(user, contract) creation lock.
+ *
+ * A second caller for the same (user, contract) waits up to ~3s for the first
+ * to finish inserting, then runs `fn` itself — by which point its dedup SELECT
+ * will see the row the first caller created and return it.
+ *
+ * Fail-open: if Redis is unavailable the lock cannot be acquired and `fn` runs
+ * unserialized (same behaviour as before this fix) rather than blocking mints.
+ */
+export async function withMintTaskCreationLock<T>(
+  userId: string,
+  contractAddress: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const lockName = `create-mint-task:${userId}:${contractAddress.toLowerCase()}`;
+  let token: string | null = null;
+  for (let i = 0; i < TASK_CREATE_LOCK_RETRIES && !token; i++) {
+    token = await acquireCronLock(lockName, TASK_CREATE_LOCK_TTL);
+    if (!token) await new Promise((resolve) => setTimeout(resolve, TASK_CREATE_LOCK_RETRY_MS));
+  }
+  try {
+    return await fn();
+  } finally {
+    if (token) await releaseCronLock(lockName, token);
+  }
+}
 
 // ——— Result types ——————————————————————————————————————————————————
 
@@ -64,6 +106,13 @@ export async function createMintTaskFromUrl(
     return { action: 'FAILED', error: 'Wallet not found' };
   }
 
+  // Narrow to a non-null const so it stays `string` inside the closure below
+  // (TS resets property narrowing of intent.contractAddress across function boundaries).
+  const contractAddress = intent.contractAddress;
+
+  // C3 fix: serialize dedup-check + insert per (user, contract) so concurrent
+  // creation requests cannot both miss the dedup check and create duplicate tasks.
+  return withMintTaskCreationLock(userId, contractAddress, async (): Promise<OrchestratorResult> => {
   // 3. Deduplication: return the existing task if any active or completed task
   //    already exists for this user+contract pair.
   //    M-5 fix: previously only checked 'completed' — a second call while a task
@@ -74,7 +123,7 @@ export async function createMintTaskFromUrl(
     .from(mintTasks)
     .where(
       and(
-        eq(mintTasks.contractAddress, intent.contractAddress),
+        eq(mintTasks.contractAddress, contractAddress),
         eq(mintTasks.userId, userId),
         inArray(mintTasks.status, ['pending', 'monitoring', 'ready', 'running', 'completed']),
       ),
@@ -86,8 +135,8 @@ export async function createMintTaskFromUrl(
 
   // 4. Resolve mint state and on-chain requirements in parallel
   const [mintState, onChainRequirements] = await Promise.all([
-    getMintState(intent.contractAddress, intent.chain),
-    fetchMintRequirements(intent.contractAddress, intent.chain),
+    getMintState(contractAddress, intent.chain),
+    fetchMintRequirements(contractAddress, intent.chain),
   ]);
 
   if (mintState.status === 'ENDED') {
@@ -100,7 +149,7 @@ export async function createMintTaskFromUrl(
   //     fetchMintRequirements + getMintState) so the discovery service only
   //     escalates to Jina/Firecrawl/Browserbase for fields that are still missing.
   const discovered = await discoverMintRequirements(url, {
-    contractAddress: intent.contractAddress,
+    contractAddress: contractAddress,
     chain: intent.chain,
     collectionName: intent.collectionName,
     mintFunction: onChainRequirements.mintFunction,
@@ -135,7 +184,7 @@ export async function createMintTaskFromUrl(
       walletId: wallet.id,
       quantity,
       status: initialStatus,
-      contractAddress: intent.contractAddress,
+      contractAddress: contractAddress,
       mintFunction,
       mintPrice,
       scheduledTime: mintState.status !== 'LIVE' && mintStartTime ? mintStartTime : undefined,
@@ -166,4 +215,5 @@ export async function createMintTaskFromUrl(
   const action: OrchestratorAction = mintState.status === 'LIVE' ? 'TASK_CREATED' : 'MONITORING';
 
   return { action, taskId: task.id };
+  });
 }

@@ -362,6 +362,13 @@ export async function executeMint(
   options: {
     walletId: string;          // REQUIRED — wallet to sign with
     privateMempool?: boolean;  // Optional — route via Flashbots/MEV Blocker (Ethereum only)
+    // C1 fix: invoked the instant the transaction is broadcast (hash known),
+    // BEFORE waiting for the receipt. The caller persists the txHash to the DB
+    // here so that if the serverless function is killed during the receipt wait
+    // (Vercel maxDuration < on-chain confirmation time), the task is left with a
+    // txHash and recovery routes it to the safe "receipt recheck" path instead
+    // of re-broadcasting a second transaction (double-spend).
+    onBroadcast?: (txHash: Hex) => Promise<void> | void;
   },
 ): Promise<MintResult> {
   // ── Guard: userId is mandatory ───────────────────────────────────
@@ -570,6 +577,23 @@ export async function executeMint(
         success: false,
         error: getErrorMessage(broadcastError) || 'Transaction broadcast failed',
       };
+    }
+
+    // C1 fix: durably persist the txHash NOW, before the receipt wait.
+    // hash is guaranteed to be defined here (the broadcast try returned without throwing).
+    // If onBroadcast throws we cannot un-broadcast — log loudly and continue so the
+    // transaction is still tracked via the receipt wait / recovery in this same process.
+    if (hash && options.onBroadcast) {
+      try {
+        await options.onBroadcast(hash);
+      } catch (persistError) {
+        await captureException(persistError, {
+          area: 'minting',
+          level: 'error',
+          context: { wallet: address, chain, collection: params.contractAddress, transactionHash: hash },
+          fingerprint: ['mint', 'onbroadcast-persist'],
+        });
+      }
     }
 
     // Post-broadcast: release inflight tracking and scan for gaps.

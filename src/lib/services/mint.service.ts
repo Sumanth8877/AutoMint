@@ -220,6 +220,16 @@ export async function executeMintTask(
       // User can force-disable via options.privateMempool = false (e.g. if Flashbots latency
       // is unacceptable for high-speed mint races where speed > protection).
       privateMempool: options.privateMempool ?? (chain === 'ethereum'),
+      // C1 fix: persist txHash to the DB the instant the tx is broadcast, before the
+      // receipt wait. If the function is killed mid-wait the task already has a txHash,
+      // so recoverStuckMintTasks routes it to receipt-recheck (Mode B) and NEVER
+      // re-broadcasts a second transaction.
+      onBroadcast: async (txHash) => {
+        await getDb()
+          .update(mintTasks)
+          .set({ status: 'unconfirmed', txHash, updatedAt: new Date() })
+          .where(eq(mintTasks.id, taskId));
+      },
     });
 
   if (!result.success) {

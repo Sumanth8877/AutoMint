@@ -2,7 +2,7 @@ import 'server-only'; // reliability: r1-r5
 
 import { getDb } from '@/lib/db';
 import { mintTasks } from '@/drizzle/schema';
-import { eq, and, isNull, isNotNull, lt } from 'drizzle-orm';
+import { eq, and, isNull, isNotNull, lt, inArray } from 'drizzle-orm';
 import { addBreadcrumb, captureException, captureMessage } from '@/lib/observability/sentry';
 
 // Tasks stuck in 'running' longer than this are assumed to have crashed
@@ -44,12 +44,18 @@ export async function recoverStuckMintTasks(): Promise<RecoveryResult> {
   const threshold = new Date(Date.now() - STUCK_THRESHOLD_MS);
 
   try {
+    // C1 fix: also scan 'unconfirmed' tasks. With the post-broadcast txHash
+    // persistence, a function killed during the receipt wait leaves the task in
+    // 'unconfirmed' (txHash set) rather than 'running'. If the in-process receipt
+    // recheck was never scheduled (the function died before returning), these
+    // would otherwise be stranded. Routing stale ones to receipt recheck is safe
+    // (idempotent poll, never re-broadcasts).
     const stuckTasks = await getDb()
       .select()
       .from(mintTasks)
       .where(
         and(
-          eq(mintTasks.status, 'running'),
+          inArray(mintTasks.status, ['running', 'unconfirmed']),
           lt(mintTasks.updatedAt, threshold),
         ),
       )
@@ -158,7 +164,10 @@ async function recoverPostBroadcastTask(taskId: string, txHash: string): Promise
     .where(
       and(
         eq(mintTasks.id, taskId),
-        eq(mintTasks.status, 'running'),
+        // C1 fix: a stuck task with a txHash may be in 'running' (crashed before
+        // the post-broadcast persist completed its status flip) or already
+        // 'unconfirmed' (persisted, but the receipt recheck was never scheduled).
+        inArray(mintTasks.status, ['running', 'unconfirmed']),
         isNotNull(mintTasks.txHash),
       ),
     )
