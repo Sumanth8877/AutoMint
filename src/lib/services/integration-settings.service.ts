@@ -5,6 +5,7 @@ import { integrationSettings } from '@/drizzle/schema';
 import { getDb } from '@/lib/db';
 import { decrypt, encrypt, rotateEncryption } from '@/lib/security/encryption';
 import { getCache, setCache, getRedisClient } from '@/lib/redis';
+import { logger } from '@/lib/logger';
 
 export const INTEGRATION_SETTING_KEYS = ['ALCHEMY_API_KEY', 'INFURA_API_KEY', 'CHAINSTACK_API_KEY'] as const;
 export type IntegrationSettingKey = typeof INTEGRATION_SETTING_KEYS[number];
@@ -136,7 +137,7 @@ export async function rotateAllIntegrationSettings(): Promise<{ rotated: number;
       }
     } catch (err) {
       // Non-fatal: log and continue so one bad row doesn't abort the migration
-      console.error(`[rotateAllIntegrationSettings] Failed to rotate key ${row.key}:`, err);
+      logger.error(`[rotateAllIntegrationSettings] Failed to rotate key ${row.key}:`, { error: err instanceof Error ? err.message : String(err) });
       skipped++;
     }
   }

@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { captureException } from '@/lib/observability/sentry';
+import { logger } from '@/lib/logger';
 
 type NFTScanCollectionResponse = {
   code: number;
@@ -92,7 +93,7 @@ function getChain(chain: string): string {
 async function fetchNFTScan<T>(endpoint: string): Promise<T | null> {
   const apiKey = process.env.NFTSCAN_API_KEY;
   if (!apiKey) {
-    console.warn('NFTScan API key not found, skipping request');
+    logger.warn('NFTScan API key not found, skipping request');
     return null;
   }
 
@@ -106,20 +107,20 @@ async function fetchNFTScan<T>(endpoint: string): Promise<T | null> {
     });
 
     if (!response.ok) {
-      console.error(`NFTScan API failed with status ${response.status}`);
+      logger.error(`NFTScan API failed with status ${response.status}`);
       return null;
     }
 
     const data = await response.json();
     
     if (data.code !== 200) {
-      console.error(`NFTScan API returned error: ${data.msg}`);
+      logger.error(`NFTScan API returned error: ${data.msg}`);
       return null;
     }
 
     return data;
   } catch (error) {
-    console.error('NFTScan API request failed:', error);
+    logger.error('NFTScan API request failed:', { error: error instanceof Error ? error.message : String(error) });
     void captureException(error, { area: 'nftscan' });
     return null;
   }

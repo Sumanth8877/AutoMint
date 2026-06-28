@@ -4,6 +4,7 @@ import { activities, consensusEvents } from '@/drizzle/schema';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getDb } from '@/lib/db';
 import { getUserWatchedWallets } from '@/lib/services/wallet-tracker.service';
+import { logger } from '@/lib/logger';
 
 type WalletTrackerActivityMetadata = {
   type?: string;
@@ -95,7 +96,7 @@ export async function GET() {
     },
   });
   } catch (error) {
-    console.error('[whale-tracker/activity] DB query failed:', error);
+    logger.error('[whale-tracker/activity] DB query failed:', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ error: 'Failed to fetch whale tracker activity' }, { status: 500 });
   }
 }

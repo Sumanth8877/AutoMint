@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
 import {
   handleAlchemyWalletWebhook,
   verifyAlchemyWebhookSignature,
@@ -44,7 +45,7 @@ export async function POST(request: Request) {
         fingerprint: ['wallet-tracker', 'webhook'],
       });
     } else {
-      console.warn('[alchemy/wallet] webhook rejected', { status, message });
+      logger.warn('[alchemy/wallet] webhook rejected', { status, message });
     }
     return NextResponse.json({ error: publicError }, { status });
   }

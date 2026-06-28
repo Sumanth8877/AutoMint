@@ -105,20 +105,21 @@ export async function POST(request: Request) {
       contracts: [...mintContracts],
     });
 
-    // Find all pending/monitoring tasks for these contracts
+    // L3 fix: previously this loaded every active task and filtered by
+    // contractAddress in JS. Push the filter into SQL so the DB returns only
+    // rows for the contracts in this webhook payload — the contractAddress
+    // index (idx_mint_tasks_contract_address) makes this an index scan.
+    const contractsLower = [...mintContracts];
     const db = getDb();
-    const pendingTasks = await db
+    const tasksToTrigger = await db
       .select({ id: mintTasks.id, userId: mintTasks.userId, contractAddress: mintTasks.contractAddress })
       .from(mintTasks)
       .where(
         and(
           inArray(mintTasks.status, ['pending', 'monitoring', 'ready']),
+          inArray(mintTasks.contractAddress, contractsLower),
         ),
       );
-
-    const tasksToTrigger = pendingTasks.filter(
-      (task) => task.contractAddress && mintContracts.has(task.contractAddress.toLowerCase())
-    );
 
     if (tasksToTrigger.length === 0) {
       return NextResponse.json({ ok: true, handled: 0, message: 'No pending tasks for these contracts' });

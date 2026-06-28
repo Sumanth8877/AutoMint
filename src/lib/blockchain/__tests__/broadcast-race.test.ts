@@ -48,6 +48,30 @@ vi.mock('@/lib/blockchain/chains', () => ({
   SUPPORTED_CHAINS: { ethereum: { id: 1 } },
 }));
 
+// L2 fix: vi.mock for 'viem' was previously nested inside the first `it()`
+// in this file, which triggered vitest's "vi.mock not at top level" deprecation
+// warning. The factory references MOCK_RECEIPT via vi.hoisted so the value is
+// available at mock-eval time (vi.mock is hoisted above all other code).
+const { MOCK_RECEIPT } = vi.hoisted(() => ({
+  MOCK_RECEIPT: {
+    transactionHash: ('0x' + 'b'.repeat(64)) as `0x${string}`,
+    status: 'success' as const,
+    blockNumber: 100n,
+  },
+}));
+
+vi.mock('viem', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('viem')>();
+  return {
+    ...actual,
+    createPublicClient: vi.fn().mockReturnValue({
+      waitForTransactionReceipt: vi.fn().mockResolvedValue(MOCK_RECEIPT),
+      estimateGas: vi.fn().mockResolvedValue(BigInt('150000')),
+      getTransactionCount: vi.fn().mockResolvedValue(42),
+    }),
+  };
+});
+
 vi.mock('@/lib/blockchain/gas', () => ({
   getEip1559GasParams: vi.fn().mockResolvedValue({
     maxFeePerGas:         BigInt('20000000000'),
@@ -60,7 +84,7 @@ vi.mock('@/lib/blockchain/gas', () => ({
 
 describe('broadcast race — Promise.any provider fanout', () => {
   const MOCK_TX_HASH = '0x' + 'b'.repeat(64) as `0x${string}`;
-  const MOCK_RECEIPT = { transactionHash: MOCK_TX_HASH, status: 'success', blockNumber: 100n };
+  // L2: MOCK_RECEIPT used by the viem mock is declared at top level via vi.hoisted.
 
   const _baseMintParams = {
     contractAddress: '0x' + 'c'.repeat(40) as `0x${string}`,
@@ -82,18 +106,6 @@ describe('broadcast race — Promise.any provider fanout', () => {
     mockGetWalletClient.mockResolvedValue({
       signTransaction: vi.fn().mockResolvedValue('0xsignedtx'),
       account: { address: '0x' + 'a'.repeat(40) },
-    });
-
-    vi.mock('viem', async (importOriginal) => {
-      const actual = await importOriginal<typeof import('viem')>();
-      return {
-        ...actual,
-        createPublicClient: vi.fn().mockReturnValue({
-          waitForTransactionReceipt: vi.fn().mockResolvedValue(MOCK_RECEIPT),
-          estimateGas: vi.fn().mockResolvedValue(BigInt('150000')),
-          getTransactionCount: vi.fn().mockResolvedValue(42),
-        }),
-      };
     });
 
     // The key invariant: nonce is allocated exactly once before any broadcast

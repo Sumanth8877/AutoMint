@@ -506,20 +506,20 @@ export async function discoverMintRequirements(
           scraperMerged = merge(scraperMerged, jinaResult.value);
           tier2Source = 'jina';
         } else {
-          console.warn('[mint-discovery] Jina failed:', jinaResult.reason);
+          logger.warn('[mint-discovery] Jina failed:', { error: jinaResult.reason instanceof Error ? jinaResult.reason.message : String(jinaResult.reason) });
         }
         if (firecrawlResult.status === 'fulfilled') {
           scraperMerged = merge(scraperMerged, firecrawlResult.value);
           if (tier2Source !== 'jina') tier2Source = 'firecrawl';
         } else {
-          console.warn('[mint-discovery] Firecrawl failed:', firecrawlResult.reason);
+          logger.warn('[mint-discovery] Firecrawl failed:', { error: firecrawlResult.reason instanceof Error ? firecrawlResult.reason.message : String(firecrawlResult.reason) });
         }
         current = merge(current, scraperMerged);
       } else {
-        console.warn('[mint-discovery] Tier 2 budget exceeded — skipping Tier 3');
+        logger.warn('[mint-discovery] Tier 2 budget exceeded — skipping Tier 3');
       }
     } else {
-      console.warn('[mint-discovery] Insufficient budget for Tier 2 — skipping all scrapers');
+      logger.warn('[mint-discovery] Insufficient budget for Tier 2 — skipping all scrapers');
     }
   } catch (err) {
     logger.warn('Tier 2 threw unexpectedly', { area: 'mint-discovery',  error: String(err) });
@@ -541,7 +541,7 @@ export async function discoverMintRequirements(
 
   if (remainingMs < 3000) {
     // Skip Tier 3 — not enough budget for a full browser render
-    console.warn('[mint-discovery] Skipping Tier 3 (Browserbase) — insufficient remaining budget:', remainingMs, 'ms');
+    logger.warn('[mint-discovery] Skipping Tier 3 (Browserbase) — insufficient remaining budget:', { arg0: remainingMs, arg1: 'ms' });
     return {
       ...current,
       confidence: computeConfidence(current),
@@ -561,7 +561,7 @@ export async function discoverMintRequirements(
       current = merge(current, bbResult);
       logger.info('Tier 3 complete', { area: 'mint-discovery' });
     } else {
-      console.warn('[mint-discovery] Tier 3 timed out');
+      logger.warn('[mint-discovery] Tier 3 timed out');
     }
   } catch (err) {
     logger.warn('Tier 3 Browserbase failed', { area: 'mint-discovery',  error: String(err) });

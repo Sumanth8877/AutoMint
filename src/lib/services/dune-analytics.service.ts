@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { captureException } from '@/lib/observability/sentry';
+import { logger } from '@/lib/logger';
 
 type DuneExecutionResponse = {
   execution_id: string;
@@ -57,7 +58,7 @@ function formatCurrency(value: unknown, decimals = 4): string | null {
 async function executeDuneSQL(sql: string): Promise<DuneQueryResult | null> {
   const apiKey = process.env.DUNE_API_KEY;
   if (!apiKey) {
-    console.warn('Dune API key not found, skipping query');
+    logger.warn('Dune API key not found, skipping query');
     return null;
   }
 
@@ -77,14 +78,14 @@ async function executeDuneSQL(sql: string): Promise<DuneQueryResult | null> {
     });
 
     if (!executeResponse.ok) {
-      console.error(`Dune execute failed with status ${executeResponse.status}`);
+      logger.error(`Dune execute failed with status ${executeResponse.status}`);
       return null;
     }
 
     const executeData: DuneExecutionResponse = await executeResponse.json();
     
     if (executeData.state === 'QUERY_STATE_FAILED' || executeData.state === 'QUERY_STATE_CANCELLED') {
-      console.error(`Dune query failed with state ${executeData.state}`);
+      logger.error(`Dune query failed with state ${executeData.state}`);
       return null;
     }
 
@@ -103,7 +104,7 @@ async function executeDuneSQL(sql: string): Promise<DuneQueryResult | null> {
       });
 
       if (!statusResponse.ok) {
-        console.error(`Dune status check failed with status ${statusResponse.status}`);
+        logger.error(`Dune status check failed with status ${statusResponse.status}`);
         continue;
       }
 
@@ -119,7 +120,7 @@ async function executeDuneSQL(sql: string): Promise<DuneQueryResult | null> {
         });
 
         if (!resultResponse.ok) {
-          console.error(`Dune results fetch failed with status ${resultResponse.status}`);
+          logger.error(`Dune results fetch failed with status ${resultResponse.status}`);
           return null;
         }
 
@@ -132,17 +133,17 @@ async function executeDuneSQL(sql: string): Promise<DuneQueryResult | null> {
       }
 
       if (statusData.state === 'QUERY_STATE_FAILED' || statusData.state === 'QUERY_STATE_CANCELLED') {
-        console.error(`Dune query failed with state ${statusData.state}`);
+        logger.error(`Dune query failed with state ${statusData.state}`);
         return null;
       }
 
       // Still running, continue polling
     }
 
-    console.error('Dune query timed out');
+    logger.error('Dune query timed out');
     return null;
   } catch (error) {
-    console.error('Dune query execution failed:', error);
+    logger.error('Dune query execution failed:', { error: error instanceof Error ? error.message : String(error) });
     void captureException(error, { area: 'dune-analytics' });
     return null;
   }

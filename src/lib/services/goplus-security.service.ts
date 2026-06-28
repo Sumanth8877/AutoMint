@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { captureException } from '@/lib/observability/sentry';
+import { logger } from '@/lib/logger';
 
 type GoPlusTokenSecurityResponse = {
   code: number;
@@ -198,7 +199,7 @@ export async function checkTokenSecurity(params: {
 }): Promise<GoPlusSecurityResult | null> {
   const apiKey = process.env.GOPLUS_API_KEY;
   if (!apiKey) {
-    console.warn('GoPlus API key not found, skipping security check');
+    logger.warn('GoPlus API key not found, skipping security check');
     return null;
   }
 
@@ -214,20 +215,20 @@ export async function checkTokenSecurity(params: {
     });
 
     if (!response.ok) {
-      console.error(`GoPlus API failed with status ${response.status}`);
+      logger.error(`GoPlus API failed with status ${response.status}`);
       return null;
     }
 
     const data: GoPlusTokenSecurityResponse = await response.json();
 
     if (data.code !== 1 || !data.result) {
-      console.error(`GoPlus API returned error: ${data.message}`);
+      logger.error(`GoPlus API returned error: ${data.message}`);
       return null;
     }
 
     const tokenData = data.result[params.contractAddress.toLowerCase()];
     if (!tokenData) {
-      console.error(`GoPlus API did not return data for contract ${params.contractAddress}`);
+      logger.error(`GoPlus API did not return data for contract ${params.contractAddress}`);
       return null;
     }
 
@@ -273,7 +274,7 @@ export async function checkTokenSecurity(params: {
       riskFactors,
     };
   } catch (error) {
-    console.error('GoPlus Security check failed:', error);
+    logger.error('GoPlus Security check failed:', { error: error instanceof Error ? error.message : String(error) });
     void captureException(error, { area: 'goplus-security' });
     return null;
   }

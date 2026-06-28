@@ -22,10 +22,13 @@
  *
  * Gap recovery:
  *   If a worker crashes after allocation but before broadcast, the inflight entry
- *   ages past GAP_THRESHOLD_MS. The next call to scanAndFillGaps detects it,
- *   verifies against on-chain state, and records a Sentry alert so the dead-task
- *   recovery job (existing logic: tasks stuck in 'running' with no txHash) can
- *   re-sign and rebroadcast using the original task parameters stored in the DB.
+ *   ages past GAP_THRESHOLD_MS. The next call to scanAndFillGaps detects it and
+ *   records a Sentry alert (L5 fix: this function itself does NOT re-sign or
+ *   re-broadcast — it only surfaces gaps). The dead-task recovery job (separate
+ *   logic in mint-recovery.service: tasks stuck in 'running' with no txHash) is
+ *   what actually re-routes the task; it relies on the Vercel cron heartbeat
+ *   (vercel.json `crons`) to run on a fixed schedule even if the QStash
+ *   self-scheduling loop misses a tick.
  */
 
 import 'server-only';
@@ -338,9 +341,10 @@ export async function releaseInflightNonce(
  * For each candidate:
  *   1. Verify the nonce is genuinely missing from the chain/mempool.
  *   2. If confirmed (chain moved past it) — stale entry, clean up.
- *   3. If genuinely missing — record in Sentry so the dead-task recovery job
- *      (which already detects tasks stuck in 'running' with no txHash > 10 min)
- *      can re-sign and rebroadcast using DB-stored task parameters.
+ *   3. If genuinely missing — record in Sentry. NOTE: this function itself
+ *      does NOT re-sign or rebroadcast. The dead-task recovery job (which
+ *      already detects tasks stuck in 'running' with no txHash > 10 min) is
+ *      what actually re-routes the task using DB-stored parameters.
  *
  * Fire-and-forget: call with `void scanAndFillGaps(...)` after each broadcast.
  * Non-blocking — adds ~5–30ms in the background, does not affect mint latency.

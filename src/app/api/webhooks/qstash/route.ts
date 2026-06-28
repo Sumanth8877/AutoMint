@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
 import {
   executeScheduledMint,
   executeScheduledRiskRecheck,
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
         fingerprint: ['qstash', 'webhook'],
       });
     } else {
-      console.warn('[qstash] webhook rejected', { status, message });
+      logger.warn('[qstash] webhook rejected', { status, message });
     }
     return NextResponse.json({ error: publicError }, { status });
   }

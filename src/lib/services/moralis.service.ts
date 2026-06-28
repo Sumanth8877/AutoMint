@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { captureException } from '@/lib/observability/sentry';
+import { logger } from '@/lib/logger';
 
 type MoralisNFTCollectionResponse = {
   result: {
@@ -82,7 +83,7 @@ function getChainId(chain: string): string {
 async function fetchMoralis<T>(endpoint: string): Promise<T | null> {
   const apiKey = process.env.MORALIS_API_KEY;
   if (!apiKey) {
-    console.warn('Moralis API key not found, skipping request');
+    logger.warn('Moralis API key not found, skipping request');
     return null;
   }
 
@@ -96,13 +97,13 @@ async function fetchMoralis<T>(endpoint: string): Promise<T | null> {
     });
 
     if (!response.ok) {
-      console.error(`Moralis API failed with status ${response.status}`);
+      logger.error(`Moralis API failed with status ${response.status}`);
       return null;
     }
 
     return await response.json();
   } catch (error) {
-    console.error('Moralis API request failed:', error);
+    logger.error('Moralis API request failed:', { error: error instanceof Error ? error.message : String(error) });
     void captureException(error, { area: 'moralis' });
     return null;
   }

@@ -9,6 +9,7 @@ import { fetchMintRequirements } from './mint-requirements.service';
 import { scheduleMint } from './qstash.service';
 import { discoverMintRequirements } from '@/lib/services/mint-discovery.service';
 import { acquireCronLock, releaseCronLock } from '@/lib/redis/lock';
+import { logger } from '@/lib/logger';
 
 // C3 fix: serialize the check-then-insert critical section per (user, contract)
 // so two near-simultaneous creation requests (e.g. duplicate Telegram messages)
@@ -169,10 +170,9 @@ export async function createMintTaskFromUrl(
   const _mintEndTime = mintState.endTime ?? onChainRequirements.mintEndTime ?? discovered.mintEndTime ?? undefined;
 
   if (discovered.missingFields.length > 0) {
-    console.warn(
-      '[orchestrator] createMintTaskFromUrl — fields still unresolved after all tiers:',
-      discovered.missingFields, '— proceeding with best-effort values',
-    );
+    logger.warn('[orchestrator] createMintTaskFromUrl — fields still unresolved after all tiers — proceeding with best-effort values', {
+      missingFields: discovered.missingFields,
+    });
   }
 
   // 5. Create the task record with fully enriched requirements

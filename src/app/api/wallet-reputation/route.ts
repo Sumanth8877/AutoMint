@@ -4,6 +4,7 @@ import { walletReputation } from '@/drizzle/schema';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getDb } from '@/lib/db';
 import { getUserWatchedWallets } from '@/lib/services/wallet-tracker.service';
+import { logger } from '@/lib/logger';
 
 export async function GET() {
   const authResult = await requireApiUser();
@@ -24,7 +25,7 @@ export async function GET() {
 
     return NextResponse.json({ reputations });
   } catch (error) {
-    console.error('[wallet-reputation] DB query failed:', error);
+    logger.error('[wallet-reputation] DB query failed:', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ error: 'Failed to fetch wallet reputations' }, { status: 500 });
   }
 }

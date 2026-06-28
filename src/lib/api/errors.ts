@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -113,7 +114,7 @@ export function handleRouteError(error: unknown, fallback: string): NextResponse
   // Database errors leak query text + params — log full detail server-side,
   // return only the generic fallback to the client.
   if (isDbError(error)) {
-    console.error(`[handleRouteError] ${fallback}:`, error);
+    logger.error(`[handleRouteError] ${fallback}:`, { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ error: fallback }, { status: 500 });
   }
 
