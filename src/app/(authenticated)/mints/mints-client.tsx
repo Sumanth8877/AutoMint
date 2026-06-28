@@ -27,7 +27,8 @@ type MintTask = {
   mintPrice: string | null;
   scheduledTime: string | null;       // when upcoming mint will fire
   phase: 'whitelist' | 'allowlist' | 'public' | null;  // which mint phase this task targets
-  riskReasons: string[] | null;       // U3 — failure reasons from execution
+  riskReasons: string[] | null;       // risk-analysis notes (NOT the exec error)
+  failureReason: string | null;       // real execution error from task logs
   qstashMessageId: string | null;     // set when QStash is handling execution — hide play button
   createdAt: string;
 };
@@ -557,8 +558,13 @@ export default function MintsClient() {
                     ) : task.status === 'monitoring' ? (
                       <p className="mt-1 text-xs text-muted">🔍 Monitoring for public phase start…</p>
                     ) : null}
-                    {/* U3 — show error reason for failed tasks */}
-                    {task.status === 'failed' && task.riskReasons && task.riskReasons.length > 0 ? (
+                    {/* Show the REAL execution failure reason (from task logs)
+                        first; fall back to risk notes only if no error log exists. */}
+                    {task.status === 'failed' && task.failureReason ? (
+                      <p className="mt-1 text-xs text-danger truncate" title={task.failureReason}>
+                        Reason: {task.failureReason}
+                      </p>
+                    ) : task.status === 'failed' && task.riskReasons && task.riskReasons.length > 0 ? (
                       <p className="mt-1 text-xs text-danger truncate" title={task.riskReasons.join('; ')}>
                         Reason: {task.riskReasons[0]}
                       </p>

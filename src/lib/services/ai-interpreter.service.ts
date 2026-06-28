@@ -66,6 +66,7 @@ CAPABILITIES:
 • Set up copy-mint rules — auto-mint when a watched wallet mints
 • Create instant mint tasks from collection URLs
 • Check mint task status and cancel tasks
+• Diagnose why a mint failed — analyze the execution logs and explain the root cause
 • Check wallet balance
 
 COPY-MINT RULES:
@@ -83,7 +84,8 @@ RULES:
 • If you need more info to proceed, ask the user
 • After executing tools, summarize what you did in plain language
 • When the user provides a wallet address, validate it looks like 0x... (42 chars) before using it
-• Always call the appropriate tools — never just describe what you would do`;
+• Always call the appropriate tools — never just describe what you would do
+• DIAGNOSING FAILURES: When the user asks why a mint failed / what went wrong / why it did not work, ALWAYS call diagnose_mint_failure FIRST. Read the returned failureReason, the log timeline, and the wallet balance, then explain the ROOT CAUSE in plain language and give a concrete fix. Do NOT reply with generic answers like "I can show you the status" — actually analyze and answer. Example: "Your Rarible Pepes mint failed because wallet 0x99…e5b1 has 0 ETH, but the mint needs 0.001 ETH + ~0.003 ETH gas. Fund the wallet with ~0.01 ETH and retry." Map common reasons to fixes: insufficient/low balance → fund the wallet; sold out / ended → mint is over, nothing to do; reverted / wrong phase → public mint not open or allowlist-only; price unknown → set the price manually; nonce conflict → retry.`;
 
 // ── Tool Declarations ────────────────────────────────────────────────────────
 
@@ -178,6 +180,20 @@ const TOOLS: FunctionDeclarationsTool[] = [
         parameters: {
           type: SchemaType.OBJECT,
           properties: {},
+        },
+      },
+      {
+        name: 'diagnose_mint_failure',
+        description:
+          'Diagnose why a mint failed or what went wrong. Returns the most recent mint task (or one for a specific contract) with its full execution log timeline, the real error reason, mint price, quantity, wallet address and current wallet balance. ALWAYS call this when the user asks why a mint failed, what went wrong, or why it did not work — then analyze the logs and explain the ROOT CAUSE.',
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {
+            contractAddress: {
+              type: SchemaType.STRING,
+              description: 'Optional contract address (0x...) to diagnose a specific collection. Omit to diagnose the most recent mint task.',
+            },
+          },
         },
       },
       {
@@ -329,6 +345,80 @@ async function executeTool(
         .orderBy(desc(mintTasks.createdAt))
         .limit(10);
       return { tasks, count: tasks.length };
+    }
+
+    case 'diagnose_mint_failure': {
+      const { getDb } = await import('@/lib/db');
+      const { mintTasks, taskLogs, wallets } = await import('@/drizzle/schema');
+      const { and, eq, desc } = await import('drizzle-orm');
+
+      // Find the target task: a specific contract if given, else the most recent.
+      const contract = input.contractAddress ? String(input.contractAddress).toLowerCase() : null;
+      const conditions = contract
+        ? and(eq(mintTasks.userId, userId), eq(mintTasks.contractAddress, contract))
+        : eq(mintTasks.userId, userId);
+
+      const [task] = await getDb()
+        .select()
+        .from(mintTasks)
+        .where(conditions)
+        .orderBy(desc(mintTasks.createdAt))
+        .limit(1);
+
+      if (!task) {
+        return { found: false, message: 'No mint tasks found to diagnose.' };
+      }
+
+      // Full execution log timeline for this task (chronological order)
+      const logs = await getDb()
+        .select({
+          event: taskLogs.event,
+          status: taskLogs.status,
+          message: taskLogs.message,
+          createdAt: taskLogs.createdAt,
+        })
+        .from(taskLogs)
+        .where(eq(taskLogs.taskId, task.id))
+        .orderBy(desc(taskLogs.createdAt))
+        .limit(25);
+
+      // Current wallet balance for context (the #1 cause of mint failures)
+      let walletAddress: string | null = null;
+      let walletBalance: string | null = null;
+      if (task.walletId) {
+        const [w] = await getDb().select().from(wallets).where(eq(wallets.id, task.walletId)).limit(1);
+        if (w) {
+          walletAddress = w.address;
+          try {
+            const { getWalletBalance } = await import('@/lib/blockchain/wallet');
+            const bal = await getWalletBalance(w.address, w.chain);
+            walletBalance = `${bal.balance} ${bal.symbol}`;
+          } catch {
+            /* balance fetch is best-effort */
+          }
+        }
+      }
+
+      // Most recent error-level log = the proximate failure reason
+      const errorLog = logs.find((l) => l.status === 'error');
+
+      return {
+        found: true,
+        task: {
+          id: task.id,
+          status: task.status,
+          contractAddress: task.contractAddress,
+          mintPrice: task.mintPrice,
+          quantity: task.quantity,
+          phase: task.phase,
+          txHash: task.txHash,
+          createdAt: task.createdAt,
+        },
+        failureReason: errorLog?.message ?? null,
+        walletAddress,
+        walletBalance,
+        logs: logs.reverse(), // chronological for easier reasoning
+      };
     }
 
     case 'cancel_mint': {

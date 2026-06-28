@@ -1,5 +1,5 @@
 import { getDb } from '@/lib/db';
-import { mintTasks, wallets, collections, mintHistory } from '@/drizzle/schema';
+import { mintTasks, wallets, collections, mintHistory, taskLogs } from '@/drizzle/schema';
 import { desc, eq, and, inArray } from 'drizzle-orm';
 import { executeMint, type MintParams } from '@/lib/blockchain/mint';
 import { logActivity } from '@/lib/monitoring';
@@ -14,7 +14,29 @@ import { unregisterIfIdle } from '@/lib/services/alchemy-webhook.service';
 
 export async function getUserMintTasks(userId: string) {
   const result = await getDb().select().from(mintTasks).where(eq(mintTasks.userId, userId)).orderBy(desc(mintTasks.createdAt));
-  return result;
+
+  // Attach the REAL execution failure reason from task logs.
+  // mintTasks.riskReasons holds risk-analysis notes (e.g. "wallet has no
+  // confirmed mint history") — NOT the execution error. Showing those as the
+  // failure reason is misleading (a balance failure displayed as a risk note).
+  // We pull the most recent error-level task log per failed task instead.
+  const failedIds = result.filter((t) => t.status === 'failed').map((t) => t.id);
+  if (failedIds.length === 0) {
+    return result.map((t) => ({ ...t, failureReason: null as string | null }));
+  }
+
+  const errorLogs = await getDb()
+    .select({ taskId: taskLogs.taskId, message: taskLogs.message, createdAt: taskLogs.createdAt })
+    .from(taskLogs)
+    .where(and(inArray(taskLogs.taskId, failedIds), eq(taskLogs.status, 'error')))
+    .orderBy(desc(taskLogs.createdAt));
+
+  const reasonByTask = new Map<string, string>();
+  for (const log of errorLogs) {
+    if (log.message && !reasonByTask.has(log.taskId)) reasonByTask.set(log.taskId, log.message);
+  }
+
+  return result.map((t) => ({ ...t, failureReason: reasonByTask.get(t.id) ?? null }));
 }
 
 export async function addMintTask(userId: string, data: {
