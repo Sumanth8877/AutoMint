@@ -79,7 +79,7 @@ export default function CollectionsClient() {
   // Delete collection mutation
   const deleteCollectionMutation = useMutation({
     mutationFn: async (id: string) => {
-      return apiRequest<{ success: true }>(`/api/collections/${id}`, { method: 'DELETE' });
+      return apiRequest<{ success: true }>('/api/collections', { method: 'DELETE', body: { id } });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['collections'] });
