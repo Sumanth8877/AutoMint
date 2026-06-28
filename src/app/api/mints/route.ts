@@ -337,7 +337,6 @@ export async function POST(req: Request) {
       scheduledTime: new Date(),
       initialStatus: 'ready',
     });
-    await addTaskLog(task.id, 'qstash_published', 'info', 'QStash message published — executing immediately with zero delay');
 
     return NextResponse.json(
       {

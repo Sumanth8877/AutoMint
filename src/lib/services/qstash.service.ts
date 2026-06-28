@@ -67,7 +67,7 @@ function normalizeAppUrl(rawValue: string, envName: string) {
   return parsed.origin;
 }
 
-function getWebhookUrl() {
+function resolveWebhookSource(): { url: string; envName: string } {
   const candidates = [
     ['APP_URL', process.env.APP_URL],
     ['NEXT_PUBLIC_APP_URL', process.env.NEXT_PUBLIC_APP_URL],
@@ -76,10 +76,14 @@ function getWebhookUrl() {
 
   for (const [envName, value] of candidates) {
     if (!value) continue;
-    return `${normalizeAppUrl(value, envName)}/api/webhooks/qstash`;
+    return { url: `${normalizeAppUrl(value, envName)}/api/webhooks/qstash`, envName };
   }
 
   throw new Error('APP_URL, NEXT_PUBLIC_APP_URL, or VERCEL_URL is required');
+}
+
+function getWebhookUrl() {
+  return resolveWebhookSource().url;
 }
 
 
@@ -235,7 +239,16 @@ export async function scheduleMint(params: {
     data: { taskId: task.id, qstashMessageId, scheduledTime: scheduledTime.toISOString() },
   });
   const effectiveStatus = params.initialStatus ?? 'monitoring';
-  await addTaskLog(task.id, 'qstash_published', 'info', `QStash message published — ${effectiveStatus === 'ready' ? 'executing immediately' : 'monitoring for mint start'}`);
+  // Diagnostic: surface the exact webhook URL QStash will POST back to, and warn
+  // when it resolves to the ephemeral VERCEL_URL (deployment-specific, often
+  // blocked by Vercel Deployment Protection — set APP_URL to your stable domain).
+  const { url: webhookUrl, envName: webhookEnv } = resolveWebhookSource();
+  await addTaskLog(task.id, 'qstash_published', 'info',
+    `QStash message published — ${effectiveStatus === 'ready' ? 'executing immediately' : 'monitoring for mint start'} → ${webhookUrl}`);
+  if (webhookEnv === 'VERCEL_URL') {
+    await addTaskLog(task.id, 'qstash_published', 'warning',
+      'Webhook URL resolved from VERCEL_URL (ephemeral, may be blocked by Vercel Deployment Protection). Set APP_URL to your stable domain.');
+  }
   const [updated] = await getDb()
     .update(mintTasks)
     .set({
