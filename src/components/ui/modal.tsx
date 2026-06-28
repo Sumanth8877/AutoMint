@@ -26,20 +26,23 @@ export function Modal({ open, title, children, onClose }: ModalProps) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-labelledby="automint-modal-title">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="automint-modal-title">
       <button
         type="button"
-        className="absolute inset-0 bg-black/65"
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm animate-fadeIn"
         onClick={onClose}
         aria-label="Close modal"
       />
-      <div className="absolute left-1/2 top-1/2 w-[min(92vw,520px)] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-elevated shadow-2xl">
+      <div
+        className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-border bg-elevated shadow-xl ring-highlight"
+        style={{ animation: 'am-fade-in-up-sm 0.18s ease-out' }}
+      >
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
-          <h2 id="automint-modal-title" className="font-semibold text-text">{title}</h2>
+          <h2 id="automint-modal-title" className="text-base font-semibold text-text">{title}</h2>
           <button
             type="button"
             onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-white/5 hover:text-text"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-muted transition-colors hover:bg-white/5 hover:text-text"
             aria-label="Close modal"
           >
             <X className="h-4 w-4" aria-hidden="true" />

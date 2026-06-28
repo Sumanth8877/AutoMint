@@ -90,10 +90,19 @@ export default function IntegrationsClient({ configured }: { configured: boolean
             ))}
           </div>
         ) : (
-          <div className="divide-y divide-border">
+          <div className="-mx-2 divide-y divide-border/60">
             {services.map((svc) => (
-              <div key={svc.name} className="flex items-center justify-between py-2.5">
-                <span className="text-sm text-text">{svc.name}</span>
+              <div
+                key={svc.name}
+                className="flex items-center justify-between rounded-lg px-2 py-2.5 transition-colors hover:bg-white/[0.03]"
+              >
+                <span className="flex items-center gap-2.5 text-sm text-text">
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${svc.configured ? 'bg-success' : 'bg-danger'}`}
+                    aria-hidden="true"
+                  />
+                  {svc.name}
+                </span>
                 {svc.configured ? (
                   <span className="inline-flex items-center gap-1.5 text-xs font-medium text-success">
                     <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />

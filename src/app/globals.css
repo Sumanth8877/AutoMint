@@ -1,21 +1,50 @@
 @import "tailwindcss";
 
+/* ───────────────────────────────────────────────────────────────────────────
+   AutoMint Design System — production-grade dark theme
+   Refined neutral elevation scale, brand accents, radii, shadows.
+   ─────────────────────────────────────────────────────────────────────────── */
 @theme inline {
-  --color-background: #050816;
-  --color-surface: #0f172a;
-  --color-elevated: #111827;
+  /* Surfaces — layered elevation from base to popover */
+  --color-background: #06080F;
+  --color-surface: #0D1019;
+  --color-surface-hover: #11151F;
+  --color-elevated: #161B26;
+
+  /* Borders — base hairline + stronger for emphasis */
   --color-border: rgba(255, 255, 255, 0.08);
-  --color-primary: #4F46E5;
-  --color-primary-hover: #4338CA;
-  --color-accent: #06B6D4;
-  --color-success: #10B981;
-  --color-warning: #F59E0B;
-  --color-danger: #EF4444;
-  --color-text: #F8FAFC;
-  --color-secondary: #CBD5E1;
-  --color-muted: #94A3B8;
+  --color-border-strong: rgba(255, 255, 255, 0.14);
+
+  /* Brand */
+  --color-primary: #6366F1;
+  --color-primary-hover: #4F46E5;
+  --color-primary-soft: rgba(99, 102, 241, 0.12);
+  --color-accent: #22D3EE;
+
+  /* Semantic — tuned for dark backgrounds */
+  --color-success: #34D399;
+  --color-warning: #FBBF24;
+  --color-danger: #F87171;
+
+  /* Text */
+  --color-text: #F4F6FB;
+  --color-secondary: #C3CCDA;
+  --color-muted: #8B95A7;
+
+  /* Typography */
   --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+
+  /* Radius scale */
+  --radius-lg: 0.625rem;  /* 10px — controls, inputs */
+  --radius-xl: 0.875rem;  /* 14px — cards */
+  --radius-2xl: 1.125rem; /* 18px — large panels */
+
+  /* Shadows — soft, layered depth */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.24);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.28);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.40);
+  --shadow-xl: 0 24px 70px rgba(0, 0, 0, 0.50);
 }
 
 * {
@@ -23,16 +52,17 @@
 }
 
 html {
-  background: #050816;
+  background: #06080F;
 }
 
 body {
   overflow-x: hidden;
-  background: #050816;
-  color: #F8FAFC;
+  background: #06080F;
+  color: #F4F6FB;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.01em;
 }
 
 a {
@@ -41,34 +71,39 @@ a {
 }
 
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #050816;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.10);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.18);
+  background-clip: padding-box;
 }
 
-/* Focus styles */
+/* Focus styles — crisp accessible ring */
 *:focus-visible {
-  outline: 2px solid #4F46E5;
+  outline: 2px solid var(--color-primary);
   outline-offset: 2px;
-  border-radius: 6px;
+  border-radius: 8px;
 }
 
+/* ─── App shell ambience ──────────────────────────────────────────────────── */
 .automint-shell {
   background:
-    linear-gradient(180deg, rgba(79, 70, 229, 0.12) 0%, rgba(5, 8, 22, 0) 34rem),
-    #050816;
+    radial-gradient(60rem 36rem at 76% -8%, rgba(34, 211, 238, 0.07), transparent 60%),
+    radial-gradient(52rem 34rem at 0% -6%, rgba(99, 102, 241, 0.12), transparent 58%),
+    #06080F;
 }
 
 .surface-grid {
@@ -79,41 +114,66 @@ a {
   mask-image: linear-gradient(to bottom, black, transparent 78%);
 }
 
+/* ─── Reusable surface primitives ─────────────────────────────────────────── */
 .premium-card {
-  background: linear-gradient(180deg, rgba(17, 24, 39, 0.96), rgba(15, 23, 42, 0.92));
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+  background: linear-gradient(180deg, rgba(22, 27, 38, 0.95), rgba(13, 16, 25, 0.92));
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-lg);
 }
 
+.card-base {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Subtle top highlight for elevated cards (premium feel) */
+.ring-highlight {
+  position: relative;
+}
+.ring-highlight::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.08), transparent 40%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* ─── Clerk theming (unchanged contract) ──────────────────────────────────── */
 .clerk-automint,
 .cl-card,
 .cl-modalContent,
 .cl-userButtonPopoverCard {
   color-scheme: dark;
-  --clerk-color-primary: #4F46E5;
-  --clerk-color-primary-foreground: #F8FAFC;
-  --clerk-color-background: #111827;
-  --clerk-color-foreground: #F8FAFC;
-  --clerk-color-input: #050816;
-  --clerk-color-input-foreground: #F8FAFC;
-  --clerk-color-muted: #0F172A;
-  --clerk-color-muted-foreground: #CBD5E1;
-  --clerk-color-neutral: #94A3B8;
+  --clerk-color-primary: #6366F1;
+  --clerk-color-primary-foreground: #F4F6FB;
+  --clerk-color-background: #161B26;
+  --clerk-color-foreground: #F4F6FB;
+  --clerk-color-input: #06080F;
+  --clerk-color-input-foreground: #F4F6FB;
+  --clerk-color-muted: #0D1019;
+  --clerk-color-muted-foreground: #C3CCDA;
+  --clerk-color-neutral: #8B95A7;
   --clerk-color-border: rgba(255, 255, 255, 0.08);
-  --clerk-color-ring: #06B6D4;
-  --clerk-color-modal-backdrop: rgba(5, 8, 22, 0.72);
-  --clerk-color-input-background: #050816;
-  --clerk-color-input-text: #F8FAFC;
-  --clerk-color-text: #F8FAFC;
-  --clerk-color-text-secondary: #CBD5E1;
+  --clerk-color-ring: #22D3EE;
+  --clerk-color-modal-backdrop: rgba(6, 8, 15, 0.74);
+  --clerk-color-input-background: #06080F;
+  --clerk-color-input-text: #F4F6FB;
+  --clerk-color-text: #F4F6FB;
+  --clerk-color-text-secondary: #C3CCDA;
 }
 
 .cl-card,
 .cl-modalContent,
 .cl-userButtonPopoverCard {
-  background: #111827;
+  background: #161B26;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #F8FAFC;
+  color: #F4F6FB;
 }
 
 .cl-userButtonPopoverCard {
@@ -148,7 +208,7 @@ a {
   .cl-userPreviewMainIdentifier,
   .cl-userButtonPopoverActionButtonText
 ) {
-  color: #F8FAFC;
+  color: #F4F6FB;
 }
 
 .cl-card :where(
@@ -180,37 +240,38 @@ a {
   .cl-userButtonPopoverActionButton,
   .cl-userButtonPopoverCustomItemButton
 ) {
-  color: #CBD5E1;
+  color: #C3CCDA;
 }
 
 .cl-card :where(.cl-formFieldHintText, .cl-tableHead, .cl-navbarButtonIcon),
 .cl-modalContent :where(.cl-formFieldHintText, .cl-tableHead, .cl-navbarButtonIcon) {
-  color: #94A3B8;
+  color: #8B95A7;
 }
 
 .cl-card :where(input, textarea, select, .cl-formFieldInput),
 .cl-modalContent :where(input, textarea, select, .cl-formFieldInput) {
-  background: #050816;
+  background: #06080F;
   border-color: rgba(255, 255, 255, 0.08);
-  color: #F8FAFC;
+  color: #F4F6FB;
 }
 
 .cl-card :where(input, textarea, select, .cl-formFieldInput)::placeholder,
 .cl-modalContent :where(input, textarea, select, .cl-formFieldInput)::placeholder {
-  color: #94A3B8;
+  color: #8B95A7;
   opacity: 1;
 }
 
 .cl-card :where(button, a),
 .cl-modalContent :where(button, a),
 .cl-userButtonPopoverCard :where(button, a) {
-  outline-color: #06B6D4;
+  outline-color: #22D3EE;
 }
 
 .text-balance {
   text-wrap: balance;
 }
 
+/* ─── Animations ──────────────────────────────────────────────────────────── */
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -240,7 +301,6 @@ a {
   background-size: 200% 100%;
 }
 
-/* ─── Entry animations (replaces framer-motion) ─────────────────────────── */
 @keyframes am-fade-in-up {
   from { opacity: 0; transform: translateY(18px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -249,4 +309,14 @@ a {
 @keyframes am-fade-in-up-sm {
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }

@@ -54,12 +54,12 @@ type ActivityItem = {
 function Logo() {
   return (
     <Link href="/" className="flex items-center gap-3" aria-label="AutoMint home">
-      <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-primary/25 bg-primary/15">
+      <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-primary/25 bg-gradient-to-br from-primary/25 to-accent/15 shadow-sm">
         <Sparkles className="h-4 w-4 text-accent" aria-hidden="true" />
       </div>
       <div>
-        <p className="text-sm font-semibold text-text">AutoMint</p>
-        <p className="text-[11px] uppercase text-muted">Mint intelligence</p>
+        <p className="text-sm font-semibold tracking-tight text-text">AutoMint</p>
+        <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted">Mint intelligence</p>
       </div>
     </Link>
   );
@@ -69,7 +69,7 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
 
   return (
-    <nav className="space-y-1" aria-label="Main navigation">
+    <nav className="space-y-0.5" aria-label="Main navigation">
       {navItems.map((item) => {
         const Icon = item.icon;
         const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -79,12 +79,16 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
             key={item.href}
             href={item.href}
             onClick={onNavigate}
-            className={`group flex h-10 items-center justify-between rounded-lg px-3 text-sm transition-colors ${
+            aria-current={active ? 'page' : undefined}
+            className={`group relative flex h-10 items-center justify-between rounded-lg px-3 text-sm transition-colors ${
               active
-                ? 'bg-primary/14 text-text ring-1 ring-primary/25'
+                ? 'bg-primary-soft font-medium text-text'
                 : 'text-muted hover:bg-white/5 hover:text-text'
             }`}
           >
+            {active ? (
+              <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-accent" aria-hidden="true" />
+            ) : null}
             <span className="flex items-center gap-3">
               <Icon className={`h-4 w-4 ${active ? 'text-accent' : 'text-muted group-hover:text-text'}`} aria-hidden="true" />
               {item.label}
@@ -164,19 +168,21 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="automint-shell min-h-screen">
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-border bg-background/85 px-4 py-5 backdrop-blur-xl lg:block">
-        <Logo />
-        <div className="mt-8">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-border bg-background/70 px-3 py-5 backdrop-blur-xl lg:flex lg:flex-col">
+        <div className="px-1">
+          <Logo />
+        </div>
+        <div className="mt-8 flex-1">
           <Navigation />
         </div>
       </aside>
 
-      <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-xl lg:ml-72">
+      <header className="sticky top-0 z-30 border-b border-border bg-background/70 backdrop-blur-xl lg:ml-64">
         <div className="flex h-16 items-center gap-3 px-4 sm:px-6">
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-white/5 text-muted hover:text-text lg:hidden"
+            className="flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-white/5 text-muted transition-colors hover:text-text lg:hidden"
             aria-label="Open navigation"
           >
             <Menu className="h-5 w-5" aria-hidden="true" />
@@ -209,10 +215,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
                   }
                 }}
                 placeholder="Search collections, wallets, tasks"
-                className="h-10 w-full rounded-lg border border-border bg-white/5 pl-10 pr-3 text-sm text-text placeholder:text-muted/70 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                className="h-10 w-full rounded-lg border border-border bg-white/[0.04] pl-10 pr-3 text-sm text-text placeholder:text-muted/70 outline-none transition-all focus:border-primary focus:bg-white/[0.06] focus:ring-2 focus:ring-primary/20"
               />
               {search.trim().length >= 2 ? (
-                <div className="absolute right-0 top-12 z-50 w-full overflow-hidden rounded-lg border border-border bg-elevated shadow-2xl">
+                <div className="absolute right-0 top-12 z-50 w-full overflow-hidden rounded-xl border border-border bg-elevated shadow-xl">
                   {searchLoading ? (
                     <div className="p-3 text-sm text-muted">Searching...</div>
                   ) : searchError ? (
@@ -244,14 +250,14 @@ export default function AppShell({ children }: { children: ReactNode }) {
               <button
                 type="button"
                 onClick={openNotifications}
-                className="flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-white/5 text-muted transition hover:text-text"
+                className="flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-white/[0.04] text-muted transition-colors hover:bg-white/[0.08] hover:text-text"
                 aria-label="View notifications"
                 aria-expanded={notificationsOpen}
               >
                 <Bell className="h-4 w-4" aria-hidden="true" />
               </button>
               {notificationsOpen ? (
-                <div className="absolute right-0 top-12 z-50 w-80 overflow-hidden rounded-lg border border-border bg-elevated shadow-2xl">
+                <div className="absolute right-0 top-12 z-50 w-80 overflow-hidden rounded-xl border border-border bg-elevated shadow-xl">
                   <div className="border-b border-border px-4 py-3">
                     <p className="text-sm font-semibold text-text">Notifications</p>
                   </div>
@@ -274,7 +280,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 </div>
               ) : null}
             </div>
-            <div className="flex h-10 items-center rounded-lg border border-border bg-white/5 px-2">
+            <div className="flex h-10 items-center rounded-lg border border-border bg-white/[0.04] px-2">
               <AutoMintUserButton />
             </div>
           </div>
@@ -308,8 +314,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </div>
       ) : null}
 
-      <main className="lg:ml-72">
-        <div className="mx-auto w-full max-w-[1280px] px-4 py-6 sm:px-6 lg:py-8">
+      <main className="lg:ml-64">
+        <div className="mx-auto w-full max-w-[1280px] px-4 py-6 sm:px-6 lg:py-8 animate-fadeIn">
           {children}
         </div>
       </main>

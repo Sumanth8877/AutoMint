@@ -20,16 +20,16 @@ const toneClasses = {
 
 export function MetricCard({ label, value, detail, icon: Icon, tone = 'primary' }: MetricCardProps) {
   return (
-    <Card className="p-4 sm:p-5" tone="interactive">
+    <Card className="p-5" tone="interactive">
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-medium uppercase text-muted">{label}</p>
-          <p className="mt-2 text-2xl font-semibold text-text">{value}</p>
-          {detail ? <p className="mt-1 text-xs text-muted">{detail}</p> : null}
+        <div className="min-w-0">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">{label}</p>
+          <p className="mt-2 text-2xl font-semibold tracking-tight text-text tabular-nums">{value}</p>
+          {detail ? <p className="mt-1 truncate text-xs text-muted">{detail}</p> : null}
         </div>
         {Icon ? (
-          <div className={`flex h-9 w-9 items-center justify-center rounded-lg border ${toneClasses[tone]}`}>
-            <Icon className="h-4 w-4" aria-hidden="true" />
+          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border ${toneClasses[tone]}`}>
+            <Icon className="h-5 w-5" aria-hidden="true" />
           </div>
         ) : null}
       </div>

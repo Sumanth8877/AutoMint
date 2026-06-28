@@ -7,16 +7,14 @@ interface CardProps extends HTMLAttributes<HTMLDivElement> {
 
 export default function Card({ children, className = '', tone = 'default', ...props }: CardProps) {
   const tones = {
-    default: 'bg-surface/80 border-border',
-    elevated: 'premium-card',
-    interactive: 'bg-surface/80 border-border hover:border-white/16 hover:bg-elevated/90 transition-colors',
+    default: 'card-base',
+    elevated: 'premium-card ring-highlight',
+    interactive:
+      'card-base transition-all duration-200 hover:border-border-strong hover:bg-surface-hover hover:shadow-md',
   };
 
   return (
-    <div
-      className={`rounded-lg border ${tones[tone]} ${className}`}
-      {...props}
-    >
+    <div className={`rounded-xl ${tones[tone]} ${className}`} {...props}>
       {children}
     </div>
   );
