@@ -36,7 +36,7 @@ const REQUIRED_VARS: EnvSpec[] = [
     validate: (v) =>
       /^[a-f0-9]{64}$/i.test(v.trim())
         ? null
-        : 'Must be a 64-character hex string (32 bytes). Generate: openssl rand -hex 64',
+        : 'Must be a 64-character hex string (32 bytes). Generate: openssl rand -hex 32',
   },
 
   // ── Upstash Redis / Vercel KV

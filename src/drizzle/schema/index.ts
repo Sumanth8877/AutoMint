@@ -309,7 +309,8 @@ export const mintTasks = pgTable('mint_tasks', {
   // Without this, PostgreSQL falls back to a full table scan as task history grows.
   // Declaring it here keeps the schema as the single source of truth so
   // drizzle-kit push and migrations produce identical results.
-  userStatusIdx: index('idx_mint_tasks_user_status').on(table.userId, table.status),
+    userStatusIdx: index('idx_mint_tasks_user_status').on(table.userId, table.status),
+  contractAddressIdx: index('idx_mint_tasks_contract_address').on(table.contractAddress),
 }));
 
 // ─── Mint History ────────────────────────────────────

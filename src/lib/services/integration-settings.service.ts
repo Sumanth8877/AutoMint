@@ -111,7 +111,7 @@ export async function deleteSetting(key: IntegrationSettingKey) {
 // to the old value. Re-encrypts all stored integration secrets with the active key.
 //
 // Step-by-step:
-//   1. openssl rand -hex 64  →  paste as ENCRYPTION_KEY in Vercel
+//   1. openssl rand -hex 32  →  paste as ENCRYPTION_KEY in Vercel
 //   2. Move old key to ENCRYPTION_KEY_PREVIOUS
 //   3. Call rotateAllIntegrationSettings() (from a one-off script or admin route)
 //   4. Remove ENCRYPTION_KEY_PREVIOUS once confirmed

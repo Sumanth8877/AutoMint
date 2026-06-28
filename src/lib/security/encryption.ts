@@ -12,8 +12,8 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 //
 // KEY ROTATION WORKFLOW
 // ─────────────────────
-// 1. Generate a new 32-byte key:
-//      openssl rand -hex 64
+// 1. Generate a new 32-byte key (64 hex chars — matches the validator):
+//      openssl rand -hex 32
 //
 // 2. Set env vars (zero-downtime — old key still decrypts during migration):
 //      ENCRYPTION_KEY=<new_key>

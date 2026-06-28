@@ -2,13 +2,11 @@
 // Next.js 16+ runs the Clerk middleware from `src/proxy.ts` (the renamed
 // convention that replaced `src/middleware.ts` in v16). DO NOT rename this
 // file back to `middleware.ts` on Next 16+ — and if you ever downgrade to
-// Next ≤ 15, rename it back, otherwise Clerk auth + CSP nonce generation
-// will silently stop running.
+// Next ≤ 15, rename it back, otherwise Clerk auth will silently stop running.
 // ─────────────────────────────────────────────────────────────────────────────
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { randomBytes } from 'node:crypto';
 
 // ─── Protected routes ─────────────────────────────────────────────────
 const isProtectedRoute = createRouteMatcher([
@@ -22,11 +20,6 @@ const isProtectedRoute = createRouteMatcher([
   '/api/collections(.*)', '/api/activities(.*)', '/api/blockchain(.*)',
   '/api/telegram/link-token(.*)', '/api/wallet-reputation(.*)',
 ]);
-
-// ─── CSP nonce ────────────────────────────────────────────────────────
-function generateNonce(): string {
-  return randomBytes(16).toString('base64');
-}
 
 // ─── Bearer token detection ───────────────────────────────────────────
 // API routes that carry a Bearer token (e.g. "am_..." from the API key system)
@@ -48,20 +41,12 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
     await auth.protect();
   }
 
-  const nonce = generateNonce();
-
-  const response = NextResponse.next({
-    request: {
-      headers: new Headers({
-        ...Object.fromEntries(request.headers.entries()),
-        'x-nonce': nonce,
-      }),
-    },
-  });
-
-  response.headers.set('x-nonce', nonce);
-
-  return response;
+  // M1: CSP is applied as a static header in next.config.ts. Clerk's hosted UI
+  // requires 'unsafe-inline' for scripts/styles in production, so a per-request
+  // CSP nonce is NOT used (a nonce-based policy would mean dropping 'unsafe-inline',
+  // which breaks Clerk). The previous x-nonce header was generated but read nowhere
+  // — removed as dead code.
+  return NextResponse.next();
 });
 
 export const config = {

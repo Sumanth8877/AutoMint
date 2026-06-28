@@ -28,8 +28,9 @@ const scriptSrc = [
   'https://*.clerk.com',
   'https://clerk.com',
   // Next.js dev HMR needs eval and inline in dev mode.
-  // In production, 'unsafe-inline' is replaced by per-request CSP nonces
-  // injected by src/middleware.ts — see buildCsp() there.
+  // NOTE: Clerk's hosted UI requires 'unsafe-inline' for scripts in production,
+  // so 'unsafe-inline' is kept in prod (a nonce-based CSP would require dropping
+  // it, which breaks Clerk). No per-request nonce is used.
   ...(isDev ? ["'unsafe-inline'", "'unsafe-eval'"] : ["'unsafe-inline'"]),  // Clerk requires unsafe-inline in prod
 ].join(' ');
 
