@@ -276,16 +276,19 @@ export async function scheduleMint(params: {
     qstashMessageId,
     scheduledTime: scheduledTime.toISOString(),
   });
-  await sendScheduledMintNotification(
-    task.userId,
-    effectiveStatus === 'ready' ? 'mint_live_detected' : 'mint_scheduled',
-    {
+  // ── Telegram/email notification policy ───────────────────────────────────
+  // A LIVE mint (effectiveStatus === 'ready') executes immediately and
+  // executeMintTask() sends the "⚡ Mint Executing" message a moment later, so a
+  // separate "live detected" message here would be redundant. We only notify on
+  // scheduling for FUTURE mints, where there is a real gap before execution.
+  // This keeps the message count tight:
+  //   LIVE      → ⚡ Executing → ✅/❌ Result          (2 messages)
+  //   Upcoming  → 🕐 Scheduled → ⚡ Executing → Result  (3 messages)
+  if (effectiveStatus !== 'ready') {
+    await sendScheduledMintNotification(task.userId, 'mint_scheduled', {
       taskId: task.id,
       contractAddress: task.contractAddress || undefined,
-    },
-  );
-  if (effectiveStatus !== 'ready') {
-    // Only send the "scheduled" email for future mints — live mints execute immediately
+    });
     await sendMintScheduledEmail(task.userId, {
       taskId: task.id,
       contractAddress: task.contractAddress || undefined,
@@ -578,11 +581,9 @@ export async function executeScheduledMint(taskId: string) {
             level: 'info',
             data: { taskId, contractAddress: task.contractAddress },
           });
-          // Notify user that mint just went live and we're executing
-          await sendScheduledMintNotification(task.userId, 'mint_live_detected', {
-            taskId,
-            contractAddress: task.contractAddress || undefined,
-          });
+          // Don't notify here — executeMintTask() (reached by falling through
+          // below) sends the "⚡ Mint Executing" message, avoiding a redundant
+          // "live detected" notification right before it.
           // Update retry counter and fall through to execution
           await getDb()
             .update(mintTasks)
@@ -846,6 +847,11 @@ export async function executeScheduledMint(taskId: string) {
 
     return mintResult;
   } catch (error) {
+    // Surface unexpected errors in the task console so the user sees a reason
+    // instead of a task silently stuck in "running". Specific failure paths
+    // above already log their own reason; this catches everything else.
+    const errMessage = error instanceof Error ? error.message : String(error);
+    await addTaskLog(taskId, 'task_failed', 'error', `Execution error: ${errMessage}`).catch(() => {});
     const row = await loadTaskWithWallet(taskId).catch(() => null);
     if (row?.task?.userId) {
       await sendSystemErrorEmail(row.task.userId, {

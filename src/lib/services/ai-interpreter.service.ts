@@ -12,13 +12,13 @@ import { getRedisClient } from '@/lib/redis';
 
 // Model management
 
-const DEFAULT_MODEL = 'gemini-3.5-flash';
+const DEFAULT_MODEL = 'gemini-2.5-flash';
 
 export type GeminiModelId =
-  | 'gemini-3.5-flash'
-  | 'gemini-3-flash-preview'
   | 'gemini-2.5-flash'
+  | 'gemini-2.5-pro'
   | 'gemini-2.5-flash-lite'
+  | 'gemini-2.0-flash'
   | 'gemini-1.5-flash'
   | 'gemini-1.5-flash-8b';
 
@@ -29,12 +29,12 @@ export type GeminiModel = {
 };
 
 export const AVAILABLE_MODELS: GeminiModel[] = [
-  { id: 'gemini-3.5-flash',       label: 'Gemini 3.5 Flash ⭐',    description: 'Latest & smartest — best for complex commands' },
-  { id: 'gemini-3-flash-preview',  label: 'Gemini 3 Flash Preview', description: 'Previous gen preview — solid all-rounder' },
-  { id: 'gemini-2.5-flash',        label: 'Gemini 2.5 Flash',       description: 'Fast & capable — good for quick tasks' },
-  { id: 'gemini-2.5-flash-lite',   label: 'Gemini 2.5 Flash Lite',  description: 'Lightest 2.5 — fastest response time' },
-  { id: 'gemini-1.5-flash',        label: 'Gemini 1.5 Flash',       description: 'Proven stable model — highly reliable' },
-  { id: 'gemini-1.5-flash-8b',     label: 'Gemini 1.5 Flash 8B',    description: 'Smallest model — ultra-low latency' },
+  { id: 'gemini-2.5-flash',       label: 'Gemini 2.5 Flash ⭐',    description: 'Recommended — fast, smart, supports tools' },
+  { id: 'gemini-2.5-pro',         label: 'Gemini 2.5 Pro',         description: 'Most capable — best for complex commands' },
+  { id: 'gemini-2.5-flash-lite',  label: 'Gemini 2.5 Flash Lite',  description: 'Lightest 2.5 — fastest response time' },
+  { id: 'gemini-2.0-flash',       label: 'Gemini 2.0 Flash',       description: 'Fast & reliable — solid all-rounder' },
+  { id: 'gemini-1.5-flash',       label: 'Gemini 1.5 Flash',       description: 'Proven stable model — highly reliable' },
+  { id: 'gemini-1.5-flash-8b',    label: 'Gemini 1.5 Flash 8B',    description: 'Smallest model — ultra-low latency' },
 ];
 
 function modelKey(userId: string) { return `ai:model:${userId}`; }
@@ -484,6 +484,10 @@ export async function interpretTelegramMessage(
       context: { userId, messagePreview: message.slice(0, 100) },
       fingerprint: ['ai-interpreter', 'gemini'],
     });
-    throw error;
+    // Return a useful message instead of throwing — a thrown error surfaces to
+    // the user as the misleading "Unknown command". Showing the real reason
+    // (e.g. an invalid model name or quota error) makes the bot diagnosable.
+    const msg = error instanceof Error ? error.message : String(error);
+    return `⚠️ AI request failed: ${msg.slice(0, 180)}\n\nYou can still use slash commands:\n/mint <url> • /watch <address> • /status • /cancel • /settings`;
   }
 }
