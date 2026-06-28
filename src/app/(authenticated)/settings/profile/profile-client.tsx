@@ -1,10 +1,9 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useClerk, useUser } from '@clerk/nextjs';
-import { ArrowLeft, KeyRound, Save, Trash2, User } from 'lucide-react';
+import { KeyRound, Save, Trash2, User } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import { apiRequest } from '@/lib/api/client';
@@ -147,12 +146,8 @@ export default function ProfileClient() {
   return (
     <div>
       <div className="mb-6">
-        <Link href="/settings" className="inline-flex items-center gap-2 text-sm text-muted hover:text-text">
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          Settings
-        </Link>
-        <h1 className="mt-3 text-2xl font-semibold text-text sm:text-3xl">Profile</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
+        <h2 className="text-xl font-semibold text-text">Profile</h2>
+        <p className="mt-1 max-w-2xl text-sm text-muted">
           Manage your AutoMint account details and Clerk-backed account security.
         </p>
       </div>

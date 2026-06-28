@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import Link from 'next/link';
-import { ArrowLeft, Radio, Save, SlidersHorizontal } from 'lucide-react';
+import { Radio, Save, SlidersHorizontal } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -141,14 +140,10 @@ export default function RpcProvidersClient() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <Link href="/settings" className="inline-flex items-center gap-2 text-sm text-muted hover:text-text">
-            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-            Settings
-          </Link>
-          <h1 className="mt-3 text-2xl font-semibold text-text sm:text-3xl">RPC Providers</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
+          <h2 className="text-xl font-semibold text-text">RPC Providers</h2>
+          <p className="mt-1 max-w-2xl text-sm text-muted">
             Control how AutoMint selects configured RPC providers during mint execution.
           </p>
         </div>

@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
-import { PageHeader } from '@/components/ui/page-header';
 import { Send, Copy, Check, Link as LinkIcon, AlertCircle } from 'lucide-react';
 
 type TelegramLinkResponse = {
@@ -15,7 +14,7 @@ type TelegramLinkResponse = {
   expiresInSeconds: number;
 };
 
-export default function TelegramSettingsPage() {
+export default function TelegramClient() {
   const [data, setData] = useState<TelegramLinkResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -61,11 +60,12 @@ export default function TelegramSettingsPage() {
   if (loading) {
     return (
       <div>
-        <PageHeader
-          eyebrow="Notifications"
-          title="Telegram"
-          description="Link your Telegram bot to receive mint notifications and send commands."
-        />
+        <div className="mb-6">
+          <h3 className="text-base font-semibold text-text">Telegram</h3>
+          <p className="mt-1 max-w-2xl text-sm text-muted">
+            Link your Telegram bot to receive mint notifications and send commands.
+          </p>
+        </div>
         <Card className="p-5">
           <p className="text-sm text-muted">Loading...</p>
         </Card>
@@ -76,11 +76,12 @@ export default function TelegramSettingsPage() {
   if (!data?.enabled) {
     return (
       <div>
-        <PageHeader
-          eyebrow="Notifications"
-          title="Telegram"
-          description="Link your Telegram bot to receive mint notifications and send commands."
-        />
+        <div className="mb-6">
+          <h3 className="text-base font-semibold text-text">Telegram</h3>
+          <p className="mt-1 max-w-2xl text-sm text-muted">
+            Link your Telegram bot to receive mint notifications and send commands.
+          </p>
+        </div>
         <Card className="p-5">
           <div className="flex items-center gap-3 text-warning">
             <AlertCircle className="h-5 w-5" />
@@ -93,11 +94,12 @@ export default function TelegramSettingsPage() {
 
   return (
     <div>
-      <PageHeader
-        eyebrow="Notifications"
-        title="Telegram"
-        description="Link your Telegram bot to receive mint notifications and send commands."
-      />
+      <div className="mb-6">
+        <h3 className="text-base font-semibold text-text">Telegram</h3>
+        <p className="mt-1 max-w-2xl text-sm text-muted">
+          Link your Telegram bot to receive mint notifications and send commands.
+        </p>
+      </div>
 
       <div className="space-y-4">
         {/* Link Status */}

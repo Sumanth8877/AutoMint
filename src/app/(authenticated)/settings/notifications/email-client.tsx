@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import Link from 'next/link';
-import { ArrowLeft, Mail, Save } from 'lucide-react';
+import { Mail, Save } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -126,15 +125,11 @@ export default function EmailNotificationsClient() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <Link href="/settings" className="inline-flex items-center gap-2 text-sm text-muted hover:text-text">
-            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-            Settings
-          </Link>
-          <h1 className="mt-3 text-2xl font-semibold text-text sm:text-3xl">Email Notifications</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
-            Control which AutoMint emails are sent to your authenticated account email.
+          <h3 className="text-base font-semibold text-text">Email</h3>
+          <p className="mt-1 max-w-2xl text-sm text-muted">
+            Choose which AutoMint emails are delivered to your account address.
           </p>
         </div>
         <Button type="button" onClick={saveSettings} loading={saving} disabled={isLoading || !draft}>
