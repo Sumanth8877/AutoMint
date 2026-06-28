@@ -7,7 +7,12 @@ import { addBreadcrumb, captureException, captureMessage } from '@/lib/observabi
 import { getClient } from '@/lib/blockchain/client';
 
 // Tasks stuck in 'running' longer than this are assumed to have crashed
-const STUCK_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
+// (Vercel killed the function at maxDuration before it could update status).
+// Tightened from 10 min → 90s. The mint-lock TTL is 60s, so by the time a
+// task is "stuck" at 90s the lock has already expired and recovery can
+// safely reset the task; the H3 nonce-count check in recoverPreBroadcastTask
+// is the final guard against re-broadcasting an in-flight transaction.
+const STUCK_THRESHOLD_MS = 90 * 1000; // 90 seconds
 
 export interface RecoveryResult {
   checkedAt: string;

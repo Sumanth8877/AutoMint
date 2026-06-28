@@ -4,7 +4,13 @@ import crypto from 'crypto';
 import { getRedisClient } from '@/lib/redis';
 import { addBreadcrumb, captureException, captureMessage } from '@/lib/observability/sentry';
 
-const LOCK_TTL_SECONDS = 5 * 60;
+// Mint lock TTL. Tightened from 5 min → 60s because Vercel maxDuration is
+// 10s for the qstash route, so a single execute attempt cannot run longer
+// than that. 60s leaves 6× headroom while ensuring a crashed worker's lock
+// expires quickly enough for the 90s stuck-task recovery threshold to
+// safely re-fire the task. extendLock is defined but never called — the
+// lock simply auto-expires.
+const LOCK_TTL_SECONDS = 60;
 
 export type MintLock = {
   acquired: boolean;

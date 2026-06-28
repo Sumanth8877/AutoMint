@@ -429,7 +429,13 @@ function isRetryableError(error: string | undefined): boolean {
   return RETRYABLE_PATTERNS.some((p) => lower.includes(p));
 }
 
-const RETRY_BASE_DELAY_MS = 30_000; // 30s base, doubles each attempt
+// Transient-error retry policy.
+// 2s base so the first retry fires near-instantly (~2-3s end-to-end including
+// QStash delivery), doubling each attempt (2s, 4s, 8s, 16s ...), capped at
+// 10 min. Most transient mint failures (RPC blip, nonce-too-low, gas estimate
+// races) clear on the very next attempt — keeping the first delay tiny is the
+// difference between "missed the mint" and "got in on the retry".
+const RETRY_BASE_DELAY_MS = 2_000;
 
 function retryDelayMs(retriesRemaining: number, maxRetries: number): number {
   const attempt = maxRetries - retriesRemaining + 1;
@@ -1224,7 +1230,12 @@ export async function scheduleRecoveryCheck(): Promise<void> {
  * Called by the QStash webhook when type='recovery'.
  * Also callable directly from an API route for Vercel cron integration.
  */
-const RECOVERY_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+// Recovery loop cadence. Tightened from 5 min → 60s so a function killed
+// mid-mint (Vercel 10s budget) is detected and re-fired within ~90-150s
+// instead of 10-15 min. C1's onBroadcast txHash persist + H3's nonce-count
+// guard make this safe — recovery never re-broadcasts a tx that is already
+// on chain or in the mempool.
+const RECOVERY_INTERVAL_MS = 60 * 1000; // 60 seconds
 
 export async function executeRecoveryCheck() {
   const { recoverStuckMintTasks } = await import('@/lib/services/mint-recovery.service');
