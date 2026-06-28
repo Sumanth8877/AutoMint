@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getErrorMessage, parseJsonBody, handleRouteError } from '@/lib/api/errors';
-import { addMintTask, executeMintTask, getMintTaskById, getUserMintTasks, removeMintTask } from '@/lib/services/mint.service';
+import { addMintTask, getMintTaskById, getUserMintTasks, removeMintTask, executeMintTask } from '@/lib/services/mint.service';
 import { cancelScheduledMint, scheduleMint } from '@/lib/services/qstash.service';
 import { registerContractForMonitoring, unregisterContract } from '@/lib/services/alchemy-webhook.service';
 import { getMintState } from '@/lib/services/mint-state.service';
@@ -333,11 +333,15 @@ export async function POST(req: Request) {
         .where(eq(mintTasks.id, task.id));
 
       if (wlPhaseIsLive) {
-        // FIX 3: Execute directly — no QStash hop
         await addTaskLog(task.id, 'mint_state_live', 'success', 'WL mint is LIVE — executing immediately');
-        void executeMintTask(task.id, authResult.userId).catch(() => {});
+        const scheduledWlLiveTask = await scheduleMint({
+          taskId: task.id,
+          userId: authResult.userId,
+          scheduledTime: new Date(),
+          initialStatus: 'ready',
+        });
         return NextResponse.json(
-          { task: { ...task, status: 'running' }, collection, mintStatus: 'live', autoTriggered: true, wlPhase: wlPhase.type },
+          { task: scheduledWlLiveTask, collection, mintStatus: 'live', autoTriggered: true, wlPhase: wlPhase.type },
           { status: 201 },
         );
       } else {
@@ -353,25 +357,27 @@ export async function POST(req: Request) {
       }
     }
 
-    // ── Public live mint — direct execution (no QStash hop) ──────────────────
-    // FIX 3: Execute inline instead of routing through QStash. This eliminates
-    // the QStash network round-trip (300-1000ms) and the cold-start of the
-    // webhook handler. The on-chain simulation inside executeMintTask() is the
-    // safety net — if the mint isn't actually open, the tx reverts and the task
-    // transitions to failed with a clear error message.
+    // ── Public live mint — immediate QStash dispatch ──────────────────────────
+    // Route through QStash with zero delay. Fire-and-forget (void) does NOT work
+    // on Vercel serverless — the function is terminated when the HTTP response is
+    // sent, killing any background execution. QStash sends a separate HTTP request
+    // to /api/webhooks/qstash which runs as its own serverless invocation.
     await addTaskLog(task.id, 'mint_state_live', 'success', 'Mint is LIVE on-chain — executing immediately');
     await getDb()
       .update(mintTasks)
-      .set({ phase: 'public', status: 'ready', updatedAt: new Date() })
+      .set({ phase: 'public', updatedAt: new Date() })
       .where(eq(mintTasks.id, task.id));
 
-    // Fire-and-forget: start execution without blocking the HTTP response.
-    // executeMintTask handles its own error reporting, retries, and notifications.
-    void executeMintTask(task.id, authResult.userId).catch(() => {});
+    const autoTask = await scheduleMint({
+      taskId: task.id,
+      userId: authResult.userId,
+      scheduledTime: new Date(),
+      initialStatus: 'ready',
+    });
 
     return NextResponse.json(
       {
-        task: { ...task, status: 'ready', phase: 'public' },
+        task: autoTask,
         collection,
         mintStatus: 'live',
         autoTriggered: true,

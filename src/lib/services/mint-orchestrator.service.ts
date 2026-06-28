@@ -144,21 +144,15 @@ export async function createMintTaskFromUrl(
     })
     .returning();
 
-  // 6. Execute or schedule
+  // 6. Schedule via QStash
   //
-  // FIX: LIVE mints now call executeMintTask() directly instead of routing
-  // through QStash. This eliminates the QStash network hop (300-1000ms) and
-  // cold-start latency, shaving ~0.5-1s off the critical path. QStash is
-  // still used for scheduled (upcoming) mints that need a delayed delivery.
-  if (mintState.status === 'LIVE') {
-    const { executeMintTask } = await import('@/lib/services/mint.service');
-    // Fire-and-forget: don't block the Telegram response on mint execution
-    void executeMintTask(task.id, userId).catch(() => undefined);
-    return { action: 'TASK_CREATED' as OrchestratorAction, taskId: task.id };
-  }
-
+  // IMPORTANT: fire-and-forget (void executeMintTask()) does NOT work on Vercel
+  // serverless — the function is terminated when the HTTP response is sent.
+  // QStash sends a separate HTTP request which runs as its own invocation.
   const scheduledTime =
-    mintStartTime && mintStartTime.getTime() > Date.now()
+    mintState.status === 'LIVE'
+      ? new Date()
+      : mintStartTime && mintStartTime.getTime() > Date.now()
       ? mintStartTime
       : undefined;
 
@@ -166,8 +160,10 @@ export async function createMintTaskFromUrl(
     taskId: task.id,
     userId,
     scheduledTime,
-    initialStatus: 'monitoring',
+    initialStatus: mintState.status === 'LIVE' ? 'ready' : 'monitoring',
   });
 
-  return { action: 'MONITORING' as OrchestratorAction, taskId: task.id };
+  const action: OrchestratorAction = mintState.status === 'LIVE' ? 'TASK_CREATED' : 'MONITORING';
+
+  return { action, taskId: task.id };
 }

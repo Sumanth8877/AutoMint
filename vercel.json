@@ -7,6 +7,9 @@
     "src/app/api/webhooks/qstash/route.ts": {
       "maxDuration": 10
     },
+    "src/app/api/mints/route.ts": {
+      "maxDuration": 10
+    },
     "src/app/api/analyzer/stream/route.ts": {
       "maxDuration": 10
     },
