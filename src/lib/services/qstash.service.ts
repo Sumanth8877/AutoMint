@@ -71,6 +71,12 @@ function resolveWebhookSource(): { url: string; envName: string } {
   const candidates = [
     ['APP_URL', process.env.APP_URL],
     ['NEXT_PUBLIC_APP_URL', process.env.NEXT_PUBLIC_APP_URL],
+    // VERCEL_PROJECT_PRODUCTION_URL is the STABLE production domain (e.g.
+    // my-app.vercel.app), auto-set by Vercel in every deployment. It is public
+    // and identical across deploys — unlike VERCEL_URL which is the ephemeral
+    // per-deployment URL that's often blocked by Deployment Protection and
+    // breaks QStash signature verification. Prefer it over VERCEL_URL.
+    ['VERCEL_PROJECT_PRODUCTION_URL', process.env.VERCEL_PROJECT_PRODUCTION_URL],
     ['VERCEL_URL', process.env.VERCEL_URL],
   ] as const;
 

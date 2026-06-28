@@ -76,6 +76,9 @@ function validateAppUrl(): string | null {
   const candidates = [
     ['APP_URL', process.env.APP_URL],
     ['NEXT_PUBLIC_APP_URL', process.env.NEXT_PUBLIC_APP_URL],
+    // Stable production domain (auto-set by Vercel) — preferred over the
+    // ephemeral VERCEL_URL for QStash webhook destination + signature match.
+    ['VERCEL_PROJECT_PRODUCTION_URL', process.env.VERCEL_PROJECT_PRODUCTION_URL],
     ['VERCEL_URL', process.env.VERCEL_URL],
   ] as const;
 
@@ -101,7 +104,7 @@ function validateAppUrl(): string | null {
     }
   }
 
-  return 'APP_URL, NEXT_PUBLIC_APP_URL, or VERCEL_URL: one is required for QStash destination URLs';
+  return 'APP_URL, NEXT_PUBLIC_APP_URL, VERCEL_PROJECT_PRODUCTION_URL, or VERCEL_URL: one is required for QStash destination URLs';
 }
 
 export function validateEnv(): void {
