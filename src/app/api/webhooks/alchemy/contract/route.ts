@@ -130,7 +130,7 @@ export async function POST(request: Request) {
 
     for (const task of tasksToTrigger) {
       try {
-        await scheduleMint({ taskId: task.id, userId: task.userId, scheduledTime: immediateTime });
+        await scheduleMint({ taskId: task.id, userId: task.userId, scheduledTime: immediateTime, initialStatus: 'ready' });
         triggered++;
         logger.info('Alchemy webhook triggered immediate mint execution', {
           area: 'webhooks/alchemy/contract',

@@ -184,7 +184,7 @@ export async function fanoutMintFromUrl(
       const taskId = taskMap.get(walletId);
       if (!taskId) return Promise.reject(new Error('Task not created'));
 
-      return scheduleMint({ taskId, userId, scheduledTime }).then(() => ({
+      return scheduleMint({ taskId, userId, scheduledTime, initialStatus: initialStatus === 'ready' ? 'ready' : 'monitoring' }).then(() => ({
         walletId,
         walletAddress,
         taskId,

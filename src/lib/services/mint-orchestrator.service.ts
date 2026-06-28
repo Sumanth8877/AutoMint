@@ -152,7 +152,12 @@ export async function createMintTaskFromUrl(
       ? mintStartTime
       : undefined;
 
-  await scheduleMint({ taskId: task.id, userId, scheduledTime });
+  await scheduleMint({
+    taskId: task.id,
+    userId,
+    scheduledTime,
+    initialStatus: mintState.status === 'LIVE' ? 'ready' : 'monitoring',
+  });
 
   const action: OrchestratorAction = mintState.status === 'LIVE' ? 'TASK_CREATED' : 'MONITORING';
 

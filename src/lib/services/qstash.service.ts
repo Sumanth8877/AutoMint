@@ -182,6 +182,10 @@ export async function scheduleMint(params: {
   userId?: string;
   scheduledTime?: Date;
   overrideRiskFlag?: boolean;
+  /** Override the DB status set when the QStash message is enqueued.
+   *  Defaults to 'monitoring'. Pass 'ready' when the mint is already
+   *  live so the UI shows the correct state instead of "monitoring". */
+  initialStatus?: 'monitoring' | 'ready';
 }) {
   const [task] = await getDb().select().from(mintTasks).where(eq(mintTasks.id, params.taskId)).limit(1);
   if (!task) throw new Error('Mint task not found');
@@ -230,10 +234,11 @@ export async function scheduleMint(params: {
     data: { taskId: task.id, qstashMessageId, scheduledTime: scheduledTime.toISOString() },
   });
 
+  const effectiveStatus = params.initialStatus ?? 'monitoring';
   const [updated] = await getDb()
     .update(mintTasks)
     .set({
-      status: 'monitoring',
+      status: effectiveStatus,
       qstashMessageId,
       scheduledTime,
       overrideRiskFlag,

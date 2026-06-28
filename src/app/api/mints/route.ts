@@ -291,6 +291,7 @@ export async function POST(req: Request) {
           taskId: task.id,
           userId: authResult.userId,
           scheduledTime: new Date(),
+          initialStatus: 'ready',
         });
         return NextResponse.json(
           { task: scheduledWlTask, collection, mintStatus: 'live', autoTriggered: true, wlPhase: wlPhase.type },
@@ -351,12 +352,6 @@ export async function POST(req: Request) {
       .set({ phase: 'public', updatedAt: new Date() })
       .where(eq(mintTasks.id, task.id));
 
-    const autoTask = await scheduleMint({
-      taskId: task.id,
-      userId: authResult.userId,
-      scheduledTime: new Date(),
-    });
-
     // By this point any FUTURE public-phase start has already been detected and
     // scheduled as 'upcoming' (see the publicPhaseStart block above). So reaching
     // here means we have no evidence the public phase is still upcoming.
@@ -372,6 +367,15 @@ export async function POST(req: Request) {
       (p: MintPhase) => p.type === 'public' && !!p.startTime && p.startTime.getTime() > Date.now(),
     );
     const trulyLive = !hasUpcomingPublic;
+
+    const autoTask = await scheduleMint({
+      taskId: task.id,
+      userId: authResult.userId,
+      scheduledTime: new Date(),
+      // When the mint is truly live, set status to 'ready' so the UI shows
+      // "executing" instead of "monitoring for public phase start".
+      initialStatus: trulyLive ? 'ready' : 'monitoring',
+    });
 
     let monitoringScheduledTime: Date | undefined;
     if (!trulyLive) {
