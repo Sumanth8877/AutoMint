@@ -10,7 +10,7 @@ export type TaskLogEvent =
   | 'mint_state_check' | 'mint_state_live' | 'mint_state_not_started' | 'mint_state_ended'
   | 'qstash_published' | 'qstash_received'
   | 'websocket_monitoring' | 'websocket_live_detected' | 'websocket_timeout'
-  | 'price_refetch' | 'price_changed'
+  | 'price_refetch' | 'price_changed' | 'price_unknown'
   | 'honeypot_check_started' | 'honeypot_check_passed' | 'honeypot_check_failed'
   | 'tx_submitting' | 'tx_submitted' | 'tx_confirmed' | 'tx_failed' | 'tx_reverted'
   | 'task_completed' | 'task_failed' | 'task_cancelled' | 'task_retrying'

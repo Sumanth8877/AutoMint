@@ -104,7 +104,7 @@ export async function createMintTaskFromUrl(
     chain: intent.chain,
     collectionName: intent.collectionName,
     mintFunction: onChainRequirements.mintFunction,
-    mintPrice: onChainRequirements.mintPrice,
+    mintPrice: onChainRequirements.mintPrice ?? undefined,
     maxPerWallet: onChainRequirements.maxPerWallet,
     maxPerTx: onChainRequirements.maxPerTx,
     mintStartTime: mintState.startTime ?? onChainRequirements.mintStartTime ?? undefined,

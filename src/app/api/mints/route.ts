@@ -153,12 +153,28 @@ export async function POST(req: Request) {
       fetchMintRequirements(collection.contractAddress, collection.chain),
     ]);
 
+    // Resolve the mint price. On-chain read is preferred. A null result means the
+    // contract has no on-chain price getter (e.g. OpenSea / SeaDrop drops) — fall
+    // back to off-chain discovery from the pasted mint URL, then the cached
+    // collection price. We deliberately do NOT coerce an unknown price to '0':
+    // a wrong 0 sends a 0-value mint that reverts and is misreported as a honeypot.
+    let resolvedPrice: string | null = requirements.mintPrice;
+    if (resolvedPrice == null && mintUrl) {
+      const discoveredPrice = await discoverMintRequirements(mintUrl, {
+        contractAddress: collection.contractAddress,
+        chain: collection.chain,
+      }).catch(() => null);
+      resolvedPrice = discoveredPrice?.mintPrice ?? collection.mintPrice ?? null;
+    } else if (resolvedPrice == null) {
+      resolvedPrice = collection.mintPrice ?? null;
+    }
+
     // Apply discovered mint function + price to the task
     await getDb()
       .update(mintTasks)
       .set({
         mintFunction: requirements.mintFunction ?? 'mint',
-        mintPrice: requirements.mintPrice ?? '0',
+        mintPrice: resolvedPrice,
         updatedAt: new Date(),
       })
       .where(eq(mintTasks.id, task.id));

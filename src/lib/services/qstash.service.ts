@@ -634,7 +634,11 @@ export async function executeScheduledMint(taskId: string) {
       const livePrice = liveReqs.mintPrice;
       await addTaskLog(taskId, 'price_refetch', 'info', 'Re-fetching live mint price from on-chain');
 
-      if (livePrice !== task.mintPrice) {
+      // Only act on a live price we could actually read. A null livePrice means
+      // the contract has no on-chain price getter (e.g. OpenSea / SeaDrop drops)
+      // — keep the stored price (set from off-chain discovery at creation) rather
+      // than overwriting it with "unknown".
+      if (livePrice != null && livePrice !== task.mintPrice) {
         await addTaskLog(taskId, 'price_changed', 'warning', `Mint price changed: ${task.mintPrice} → ${livePrice}`);
         addBreadcrumb({
           category: 'qstash',
@@ -669,6 +673,29 @@ export async function executeScheduledMint(taskId: string) {
         level: 'warning',
         data: { taskId, storedPrice: task.mintPrice },
       });
+    }
+
+    // Block when the mint price is still unknown. Proceeding with an implicit 0
+    // would (a) make the balance check pass for an empty wallet and (b) simulate
+    // mint() with 0 value, which reverts on underpayment and is misreported as a
+    // honeypot. Fail clearly instead so the user can set the price manually.
+    if (effectiveMintPrice == null) {
+      await addTaskLog(taskId, 'price_unknown', 'error', 'Could not determine mint price — no on-chain price getter and off-chain discovery was unavailable. Task blocked to avoid a 0-value mint. Set the mint price manually and retry.');
+      await getDb()
+        .update(mintTasks)
+        .set({ status: 'failed', updatedAt: new Date() })
+        .where(eq(mintTasks.id, taskId));
+      await sendScheduledMintNotification(task.userId, 'mint_failed', {
+        taskId,
+        contractAddress: task.contractAddress,
+        error: 'Mint price could not be determined',
+      });
+      await sendMintFailedEmail(task.userId, {
+        taskId,
+        contractAddress: task.contractAddress,
+        error: 'Mint price could not be determined',
+      });
+      return { success: false, error: 'Mint price could not be determined' };
     }
 
     const balance = await getWalletBalance(wallet.address, wallet.chain);
@@ -736,7 +763,8 @@ export async function executeScheduledMint(taskId: string) {
         contractAddress: task.contractAddress,
         chain:           wallet.chain,
         mintFunction:    task.mintFunction ?? 'mint',
-        mintPrice:       effectiveMintPrice ?? task.mintPrice ?? '0',
+        // Guaranteed non-null here: the unknown-price guard above already blocked.
+        mintPrice:       effectiveMintPrice,
         quantity:        task.quantity,
         walletAddress:   wallet.address,
       });
