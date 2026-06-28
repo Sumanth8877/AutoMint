@@ -4,7 +4,7 @@ import { getErrorMessage, parseJsonBody } from '@/lib/api/errors';
 import { resolveMintIntent, type MintIntent } from '@/lib/resolve-mint-intent';
 import { discoverMintRequirements } from '@/lib/services/mint-discovery.service';
 import { runAnalyzer } from '@/lib/services/analyzer.service';
-import { addMintTask, executeMintTask } from '@/lib/services/mint.service';
+import { addMintTask } from '@/lib/services/mint.service';
 import { getEffectiveExecutionDefaults } from '@/lib/services/execution-settings.service';
 import { scheduleMint } from '@/lib/services/qstash.service';
 import { getDb } from '@/lib/db';
@@ -276,14 +276,26 @@ export async function POST(request: Request) {
       .set({ phase: targetPhase.type })
       .where(eq(mintTasks.id, task.id));
 
-    if (isMintLive) {
-      // Execute mint immediately
-      await executeMintTask(task.id, authResult.userId);
-    } else {
-      // Schedule mint for the appropriate time
-      const scheduledTime = mintStartTime ? new Date(mintStartTime) : new Date(Date.now() + 30 * 60 * 1000); // Default to 30 mins if no time
-      await scheduleMint({ taskId: task.id, userId: authResult.userId, scheduledTime });
-    }
+    // M4 fix: always schedule via QStash, even when the mint is already live.
+    // Previously `await executeMintTask` ran the whole mint pipeline inside this
+    // HTTP request — capped at `maxDuration: 10s` in vercel.json. On Ethereum
+    // (~12s blocks) the function is killed mid-receipt-wait, the user sees an
+    // error, and recovery has to clean up. With C1's onBroadcast persist there
+    // is no double-spend, but the UX is bad and the request handler is the
+    // wrong place to do work that exceeds its budget. QStash sends a fresh
+    // invocation with its own budget; for live mints we enqueue with the
+    // current time so QStash dispatches it immediately.
+    const scheduledTime = isMintLive
+      ? new Date()
+      : mintStartTime
+      ? new Date(mintStartTime)
+      : new Date(Date.now() + 30 * 60 * 1000); // Default to 30 mins if no time
+    await scheduleMint({
+      taskId: task.id,
+      userId: authResult.userId,
+      scheduledTime,
+      initialStatus: isMintLive ? 'ready' : 'monitoring',
+    });
 
     return NextResponse.json({
       success: true,
