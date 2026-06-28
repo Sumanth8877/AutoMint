@@ -883,7 +883,7 @@ async function handleModelCallback(callback: TelegramCallbackQuery) {
   if (scope !== 'model' || action !== 'select') return { handled: false };
 
   const modelId = rest.join(':');
-  const { AVAILABLE_MODELS, setUserModel, getUserModel } = await import('@/lib/services/ai-interpreter.service');
+  const { AVAILABLE_MODELS, setUserModel } = await import('@/lib/services/ai-interpreter.service');
 
   const modelInfo = AVAILABLE_MODELS.find(m => m.id === modelId);
   if (!modelInfo) {

@@ -17,7 +17,7 @@ import { addBreadcrumb } from '@/lib/observability/sentry';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export type MintStatus = 'LIVE' | 'NOT_STARTED' | 'ENDED' | 'UNKNOWN';
+export type MintStatus = 'LIVE' | 'ACTIVE' | 'NOT_STARTED' | 'ENDED' | 'UNKNOWN';
 
 export interface MintState {
   status: MintStatus;

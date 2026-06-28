@@ -3,7 +3,7 @@ import type { Hex } from 'viem';
 import { discoverContractABI, discoverMintFunction } from '@/lib/services/mint-abi-discovery.service';
 
 const CONTRACT_ABI = ['function publicMintPrice() view returns (uint256)', 'function maxPerWallet() view returns (uint256)', 'function maxPerTx() view returns (uint256)', 'function mintStart() view returns (uint256)', 'function mintEnd() view returns (uint256)'] as const;
-export interface MintRequirements { mintFunction: string; mintPrice: string; maxPerWallet?: number; maxPerTx?: number; mintStartTime?: Date; mintEndTime?: Date; }
+export interface MintRequirements { mintFunction: string; mintPrice: string; maxPerWallet?: number; maxPerTx?: number; mintStartTime?: Date; mintEndTime?: Date; isSoldOut?: boolean; }
 
 type RequirementFunction = 'publicMintPrice' | 'maxPerWallet' | 'maxPerTx' | 'mintStart' | 'mintEnd';
 

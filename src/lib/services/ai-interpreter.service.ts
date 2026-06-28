@@ -8,10 +8,52 @@ import {
 } from '@google/generative-ai';
 import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
 import { logger } from '@/lib/logger';
+import { getRedisClient } from '@/lib/redis';
+
+// Model management
+
+const DEFAULT_MODEL = 'gemini-3.5-flash';
+
+export type GeminiModelId =
+  | 'gemini-3.5-flash'
+  | 'gemini-3-flash-preview'
+  | 'gemini-2.5-flash'
+  | 'gemini-2.5-flash-lite'
+  | 'gemini-1.5-flash'
+  | 'gemini-1.5-flash-8b';
+
+export type GeminiModel = {
+  id: GeminiModelId;
+  label: string;
+  description: string;
+};
+
+export const AVAILABLE_MODELS: GeminiModel[] = [
+  { id: 'gemini-3.5-flash',       label: 'Gemini 3.5 Flash ⭐',    description: 'Latest & smartest — best for complex commands' },
+  { id: 'gemini-3-flash-preview',  label: 'Gemini 3 Flash Preview', description: 'Previous gen preview — solid all-rounder' },
+  { id: 'gemini-2.5-flash',        label: 'Gemini 2.5 Flash',       description: 'Fast & capable — good for quick tasks' },
+  { id: 'gemini-2.5-flash-lite',   label: 'Gemini 2.5 Flash Lite',  description: 'Lightest 2.5 — fastest response time' },
+  { id: 'gemini-1.5-flash',        label: 'Gemini 1.5 Flash',       description: 'Proven stable model — highly reliable' },
+  { id: 'gemini-1.5-flash-8b',     label: 'Gemini 1.5 Flash 8B',    description: 'Smallest model — ultra-low latency' },
+];
+
+function modelKey(userId: string) { return `ai:model:${userId}`; }
+
+export async function getUserModel(userId: string): Promise<GeminiModelId> {
+  try {
+    const stored = await getRedisClient().get<string>(modelKey(userId));
+    if (stored && AVAILABLE_MODELS.some(m => m.id === stored)) return stored as GeminiModelId;
+  } catch { /* Redis unavailable */ }
+  return DEFAULT_MODEL;
+}
+
+export async function setUserModel(userId: string, modelId: GeminiModelId): Promise<void> {
+  await getRedisClient().set(modelKey(userId), modelId, { ex: 60 * 60 * 24 * 365 });
+}
+
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
-const MODEL = 'gemini-3.5-flash';
 const MAX_TOOL_ROUNDS = 6;
 
 // ── System Prompt ────────────────────────────────────────────────────────────

@@ -33,7 +33,7 @@ const createMockRedis = () => {
   const store = new Map<string, string>();
   const sortedSets = new Map<string, Map<string, number>>();
 
-  return {
+  const redis = {
     store,
     sortedSets,
     get: vi.fn(async (key: string) => store.get(key) ?? null),
@@ -116,35 +116,37 @@ const createMockRedis = () => {
       }
       return removed;
     }),
-    pipeline: vi.fn(function(this: ReturnType<typeof createMockRedis>) {
-      // Return a chainable pipeline that executes commands immediately (synchronously queued)
-      const commands: Array<() => Promise<unknown>> = [];
-      const self = this;
-      const pipe = {
-        set: vi.fn((key: string, value: string, opts?: { ex?: number; nx?: boolean; px?: number }) => {
-          commands.push(() => self.set(key, value, opts));
-          return pipe;
-        }),
-        zadd: vi.fn((key: string, opts: { score: number; member: string }) => {
-          commands.push(() => self.zadd(key, opts));
-          return pipe;
-        }),
-        zrem: vi.fn((key: string, member: string) => {
-          commands.push(() => self.zrem(key, member));
-          return pipe;
-        }),
-        del: vi.fn((key: string) => {
-          commands.push(() => self.del(key));
-          return pipe;
-        }),
-        exec: vi.fn(async () => {
-          const results = await Promise.all(commands.map(fn => fn()));
-          return results;
-        }),
-      };
-      return pipe;
-    }),
   };
+
+  // Add pipeline as a closure over `redis` to avoid no-this-alias ESLint rule
+  redis.pipeline = vi.fn(() => {
+    const commands: Array<() => Promise<unknown>> = [];
+    const pipe = {
+      set: vi.fn((key: string, value: string, opts?: { ex?: number; nx?: boolean; px?: number }) => {
+        commands.push(() => redis.set(key, value, opts));
+        return pipe;
+      }),
+      zadd: vi.fn((key: string, opts: { score: number; member: string }) => {
+        commands.push(() => redis.zadd(key, opts));
+        return pipe;
+      }),
+      zrem: vi.fn((key: string, member: string) => {
+        commands.push(() => redis.zrem(key, member));
+        return pipe;
+      }),
+      del: vi.fn((key: string) => {
+        commands.push(() => redis.del(key));
+        return pipe;
+      }),
+      exec: vi.fn(async () => {
+        const results = await Promise.all(commands.map(fn => fn()));
+        return results;
+      }),
+    };
+    return pipe;
+  });
+
+  return redis;
 };
 
 let mockRedis = createMockRedis();

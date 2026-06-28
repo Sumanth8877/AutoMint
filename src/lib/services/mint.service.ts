@@ -79,12 +79,13 @@ export async function executeMintTask(
   }
 
   return startSpan('mint.execute_task', { area: 'minting', taskId, userId }, async (): Promise<{ success: boolean; txHash?: string; error?: string }> => {
-  const mintLock = options.existingLockToken
-    ? { acquired: true, mintId: taskId, key: `mint-lock:${taskId}`, token: options.existingLockToken }
-    : await acquireLock(taskId);
-  if (!mintLock.acquired) {
+  const mintLockToken = options.existingLockToken ?? null;
+  const lockAcquired = options.existingLockToken ? true : await acquireLock(taskId);
+  if (!lockAcquired) {
     return { success: false, error: 'Mint execution already locked' };
   }
+  // Derive the token for release: provided externally or unknown (plain DEL fallback)
+  const lockToken: string | undefined = mintLockToken ?? undefined;
 
   try {
   const riskGate = await requireRiskApproval({ taskId, action: 'mint', userId });
@@ -314,7 +315,7 @@ export async function executeMintTask(
 
   return { success: true, txHash: result.txHash };
   } finally {
-    await releaseLock(taskId, mintLock.token);
+    await releaseLock(taskId, lockToken);
   }
   return { success: false, error: 'Mint execution did not complete' };
   }).catch(async (error) => {

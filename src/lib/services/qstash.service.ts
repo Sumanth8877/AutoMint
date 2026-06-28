@@ -401,12 +401,12 @@ function retryDelayMs(retriesRemaining: number, maxRetries: number): number {
 }
 
 export async function executeScheduledMint(taskId: string) {
-  const mintLock = await acquireLock(taskId);
-  if (!mintLock.acquired) {
+  const lockAcquired = await acquireLock(taskId);
+  if (!lockAcquired) {
     await captureMessage('QStash duplicate execution attempt', {
       area: 'qstash',
       level: 'warning',
-      context: { taskId, lockName: mintLock.key },
+      context: { taskId },
       fingerprint: ['qstash', 'duplicate-execution'],
     });
     return { success: false, skipped: true, error: 'Mint task is already locked' };
@@ -724,7 +724,7 @@ export async function executeScheduledMint(taskId: string) {
     if (task.walletId) {
       void prewarmWalletKey(task.walletId, task.userId).catch(() => undefined);
     }
-    const mintResult = await executeMintTask(taskId, task.userId, { existingLockToken: mintLock.token });
+    const mintResult = await executeMintTask(taskId, task.userId, {});
 
     // ——— Retry on transient failure ——————————————————————————————
     // C-04: NEVER retry if a txHash is present — the transaction is already
@@ -788,7 +788,7 @@ export async function executeScheduledMint(taskId: string) {
     });
     throw error;
   } finally {
-    if (!lockReleased) await releaseLock(taskId, mintLock.token);
+    if (!lockReleased) await releaseLock(taskId);
   }
 }
 
