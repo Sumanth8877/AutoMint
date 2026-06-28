@@ -27,6 +27,7 @@ type MintTask = {
   scheduledTime: string | null;       // when upcoming mint will fire
   phase: 'whitelist' | 'allowlist' | 'public' | null;  // which mint phase this task targets
   riskReasons: string[] | null;       // U3 — failure reasons from execution
+  qstashMessageId: string | null;     // set when QStash is handling execution — hide play button
   createdAt: string;
 };
 
@@ -572,20 +573,27 @@ export default function MintsClient() {
                   </div>
                   <p className="col-span-2 hidden font-mono text-sm text-text sm:block">{task.quantity}</p>
                   <div className="col-span-7 flex justify-end gap-1 sm:col-span-1">
-                    <button
-                      type="button"
-                      onClick={() => startTask(task)}
-                      disabled={updatingId === task.id || task.status === 'running' || task.status === 'completed'}
-                      className={`flex h-8 w-8 items-center justify-center rounded-lg disabled:opacity-50 ${
-                        task.status === 'failed'
-                          ? 'text-warning hover:bg-warning/10'
-                          : 'text-muted hover:bg-white/5 hover:text-text'
-                      }`}
-                      aria-label={`${task.status === 'failed' || task.status === 'cancelled' ? 'Retry' : 'Start'} ${title}`}
-                      title={task.status === 'failed' ? 'Retry' : task.status === 'cancelled' ? 'Restart' : 'Start'}
-                    >
-                      {task.status === 'failed' ? <RotateCcw className="h-4 w-4" aria-hidden="true" /> : <Play className="h-4 w-4" aria-hidden="true" />}
-                    </button>
+                    {/* Hide play/retry when QStash is already handling execution */}
+                    {task.qstashMessageId && (task.status === 'ready' || task.status === 'monitoring') ? (
+                      <span className="flex h-8 w-8 items-center justify-center text-accent" title="Auto-executing via QStash">
+                        <Zap className="h-4 w-4 animate-pulse" aria-hidden="true" />
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => startTask(task)}
+                        disabled={updatingId === task.id || task.status === 'running' || task.status === 'completed'}
+                        className={`flex h-8 w-8 items-center justify-center rounded-lg disabled:opacity-50 ${
+                          task.status === 'failed'
+                            ? 'text-warning hover:bg-warning/10'
+                            : 'text-muted hover:bg-white/5 hover:text-text'
+                        }`}
+                        aria-label={`${task.status === 'failed' || task.status === 'cancelled' ? 'Retry' : 'Start'} ${title}`}
+                        title={task.status === 'failed' ? 'Retry' : task.status === 'cancelled' ? 'Restart' : 'Start'}
+                      >
+                        {task.status === 'failed' ? <RotateCcw className="h-4 w-4" aria-hidden="true" /> : <Play className="h-4 w-4" aria-hidden="true" />}
+                      </button>
+                    )}
                     <button type="button" onClick={() => cancelTask(task)} disabled={updatingId === task.id || task.status === 'completed' || task.status === 'cancelled'} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-white/5 hover:text-warning disabled:opacity-50" aria-label={`Cancel ${title}`}>
                       <XCircle className="h-4 w-4" aria-hidden="true" />
                     </button>
