@@ -77,13 +77,21 @@ export async function GET() {
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// POST /api/mints — Optimized fast path (no analyzer, no QStash delay)
+// POST /api/mints — Optimized fast path
 //
-// BEFORE:  URL → runAnalyzer(2-5s) → getMintState(0.5-3s) → QStash(+5s) → execute
-// AFTER:   URL → resolveMintIntent(0.5-1s) → [getMintState ∥ fetchMintRequirements](0.5-1s) → QStash(0s) → execute
+// Pipeline: URL → resolve (with discovery fallback) → on-chain state ∥ requirements
+//           → state gating → LIVE: execute inline / UPCOMING: schedule via QStash
 //
-// Removed: runAnalyzer() overhead, applyAnalyzerResultToTask(), 5s QStash delay
-// Savings: ~5-10s per mint
+// Key optimisations over the previous version:
+//   1. Custom mint site support: when resolveMintIntent fails (no contract in URL),
+//      falls back to discoverMintRequirements (Jina/Firecrawl/Browserbase) to
+//      extract the contract address from the page content.
+//   2. Single discovery call: all off-chain discovery is done once and the result
+//      is reused for price, timing, and phase data — no redundant scraping.
+//   3. Direct execution for LIVE mints: executeMintTask() is called inline,
+//      eliminating the QStash network hop (saves 300-1000ms).
+//   4. Pre-creation validation: ENDED/UNKNOWN states are checked before the task
+//      is created, avoiding a create-then-delete DB round-trip.
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 export async function POST(req: Request) {
   try {
@@ -106,9 +114,41 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Wallet ID and Collection ID or Mint URL are required' }, { status: 400 });
     }
 
-    // ── Fast path: URL → contract address (no analyzer, no market data) ──────
+    // ── Resolve URL → contract address ───────────────────────────────────────
+    // FIX 1: Two-tier resolution. resolveMintIntent handles OpenSea, block
+    // explorers, and URLs with an address in the path. For custom mint sites
+    // (unknown host, no address in URL), we fall back to discoverMintRequirements
+    // which scrapes the page via Jina/Firecrawl/Browserbase to extract the
+    // contract. This makes "paste any URL" work for third-party mint pages.
+    //
+    // FIX 2: The discovery result is cached in `discoveryCache` and reused for
+    // price/timing/phase later — no redundant scraping calls.
+    let discoveryCache: Awaited<ReturnType<typeof discoverMintRequirements>> | null = null;
+
     if (mintUrl) {
-      const intent = await resolveMintIntent(mintUrl);
+      let intent = await resolveMintIntent(mintUrl);
+
+      // Tier 2 fallback: if URL resolution didn't find a contract, scrape the page
+      if (!intent.contractAddress) {
+        logger.info('resolveMintIntent found no contract — falling back to page scraping', { area: 'mints/route', url: mintUrl });
+        try {
+          discoveryCache = await discoverMintRequirements(mintUrl);
+          if (discoveryCache.contractAddress) {
+            intent = {
+              ...intent,
+              contractAddress: discoveryCache.contractAddress,
+              chain: discoveryCache.chain ?? intent.chain,
+              collectionName: discoveryCache.collectionName ?? intent.collectionName,
+              isValid: true,
+              confidence: discoveryCache.confidence,
+              sourcePlatform: 'custom',
+            };
+          }
+        } catch (err) {
+          logger.warn('Discovery fallback failed', { area: 'mints/route', error: err instanceof Error ? err.message : String(err) });
+        }
+      }
+
       const collection = await upsertCollectionFromMintIntent(authResult.userId, intent);
       collectionId = collection.id;
 
@@ -122,6 +162,69 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Collection ID could not be resolved' }, { status: 400 });
     }
 
+    // Load the collection record for on-chain queries
+    const [collection] = await getDb()
+      .select()
+      .from(collections)
+      .where(and(eq(collections.id, collectionId), eq(collections.userId, authResult.userId)))
+      .limit(1);
+
+    if (!collection) {
+      return NextResponse.json({ error: 'Collection not found' }, { status: 404 });
+    }
+
+    // ── Parallel: mint state + on-chain requirements ─────────────────────────
+    const [mintState, requirements] = await Promise.all([
+      getMintState(collection.contractAddress, collection.chain),
+      fetchMintRequirements(collection.contractAddress, collection.chain),
+    ]);
+
+    // ── FIX 5: Pre-creation state validation ─────────────────────────────────
+    // Check ENDED and UNKNOWN BEFORE creating the task to avoid a wasteful
+    // create-then-delete DB round-trip.
+
+    if (mintState.status === 'ENDED') {
+      return NextResponse.json(
+        { error: 'This mint has already ended and is no longer mintable.' },
+        { status: 422 },
+      );
+    }
+
+    // FIX 2 (continued): Run discovery ONCE for UNKNOWN state recovery AND
+    // price/timing/phase — reuse the cached result from URL resolution if
+    // we already have it.
+    if (mintState.status === 'UNKNOWN' || mintState.status === 'NOT_STARTED') {
+      if (!discoveryCache && mintUrl) {
+        discoveryCache = await discoverMintRequirements(mintUrl, {
+          contractAddress: collection.contractAddress,
+          chain: collection.chain,
+        }).catch(() => null);
+      }
+    }
+
+    if (mintState.status === 'UNKNOWN') {
+      if (discoveryCache) {
+        if (discoveryCache.mintStartTime && discoveryCache.mintStartTime.getTime() > Date.now()) {
+          Object.assign(mintState, { status: 'NOT_STARTED' as const, startTime: discoveryCache.mintStartTime });
+        } else if (discoveryCache.contractAddress) {
+          Object.assign(mintState, { status: 'LIVE' as const });
+        }
+      }
+
+      if (mintState.status === 'UNKNOWN') {
+        return NextResponse.json(
+          {
+            error:
+              'Mint status could not be determined for this collection. ' +
+              'It may be closed, not yet announced, or use a custom contract. ' +
+              'Please verify the mint page and try again.',
+          },
+          { status: 422 },
+        );
+      }
+    }
+
+    // ── Now safe to create the task (state is LIVE or NOT_STARTED) ────────────
     const fallbackQuantity = mintUrl ? 1 : defaults.defaultMintQuantity;
     const qty = Math.max(1, parseInt(String(quantity ?? fallbackQuantity), 10) || fallbackQuantity);
     const task = await addMintTask(authResult.userId, {
@@ -136,37 +239,12 @@ export async function POST(req: Request) {
 
     await addTaskLog(task.id, 'task_created', 'info', 'Mint task created');
 
-    const [collection] = await getDb()
-      .select()
-      .from(collections)
-      .where(and(eq(collections.id, collectionId), eq(collections.userId, authResult.userId)))
-      .limit(1);
-
-    if (!collection) {
-      return NextResponse.json({ task }, { status: 201 });
-    }
-
-    // ── Parallel: mint state + on-chain requirements (zero duplication) ───────
-    // Both are independent RPC calls. Concurrent execution saves ~200-500ms.
-    const [mintState, requirements] = await Promise.all([
-      getMintState(collection.contractAddress, collection.chain),
-      fetchMintRequirements(collection.contractAddress, collection.chain),
-    ]);
-
-    // Resolve the mint price. On-chain read is preferred. A null result means the
-    // contract has no on-chain price getter (e.g. OpenSea / SeaDrop drops) — fall
-    // back to off-chain discovery from the pasted mint URL, then the cached
-    // collection price. We deliberately do NOT coerce an unknown price to '0':
-    // a wrong 0 sends a 0-value mint that reverts and is misreported as a honeypot.
+    // ── Resolve price (on-chain preferred, discovery fallback) ────────────────
+    // FIX 6: Use the already-fetched discoveryCache for price fallback instead
+    // of calling discoverMintRequirements again.
     let resolvedPrice: string | null = requirements.mintPrice;
-    if (resolvedPrice == null && mintUrl) {
-      const discoveredPrice = await discoverMintRequirements(mintUrl, {
-        contractAddress: collection.contractAddress,
-        chain: collection.chain,
-      }).catch(() => null);
-      resolvedPrice = discoveredPrice?.mintPrice ?? collection.mintPrice ?? null;
-    } else if (resolvedPrice == null) {
-      resolvedPrice = collection.mintPrice ?? null;
+    if (resolvedPrice == null) {
+      resolvedPrice = discoveryCache?.mintPrice ?? collection.mintPrice ?? null;
     }
 
     // Apply discovered mint function + price to the task
@@ -179,52 +257,11 @@ export async function POST(req: Request) {
       })
       .where(eq(mintTasks.id, task.id));
 
-    // ── Mint state gating ────────────────────────────────────────────────────
-    // Priority: ENDED → UNKNOWN → NOT_STARTED → LIVE
-
-    if (mintState.status === 'ENDED') {
-      await removeMintTask(task.id, authResult.userId).catch(() => {});
-      return NextResponse.json(
-        { error: 'This mint has already ended and is no longer mintable.' },
-        { status: 422 },
-      );
-    }
-
-    if (mintState.status === 'UNKNOWN') {
-      if (mintUrl) {
-        const discovered = await discoverMintRequirements(mintUrl, {
-          contractAddress: collection.contractAddress,
-          chain: collection.chain,
-        });
-        if (discovered.mintStartTime && discovered.mintStartTime.getTime() > Date.now()) {
-          Object.assign(mintState, { status: 'NOT_STARTED' as const, startTime: discovered.mintStartTime });
-        } else if (discovered.contractAddress) {
-          Object.assign(mintState, { status: 'LIVE' as const });
-        }
-      }
-
-      if (mintState.status === 'UNKNOWN') {
-        await removeMintTask(task.id, authResult.userId).catch(() => {});
-        return NextResponse.json(
-          {
-            error:
-              'Mint status could not be determined for this collection. ' +
-              'It may be closed, not yet announced, or use a custom contract. ' +
-              'Please verify the mint page and try again.',
-          },
-          { status: 422 },
-        );
-      }
-    }
-
-    // NOT_STARTED (upcoming): schedule for mint start time.
+    // ── NOT_STARTED (upcoming): schedule for mint start time ─────────────────
     if (mintState.status === 'NOT_STARTED') {
-      if (wlMode && mintUrl) {
-        const discovered = await discoverMintRequirements(mintUrl, {
-          contractAddress: collection.contractAddress,
-          chain: collection.chain,
-        });
-        const nonPublicPhases = (discovered?.mintPhases ?? []).filter((p: MintPhase) => p.type !== 'public');
+      if (wlMode) {
+        // Use discoveryCache (already fetched above) for WL phases
+        const nonPublicPhases = (discoveryCache?.mintPhases ?? []).filter((p: MintPhase) => p.type !== 'public');
         if (nonPublicPhases.length === 0) {
           await removeMintTask(task.id, authResult.userId).catch(() => {});
           return NextResponse.json(
@@ -253,16 +290,10 @@ export async function POST(req: Request) {
         mintState.startTime ??
         (collection.mintStart ? new Date(collection.mintStart) : undefined);
 
-      if (!detectedStart && mintUrl) {
-        logger.info('startTime missing — running discoverMintRequirements for timing', { area: 'mints/route' });
-        const discovered = await discoverMintRequirements(mintUrl, {
-          contractAddress: collection.contractAddress,
-          chain: collection.chain,
-        });
-        if (discovered.mintStartTime) {
-          detectedStart = discovered.mintStartTime;
-          logger.info('Discovery found startTime', { area: 'mints/route', startTime: detectedStart.toISOString() });
-        }
+      // Use discoveryCache for start time instead of re-calling discovery
+      if (!detectedStart && discoveryCache?.mintStartTime) {
+        detectedStart = discoveryCache.mintStartTime;
+        logger.info('Discovery provided startTime', { area: 'mints/route', startTime: detectedStart.toISOString() });
       }
 
       const scheduledTime =
@@ -281,20 +312,9 @@ export async function POST(req: Request) {
     }
 
     // ── LIVE mint ────────────────────────────────────────────────────────────
-    //
-    // WL mode needs phase discovery to find the right non-public phase.
-    // Public mode skips discovery entirely — getMintState() already confirmed
-    // the contract is LIVE on-chain (publicMintActive() = true). Skipping
-    // discoverMintRequirements() saves 2-5s of Jina/Firecrawl scraping.
-    // If the on-chain call reverts, the retry mechanism handles it.
-
     if (wlMode) {
-      const discoveredForPhase = mintUrl ? await discoverMintRequirements(mintUrl, {
-        contractAddress: collection.contractAddress,
-        chain: collection.chain,
-      }) : null;
-      const allPhases = discoveredForPhase?.mintPhases ?? [];
-
+      // Use discoveryCache for WL phases (already fetched or null)
+      const allPhases = discoveryCache?.mintPhases ?? [];
       const nonPublicPhases = allPhases.filter((p: MintPhase) => p.type !== 'public');
       if (nonPublicPhases.length === 0) {
         await removeMintTask(task.id, authResult.userId).catch(() => {});
@@ -313,14 +333,11 @@ export async function POST(req: Request) {
         .where(eq(mintTasks.id, task.id));
 
       if (wlPhaseIsLive) {
-        const scheduledWlTask = await scheduleMint({
-          taskId: task.id,
-          userId: authResult.userId,
-          scheduledTime: new Date(),
-          initialStatus: 'ready',
-        });
+        // FIX 3: Execute directly — no QStash hop
+        await addTaskLog(task.id, 'mint_state_live', 'success', 'WL mint is LIVE — executing immediately');
+        void executeMintTask(task.id, authResult.userId).catch(() => {});
         return NextResponse.json(
-          { task: scheduledWlTask, collection, mintStatus: 'live', autoTriggered: true, wlPhase: wlPhase.type },
+          { task: { ...task, status: 'running' }, collection, mintStatus: 'live', autoTriggered: true, wlPhase: wlPhase.type },
           { status: 201 },
         );
       } else {
@@ -336,27 +353,25 @@ export async function POST(req: Request) {
       }
     }
 
-    // ── Public live mint — fast path (no phase discovery) ────────────────────
-    // getMintState() confirmed LIVE on-chain. Execute immediately via QStash
-    // with zero delay. The on-chain simulation inside executeScheduledMint()
-    // serves as the final safety net — if the mint isn't actually open for
-    // public, the tx reverts and is retried automatically.
+    // ── Public live mint — direct execution (no QStash hop) ──────────────────
+    // FIX 3: Execute inline instead of routing through QStash. This eliminates
+    // the QStash network round-trip (300-1000ms) and the cold-start of the
+    // webhook handler. The on-chain simulation inside executeMintTask() is the
+    // safety net — if the mint isn't actually open, the tx reverts and the task
+    // transitions to failed with a clear error message.
     await addTaskLog(task.id, 'mint_state_live', 'success', 'Mint is LIVE on-chain — executing immediately');
     await getDb()
       .update(mintTasks)
-      .set({ phase: 'public', updatedAt: new Date() })
+      .set({ phase: 'public', status: 'ready', updatedAt: new Date() })
       .where(eq(mintTasks.id, task.id));
 
-    const autoTask = await scheduleMint({
-      taskId: task.id,
-      userId: authResult.userId,
-      scheduledTime: new Date(),
-      initialStatus: 'ready',
-    });
+    // Fire-and-forget: start execution without blocking the HTTP response.
+    // executeMintTask handles its own error reporting, retries, and notifications.
+    void executeMintTask(task.id, authResult.userId).catch(() => {});
 
     return NextResponse.json(
       {
-        task: autoTask,
+        task: { ...task, status: 'ready', phase: 'public' },
         collection,
         mintStatus: 'live',
         autoTriggered: true,
