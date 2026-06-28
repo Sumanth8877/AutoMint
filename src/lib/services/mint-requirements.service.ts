@@ -1,6 +1,7 @@
 import { getClient } from '@/lib/blockchain/client';
 import type { Hex } from 'viem';
 import { discoverContractABI, discoverMintFunction } from '@/lib/services/mint-abi-discovery.service';
+import { getSeaDropPublicDrop, SEADROP_MINT_FUNCTION } from '@/lib/services/seadrop.service';
 
 const CONTRACT_ABI = ['function maxPerWallet() view returns (uint256)', 'function maxPerTx() view returns (uint256)', 'function mintStart() view returns (uint256)', 'function mintEnd() view returns (uint256)'] as const;
 
@@ -49,10 +50,11 @@ async function readMintPriceWei(client: ReturnType<typeof getClient>, address: s
 export async function fetchMintRequirements(contractAddress: string, chain: string): Promise<MintRequirements> {
   const client = getClient(chain);
 
-  // Run ABI discovery and contract view reads in parallel — both are independent
+  // Run ABI discovery, contract view reads, and SeaDrop detection in parallel —
+  // all independent. SeaDrop is one extra eth_call, so it adds no latency.
   const [
     priceWei, maxPerWallet, maxPerTx, mintStart, mintEnd,
-    abiResult,
+    abiResult, seaDrop,
   ] = await Promise.all([
     readMintPriceWei(client, contractAddress),
     callView(client, contractAddress, 'maxPerWallet'),
@@ -62,23 +64,33 @@ export async function fetchMintRequirements(contractAddress: string, chain: stri
     // Speed fix: discover the mint function name now so it's stored in the DB.
     // At execution time, params.mintFunction will already be set — no ABI lookup needed.
     discoverContractABI(contractAddress, chain).catch(() => null),
+    // OpenSea drops are SeaDrop contracts: price lives in PublicDrop config and
+    // the mint must be routed through SeaDrop, not a token-level mint().
+    getSeaDropPublicDrop(contractAddress, chain).catch(() => null),
   ]);
 
   // null (not '0') when the price has no on-chain getter — callers fall back to
   // off-chain discovery and block rather than minting with a wrong 0 value.
-  const mintPrice = typeof priceWei === 'bigint' ? (Number(priceWei) / 1e18).toFixed(6) : null;
+  let mintPrice = typeof priceWei === 'bigint' ? (Number(priceWei) / 1e18).toFixed(6) : null;
 
   // Use the discovered function name; fall back to 'mint' if discovery failed
-  const mintFunction = abiResult && abiResult.abi.length > 0
+  let mintFunction = abiResult && abiResult.abi.length > 0
     ? discoverMintFunction(abiResult.abi).functionName
     : 'mint';
+
+  // SeaDrop drop: authoritative on-chain price + correct mint route. This is the
+  // path that makes pasting an OpenSea collection URL actually mintable.
+  if (seaDrop && mintPrice == null) {
+    mintPrice = seaDrop.mintPriceEth;
+    mintFunction = SEADROP_MINT_FUNCTION;
+  }
 
   return {
     mintFunction,
     mintPrice,
-    maxPerWallet: typeof maxPerWallet === 'bigint' ? Number(maxPerWallet) : undefined,
+    maxPerWallet: seaDrop?.maxPerWallet ?? (typeof maxPerWallet === 'bigint' ? Number(maxPerWallet) : undefined),
     maxPerTx: typeof maxPerTx === 'bigint' ? Number(maxPerTx) : undefined,
-    mintStartTime: typeof mintStart === 'bigint' ? new Date(Number(mintStart) * 1000) : undefined,
-    mintEndTime: typeof mintEnd === 'bigint' ? new Date(Number(mintEnd) * 1000) : undefined,
+    mintStartTime: seaDrop?.startTime ?? (typeof mintStart === 'bigint' ? new Date(Number(mintStart) * 1000) : undefined),
+    mintEndTime: seaDrop?.endTime ?? (typeof mintEnd === 'bigint' ? new Date(Number(mintEnd) * 1000) : undefined),
   };
 }

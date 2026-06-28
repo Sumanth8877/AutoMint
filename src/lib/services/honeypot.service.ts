@@ -4,6 +4,13 @@ import { getClient } from '@/lib/blockchain/client';
 import { addBreadcrumb } from '@/lib/observability/sentry';
 import { logger } from '@/lib/logger';
 import type { Hex } from 'viem';
+import {
+  SEADROP_ADDRESS,
+  SEADROP_MINT_PUBLIC_ABI,
+  ZERO_ADDRESS,
+  getSeaDropFeeRecipient,
+  isSeaDropMintFunction,
+} from '@/lib/services/seadrop.service';
 
 /**
  * honeypot.service.ts
@@ -66,6 +73,28 @@ export async function checkHoneypot(params: {
   try {
     const client = getClient(chain);
     const value = BigInt(Math.round(parseFloat(mintPrice) * 1e18)) * BigInt(quantity);
+
+    // SeaDrop (OpenSea) drops mint via the SeaDrop contract's mintPublic(...),
+    // not a token-level mint(). Simulate the correct call so a valid SeaDrop
+    // drop is not falsely flagged as a honeypot.
+    if (isSeaDropMintFunction(mintFunction)) {
+      const feeRecipient = await getSeaDropFeeRecipient(contractAddress, chain);
+      await client.simulateContract({
+        address:      SEADROP_ADDRESS,
+        abi:          SEADROP_MINT_PUBLIC_ABI,
+        functionName: 'mintPublic',
+        args:         [contractAddress as Hex, feeRecipient, ZERO_ADDRESS, BigInt(quantity)],
+        value,
+        account:      walletAddress as Hex,
+      });
+      addBreadcrumb({
+        category: 'honeypot',
+        message:  'SeaDrop simulation passed — contract appears safe',
+        level:    'info',
+        data: { contractAddress, chain, mintFunction, mintPrice, quantity },
+      });
+      return { isSafe: true };
+    }
 
     // Find the ABI variant matching the stored function name
     const abiEntry = MINT_ABI_VARIANTS.find(v => v.name === mintFunction)

@@ -13,6 +13,14 @@ import {
   releaseInflightNonce,
   scanAndFillGaps,
 } from '@/lib/services/nonce-allocator.service';
+import {
+  SEADROP_ADDRESS,
+  SEADROP_MINT_PUBLIC_ABI,
+  ZERO_ADDRESS,
+  buildSeaDropMintData,
+  getSeaDropFeeRecipient,
+  isSeaDropMintFunction,
+} from '@/lib/services/seadrop.service';
 
 // ─── Config ──────────────────────────────────────────
 
@@ -70,6 +78,39 @@ function buildMintData(params: MintParams): Hex {
     functionName: params.mintFunction || 'mint',
     args: [BigInt(params.quantity)],
   });
+}
+
+// Per-unit mint price in wei (0 when free / unknown).
+function unitPriceWei(params: MintParams): bigint {
+  return params.mintPrice ? parseEther(params.mintPrice) : BigInt(0);
+}
+
+/**
+ * Resolve the actual on-chain call (target, calldata, value) for a mint.
+ *
+ * Standard contracts: call the token's mint(uint256) with msg.value = price.
+ * SeaDrop (OpenSea) drops: the token has no payable mint — route through the
+ * SeaDrop contract's mintPublic(...) with msg.value = quantity * mintPrice.
+ */
+async function resolveMintTx(
+  address: Hex,
+  chain: string,
+  params: MintParams,
+  userId?: string,
+): Promise<{ to: Hex; data: Hex; value: bigint }> {
+  if (isSeaDropMintFunction(params.mintFunction)) {
+    const feeRecipient = await getSeaDropFeeRecipient(params.contractAddress, chain, userId);
+    return {
+      to: SEADROP_ADDRESS,
+      data: buildSeaDropMintData({ nftContract: params.contractAddress, feeRecipient, quantity: params.quantity }),
+      value: unitPriceWei(params) * BigInt(params.quantity),
+    };
+  }
+  return {
+    to: params.contractAddress,
+    data: buildMintData(params),
+    value: unitPriceWei(params),
+  };
 }
 
 
@@ -140,12 +181,12 @@ export async function estimateMintGas(
 ): Promise<{ gasLimit: bigint; error?: string }> {
   try {
     const client = getClient(chain, userId);
-    const mintData = buildMintData(params);
+    const { to, data, value } = await resolveMintTx(address, chain, params, userId);
     const estimate = await client.estimateGas({
       account: address,
-      to: params.contractAddress,
-      data: mintData,
-      value: params.mintPrice ? parseEther(params.mintPrice) : BigInt(0),
+      to,
+      data,
+      value,
     });
     return { gasLimit: estimate };
   } catch (error) {
@@ -209,6 +250,22 @@ export async function simulateMint(
 
   try {
     const client = getClient(chain, userId);
+
+    // SeaDrop (OpenSea) drops simulate mintPublic(...) on the SeaDrop contract
+    // with value = quantity * mintPrice — NOT a token-level mint(uint256).
+    if (isSeaDropMintFunction(params.mintFunction)) {
+      const feeRecipient = await getSeaDropFeeRecipient(params.contractAddress, chain, userId);
+      await client.simulateContract({
+        address: SEADROP_ADDRESS,
+        abi: SEADROP_MINT_PUBLIC_ABI,
+        functionName: 'mintPublic',
+        args: [params.contractAddress, feeRecipient, ZERO_ADDRESS, BigInt(params.quantity)],
+        account: address,
+        value: unitPriceWei(params) * BigInt(params.quantity),
+      });
+      return { success: true };
+    }
+
     const abi = params.mintFunction === 'mint' || !params.mintFunction
       ? parseAbi(['function mint(uint256 quantity) payable'])
       : parseAbi([`function ${params.mintFunction}(uint256 quantity) payable`]);
@@ -309,7 +366,6 @@ export async function executeMint(
       resolveGasParams(chain, userId),
     ]);
     const allocatedNonce: number | undefined = nonceResult?.nonce;
-    const value = params.mintPrice ? parseEther(params.mintPrice) : BigInt(0);
 
     // Gate on simulation AFTER all three have resolved.
     // Release the inflight nonce if simulation failed so it doesn't create a gap.
@@ -370,7 +426,9 @@ export async function executeMint(
     }
 
     // ── Build and broadcast transaction ──────────────────────────────────────
-    const mintData = buildMintData(params);
+    // Resolve target + calldata + value (handles SeaDrop routing). For SeaDrop
+    // this is sent to the SeaDrop contract with value = quantity * mintPrice.
+    const { to: mintTo, data: mintData, value } = await resolveMintTx(address, chain, params, userId);
     const account = privateKeyToAccount(privateKey);
     const walletClient = getWalletClient(chain, account, { userId });
 
@@ -395,7 +453,7 @@ export async function executeMint(
       const baseTxParams = {
         account,
         chain: getChain(chain),
-        to: params.contractAddress,
+        to: mintTo,
         data: mintData,
         value,
         gas: params.gasLimit ? BigInt(params.gasLimit) : undefined,
