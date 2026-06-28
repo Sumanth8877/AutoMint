@@ -14,6 +14,7 @@
 import { getClient } from '@/lib/blockchain/client';
 import { type Hex, parseAbi } from 'viem';
 import { addBreadcrumb } from '@/lib/observability/sentry';
+import { getSeaDropPublicDrop } from '@/lib/services/seadrop.service';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -205,17 +206,24 @@ export async function getMintState(contractAddress: string, chain: string): Prom
   // status instead of throwing the whole batch.
   const FALLBACK = Array(6).fill({ status: 'failure' as const });
 
-  const results = await client.multicall({
-    contracts: [
-      { address: contractAddress as Hex, abi: MULTICALL_ABI, functionName: 'publicMintActive' },
-      { address: contractAddress as Hex, abi: MULTICALL_ABI, functionName: 'maxSupply' },
-      { address: contractAddress as Hex, abi: MULTICALL_ABI, functionName: 'totalSupply' },
-      { address: contractAddress as Hex, abi: MULTICALL_ABI, functionName: 'mintStart' },
-      { address: contractAddress as Hex, abi: MULTICALL_ABI, functionName: 'mintEnd' },
-      { address: contractAddress as Hex, abi: MULTICALL_ABI, functionName: 'paused' },
-    ],
-    allowFailure: true,
-  }).catch(() => FALLBACK);
+  const [results, seaDrop] = await Promise.all([
+    client.multicall({
+      contracts: [
+        { address: contractAddress as Hex, abi: MULTICALL_ABI, functionName: 'publicMintActive' },
+        { address: contractAddress as Hex, abi: MULTICALL_ABI, functionName: 'maxSupply' },
+        { address: contractAddress as Hex, abi: MULTICALL_ABI, functionName: 'totalSupply' },
+        { address: contractAddress as Hex, abi: MULTICALL_ABI, functionName: 'mintStart' },
+        { address: contractAddress as Hex, abi: MULTICALL_ABI, functionName: 'mintEnd' },
+        { address: contractAddress as Hex, abi: MULTICALL_ABI, functionName: 'paused' },
+      ],
+      allowFailure: true,
+    }).catch(() => FALLBACK),
+    // OpenSea drops are SeaDrop contracts: publicMintActive/mintStart/mintEnd do
+    // NOT exist on the token. Read authoritative timing from SeaDrop's PublicDrop
+    // so upcoming drops are scheduled (not falsely reported LIVE) and live drops
+    // mint immediately. One extra eth_call, run in parallel = no added latency.
+    getSeaDropPublicDrop(contractAddress, chain).catch(() => null),
+  ]);
 
   const [
     publicMintActiveRes,
@@ -246,6 +254,19 @@ export async function getMintState(contractAddress: string, chain: string): Prom
   const endTime      = typeof mintEndRaw      === 'bigint' ? new Date(Number(mintEndRaw)   * 1000) : undefined;
 
   const now = Date.now();
+
+  // SeaDrop (OpenSea) drops: PublicDrop start/end are the source of truth.
+  // This makes "paste any OpenSea URL" behave correctly — mint now if live,
+  // schedule for the start time if upcoming, and report ENDED/sold-out clearly.
+  if (seaDrop) {
+    const sdStart = seaDrop.startTime;
+    const sdEnd = seaDrop.endTime;
+    const soldOut = maxSupply !== undefined && totalMinted !== undefined && totalMinted >= maxSupply;
+    if (soldOut) return { status: 'ENDED', startTime: sdStart, endTime: sdEnd, maxSupply, minted: totalMinted };
+    if (sdEnd && now >= sdEnd.getTime()) return { status: 'ENDED', startTime: sdStart, endTime: sdEnd, maxSupply, minted: totalMinted };
+    if (sdStart && now < sdStart.getTime()) return { status: 'NOT_STARTED', startTime: sdStart, endTime: sdEnd, maxSupply, minted: totalMinted };
+    return { status: 'LIVE', startTime: sdStart, endTime: sdEnd, maxSupply, minted: totalMinted };
+  }
 
   if (typeof publicMintActive === 'boolean') {
     if (!publicMintActive) {
