@@ -6,19 +6,19 @@
    ─────────────────────────────────────────────────────────────────────────── */
 @theme inline {
   /* Surfaces — layered elevation from base to popover */
-  --color-background: #06080F;
-  --color-surface: #0D1019;
-  --color-surface-hover: #11151F;
-  --color-elevated: #161B26;
+  --color-background: #0A0B0E;
+  --color-surface: #121317;
+  --color-surface-hover: #17181D;
+  --color-elevated: #1C1E24;
 
   /* Borders — base hairline + stronger for emphasis */
   --color-border: rgba(255, 255, 255, 0.08);
   --color-border-strong: rgba(255, 255, 255, 0.14);
 
   /* Brand */
-  --color-primary: #6366F1;
-  --color-primary-hover: #4F46E5;
-  --color-primary-soft: rgba(99, 102, 241, 0.12);
+  --color-primary: #3D7FFF;
+  --color-primary-hover: #2F6BFF;
+  --color-primary-soft: rgba(61, 127, 255, 0.12);
   --color-accent: #22D3EE;
 
   /* Semantic — tuned for dark backgrounds */
@@ -52,12 +52,12 @@
 }
 
 html {
-  background: #06080F;
+  background: #0A0B0E;
 }
 
 body {
   overflow-x: hidden;
-  background: #06080F;
+  background: #0A0B0E;
   color: #F4F6FB;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
@@ -102,8 +102,8 @@ a {
 .automint-shell {
   background:
     radial-gradient(60rem 36rem at 76% -8%, rgba(34, 211, 238, 0.07), transparent 60%),
-    radial-gradient(52rem 34rem at 0% -6%, rgba(99, 102, 241, 0.12), transparent 58%),
-    #06080F;
+    radial-gradient(52rem 34rem at 0% -6%, rgba(61, 127, 255, 0.12), transparent 58%),
+    #0A0B0E;
 }
 
 .surface-grid {
@@ -116,7 +116,7 @@ a {
 
 /* ─── Reusable surface primitives ─────────────────────────────────────────── */
 .premium-card {
-  background: linear-gradient(180deg, rgba(22, 27, 38, 0.95), rgba(13, 16, 25, 0.92));
+  background: linear-gradient(180deg, rgba(28, 30, 36, 0.95), rgba(18, 19, 23, 0.92));
   border: 1px solid var(--color-border);
   box-shadow: var(--shadow-lg);
 }
@@ -150,19 +150,19 @@ a {
 .cl-modalContent,
 .cl-userButtonPopoverCard {
   color-scheme: dark;
-  --clerk-color-primary: #6366F1;
+  --clerk-color-primary: #3D7FFF;
   --clerk-color-primary-foreground: #F4F6FB;
-  --clerk-color-background: #161B26;
+  --clerk-color-background: #1C1E24;
   --clerk-color-foreground: #F4F6FB;
-  --clerk-color-input: #06080F;
+  --clerk-color-input: #0A0B0E;
   --clerk-color-input-foreground: #F4F6FB;
-  --clerk-color-muted: #0D1019;
+  --clerk-color-muted: #121317;
   --clerk-color-muted-foreground: #C3CCDA;
   --clerk-color-neutral: #8B95A7;
   --clerk-color-border: rgba(255, 255, 255, 0.08);
   --clerk-color-ring: #22D3EE;
-  --clerk-color-modal-backdrop: rgba(6, 8, 15, 0.74);
-  --clerk-color-input-background: #06080F;
+  --clerk-color-modal-backdrop: rgba(10, 11, 14, 0.74);
+  --clerk-color-input-background: #0A0B0E;
   --clerk-color-input-text: #F4F6FB;
   --clerk-color-text: #F4F6FB;
   --clerk-color-text-secondary: #C3CCDA;
@@ -171,7 +171,7 @@ a {
 .cl-card,
 .cl-modalContent,
 .cl-userButtonPopoverCard {
-  background: #161B26;
+  background: #1C1E24;
   border: 1px solid rgba(255, 255, 255, 0.08);
   color: #F4F6FB;
 }
@@ -250,7 +250,7 @@ a {
 
 .cl-card :where(input, textarea, select, .cl-formFieldInput),
 .cl-modalContent :where(input, textarea, select, .cl-formFieldInput) {
-  background: #06080F;
+  background: #0A0B0E;
   border-color: rgba(255, 255, 255, 0.08);
   color: #F4F6FB;
 }
