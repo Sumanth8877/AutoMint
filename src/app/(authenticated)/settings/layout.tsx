@@ -3,22 +3,19 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { Bell, KeyRound, Radio, SlidersHorizontal, User, Wrench } from 'lucide-react';
+import { Bell, KeyRound, User, Wrench } from 'lucide-react';
 
 type NavItem = {
   label: string;
   href: string;
   icon: React.ElementType;
-  description: string;
 };
 
 const NAV: NavItem[] = [
-  { label: 'Profile', href: '/settings/profile', icon: User, description: 'Account details' },
-  { label: 'RPC Providers', href: '/settings/rpc-providers', icon: Radio, description: 'Failover routing' },
-  { label: 'Execution', href: '/settings/execution', icon: SlidersHorizontal, description: 'Gas & retries' },
-  { label: 'Notifications', href: '/settings/notifications', icon: Bell, description: 'Email & Telegram' },
-  { label: 'Integrations', href: '/settings/integrations', icon: KeyRound, description: 'Service status' },
-  { label: 'System', href: '/settings/system', icon: Wrench, description: 'Dependencies' },
+  { label: 'Profile', href: '/settings/profile', icon: User },
+  { label: 'Notifications', href: '/settings/notifications', icon: Bell },
+  { label: 'Integrations', href: '/settings/integrations', icon: KeyRound },
+  { label: 'System', href: '/settings/system', icon: Wrench },
 ];
 
 export default function SettingsLayout({ children }: { children: ReactNode }) {
@@ -42,6 +39,7 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
                 <li key={item.href} className="shrink-0 lg:shrink">
                   <Link
                     href={item.href}
+                    prefetch
                     aria-current={active ? 'page' : undefined}
                     className={[
                       'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
