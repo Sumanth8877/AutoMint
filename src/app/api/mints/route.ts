@@ -357,9 +357,21 @@ export async function POST(req: Request) {
       scheduledTime: new Date(),
     });
 
-    const trulyLive = allPhases.length > 0 && (
-      allPhases.some((p: MintPhase) => p.type === 'public' && (!p.startTime || p.startTime.getTime() <= Date.now()))
+    // By this point any FUTURE public-phase start has already been detected and
+    // scheduled as 'upcoming' (see the publicPhaseStart block above). So reaching
+    // here means we have no evidence the public phase is still upcoming.
+    //
+    // A user-initiated public mint should EXECUTE immediately rather than fall into
+    // indefinite "monitoring" when phase discovery is empty or inconclusive (e.g.
+    // a custom contract OpenSea's API doesn't expose stages for). We only treat the
+    // mint as not-live when we POSITIVELY detect an upcoming public phase with a
+    // known future start. Otherwise we trust the user (who initiated the mint on a
+    // live collection): the on-chain attempt either succeeds (live) or reverts and
+    // is retried — which is far better than silently missing a live mint.
+    const hasUpcomingPublic = allPhases.some(
+      (p: MintPhase) => p.type === 'public' && !!p.startTime && p.startTime.getTime() > Date.now(),
     );
+    const trulyLive = !hasUpcomingPublic;
 
     let monitoringScheduledTime: Date | undefined;
     if (!trulyLive) {
