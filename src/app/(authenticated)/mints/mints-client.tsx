@@ -180,6 +180,19 @@ function CountdownTimer({ targetTime, monitoringStatus = false }: { targetTime: 
   return <span className="font-mono tabular-nums">{label}</span>;
 }
 
+// ── ScheduleLabel ─────────────────────────────────────────────────────
+// Shows "⚡ Executing now…" for ready tasks whose scheduledTime has
+// passed (QStash delivery imminent), or the scheduled fire time otherwise.
+// Uses a ref to snapshot "now" at mount so render stays pure.
+function ScheduleLabel({ status, scheduledTime }: { status: string; scheduledTime: string }) {
+  const [mountTime] = useState(() => Date.now());
+  const ts = new Date(scheduledTime).getTime();
+  const near = status === 'ready' && ts <= mountTime + 60_000;
+  if (near) return <span>⚡ Executing now…</span>;
+  const prefix = status === 'running' ? 'Executing' : 'Fires at';
+  return <span>⏰ {prefix}: {new Date(scheduledTime).toLocaleString()}</span>;
+}
+
 export default function MintsClient() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
@@ -535,7 +548,7 @@ export default function MintsClient() {
                         </>
                       ) : (
                         <p className="mt-1 text-xs text-accent">
-                          <span>⏰ {task.status === 'running' ? 'Executing at' : 'Fires at'}: {new Date(task.scheduledTime).toLocaleString()}</span>
+                          <ScheduleLabel status={task.status} scheduledTime={task.scheduledTime!} />
                         </p>
                       )
                     ) : task.status === 'monitoring' ? (

@@ -5,7 +5,7 @@ import { getErrorMessage, parseJsonBody, handleRouteError } from '@/lib/api/erro
 import { addMintTask, executeMintTask, getMintTaskById, getUserMintTasks, removeMintTask } from '@/lib/services/mint.service';
 import { cancelScheduledMint, scheduleMint } from '@/lib/services/qstash.service';
 import { registerContractForMonitoring, unregisterContract } from '@/lib/services/alchemy-webhook.service';
-import { getMintState, fetchOpenSeaDropPhases } from '@/lib/services/mint-state.service';
+import { getMintState } from '@/lib/services/mint-state.service';
 import { fetchMintRequirements } from '@/lib/services/mint-requirements.service';
 import { getDb } from '@/lib/db';
 import { collections, mintTasks } from '@/drizzle/schema';
@@ -262,13 +262,20 @@ export async function POST(req: Request) {
     }
 
     // ── LIVE mint ────────────────────────────────────────────────────────────
-    const discoveredForPhase = mintUrl ? await discoverMintRequirements(mintUrl, {
-      contractAddress: collection.contractAddress,
-      chain: collection.chain,
-    }) : null;
-    const allPhases = discoveredForPhase?.mintPhases ?? [];
+    //
+    // WL mode needs phase discovery to find the right non-public phase.
+    // Public mode skips discovery entirely — getMintState() already confirmed
+    // the contract is LIVE on-chain (publicMintActive() = true). Skipping
+    // discoverMintRequirements() saves 2-5s of Jina/Firecrawl scraping.
+    // If the on-chain call reverts, the retry mechanism handles it.
 
     if (wlMode) {
+      const discoveredForPhase = mintUrl ? await discoverMintRequirements(mintUrl, {
+        contractAddress: collection.contractAddress,
+        chain: collection.chain,
+      }) : null;
+      const allPhases = discoveredForPhase?.mintPhases ?? [];
+
       const nonPublicPhases = allPhases.filter((p: MintPhase) => p.type !== 'public');
       if (nonPublicPhases.length === 0) {
         await removeMintTask(task.id, authResult.userId).catch(() => {});
@@ -310,110 +317,28 @@ export async function POST(req: Request) {
       }
     }
 
-    // Public mint mode
-    const publicPhase = allPhases.find((p: MintPhase) => p.type === 'public');
-    let publicPhaseStart: Date | undefined = publicPhase?.startTime
-      ?? (collection.mintStart ? new Date(collection.mintStart) : undefined);
-
-    if ((!publicPhaseStart || publicPhaseStart.getTime() <= Date.now()) && mintUrl) {
-      const slug = mintUrl.match(/opensea\.io\/collection\/([^/?#]+)/)?.[1];
-      if (slug) {
-        const dropPhases = await fetchOpenSeaDropPhases(slug);
-        const openSeaPublic = dropPhases.find(p => p.type === 'public');
-        if (openSeaPublic?.startTime) {
-          const parsed = new Date(openSeaPublic.startTime);
-          if (!isNaN(parsed.getTime()) && parsed.getTime() > Date.now()) {
-            publicPhaseStart = parsed;
-          }
-        }
-      }
-    }
-
-    if (publicPhaseStart && publicPhaseStart.getTime() > Date.now()) {
-      await getDb()
-        .update(mintTasks)
-        .set({ phase: 'public', mintPrice: publicPhase?.price ?? task.mintPrice ?? '0', updatedAt: new Date() })
-        .where(eq(mintTasks.id, task.id));
-
-      const scheduledTask = await scheduleMint({
-        taskId: task.id,
-        userId: authResult.userId,
-        scheduledTime: publicPhaseStart,
-      });
-      return NextResponse.json(
-        { task: scheduledTask, collection, mintStatus: 'upcoming', scheduledTime: publicPhaseStart.toISOString() },
-        { status: 201 },
-      );
-    }
-
-    // Public mint is truly live — execute immediately (no delay)
+    // ── Public live mint — fast path (no phase discovery) ────────────────────
+    // getMintState() confirmed LIVE on-chain. Execute immediately via QStash
+    // with zero delay. The on-chain simulation inside executeScheduledMint()
+    // serves as the final safety net — if the mint isn't actually open for
+    // public, the tx reverts and is retried automatically.
     await getDb()
       .update(mintTasks)
       .set({ phase: 'public', updatedAt: new Date() })
       .where(eq(mintTasks.id, task.id));
 
-    // By this point any FUTURE public-phase start has already been detected and
-    // scheduled as 'upcoming' (see the publicPhaseStart block above). So reaching
-    // here means we have no evidence the public phase is still upcoming.
-    //
-    // A user-initiated public mint should EXECUTE immediately rather than fall into
-    // indefinite "monitoring" when phase discovery is empty or inconclusive (e.g.
-    // a custom contract OpenSea's API doesn't expose stages for). We only treat the
-    // mint as not-live when we POSITIVELY detect an upcoming public phase with a
-    // known future start. Otherwise we trust the user (who initiated the mint on a
-    // live collection): the on-chain attempt either succeeds (live) or reverts and
-    // is retried — which is far better than silently missing a live mint.
-    const hasUpcomingPublic = allPhases.some(
-      (p: MintPhase) => p.type === 'public' && !!p.startTime && p.startTime.getTime() > Date.now(),
-    );
-    const trulyLive = !hasUpcomingPublic;
-
     const autoTask = await scheduleMint({
       taskId: task.id,
       userId: authResult.userId,
       scheduledTime: new Date(),
-      // When the mint is truly live, set status to 'ready' so the UI shows
-      // "executing" instead of "monitoring for public phase start".
-      initialStatus: trulyLive ? 'ready' : 'monitoring',
+      initialStatus: 'ready',
     });
-
-    let monitoringScheduledTime: Date | undefined;
-    if (!trulyLive) {
-      // Try allPhases → collection.mintStart → OpenSea Drops API (last resort)
-      monitoringScheduledTime =
-        allPhases.find((p: MintPhase) => p.type === 'public' && p.startTime && p.startTime.getTime() > Date.now())?.startTime ??
-        (collection.mintStart && new Date(collection.mintStart).getTime() > Date.now()
-          ? new Date(collection.mintStart) : undefined);
-
-      // If still no timing, try OpenSea Drops API for the public phase countdown
-      if (!monitoringScheduledTime && mintUrl) {
-        const slug = mintUrl.match(/opensea\.io\/collection\/([^/?#]+)/)?.[1];
-        if (slug) {
-          const dropPhases = await fetchOpenSeaDropPhases(slug);
-          const openSeaPublic = dropPhases.find(p => p.type === 'public');
-          if (openSeaPublic?.startTime) {
-            const parsed = new Date(openSeaPublic.startTime);
-            if (!isNaN(parsed.getTime()) && parsed.getTime() > Date.now()) {
-              monitoringScheduledTime = parsed;
-            }
-          }
-        }
-      }
-
-      if (monitoringScheduledTime) {
-        await getDb()
-          .update(mintTasks)
-          .set({ scheduledTime: monitoringScheduledTime, updatedAt: new Date() })
-          .where(eq(mintTasks.id, task.id));
-      }
-    }
 
     return NextResponse.json(
       {
-        task: { ...autoTask, ...(monitoringScheduledTime ? { scheduledTime: monitoringScheduledTime.toISOString() } : {}) },
+        task: autoTask,
         collection,
-        mintStatus: trulyLive ? 'live' : 'monitoring',
-        scheduledTime: monitoringScheduledTime?.toISOString() ?? null,
+        mintStatus: 'live',
         autoTriggered: true,
       },
       { status: 201 },
