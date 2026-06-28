@@ -85,7 +85,7 @@ RULES:
 • After executing tools, summarize what you did in plain language
 • When the user provides a wallet address, validate it looks like 0x... (42 chars) before using it
 • Always call the appropriate tools — never just describe what you would do
-• DIAGNOSING FAILURES: When the user asks why a mint failed / what went wrong / why it did not work, ALWAYS call diagnose_mint_failure FIRST. Read the returned failureReason, the log timeline, and the wallet balance, then explain the ROOT CAUSE in plain language and give a concrete fix. Do NOT reply with generic answers like "I can show you the status" — actually analyze and answer. Example: "Your Rarible Pepes mint failed because wallet 0x99…e5b1 has 0 ETH, but the mint needs 0.001 ETH + ~0.003 ETH gas. Fund the wallet with ~0.01 ETH and retry." Map common reasons to fixes: insufficient/low balance → fund the wallet; sold out / ended → mint is over, nothing to do; reverted / wrong phase → public mint not open or allowlist-only; price unknown → set the price manually; nonce conflict → retry.`;
+• DIAGNOSING FAILURES: When the user asks why a mint failed / what went wrong / why it did not work, ALWAYS call diagnose_mint_failure FIRST. Read the returned failureReason, the log timeline, walletBalance and mintCost, then explain the ROOT CAUSE in plain language and give a concrete fix. ALWAYS include the USD values — walletBalance and mintCost already contain them (e.g. "0.00008 ETH (~$0.21)") — so the user knows how much real money to add. Do NOT reply with generic answers like "I can show you the status" — actually analyze and answer. Example: "Your Rarible Pepes mint failed because wallet 0x99…e5b1 has only 0.00008 ETH (~$0.21), but the mint costs 0.001 ETH (~$2.50) + ~$8 gas. Add about $11 of ETH to the wallet and retry." Map common reasons to fixes: insufficient/low balance → tell them the exact USD to add; sold out / ended → mint is over, nothing to do; reverted / wrong phase → public mint not open or allowlist-only; price unknown → set the price manually; nonce conflict → retry.`;
 
 // ── Tool Declarations ────────────────────────────────────────────────────────
 
@@ -382,19 +382,30 @@ async function executeTool(
         .orderBy(desc(taskLogs.createdAt))
         .limit(25);
 
-      // Current wallet balance for context (the #1 cause of mint failures)
+      // Current wallet balance + mint cost in ETH and USD — the #1 cause of
+      // mint failures is an underfunded wallet, and showing $ makes the fix
+      // obvious ("add ~$10 of ETH" beats "add 0.004 ETH").
       let walletAddress: string | null = null;
       let walletBalance: string | null = null;
+      let mintCost: string | null = null;
       if (task.walletId) {
         const [w] = await getDb().select().from(wallets).where(eq(wallets.id, task.walletId)).limit(1);
         if (w) {
           walletAddress = w.address;
           try {
             const { getWalletBalance } = await import('@/lib/blockchain/wallet');
-            const bal = await getWalletBalance(w.address, w.chain);
-            walletBalance = `${bal.balance} ${bal.symbol}`;
+            const { getNativeTokenUsdPrice, formatWithUsd } = await import('@/lib/services/native-price.service');
+            const [bal, usdPrice] = await Promise.all([
+              getWalletBalance(w.address, w.chain),
+              getNativeTokenUsdPrice(w.chain).catch(() => 0),
+            ]);
+            walletBalance = usdPrice ? formatWithUsd(bal.balance, bal.symbol, usdPrice) : `${bal.balance} ${bal.symbol}`;
+            if (task.mintPrice) {
+              const costEth = Number(task.mintPrice) * task.quantity;
+              mintCost = usdPrice ? formatWithUsd(costEth, bal.symbol, usdPrice) : `${costEth} ${bal.symbol}`;
+            }
           } catch {
-            /* balance fetch is best-effort */
+            /* balance/price fetch is best-effort */
           }
         }
       }
@@ -417,6 +428,7 @@ async function executeTool(
         failureReason: errorLog?.message ?? null,
         walletAddress,
         walletBalance,
+        mintCost,
         logs: logs.reverse(), // chronological for easier reasoning
       };
     }

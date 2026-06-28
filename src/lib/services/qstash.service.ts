@@ -19,6 +19,7 @@ import { getClient } from '@/lib/blockchain/client';
 import type { Hex } from 'viem';
 import { unregisterIfIdle } from '@/lib/services/alchemy-webhook.service';
 import { addTaskLog } from '@/lib/services/task-log.service';
+import { getNativeTokenUsdPrice, formatWithUsd } from '@/lib/services/native-price.service';
 
 // Monitoring fix: reduced from 60s to 30s.
 // WebSocket monitoring watches for 25s per invocation;
@@ -701,7 +702,14 @@ export async function executeScheduledMint(taskId: string) {
 
     const balance = await getWalletBalance(wallet.address, wallet.chain);
     if (!hasEnoughBalance(balance.balance, effectiveMintPrice, task.quantity)) {
-      await addTaskLog(taskId, 'balance_check_failed', 'error', `Insufficient balance: ${balance.balance} ${balance.symbol}`);
+      // Show both what the wallet has and what the mint needs in ETH + USD so
+      // the user knows exactly how much money to add. Also trims the ugly long
+      // balance decimal (e.g. 0.000082664711775296 → 0.000083).
+      const usdPrice = await getNativeTokenUsdPrice(wallet.chain).catch(() => 0);
+      const mintCostEth = Number(effectiveMintPrice) * task.quantity;
+      const haveStr = usdPrice ? formatWithUsd(balance.balance, balance.symbol, usdPrice) : `${balance.balance} ${balance.symbol}`;
+      const costStr = usdPrice ? formatWithUsd(mintCostEth, balance.symbol, usdPrice) : `${mintCostEth} ${balance.symbol}`;
+      await addTaskLog(taskId, 'balance_check_failed', 'error', `Insufficient balance: have ${haveStr}, mint costs ${costStr} + gas. Fund the wallet and retry.`);
       await getDb()
         .update(mintTasks)
         .set({ status: 'failed', qstashMessageId: null, scheduledTime: null, updatedAt: new Date() })
