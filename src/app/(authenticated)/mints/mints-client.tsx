@@ -258,6 +258,16 @@ export default function MintsClient() {
     }
   }, [fetchError]);
 
+  // Auto-dismiss the success banner after a few seconds. It reflects the state
+  // at submit time (e.g. "⚡ auto-executing now") — the task table below is the
+  // live source of truth. Without this, a transient "executing" banner lingers
+  // and contradicts a task that has already failed (e.g. balance too low).
+  useEffect(() => {
+    if (!success) return;
+    const timer = setTimeout(() => dispatch({ type: 'SET_SUCCESS', message: null }), 6000);
+    return () => clearTimeout(timer);
+  }, [success]);
+
   // Create task mutation
   const createTaskMutation = useMutation({
     mutationFn: async (data: { mintUrl: string; quantity: number; wlMode?: boolean }) => {
