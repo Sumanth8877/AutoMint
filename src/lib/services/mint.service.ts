@@ -4,7 +4,7 @@ import { desc, eq, and, inArray } from 'drizzle-orm';
 import { executeMint, type MintParams } from '@/lib/blockchain/mint';
 import { logActivity } from '@/lib/monitoring';
 import { sendTelegramNotification } from '@/lib/services/telegram.service';
-import { sendMintFailedEmail, sendMintScheduledEmail, sendMintSuccessEmail, sendSystemErrorEmail } from '@/lib/services/email-notification.service';
+import { sendMintFailedEmail, sendMintSuccessEmail, sendSystemErrorEmail } from '@/lib/services/email-notification.service';
 import type { GasStrategy } from '@/lib/services/execution-settings.service';
 import { requireRiskApproval } from '@/lib/services/risk.service';
 import { addBreadcrumb, captureException, captureMessage, startSpan } from '@/lib/observability/sentry';
@@ -78,14 +78,15 @@ export async function addMintTask(userId: string, data: {
     contractAddress: task.contractAddress,
   });
 
-  await sendTelegramNotification(userId, 'mint_scheduled', {
-    taskId: task.id,
-    contractAddress: task.contractAddress || undefined,
-  });
-  await sendMintScheduledEmail(userId, {
-    taskId: task.id,
-    contractAddress: task.contractAddress || undefined,
-  });
+  // Notifications are intentionally NOT sent here.
+  // addMintTask() is a pure DB record creator — it has no knowledge of whether
+  // the mint is LIVE (immediate execution) or upcoming (future-scheduled).
+  // Sending 'mint_scheduled' here caused every LIVE mint to fire a spurious
+  // "🕐 Mint Scheduled" Telegram message even though the mint was already
+  // executing. The correct notification is sent by scheduleMint() in
+  // qstash.service.ts, which has the effectiveStatus context:
+  //   LIVE  (initialStatus='ready')      → no Telegram (mint_executing fires later)
+  //   FUTURE (initialStatus='monitoring') → 🕐 mint_scheduled Telegram + email
 
   return task;
 }
