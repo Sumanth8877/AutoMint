@@ -4,7 +4,7 @@ import { Client, Receiver } from '@upstash/qstash';
 import { and, eq, inArray } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
 import { getWalletBalance } from '@/lib/blockchain/wallet';
-import { mintTasks, wallets } from '@/drizzle/schema';
+import { mintTasks, wallets, collections } from '@/drizzle/schema';
 import { logActivity } from '@/lib/monitoring';
 import { executeMintTask } from '@/lib/services/mint.service';
 import { prewarmWalletKey } from '@/lib/services/wallet.service';
@@ -178,11 +178,14 @@ async function sendScheduledMintNotification(
   type: 'mint_scheduled' | 'mint_failed' | 'wallet_balance_low' | 'mint_live_detected' | 'mint_executing',
   payload: {
     taskId?: string;
+    collectionName?: string;
     contractAddress?: string;
     wallet?: string;
     error?: string;
     balance?: string;
     symbol?: string;
+    mintPrice?: string;
+    detail?: string;
   } = {},
 ) {
   const { sendTelegramNotification } = await import('@/lib/services/telegram.service');
@@ -336,9 +339,10 @@ async function loadTaskWithWallet(taskId: string, userId?: string) {
     : eq(mintTasks.id, taskId);
 
   const [row] = await getDb()
-    .select({ task: mintTasks, wallet: wallets })
+    .select({ task: mintTasks, wallet: wallets, collection: collections })
     .from(mintTasks)
     .leftJoin(wallets, eq(mintTasks.walletId, wallets.id))
+    .leftJoin(collections, eq(mintTasks.collectionId, collections.id))
     .where(whereClause)
     .limit(1);
 
@@ -461,7 +465,8 @@ export async function executeScheduledMint(taskId: string) {
     const row = await loadTaskWithWallet(taskId);
     if (!row?.task) throw new Error('Mint task not found');
 
-    const { task, wallet } = row;
+    const { task, wallet, collection } = row;
+    const collectionName = collection?.name || undefined;
     if (task.status === 'completed' || task.txHash) {
       return { success: true, skipped: true, txHash: task.txHash || undefined };
     }
@@ -481,6 +486,7 @@ export async function executeScheduledMint(taskId: string) {
         .where(eq(mintTasks.id, taskId));
       await sendScheduledMintNotification(task.userId, 'mint_failed', {
         taskId,
+        collectionName,
         contractAddress: task.contractAddress || undefined,
         error: 'Scheduled mint missing wallet or contract',
       });
@@ -549,6 +555,7 @@ export async function executeScheduledMint(taskId: string) {
           }
           await sendScheduledMintNotification(task.userId, 'mint_failed', {
             taskId,
+            collectionName,
             contractAddress: task.contractAddress || undefined,
             error: mintState.status === 'ENDED'
               ? 'Mint has ended'
@@ -696,6 +703,7 @@ export async function executeScheduledMint(taskId: string) {
         .where(eq(mintTasks.id, taskId));
       await sendScheduledMintNotification(task.userId, 'mint_failed', {
         taskId,
+        collectionName,
         contractAddress: task.contractAddress,
         error: 'Mint price could not be determined',
       });
@@ -706,6 +714,20 @@ export async function executeScheduledMint(taskId: string) {
       });
       return { success: false, error: 'Mint price could not be determined' };
     }
+
+    // ── Notify execution start ────────────────────────────────────────────────
+    // Fire "⚡ Mint Executing" HERE — once the mint is confirmed live and the
+    // price is resolved, but BEFORE the balance/pre-flight gates that can fail.
+    // Previously this lived inside executeMintTask(), which the balance check
+    // below returns before reaching, so a low-balance mint only ever showed
+    // "❌ Mint Failed" with no preceding "⚡ Executing". executeMintTask() is
+    // called with notifyStarted:false below to avoid a duplicate on success.
+    await sendScheduledMintNotification(task.userId, 'mint_executing', {
+      taskId,
+      collectionName,
+      contractAddress: task.contractAddress || undefined,
+      mintPrice: effectiveMintPrice || undefined,
+    });
 
     const balance = await getWalletBalance(wallet.address, wallet.chain);
     if (!hasEnoughBalance(balance.balance, effectiveMintPrice, task.quantity)) {
@@ -733,8 +755,11 @@ export async function executeScheduledMint(taskId: string) {
       });
       await sendScheduledMintNotification(task.userId, 'mint_failed', {
         taskId,
+        collectionName,
         contractAddress: task.contractAddress,
+        mintPrice: effectiveMintPrice || undefined,
         error: 'Wallet balance is too low',
+        detail: `Have ${haveStr}, need ${costStr} + gas`,
       });
       await sendMintFailedEmail(task.userId, {
         taskId,
@@ -817,7 +842,15 @@ export async function executeScheduledMint(taskId: string) {
       void prewarmWalletKey(task.walletId, task.userId).catch(() => undefined);
     }
     await addTaskLog(taskId, 'tx_submitting', 'info', 'Submitting mint transaction to blockchain');
-    const mintResult = await executeMintTask(taskId, task.userId, { existingLockToken: lockToken });
+    const mintResult = await executeMintTask(taskId, task.userId, {
+      existingLockToken: lockToken,
+      // The "⚡ Mint Executing" message was already sent above (before the
+      // balance gate), so suppress the duplicate inside executeMintTask.
+      notifyStarted: false,
+      // Pass the resolved collection name so success/failure messages from
+      // executeMintTask also show it instead of the raw contract address.
+      collectionName,
+    });
     await addTaskLog(taskId, mintResult.txHash ? 'tx_submitted' : 'task_completed', mintResult.success ? 'success' : 'error', mintResult.txHash ? `Transaction submitted: ${mintResult.txHash}` : mintResult.error ?? 'Unknown error');
 
     // ——— Retry on transient failure ——————————————————————————————

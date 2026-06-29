@@ -93,6 +93,8 @@ type NotificationPayload = {
   error?: string;
   balance?: string;
   symbol?: string;
+  mintPrice?: string;
+  detail?: string;
   riskReason?: string;
   confidence?: number;
 };
@@ -372,10 +374,12 @@ function formatNotification(type: TelegramNotificationType, payload: Notificatio
     case 'mint_started':
     case 'mint_executing':
       lines.push('⚡ Mint Executing', truncate(subject));
+      if (payload.mintPrice) lines.push(`Price: ${payload.mintPrice} ETH`);
       if (payload.taskId) lines.push(`Task: ${payload.taskId.slice(0, 8)}`);
       break;
     case 'mint_success':
       lines.push('✅ Mint Success', truncate(subject));
+      if (payload.mintPrice) lines.push(`Price: ${payload.mintPrice} ETH`);
       if (payload.txHash) lines.push(`Tx: ${payload.txHash.slice(0, 18)}...`);
       break;
     case 'mint_live_detected':
@@ -405,6 +409,8 @@ function formatNotification(type: TelegramNotificationType, payload: Notificatio
       }
       lines.push('❌ Mint Failed', truncate(subject));
       lines.push(`Reason: ${errLabel}`);
+      if (payload.mintPrice) lines.push(`Price: ${payload.mintPrice} ETH`);
+      if (payload.detail) lines.push(payload.detail);
       break;
     }
     case 'high_risk_collection':

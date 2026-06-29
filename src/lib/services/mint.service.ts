@@ -94,7 +94,7 @@ export async function addMintTask(userId: string, data: {
 export async function executeMintTask(
   taskId: string,
   userId: string,
-  options: { existingLockToken?: string; privateMempool?: boolean } = {},
+  options: { existingLockToken?: string; privateMempool?: boolean; notifyStarted?: boolean; collectionName?: string } = {},
 ): Promise<{ success: boolean; txHash?: string; error?: string }> {
   // Validate that taskId is a UUID, not a contract address
   if (!taskId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
@@ -148,10 +148,16 @@ export async function executeMintTask(
     level: 'info',
     data: { taskId, userId: claimed.userId, walletId: claimed.walletId, collectionId: claimed.collectionId, chain: claimed.contractAddress },
   });
-  await sendTelegramNotification(claimed.userId, 'mint_started', {
-    taskId,
-    contractAddress: claimed.contractAddress || undefined,
-  });
+  // notifyStarted defaults to true. The QStash scheduler passes false because it
+  // already sent "⚡ Mint Executing" before the balance gate (see qstash.service.ts).
+  if (options.notifyStarted !== false) {
+    await sendTelegramNotification(claimed.userId, 'mint_started', {
+      taskId,
+      collectionName: options.collectionName,
+      contractAddress: claimed.contractAddress || undefined,
+      mintPrice: claimed.mintPrice || undefined,
+    });
+  }
 
   if (claimed.txHash) {
     return { success: true, txHash: claimed.txHash };
@@ -267,7 +273,9 @@ export async function executeMintTask(
       });
       await sendTelegramNotification(claimed.userId, 'mint_failed', {
         taskId,
+        collectionName: options.collectionName,
         contractAddress: claimed.contractAddress,
+        mintPrice: claimed.mintPrice || undefined,
         error: result.error,
       });
       await sendMintFailedEmail(claimed.userId, {
@@ -327,7 +335,9 @@ export async function executeMintTask(
     });
     await sendTelegramNotification(claimed.userId, 'mint_success', {
       taskId,
+      collectionName: options.collectionName,
       contractAddress: claimed.contractAddress,
+      mintPrice: claimed.mintPrice || undefined,
       txHash: result.txHash,
     });
     await sendMintSuccessEmail(claimed.userId, {
