@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useReducer, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
-import { CalendarClock, LinkIcon, MoreHorizontal, Play, Plus, RotateCcw, ShieldCheck, Trash2, XCircle, Zap } from 'lucide-react';
+import { CalendarClock, LinkIcon, MoreHorizontal, Play, Plus, RotateCcw, Trash2, XCircle, Zap } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -236,8 +236,9 @@ export default function MintsClient() {
   const walletById = useMemo(() => new Map(wallets.map((wallet) => [wallet.id, wallet])), [wallets]);
   const defaultWallet = useMemo(() => wallets.find((wallet) => wallet.isDefault), [wallets]);
   const runningCount = tasks.filter((task) => task.status === 'running').length;
-  const queuedCount = tasks.filter((task) => task.status === 'pending' || task.status === 'monitoring').length;
-  const readyCount = tasks.filter((task) => task.status === 'ready').length;
+  // 'ready' (strategy approved, QStash enqueued, about to fire) is a brief
+  // intermediate state — count it as Queued rather than its own card.
+  const queuedCount = tasks.filter((task) => task.status === 'pending' || task.status === 'monitoring' || task.status === 'ready').length;
   const retryCount = tasks.filter((task) => task.status === 'failed').length;
 
   // Handle mintUrl from URL params and set default wallet
@@ -496,11 +497,10 @@ export default function MintsClient() {
         {formError ? <div className="mt-3 rounded-lg border border-danger/20 bg-danger/10 p-3 text-sm text-danger" role="alert">{formError}</div> : null}
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-3">
         <MetricCard label="Executing" value={String(runningCount)} detail="Currently running" icon={Zap} tone="primary" />
-        <MetricCard label="Queued" value={String(queuedCount)} detail="Pending or monitoring" icon={CalendarClock} tone="accent" />
-        <MetricCard label="Ready" value={String(readyCount)} detail="Strategy approved" icon={ShieldCheck} tone="success" />
-        <MetricCard label="Retries" value={String(retryCount)} detail="Failed tasks" icon={RotateCcw} tone="warning" />
+        <MetricCard label="Queued" value={String(queuedCount)} detail="Pending or about to run" icon={CalendarClock} tone="accent" />
+        <MetricCard label="Failed" value={String(retryCount)} detail="Need attention — tap ↻ to retry" icon={RotateCcw} tone="warning" />
       </div>
 
       {success ? (
