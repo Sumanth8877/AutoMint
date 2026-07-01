@@ -4,7 +4,7 @@ import { useEffect, useMemo, useReducer, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import {
-  CalendarLinkIcon, Play, Plus, RotateCcw,
+  CalendarClock, LinkIcon, Play, Plus, RotateCcw,
   Trash2, XCircle, Zap, CheckCircle2, AlertCircle, Cpu, ExternalLink,
 } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
@@ -14,7 +14,6 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { MetricCard } from '@/components/ui/metric-card';
 import { Modal } from '@/components/ui/modal';
 import { PageHeader } from '@/components/ui/page-header';
-import { TaskConsole } from '@/components/ui/task-console';
 import { SkeletonCard } from '@/components/ui/skeleton';
 import { apiRequest } from '@/lib/api/client';
 import type { WalletType } from '@/lib/wallets/detection';
