@@ -129,6 +129,28 @@ export const monitoringEventsRelations = relations(monitoringEvents, ({ one }) =
   website: one(monitoredWebsites, { fields: [monitoringEvents.websiteId], references: [monitoredWebsites.id] }),
 }));
 
+
+// ── Infrastructure Test Runs ───────────────────────────────────────────────────
+export const infrastructureTestRuns = pgTable('infrastructure_test_runs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id'),
+  service: text('service').notNull(),
+  testType: text('test_type').notNull(),
+  status: text('status').notNull().default('pending'),
+  score: integer('score'),
+  latency: integer('latency'),
+  summary: text('summary'),
+  reasoning: text('reasoning'),
+  rootCause: text('root_cause'),
+  fixRecommendation: text('fix_recommendation'),
+  result: jsonb('result'),
+  response: jsonb('response'),
+  error: text('error'),
+  startedAt: timestamp('started_at').defaultNow().notNull(),
+  completedAt: timestamp('completed_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
 export const browserSessionsRelations = relations(browserSessions, ({ one }) => ({
   website: one(monitoredWebsites, { fields: [browserSessions.websiteId], references: [monitoredWebsites.id] }),
 }));
