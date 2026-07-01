@@ -88,7 +88,10 @@ function statusConfig(status: string) {
 
 export default async function DashboardPage() {
   const authResult = await requireApiUser();
-  const userId = 'id' in authResult ? (authResult as any).id : (authResult as any).user?.id ?? '';
+  // ApiAuthResult wraps the user object — access via .user.id
+  const userId = (authResult as { id?: string; user?: { id: string } }).id
+    ?? (authResult as { id?: string; user?: { id: string } }).user?.id
+    ?? '';
   const d = await getDashboardData(userId);
 
   const totalMints = d.completedTasks + d.pendingTasks + d.failedTasks;
