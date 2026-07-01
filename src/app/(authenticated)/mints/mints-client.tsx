@@ -355,7 +355,6 @@ export default function MintsClient() {
                 updatingId={state.updatingId}
                 deletingId={state.deletingId}
               />
-              {expandedId === task.id && (
                 <div className="mt-2 rounded-xl border border-border overflow-hidden">
                   <TaskConsole taskId={task.id} />
                 </div>

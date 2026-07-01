@@ -52,8 +52,6 @@ function Logo() {
 }
 
 function Navigation({ onNavigate }: { onNavigate?: () => void }) {
-  const pathname = usePathname();
-
   return (
     <nav className="space-y-0.5" aria-label="Main navigation">
       {navItems.map((item) => {

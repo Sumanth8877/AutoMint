@@ -348,7 +348,8 @@ export async function testRpcFailover() {
 
 export async function testJina() {
   return executeTest('Jina', async () => {
-    const result: unknown = null; // jina.provider was removed
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result: any = null; // jina.provider was removed
     const size = result.rawText?.length ?? 0;
     if (size < 100) throw new Error('Jina returned an empty or too-small extraction response');
     return {
