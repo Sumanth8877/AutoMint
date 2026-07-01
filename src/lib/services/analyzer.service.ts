@@ -4,7 +4,7 @@ import 'server-only';
 // Thin coordinator: resolves intent → fetches on-chain data → runs risk →
 // persists history → notifies. All heavy logic lives in:
 //   • analyzer-resolver.service.ts  (URL resolution, social discovery)
-//   • analyzer-data.service.ts      (NFTScan / Moralis / GoPlus / risk)
+//   • analyzer-data.service.ts      (Moralis / GoPlus / risk)
 // ─────────────────────────────────────────────────────────────────────────────
 
 import {

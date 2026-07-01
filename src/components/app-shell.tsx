@@ -104,11 +104,11 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         <Navigation onNavigate={onNavigate} />
       </div>
       <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
-      <div className="flex items-center justify-between">
+      <div className="space-y-2">
         <AutoMintUserButton />
-        <div className="flex items-center gap-1">
-          <span className="h-2 w-2 rounded-full bg-success status-live animate-pulse" />
-          <span className="text-[10px] text-muted font-mono">LIVE</span>
+        <div className="flex items-center justify-center gap-1.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-success shadow-[0_0_6px_rgba(16,185,129,0.9)] animate-pulse" />
+          <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-muted/70">System Live</span>
         </div>
       </div>
     </aside>

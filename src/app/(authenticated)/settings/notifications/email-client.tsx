@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Mail, Save } from 'lucide-react';
+import { Check, Mail, Save } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -25,31 +25,63 @@ type EmailSettingsResponse = {
 };
 
 const notificationTypes: Array<{ key: keyof EmailPreferences; label: string; description: string }> = [
-  {
-    key: 'mintScheduledEnabled',
-    label: 'Mint Scheduled',
-    description: 'Your mint task has been successfully scheduled.',
-  },
-  {
-    key: 'mintSuccessEnabled',
-    label: 'Mint Success',
-    description: 'Mint completed successfully.',
-  },
-  {
-    key: 'mintFailedEnabled',
-    label: 'Mint Failed',
-    description: 'Mint failed, with the failure reason sanitized.',
-  },
-  {
-    key: 'systemErrorsEnabled',
-    label: 'System Errors',
-    description: 'User-relevant task execution, infrastructure, or wallet execution failures.',
-  },
+  { key: 'mintScheduledEnabled', label: 'Mint Scheduled',  description: 'Your mint task has been successfully scheduled.' },
+  { key: 'mintSuccessEnabled',   label: 'Mint Success',    description: 'Mint completed successfully.' },
+  { key: 'mintFailedEnabled',    label: 'Mint Failed',     description: 'Mint failed, with the failure reason sanitized.' },
+  { key: 'systemErrorsEnabled',  label: 'System Errors',  description: 'User-relevant task execution, infrastructure, or wallet execution failures.' },
 ];
 
 function formatDate(value: string | null) {
   if (!value) return 'Not saved yet';
   return new Date(value).toLocaleString();
+}
+
+// ── Neon toggle switch ────────────────────────────────────────────
+function Toggle({ checked, onChange, disabled = false }: { checked: boolean; onChange: () => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={onChange}
+      disabled={disabled}
+      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon/50 disabled:cursor-not-allowed disabled:opacity-50 ${
+        checked
+          ? 'border-neon/50 bg-neon/20 shadow-[0_0_12px_rgba(0,245,255,0.25)]'
+          : 'border-border bg-white/5'
+      }`}
+    >
+      <span
+        className={`inline-block h-4 w-4 transform rounded-full shadow-sm transition-all duration-200 ${
+          checked
+            ? 'translate-x-6 bg-neon shadow-[0_0_8px_rgba(0,245,255,0.80)]'
+            : 'translate-x-1 bg-muted'
+        }`}
+      />
+    </button>
+  );
+}
+
+// ── Neon checkbox ─────────────────────────────────────────────────
+function Checkbox({ checked, onChange, disabled = false }: { checked: boolean; onChange: () => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      onClick={onChange}
+      disabled={disabled}
+      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon/50 disabled:cursor-not-allowed disabled:opacity-50 ${
+        checked
+          ? 'border-neon bg-neon/20 shadow-[0_0_8px_rgba(0,245,255,0.40)]'
+          : 'border-border bg-white/5 hover:border-border-strong'
+      }`}
+    >
+      {checked && (
+        <Check className="h-3 w-3 text-neon" strokeWidth={3} aria-hidden="true" />
+      )}
+    </button>
+  );
 }
 
 export default function EmailNotificationsClient() {
@@ -60,13 +92,11 @@ export default function EmailNotificationsClient() {
   const [success, setSuccess] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
-  // Fetch email notification settings with React Query
   const { data: settings, isLoading, error: fetchError } = useQuery({
     queryKey: ['email-notifications'],
     queryFn: () => apiRequest<EmailSettingsResponse>('/api/settings/email-notifications'),
   });
 
-  // Initialize draft when settings changes
   useEffect(() => {
     if (settings) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- syncs fetched preferences into an editable draft form
@@ -75,7 +105,6 @@ export default function EmailNotificationsClient() {
     }
   }, [settings]);
 
-  // Set error from fetch error
   useEffect(() => {
     if (fetchError) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- mirrors React Query fetch failures into local UI state
@@ -83,160 +112,165 @@ export default function EmailNotificationsClient() {
     }
   }, [fetchError]);
 
-  // Save settings mutation
   const saveMutation = useMutation({
-    mutationFn: async (preferences: EmailPreferences) => {
-      return apiRequest<EmailSettingsResponse>('/api/settings/email-notifications', {
-        method: 'PATCH',
-        body: preferences,
-      });
+    mutationFn: async (preferences: EmailPreferences) =>
+      apiRequest<EmailSettingsResponse>('/api/settings/email-notifications', {
+        method: 'POST',
+        body: JSON.stringify(preferences),
+      }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['email-notifications'], data);
+      setDraft(data.preferences);
+      setSavedAt(data.preferences.updatedAt);
+      setSuccess('Preferences saved successfully.');
+      setSaving(false);
+      window.setTimeout(() => setSuccess(null), 3000);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['email-notifications'] });
-      setSavedAt(new Date().toISOString());
-      setSuccess('Preferences saved successfully');
+    onError: (err: Error) => {
+      setError(err.message || 'Failed to save preferences.');
+      setSaving(false);
     },
   });
 
-  async function saveSettings() {
+  function handleSave() {
     if (!draft) return;
     setSaving(true);
     setError(null);
     setSuccess(null);
-    try {
-      await saveMutation.mutateAsync(draft);
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Failed to save email notification settings.');
-    } finally {
-      setSaving(false);
-    }
+    saveMutation.mutate(draft);
   }
 
-  function updateDraft(key: keyof EmailPreferences, value: boolean) {
-    setDraft((current) => current ? { ...current, [key]: value } : current);
+  function toggle(key: keyof EmailPreferences) {
+    if (!draft) return;
+    setDraft(prev => prev ? { ...prev, [key]: !prev[key] } : prev);
   }
 
-  useEffect(() => {
-    if (!success) return;
-
-    const timeout = window.setTimeout(() => setSuccess(null), 3500);
-    return () => window.clearTimeout(timeout);
-  }, [success]);
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        {[0, 1, 2].map(i => (
+          <div key={i} className="skeleton h-20 w-full rounded-xl" />
+        ))}
+      </div>
+    );
+  }
 
   return (
-    <div>
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-base font-semibold text-text">Email</h3>
-          <p className="mt-1 max-w-2xl text-sm text-muted">
-            Choose which AutoMint emails are delivered to your account address.
-          </p>
+          <h3 className="text-base font-black tracking-tight text-text">Email</h3>
+          <p className="mt-0.5 text-sm text-muted">Choose which AutoMint emails are delivered to your account address.</p>
         </div>
-        <Button type="button" onClick={saveSettings} loading={saving} disabled={isLoading || !draft}>
-          <Save className="h-4 w-4" aria-hidden="true" />
-          {saving ? 'Saving...' : 'Save Preferences'}
+        <Button variant="neon" onClick={handleSave} loading={saving} glow size="sm">
+          <Save className="h-3.5 w-3.5" />
+          Save Preferences
         </Button>
       </div>
 
-      {success ? (
-        <div className="mb-6 rounded-lg border border-success/25 bg-success/10 px-4 py-3 text-sm text-success" role="status">
-          {success}
-        </div>
-      ) : null}
+      {/* Banners */}
+      {error && (
+        <div className="rounded-xl border border-danger/25 bg-danger/8 px-4 py-3 text-sm text-danger">{error}</div>
+      )}
+      {success && (
+        <div className="rounded-xl border border-success/25 bg-success/8 px-4 py-3 text-sm text-success">{success}</div>
+      )}
 
-      {error ? (
-        <div className="mb-6 rounded-lg border border-danger/25 bg-danger/10 px-4 py-3 text-sm text-danger" role="alert">
-          {error}
-        </div>
-      ) : null}
-
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <Card className="p-5">
-          <div className="flex items-start justify-between gap-4 border-b border-border pb-5">
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-accent/20 bg-accent/10 text-accent">
-                <Mail className="h-5 w-5" aria-hidden="true" />
-              </div>
-              <div>
-                <h2 className="font-semibold text-text">Email Notifications</h2>
-                <p className="mt-1 text-sm text-muted">Resend is the only email provider.</p>
-              </div>
-            </div>
-            <Badge variant={draft?.emailEnabled ? 'success' : 'default'}>{draft?.emailEnabled ? 'ON' : 'OFF'}</Badge>
-          </div>
-
-          {isLoading || !draft ? (
-            <div className="py-10 text-sm text-muted">Loading email preferences...</div>
-          ) : (
-            <div className="divide-y divide-border">
-              <label className="flex items-start gap-3 py-5">
-                <input
-                  type="checkbox"
-                  checked={draft.emailEnabled}
-                  onChange={(event) => updateDraft('emailEnabled', event.target.checked)}
-                  className="mt-1 h-4 w-4 accent-primary"
-                />
-                <span>
-                  <span className="block text-sm font-medium text-text">Enable Email Notifications</span>
-                  <span className="mt-1 block text-sm text-muted">When disabled, AutoMint will not send email notifications.</span>
-                </span>
-              </label>
-
-              <div className="py-5">
-                <h3 className="text-sm font-semibold text-text">Notification Types</h3>
-                <div className="mt-3 grid gap-3">
-                  {notificationTypes.map((item) => (
-                    <label key={item.key} className="flex items-start gap-3 rounded-lg border border-border bg-white/[0.03] p-4">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(draft[item.key])}
-                        onChange={(event) => updateDraft(item.key, event.target.checked)}
-                        className="mt-1 h-4 w-4 accent-primary"
-                      />
-                      <span>
-                        <span className="block text-sm font-medium text-text">{item.label}</span>
-                        <span className="mt-1 block text-sm text-muted">{item.description}</span>
-                      </span>
-                    </label>
-                  ))}
+      <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
+        {/* Left — controls */}
+        <div className="space-y-4">
+          {/* Master toggle */}
+          <Card tone="neon" className="p-5">
+            <div className="flex items-center justify-between gap-6">
+              <div className="flex items-center gap-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-neon/25 bg-neon/8">
+                  <Mail className="h-4 w-4 text-neon" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-text">Email Notifications</p>
+                  <p className="text-xs text-muted">Resend is the only email provider.</p>
                 </div>
               </div>
+              <div className="flex items-center gap-3">
+                <span className={`text-[10px] font-bold uppercase tracking-widest ${draft?.emailEnabled ? 'text-neon' : 'text-muted'}`}>
+                  {draft?.emailEnabled ? 'ON' : 'OFF'}
+                </span>
+                <Toggle
+                  checked={draft?.emailEnabled ?? false}
+                  onChange={() => toggle('emailEnabled')}
+                />
+              </div>
+            </div>
+          </Card>
+
+          {/* Notification types */}
+          {draft?.emailEnabled && (
+            <div className="space-y-2">
+              <p className="px-1 text-[10px] font-bold uppercase tracking-[0.18em] text-muted">Notification Types</p>
+              {notificationTypes.map(({ key, label, description }) => {
+                const isChecked = !!draft?.[key];
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => toggle(key)}
+                    className={`group flex w-full items-start gap-4 rounded-xl border p-4 text-left transition-all duration-150 hover:bg-surface-hover ${
+                      isChecked
+                        ? 'border-neon/20 bg-neon/[0.04]'
+                        : 'border-border bg-surface'
+                    }`}
+                  >
+                    <Checkbox checked={isChecked} onChange={() => toggle(key)} />
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-semibold transition-colors ${isChecked ? 'text-text' : 'text-secondary'}`}>
+                        {label}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted">{description}</p>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           )}
-        </Card>
 
-        <Card className="p-5">
-          <h2 className="font-semibold text-text">Email Destination</h2>
-          <div className="mt-4 rounded-lg border border-border bg-white/[0.03] p-4">
-            <p className="text-xs uppercase text-muted">Authenticated Account</p>
-            <p className="mt-2 break-all text-sm font-medium text-text">
-              {settings?.destinationEmail ? (
-                <a href={`mailto:${settings.destinationEmail}`} className="hover:text-accent">
-                  {settings.destinationEmail}
-                </a>
-              ) : (
-                'No email available'
+          {!draft?.emailEnabled && (
+            <div className="rounded-xl border border-border bg-surface/50 px-4 py-6 text-center">
+              <p className="text-sm text-muted">Enable email notifications to configure individual alert types.</p>
+            </div>
+          )}
+        </div>
+
+        {/* Right — destination panel */}
+        <div className="space-y-3">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">Email Destination</p>
+          <Card tone="elevated" className="p-5 space-y-4">
+            {settings?.destinationEmail && (
+              <div>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-muted mb-1.5">Authenticated Account</p>
+                <p className="text-sm font-semibold text-text truncate">{settings.destinationEmail}</p>
+              </div>
+            )}
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted">Provider</span>
+                <span className="text-xs font-semibold text-text">Resend</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted">RESEND_API_KEY</span>
+                <Badge variant={settings?.providerConfigured ? 'success' : 'danger'} dot>
+                  {settings?.providerConfigured ? 'Configured' : 'Missing'}
+                </Badge>
+              </div>
+              {savedAt && (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted">Last Saved</span>
+                  <span className="text-xs text-muted">{formatDate(savedAt)}</span>
+                </div>
               )}
-            </p>
-          </div>
-
-          <div className="mt-4 grid gap-3 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-muted">Provider</span>
-              <span className="font-medium text-text">{settings?.provider ?? 'Resend'}</span>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted">RESEND_API_KEY</span>
-              <Badge variant={settings?.providerConfigured ? 'success' : 'danger'}>
-                {settings?.providerConfigured ? 'Configured' : 'Missing'}
-              </Badge>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted">Last Saved</span>
-              <span className="text-right text-text">{formatDate(savedAt ?? draft?.updatedAt ?? null)}</span>
-            </div>
-          </div>
-        </Card>
+          </Card>
+        </div>
       </div>
     </div>
   );

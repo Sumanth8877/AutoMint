@@ -1,7 +1,7 @@
 import 'server-only';
 
 // ── analyzer-data.service.ts ──────────────────────────────────────────────────
-// Handles on-chain data aggregation (NFTScan, Moralis, GoPlus) and
+// Handles on-chain data aggregation (Moralis, GoPlus) and
 // risk/history persistence.  Called by the thin orchestrator.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -162,7 +162,7 @@ async function runBlockchainDiscovery(params: {
   params.log('info', 'blockchain_discovery', 'Starting blockchain discovery with Moralis and GoPlus Security');
   let collectionData: BlockchainDiscoveryResult['collectionData'] = null;
   let trades: BlockchainDiscoveryResult['trades'] = null;
-  const statistics: BlockchainDiscoveryResult['statistics'] = null; // NFTScan removed; Moralis provides trades
+  const statistics: BlockchainDiscoveryResult['statistics'] = null; // Moralis provides trades
 
   params.log('info', 'blockchain_discovery', 'Fetching Moralis collection data');
   try {

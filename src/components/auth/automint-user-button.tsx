@@ -36,21 +36,40 @@ export default function AutoMintUserButton() {
     return () => document.removeEventListener('pointerdown', handlePointerDown);
   }, [open]);
 
+  // Derive the best available display name — updates reactively when
+  // the user saves their profile via Settings → Profile.
+  const name = user?.fullName
+    || [user?.firstName, user?.lastName].filter(Boolean).join(' ')
+    || email?.split('@')[0]
+    || 'Account';
+
   return (
     <div ref={menuRef} className="relative">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-primary/30 bg-primary/15 text-xs font-semibold text-text"
+        className="group flex w-full items-center gap-3 rounded-xl border border-border bg-surface p-2.5 text-left transition-all duration-200 hover:border-border-strong hover:bg-surface-hover"
         aria-label="Open account menu"
         aria-expanded={open}
       >
-        {user?.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={user.imageUrl} alt="" className="h-full w-full object-cover" />
-        ) : (
-          initials(user?.fullName, email)
-        )}
+        {/* Avatar */}
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-primary/30 bg-primary/15 text-xs font-bold text-text">
+          {user?.imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={user.imageUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            initials(user?.fullName, email)
+          )}
+        </div>
+        {/* Name + email */}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs font-bold text-text">{name}</p>
+          {email && <p className="truncate text-[10px] text-muted">{email}</p>}
+        </div>
+        {/* Chevron */}
+        <svg className="h-3.5 w-3.5 shrink-0 text-muted transition-transform group-aria-expanded:rotate-180" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
       </button>
 
       {open ? (
