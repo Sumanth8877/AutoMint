@@ -1,147 +1,76 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Modal } from '@/components/ui/modal';
-import Badge from '@/components/ui/Badge';
+import { useEffect, useRef, useState } from 'react';
+import { Terminal, X } from 'lucide-react';
 import { apiRequest } from '@/lib/api/client';
-import { Terminal, ExternalLink } from 'lucide-react';
 
+type LogEntry = { id: string; message: string; level: 'info' | 'warn' | 'error' | 'success'; createdAt: string; };
 
-type LogEntry = {
-  id: string;
-  event: string;
-  status: 'info' | 'success' | 'warning' | 'error';
-  message: string | null;
-  createdAt: string;
+const levelStyles: Record<string, string> = {
+  info:    'text-secondary',
+  warn:    'text-warning',
+  error:   'text-danger',
+  success: 'text-success',
+};
+const levelPrefix: Record<string, string> = {
+  info: 'ℹ', warn: '⚠', error: '✖', success: '✔',
 };
 
-type TaskConsoleProps = {
-  open: boolean;
-  onClose: () => void;
-  taskId: string;
-  taskStatus: string;
-  contractAddress: string | null;
-  phase: string | null;
-  /** Chain determines which block explorer URL to use for the contract link. */
-  chain?: string | null;
-};
+export function TaskConsole({ taskId, onClose }: { taskId: string; onClose?: () => void }) {
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
-const STATUS_COLORS: Record<string, string> = {
-  info: 'text-blue-400',
-  success: 'text-green-400',
-  warning: 'text-yellow-400',
-  error: 'text-red-400',
-};
-
-const STATUS_ICONS: Record<string, string> = {
-  info: 'ℹ',
-  success: '✓',
-  warning: '⚠',
-  error: '✗',
-};
-
-// H-2 fix: chain-specific block explorers. Previously hardcoded to etherscan.io
-// which returned 404 for Base, Polygon, and Arbitrum contract addresses.
-const EXPLORER_HOSTS: Record<string, string> = {
-  ethereum: 'https://etherscan.io/address/',
-  base:     'https://basescan.org/address/',
-  polygon:  'https://polygonscan.com/address/',
-  arbitrum: 'https://arbiscan.io/address/',
-};
-
-function explorerUrl(chain: string | null | undefined, contractAddress: string): string {
-  const base = EXPLORER_HOSTS[chain?.toLowerCase() ?? ''] ?? EXPLORER_HOSTS.ethereum;
-  return `${base}${contractAddress}`;
-}
-
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-}
-
-export function TaskConsole({ open, onClose, taskId, taskStatus, contractAddress, phase, chain }: TaskConsoleProps) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const isActive = ['pending', 'monitoring', 'ready', 'running', 'unconfirmed'].includes(taskStatus);
-
-  const { data } = useQuery({
-    queryKey: ['task-logs', taskId],
-    queryFn: () => apiRequest<{ logs: LogEntry[] }>(`/api/mints/${taskId}/logs`),
-    enabled: open,
-    refetchInterval: isActive ? 2000 : false,
-  });
-
-  const logs = data?.logs ?? [];
-
-  // Auto-scroll to bottom when new logs arrive
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    let cancelled = false;
+    async function fetchLogs() {
+      try {
+        const data = await apiRequest<LogEntry[]>(`/api/mints/${taskId}/logs`);
+        if (!cancelled) { setLogs(data); setLoading(false); }
+      } catch { if (!cancelled) setLoading(false); }
     }
-  }, [logs.length]);
+    fetchLogs();
+    const interval = setInterval(fetchLogs, 3000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [taskId]);
+
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [logs]);
 
   return (
-    <Modal open={open} title="" onClose={onClose}>
-      <div className="-m-6">
-        {/* Header bar */}
-        <div className="flex items-center gap-3 border-b border-border bg-gray-900 px-4 py-3">
-          <Terminal className="h-4 w-4 text-green-400" />
-          <span className="font-mono text-sm text-green-400">Task Console</span>
-          <Badge variant={taskStatus === 'completed' ? 'success' : taskStatus === 'failed' ? 'danger' : taskStatus === 'running' ? 'info' : 'warning'}>
-            {taskStatus}
-          </Badge>
-          {phase ? <Badge variant="info">{phase}</Badge> : null}
-          {contractAddress ? (
-            <a
-              href={explorerUrl(chain, contractAddress)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="ml-auto flex items-center gap-1 text-xs text-muted hover:text-text"
-            >
-              {contractAddress.slice(0, 6)}…{contractAddress.slice(-4)}
-              <ExternalLink className="h-3 w-3" />
-            </a>
-          ) : null}
+    <div className="rounded-xl border border-border bg-[#020408] overflow-hidden">
+      {/* Console header */}
+      <div className="flex items-center justify-between border-b border-border px-4 py-2.5 bg-surface">
+        <div className="flex items-center gap-2">
+          <Terminal className="h-3.5 w-3.5 text-neon" />
+          <span className="text-[10px] font-bold uppercase tracking-widest text-neon">Execution Log</span>
+          <span className="text-[10px] font-mono text-muted">#{taskId.slice(-8)}</span>
         </div>
-
-        {/* Console body */}
-        <div
-          ref={scrollRef}
-          className="h-80 overflow-y-auto bg-gray-950 px-4 py-3 font-mono text-xs leading-6"
-        >
-          {logs.length === 0 ? (
-            <div className="flex h-full items-center justify-center text-muted">
-              {isActive ? (
-                <span className="animate-pulse">Waiting for execution logs…</span>
-              ) : (
-                <span>No logs recorded for this task.</span>
-              )}
-            </div>
-          ) : (
-            logs.map((log) => (
-              <div key={log.id} className="flex gap-2">
-                <span className="shrink-0 text-gray-600">{formatTime(log.createdAt)}</span>
-                <span className={`shrink-0 ${STATUS_COLORS[log.status] ?? 'text-gray-400'}`}>
-                  {STATUS_ICONS[log.status] ?? '·'}
-                </span>
-                <span className={STATUS_COLORS[log.status] ?? 'text-gray-400'}>
-                  {log.message ?? log.event}
-                </span>
-              </div>
-            ))
+        <div className="flex items-center gap-2">
+          {loading && <div className="h-3 w-3 rounded-full border border-neon/40 border-t-neon animate-spin" />}
+          {onClose && (
+            <button onClick={onClose} className="flex h-5 w-5 items-center justify-center rounded text-muted hover:text-text transition-colors">
+              <X className="h-3 w-3" />
+            </button>
           )}
-          {isActive && logs.length > 0 ? (
-            <div className="mt-1 flex items-center gap-2 text-green-400">
-              <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-green-400" />
-              <span>Watching for updates…</span>
-            </div>
-          ) : null}
-        </div>
-
-        {/* Footer */}
-        <div className="border-t border-border bg-gray-900 px-4 py-2 text-right">
-          <span className="font-mono text-xs text-gray-600">Task: {taskId.slice(0, 8)}</span>
         </div>
       </div>
-    </Modal>
+
+      {/* Log output */}
+      <div className="h-48 overflow-y-auto p-4 font-mono text-xs space-y-0.5">
+        {logs.length === 0 && !loading && (
+          <p className="text-muted">No logs yet...</p>
+        )}
+        {logs.map(log => (
+          <div key={log.id} className="flex gap-2">
+            <span className="text-muted/50 shrink-0 tabular-nums">
+              {new Date(log.createdAt).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </span>
+            <span className={`shrink-0 ${levelStyles[log.level]}`}>{levelPrefix[log.level]}</span>
+            <span className={levelStyles[log.level]}>{log.message}</span>
+          </div>
+        ))}
+        <div ref={bottomRef} />
+      </div>
+    </div>
   );
 }
