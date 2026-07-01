@@ -7,20 +7,6 @@ import Badge from '@/components/ui/Badge';
 import { apiRequest } from '@/lib/api/client';
 import { Terminal, ExternalLink } from 'lucide-react';
 
-// H-2 fix — per-chain block explorer resolution
-type Chain = 'ethereum' | 'base' | 'polygon' | 'arbitrum';
-const EXPLORER_HOSTS: Record<Chain, string> = {
-  ethereum: 'https://etherscan.io/address/',
-  base: 'https://basescan.org/address/',
-  polygon: 'https://polygonscan.com/address/',
-  arbitrum: 'https://arbiscan.io/address/',
-};
-function resolveExplorer(chain: string | null | undefined, address: string): string {
-  const c = (chain ?? 'ethereum').toLowerCase();
-  const host = EXPLORER_HOSTS[c as Chain] ?? EXPLORER_HOSTS.ethereum;
-  return `${host}${address}`;
-}
-
 
 type LogEntry = {
   id: string;
