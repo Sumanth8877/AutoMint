@@ -57,9 +57,26 @@ export async function POST(request: Request) {
 
   try {
     const client = new Client({ token: qstashToken });
-    const healthUrl = `${getAppOrigin()}/api/health`;
+    const origin = getAppOrigin();
+    const healthUrl = `${origin}/api/health`;
 
-    // Every 3 days at 00:00 UTC — well within Neon's 5-day suspend window.
+    // M-03 fix: check for an existing keepalive schedule before creating a new one.
+    // Each POST previously created a fresh cron schedule unconditionally.
+    // Repeated calls (e.g. redeployment triggers) would accumulate duplicate
+    // schedules, exhausting the QStash free-tier message quota.
+    const existing = await client.schedules.list();
+    const alreadyRegistered = existing.some(
+      (s) => s.destination?.includes('/api/health') && s.destination?.includes(origin),
+    );
+    if (alreadyRegistered) {
+      return NextResponse.json({
+        ok: true,
+        alreadyExists: true,
+        message: 'Keepalive schedule already registered — no action taken.',
+      });
+    }
+
+    // Every 3 days at 00:00 UTC — well within Neon’s 5-day suspend window.
     const schedule = await client.schedules.create({
       destination: healthUrl,
       cron: '0 0 */3 * *',

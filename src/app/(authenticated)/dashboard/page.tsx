@@ -26,7 +26,7 @@ import { getDb } from '@/lib/db';
 import { captureException } from '@/lib/observability/sentry';
 import { wallets, collections, mintHistory } from '@/drizzle/schema';
 import { and, desc, eq, gte } from 'drizzle-orm';
-import { formatEther } from 'viem';
+import { getNativeTokenUsdPrice, formatUsd, formatWithUsd } from '@/lib/services/native-price.service';
 
 async function getDashboardData(userId: string) {
   // Hoisted — used in both try{} and catch{} blocks
@@ -71,30 +71,23 @@ async function getDashboardData(userId: string) {
       failed: historyByDay[day]?.failed ?? 0,
     }));
 
-    // Calculate portfolio value (sum of all wallet balances)
-    let portfolioValue = 0n;
+    // H-01 fix: wallet.balance is a decimal ETH string (e.g. "0.05" from formatEther).
+    // BigInt("0.05") throws, so portfolioValue was always 0. Sum as floats instead.
+    // Also fetch the live ETH price so we can show the USD equivalent.
+    let portfolioEth = 0;
     for (const wallet of userWallets) {
-      if (wallet.address && wallet.balance) {
-        try {
-          portfolioValue += BigInt(wallet.balance);
-        } catch {
-          // Skip balance parse if it fails
-        }
+      if (wallet.balance) {
+        const v = parseFloat(wallet.balance);
+        if (Number.isFinite(v) && v > 0) portfolioEth += v;
       }
     }
+    const ethUsdPrice = await getNativeTokenUsdPrice('ethereum').catch(() => 2500);
+    const portfolioUsdValue = portfolioEth * ethUsdPrice;
 
     // Calculate statistics
     const completedTasks = tasks.filter(t => t.status === 'completed').length;
     const pendingTasks = tasks.filter(t => ['pending', 'monitoring', 'ready'].includes(t.status)).length;
     const failedTasks = tasks.filter(t => t.status === 'failed').length;
-    
-    // Get recent activities
-    let _recentActivities: Awaited<ReturnType<typeof getRecentActivities>> = [];
-    try {
-      _recentActivities = await getRecentActivities(userId);
-    } catch {
-      // Skip activities if fetch fails
-    }
     
     // System health checks
     const systemStatuses = [
@@ -108,8 +101,10 @@ async function getDashboardData(userId: string) {
       metrics: [
         { 
           label: 'Portfolio Value', 
-          value: `${parseFloat(formatEther(portfolioValue)).toFixed(2)} ETH`, 
-          detail: `${userWallets.length} wallet${userWallets.length !== 1 ? 's' : ''}`, 
+          value: portfolioEth > 0 ? formatWithUsd(portfolioEth, 'ETH', ethUsdPrice) : '0 ETH', 
+          detail: portfolioEth > 0
+            ? `${formatUsd(portfolioUsdValue)} · ${userWallets.length} wallet${userWallets.length !== 1 ? 's' : ''}`
+            : `${userWallets.length} wallet${userWallets.length !== 1 ? 's' : ''}`, 
           icon: Wallet, 
           tone: 'success' as const 
         },
@@ -166,7 +161,7 @@ async function getDashboardData(userId: string) {
     // Return empty data on error
     return {
       metrics: [
-        { label: 'Portfolio Value', value: '0.00 ETH', detail: '0 wallets', icon: Wallet, tone: 'success' as const },
+        { label: 'Portfolio Value', value: '0 ETH', detail: '0 wallets', icon: Wallet, tone: 'success' as const },
         { label: 'Completed Mints', value: '0', detail: '0 failed', icon: BarChart3, tone: 'accent' as const },
         { label: 'Active Tasks', value: '0', detail: '0 other', icon: Zap, tone: 'primary' as const },
         { label: 'Funded Wallets', value: '0/0', detail: 'No wallets', icon: AlertTriangle, tone: 'warning' as const },
