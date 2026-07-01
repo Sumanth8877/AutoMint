@@ -48,7 +48,10 @@ export async function getUserModel(userId: string): Promise<GeminiModelId> {
 }
 
 export async function setUserModel(userId: string, modelId: GeminiModelId): Promise<void> {
-  await getRedisClient().set(modelKey(userId), modelId, { ex: 60 * 60 * 24 * 365 });
+  // L-03 fix: 30-day TTL (was 365 days). getUserModel() already falls back to
+  // DEFAULT_MODEL when a stored id is no longer in AVAILABLE_MODELS, but a shorter
+  // TTL means deprecated model preferences auto-reset within a month rather than a year.
+  await getRedisClient().set(modelKey(userId), modelId, { ex: 60 * 60 * 24 * 30 });
 }
 
 
