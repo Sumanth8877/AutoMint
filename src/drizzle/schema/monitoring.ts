@@ -11,11 +11,7 @@ export const websiteTypeEnum = pgEnum('website_type', [
   'whitelist_page',
   'marketplace',
   'other',
-
-}, (table) => ({
-  // H-1 fix — notification bell fetches these on every page load
-  userIdCreatedIdx: index('idx_activities_user_created').on(table.userId, table.createdAt),
-}));
+]);
 
 // ─── Website Status Enum ─────────────────────────
 export const websiteStatusEnum = pgEnum('website_status', [
