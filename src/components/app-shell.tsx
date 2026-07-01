@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import AutoMintUserButton from '@/components/auth/automint-user-button';
@@ -52,6 +52,8 @@ function Logo() {
 }
 
 function Navigation({ onNavigate }: { onNavigate?: () => void }) {
+  const pathname = usePathname();
+
   return (
     <nav className="space-y-0.5" aria-label="Main navigation">
       {navItems.map((item) => {
@@ -198,7 +200,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
-  const pathname = usePathname();
 
   async function handleSearch(query: string) {
     if (!query.trim()) { setSearchResults([]); return; }

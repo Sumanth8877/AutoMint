@@ -4,9 +4,8 @@ import { useEffect, useMemo, useReducer, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import {
-  CalendarClock, LinkIcon, Play, Plus, RotateCcw,
-  Trash2, XCircle, Zap, CheckCircle2, AlertCircle,
-  Cpu, ExternalLink,
+  CalendarLinkIcon, Play, Plus, RotateCcw,
+  Trash2, XCircle, Zap, CheckCircle2, AlertCircle, Cpu, ExternalLink,
 } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
@@ -345,8 +344,8 @@ export default function MintsClient() {
           />
         ) : (
           filtered.map(task => (
-            <div key={task.id}>
-              <MintRow
+            <MintRow
+                key={task.id}
                 task={task}
                 wallets={wallets}
                 onStart={id => { dispatch({ type: 'SET_UPDATING_ID', id }); updateTask.mutate({ id, action: 'start' }); }}
@@ -355,10 +354,6 @@ export default function MintsClient() {
                 updatingId={state.updatingId}
                 deletingId={state.deletingId}
               />
-                <div className="mt-2 rounded-xl border border-border overflow-hidden">
-                  <TaskConsole taskId={task.id} />
-                </div>
-              )}
             </div>
           ))
         )}
