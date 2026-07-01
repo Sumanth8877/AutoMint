@@ -11,16 +11,16 @@ interface ResetResult {
 }
 
 const TABLES = [
-  { key: 'mintTasks',      label: 'Mint Queue',         desc: 'All queued and completed mint tasks' },
   { key: 'mintHistory',    label: 'Mint History',        desc: 'Blockchain transaction receipts' },
-  { key: 'collections',    label: 'Collections',         desc: 'Watched NFT contracts' },
   { key: 'analyzerHistory',label: 'Analyzer History',    desc: 'Contract analysis records' },
-  { key: 'watchedWallets', label: 'Whale Tracker',       desc: 'Watched wallet addresses' },
 ];
 
 const KEPT = [
   'Your account & login',
   'Connected wallets (encrypted keys)',
+  'Mint queue (pending & completed tasks)',
+  'Collections watchlist',
+  'Whale tracker wallets',
   'Settings & notification preferences',
   'Integrations configuration',
 ];
@@ -61,7 +61,7 @@ export function ResetDataModal({ onClose }: { onClose: () => void }) {
               <Check className="h-7 w-7 text-success" />
             </div>
             <div>
-              <p className="text-lg font-black text-text">Data cleared</p>
+              <p className="text-lg font-black text-text">History cleared</p>
               <p className="mt-1 text-sm text-muted">{result.message}</p>
             </div>
             <div className="rounded-xl border border-border bg-surface p-4 text-left space-y-1.5">
@@ -170,7 +170,7 @@ export function ResetDataModal({ onClose }: { onClose: () => void }) {
             >
               {phase === 'running'
                 ? <><RefreshCw className="h-4 w-4 animate-spin" /> Clearing…</>
-                : <><Trash2 className="h-4 w-4" /> Reset Data</>
+                : <><Trash2 className="h-4 w-4" /> Clear History</>
               }
             </button>
           </div>

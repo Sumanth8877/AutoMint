@@ -3,11 +3,8 @@ import { requireApiUser } from '@/lib/auth/require-auth';
 import { getDb } from '@/lib/db';
 import { eq } from 'drizzle-orm';
 import {
-  mintTasks,
   mintHistory,
-  collections,
   analyzerHistory,
-  watchedWallets,
 } from '@/drizzle/schema';
 import { invalidateCache } from '@/lib/redis';
 
@@ -16,15 +13,12 @@ export const dynamic = 'force-dynamic';
 /**
  * POST /api/user/reset-data
  *
- * Clears all operational data for the authenticated user:
- *   • Mint tasks (queue + history)
+ * Clears history data for the authenticated user:
  *   • Blockchain mint history
- *   • Collections watchlist
  *   • Analyzer history
- *   • Watched wallets (whale tracker)
  *
- * KEEPS: account, wallets (with encrypted keys), settings, notifications.
- * This action is IRREVERSIBLE.
+ * KEEPS: mint queue, collections, wallets, watched wallets, account,
+ *        settings, notifications. This action is IRREVERSIBLE.
  */
 export async function POST() {
   const auth = await requireApiUser();
@@ -45,18 +39,6 @@ export async function POST() {
     // 2. Mint history (blockchain receipts)
     const mh = await db.delete(mintHistory).where(eq(mintHistory.userId, userId)).returning({ id: mintHistory.id });
     results.mintHistory = mh.length;
-
-    // 3. Mint tasks (queue)
-    const mt = await db.delete(mintTasks).where(eq(mintTasks.userId, userId)).returning({ id: mintTasks.id });
-    results.mintTasks = mt.length;
-
-    // 4. Collections watchlist
-    const col = await db.delete(collections).where(eq(collections.userId, userId)).returning({ id: collections.id });
-    results.collections = col.length;
-
-    // 5. Watched wallets (whale tracker)
-    const ww = await db.delete(watchedWallets).where(eq(watchedWallets.userId, userId)).returning({ id: watchedWallets.id });
-    results.watchedWallets = ww.length;
 
     // Invalidate all Redis caches for this user
     await Promise.allSettled([
