@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { FolderKanban, Plus, Radar, ShieldAlert, Sparkles, Trash2, TrendingUp } from 'lucide-react';
+import { ExternalLink, FolderKanban, Plus, Search, Trash2, Zap, Shield, TrendingUp } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -11,215 +11,216 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { MetricCard } from '@/components/ui/metric-card';
 import { Modal } from '@/components/ui/modal';
 import { PageHeader } from '@/components/ui/page-header';
-import { Skeleton } from '@/components/ui/skeleton';
+import { SkeletonCard } from '@/components/ui/skeleton';
 import { apiRequest } from '@/lib/api/client';
 
-type CollectionRecord = {
-  id: string;
-  name: string | null;
-  contractAddress: string;
-  chain: string;
-  mintStatus: string | null;
-  tokenStandard: string | null;
-  totalSupply: string | null;
+type Collection = {
+  id: string; name: string | null; contractAddress: string; chain: string;
+  mintPrice: string | null; totalSupply: number | null; mintedCount: number | null;
+  createdAt: string; riskScore: number | null; isPublic: boolean | null;
 };
 
-function shortAddress(address: string) {
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+const chainColors: Record<string, string> = {
+  ethereum: 'text-neon border-neon/25 bg-neon/8',
+  base:     'text-primary border-primary/25 bg-primary/8',
+  polygon:  'text-accent border-accent/25 bg-accent/8',
+  arbitrum: 'text-info border-info/25 bg-info/8',
+};
+
+function riskBadge(score: number | null) {
+  if (score === null) return null;
+  if (score >= 80) return <Badge variant="danger" dot>High Risk {score}</Badge>;
+  if (score >= 50) return <Badge variant="warning" dot>Med Risk {score}</Badge>;
+  return <Badge variant="success" dot>Safe {score}</Badge>;
 }
 
-function statusVariant(status: string | null) {
-  if (status === 'live' || status === 'ready') return 'success';
-  if (status === 'blocked' || status === 'failed') return 'danger';
-  return 'warning';
+function CollectionCard({ col, onDelete, deleting }: { col: Collection; onDelete: (id: string) => void; deleting: boolean }) {
+  const filled = col.mintedCount !== null && col.totalSupply ? Math.min((col.mintedCount / col.totalSupply) * 100, 100) : null;
+  const chainStyle = chainColors[col.chain] ?? 'text-muted border-border bg-surface';
+
+  return (
+    <Card tone="neon" className="p-5 group hover:scale-[1.01] transition-transform duration-200">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-background">
+            <FolderKanban className="h-4 w-4 text-neon" />
+          </div>
+          <div>
+            <p className="font-bold text-text text-sm">{col.name ?? 'Unnamed Collection'}</p>
+            <p className="text-[10px] font-mono text-muted">{col.contractAddress.slice(0, 10)}…{col.contractAddress.slice(-6)}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${chainStyle}`}>{col.chain}</span>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="rounded-lg bg-background/50 p-2.5 text-center">
+          <p className="text-[9px] font-bold uppercase tracking-widest text-muted mb-1">Supply</p>
+          <p className="text-sm font-black text-text">{col.totalSupply?.toLocaleString() ?? '–'}</p>
+        </div>
+        <div className="rounded-lg bg-background/50 p-2.5 text-center">
+          <p className="text-[9px] font-bold uppercase tracking-widest text-muted mb-1">Minted</p>
+          <p className="text-sm font-black text-text">{col.mintedCount?.toLocaleString() ?? '–'}</p>
+        </div>
+        <div className="rounded-lg bg-background/50 p-2.5 text-center">
+          <p className="text-[9px] font-bold uppercase tracking-widest text-muted mb-1">Price</p>
+          <p className="text-sm font-black text-gold">{col.mintPrice ?? 'Free'}</p>
+        </div>
+      </div>
+
+      {/* Mint progress bar */}
+      {filled !== null && (
+        <div className="mb-4">
+          <div className="flex justify-between mb-1.5">
+            <span className="text-[10px] text-muted">Mint Progress</span>
+            <span className="text-[10px] font-bold text-neon">{filled.toFixed(1)}%</span>
+          </div>
+          <div className="h-1.5 w-full rounded-full bg-white/5 overflow-hidden">
+            <div className="mint-progress-bar h-full" style={{ width: `${filled}%` }} />
+          </div>
+        </div>
+      )}
+
+      {/* Footer */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {riskBadge(col.riskScore)}
+          {col.isPublic && <Badge variant="neon" dot>Live</Badge>}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant="neon"
+            size="xs"
+            onClick={() => window.location.href = `/mints?mintUrl=https://etherscan.io/address/${col.contractAddress}`}
+          >
+            <Zap className="h-3 w-3" />Mint
+          </Button>
+          <a
+            href={`https://etherscan.io/address/${col.contractAddress}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex h-7 w-7 items-center justify-center rounded-lg border border-border text-muted hover:text-text hover:border-border-strong transition-colors"
+          >
+            <ExternalLink className="h-3 w-3" />
+          </a>
+          <Button variant="ghost" size="xs" onClick={() => onDelete(col.id)} loading={deleting} className="hover:text-danger">
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
 }
 
 export default function CollectionsClient() {
-  const queryClient = useQueryClient();
-  const [saving, setSaving] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [searchQ, setSearchQ] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [formError, setFormError] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', contractAddress: '', chain: 'ethereum' });
+  const [formError, setFormError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  // Fetch collections with React Query
-  const { data: collectionsData, isLoading, error: fetchError } = useQuery({
+  const { data: collections = [], isLoading } = useQuery<Collection[]>({
     queryKey: ['collections'],
-    queryFn: () => apiRequest<{ collections: CollectionRecord[] }>('/api/collections'),
+    queryFn: () => apiRequest<Collection[]>('/api/collections'),
   });
 
-  const collections = useMemo(() => collectionsData?.collections ?? [], [collectionsData?.collections]);
-  const trackedCount = collections.length;
-  const syncedCount = useMemo(() => collections.filter((collection) => collection.tokenStandard || collection.totalSupply).length, [collections]);
-  const unknownCount = trackedCount - syncedCount;
-
-  // Set error from fetch error
-  useEffect(() => {
-    if (fetchError) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- mirrors React Query fetch failures into dismissible local UI state
-      setError(fetchError instanceof Error ? fetchError.message : 'Failed to load collections.');
-    }
-  }, [fetchError]);
-
-  // Add collection mutation
-  const addCollectionMutation = useMutation({
-    mutationFn: async (data: { name: string; contractAddress: string; chain: string }) => {
-      return apiRequest<{ collection: CollectionRecord }>('/api/collections', {
-        method: 'POST',
-        body: data,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['collections'] });
-      setModalOpen(false);
-    },
+  const addMutation = useMutation({
+    mutationFn: (body: object) => apiRequest('/api/collections', { method: 'POST', body: JSON.stringify(body) }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['collections'] }); setAddOpen(false); setForm({ name: '', contractAddress: '', chain: 'ethereum' }); },
+    onError: (e: Error) => setFormError(e.message),
   });
 
-  // Delete collection mutation
-  const deleteCollectionMutation = useMutation({
-    mutationFn: async (id: string) => {
-      return apiRequest<{ success: true }>('/api/collections', { method: 'DELETE', body: { id } });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['collections'] });
-    },
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest(`/api/collections/${id}`, { method: 'DELETE' }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['collections'] }); setDeletingId(null); },
+    onError: () => setDeletingId(null),
   });
 
-  const submitCollection = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setSaving(true);
-    setFormError(null);
-
-    try {
-      await addCollectionMutation.mutateAsync({
-        name: form.name.trim(),
-        contractAddress: form.contractAddress.trim(),
-        chain: form.chain,
-      });
-    } catch (requestError) {
-      setFormError(requestError instanceof Error ? requestError.message : 'Failed to add collection.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const deleteCollection = async (id: string) => {
-    setDeletingId(id);
-    setError(null);
-
-    try {
-      await deleteCollectionMutation.mutateAsync(id);
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Failed to delete collection.');
-    } finally {
-      setDeletingId(null);
-    }
-  };
+  const filtered = collections.filter(c =>
+    c.name?.toLowerCase().includes(searchQ.toLowerCase()) ||
+    c.contractAddress.toLowerCase().includes(searchQ.toLowerCase())
+  );
 
   return (
-    <div>
+    <div className="space-y-8">
       <PageHeader
-        eyebrow="Research"
         title="Collections"
-        description="Manage collection watchlists, launchpad metadata, demand signals, and risk posture."
+        subtitle={`${collections.length} tracked contracts`}
+        icon={FolderKanban}
+        iconTone="purple"
         actions={
-          <Button type="button" onClick={() => setModalOpen(true)}>
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Add Collection
+          <Button variant="primary" onClick={() => setAddOpen(true)}>
+            <Plus className="h-3.5 w-3.5" />Add Collection
           </Button>
         }
       />
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <MetricCard label="Tracked" value={String(trackedCount)} detail="Loaded from saved collections" icon={FolderKanban} tone="primary" />
-        <MetricCard label="Synced" value={String(syncedCount)} detail="Metadata available" icon={TrendingUp} tone="accent" />
-        <MetricCard label="Needs Review" value={String(unknownCount)} detail="Awaiting metadata sync" icon={ShieldAlert} tone="danger" />
+      {/* Stats */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <MetricCard label="Total Tracked" value={collections.length} icon={FolderKanban} tone="primary" />
+        <MetricCard label="Live Mints" value={collections.filter(c => c.isPublic).length} icon={Zap} tone="neon" />
+        <MetricCard label="Safe Contracts" value={collections.filter(c => c.riskScore !== null && c.riskScore < 50).length} icon={Shield} tone="success" />
       </div>
 
-      {error ? (
-        <div className="mt-6 rounded-lg border border-danger/20 bg-danger/10 p-3 text-sm text-danger" role="alert">
-          {error}
-        </div>
-      ) : null}
+      {/* Search */}
+      <Input
+        placeholder="Search collections or contract addresses…"
+        value={searchQ}
+        onChange={e => setSearchQ(e.target.value)}
+        leftIcon={<Search className="h-3.5 w-3.5" />}
+      />
 
+      {/* Grid */}
       {isLoading ? (
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {[0, 1, 2, 3].map((item) => (
-            <Card key={item} className="p-5">
-              <Skeleton className="h-10 w-10" />
-              <Skeleton className="mt-5 h-5 w-40" />
-              <Skeleton className="mt-3 h-4 w-full" />
-            </Card>
-          ))}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} lines={3} />)}
         </div>
-      ) : collections.length > 0 ? (
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {collections.map((collection) => (
-            <Card key={collection.id} tone="interactive" className="p-5">
-              <div className="mb-5 flex items-start justify-between gap-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
-                  <Sparkles className="h-5 w-5" aria-hidden="true" />
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant={statusVariant(collection.mintStatus) as 'success' | 'warning' | 'danger'}>{collection.mintStatus ?? 'unknown'}</Badge>
-                  <button
-                    type="button"
-                    onClick={() => deleteCollection(collection.id)}
-                    disabled={deletingId === collection.id}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-white/5 hover:text-danger disabled:opacity-50"
-                    aria-label={`Delete ${collection.name ?? collection.contractAddress}`}
-                  >
-                    <Trash2 className="h-4 w-4" aria-hidden="true" />
-                  </button>
-                </div>
-              </div>
-              <h2 className="truncate font-semibold text-text">{collection.name || shortAddress(collection.contractAddress)}</h2>
-              <p className="mt-1 text-sm text-muted">{collection.chain}</p>
-              <p className="mt-2 truncate font-mono text-xs text-muted">{collection.contractAddress}</p>
-              <div className="mt-5 flex items-center justify-between">
-                <span className="text-sm text-muted">{collection.tokenStandard ?? 'Unverified'}</span>
-                <span className="font-mono text-xl text-text">{collection.totalSupply ?? '--'}</span>
-              </div>
-            </Card>
-          ))}
-        </div>
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          icon={FolderKanban}
+          title={searchQ ? 'No matching collections' : 'No collections yet'}
+          description={searchQ ? 'Try a different search term' : 'Add your first NFT collection to start tracking and minting.'}
+          action={!searchQ ? <Button variant="primary" onClick={() => setAddOpen(true)}><Plus className="h-3.5 w-3.5" />Add Collection</Button> : undefined}
+        />
       ) : (
-        <div className="mt-6">
-          <EmptyState
-            icon={Radar}
-            title="No collections tracked"
-            description="Paste a launchpad URL or import a watchlist to start scoring collection risk, demand, and execution readiness."
-            action={
-              <Button type="button" onClick={() => setModalOpen(true)}>
-                <Plus className="h-4 w-4" aria-hidden="true" />
-                Add Collection
-              </Button>
-            }
-          />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filtered.map(col => (
+            <CollectionCard
+              key={col.id}
+              col={col}
+              onDelete={id => { setDeletingId(id); deleteMutation.mutate(id); }}
+              deleting={deletingId === col.id}
+            />
+          ))}
         </div>
       )}
 
-      <Modal open={modalOpen} title="Add Collection" onClose={() => setModalOpen(false)}>
-        <form onSubmit={submitCollection} className="space-y-4">
-          <Input label="Name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Eclipse Foundry" required />
-          <Input label="Contract Address" value={form.contractAddress} onChange={(event) => setForm((current) => ({ ...current, contractAddress: event.target.value }))} placeholder="0x..." required />
-          <label className="block text-sm font-medium text-muted">
-            Chain
+      {/* Add modal */}
+      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add Collection" subtitle="Track a new NFT contract" tone="neon">
+        <form
+          onSubmit={e => { e.preventDefault(); setFormError(null); addMutation.mutate(form); }}
+          className="space-y-4"
+        >
+          <Input label="Collection Name" placeholder="Bored Apes…" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
+          <Input label="Contract Address" placeholder="0x…" value={form.contractAddress} onChange={e => setForm(p => ({ ...p, contractAddress: e.target.value }))} required error={formError ?? undefined} />
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-bold uppercase tracking-widest text-secondary">Chain</label>
             <select
               value={form.chain}
-              onChange={(event) => setForm((current) => ({ ...current, chain: event.target.value }))}
-              className="mt-2 h-11 w-full rounded-lg border border-border bg-background/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              onChange={e => setForm(p => ({ ...p, chain: e.target.value }))}
+              className="h-10 w-full rounded-lg border border-border bg-background/80 px-3 text-sm text-text focus:border-neon/60 focus:outline-none focus:ring-2 focus:ring-neon/15"
             >
-              <option value="ethereum">Ethereum</option>
-              <option value="base">Base</option>
-              <option value="polygon">Polygon</option>
+              {['ethereum', 'base', 'polygon', 'arbitrum', 'optimism'].map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
             </select>
-          </label>
-          {formError ? <div className="rounded-lg border border-danger/20 bg-danger/10 p-3 text-sm text-danger" role="alert">{formError}</div> : null}
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button type="submit" loading={saving}>Add Collection</Button>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button type="button" variant="secondary" onClick={() => setAddOpen(false)} className="flex-1">Cancel</Button>
+            <Button type="submit" variant="neon" loading={addMutation.isPending} className="flex-1"><Plus className="h-3.5 w-3.5" />Add</Button>
           </div>
         </form>
       </Modal>
