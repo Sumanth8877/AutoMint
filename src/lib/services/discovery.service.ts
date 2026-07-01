@@ -2,14 +2,10 @@ import 'server-only';
 
 import { getCache, setCache } from '@/lib/redis';
 import { discoverWithFirecrawl } from '@/lib/services/firecrawl.provider';
-import { discoverWithJina, type DiscoveryProviderResult, type DiscoverySocials } from '@/lib/services/jina.provider';
+import { type DiscoveryProviderResult, type DiscoverySocials } from '@/lib/services/discovery-extractor';
 import { addBreadcrumb, captureException, startSpan } from '@/lib/observability/sentry';
 
 const DISCOVERY_TTL_SECONDS = 24 * 60 * 60;
-const REQUIRED_FIELDS = ['contract', 'chain', 'mintPrice', 'mintStatus', 'mintTime'] as const;
-
-type RequiredDiscoveryField = (typeof REQUIRED_FIELDS)[number];
-
 export type DiscoveryResult = {
   collectionName: string | null;
   contract: string | null;
@@ -95,37 +91,6 @@ function toDiscoveryResult(result: DiscoveryProviderResult): DiscoveryResult {
   };
 }
 
-function isMissing(value: string | null | undefined) {
-  return !value || value === 'UNKNOWN';
-}
-
-function getMissingRequiredFields(result: DiscoveryResult): RequiredDiscoveryField[] {
-  return REQUIRED_FIELDS.filter((field) => isMissing(result[field]));
-}
-
-function mergeSocials(
-  primary: DiscoverySocials | undefined,
-  fallback: DiscoverySocials | undefined,
-) {
-  return {
-    ...(fallback ?? {}),
-    ...(primary ?? {}),
-  };
-}
-
-function mergeProviderResults(primary: DiscoveryProviderResult, fallback: DiscoveryProviderResult): DiscoveryProviderResult {
-  return {
-    collectionName: primary.collectionName || fallback.collectionName,
-    contract: primary.contract || fallback.contract,
-    chain: primary.chain || fallback.chain,
-    mintPrice: primary.mintPrice || fallback.mintPrice,
-    mintTime: primary.mintTime || fallback.mintTime,
-    mintStatus: primary.mintStatus || fallback.mintStatus,
-    website: primary.website || fallback.website,
-    socials: mergeSocials(primary.socials, fallback.socials),
-    rawText: primary.rawText || fallback.rawText,
-  };
-}
 
 export async function discoverCollection(openseaUrl: string): Promise<DiscoveryResult> {
   return startSpan('discovery.collection', { area: 'discovery', url: openseaUrl }, async () => {
@@ -136,58 +101,34 @@ export async function discoverCollection(openseaUrl: string): Promise<DiscoveryR
 
   if (cached) return cached;
 
-  addBreadcrumb({ category: 'discovery', message: 'discovery started', level: 'info', data: { url, provider: 'jina' } });
-  const jinaStartedAt = Date.now();
+  addBreadcrumb({ category: 'discovery', message: 'discovery started', level: 'info', data: { url, provider: 'firecrawl' } });
   const { trackAnalyticsEvent } = await import('@/lib/services/analytics.service');
-  let jinaResult: DiscoveryProviderResult;
+  const firecrawlStartedAt = Date.now();
+  let result: ReturnType<typeof toDiscoveryResult>;
   try {
-    jinaResult = await discoverWithJina(url);
+    const firecrawlResult = await discoverWithFirecrawl(url);
     await trackAnalyticsEvent({
       eventType: 'discovery',
       status: 'success',
-      provider: 'jina',
-      durationMs: Date.now() - jinaStartedAt,
+      provider: 'firecrawl',
+      durationMs: Date.now() - firecrawlStartedAt,
       metadata: { url, slug },
     });
+    result = toDiscoveryResult(firecrawlResult);
   } catch (error) {
     await trackAnalyticsEvent({
       eventType: 'discovery',
       status: 'failed',
-      provider: 'jina',
-      durationMs: Date.now() - jinaStartedAt,
+      provider: 'firecrawl',
+      durationMs: Date.now() - firecrawlStartedAt,
       metadata: { url, slug },
     });
+    await captureException(error, {
+      area: 'discovery',
+      context: { url, provider: 'firecrawl', collection: slug },
+      fingerprint: ['discovery', 'firecrawl'],
+    });
     throw error;
-  }
-  let result = toDiscoveryResult(jinaResult);
-
-  if (getMissingRequiredFields(result).length > 0) {
-    try {
-      addBreadcrumb({ category: 'discovery', message: 'discovery fallback started', level: 'info', data: { url, provider: 'firecrawl', missing: getMissingRequiredFields(result) } });
-      const firecrawlStartedAt = Date.now();
-      const firecrawlResult = await discoverWithFirecrawl(url);
-      await trackAnalyticsEvent({
-        eventType: 'discovery',
-        status: 'success',
-        provider: 'firecrawl',
-        durationMs: Date.now() - firecrawlStartedAt,
-        metadata: { url, slug, missing: getMissingRequiredFields(result) },
-      });
-      result = toDiscoveryResult(mergeProviderResults(jinaResult, firecrawlResult));
-    } catch (error) {
-      await captureException(error, { area: 'discovery', context: {}, fingerprint: ['discovery', 'firecrawl-fallback-failed'] });
-      await trackAnalyticsEvent({
-        eventType: 'discovery',
-        status: 'failed',
-        provider: 'firecrawl',
-        metadata: { url, slug, missing: getMissingRequiredFields(result) },
-      });
-      await captureException(error, {
-        area: 'discovery',
-        context: { url, provider: 'firecrawl', collection: slug },
-        fingerprint: ['discovery', 'firecrawl', 'fallback'],
-      });
-    }
   }
 
   const normalized = {

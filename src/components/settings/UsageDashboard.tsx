@@ -45,7 +45,6 @@ const DASHBOARD_LINKS: Record<string, string> = {
   'Alchemy':   'https://dashboard.alchemy.com',
   'Vercel':    'https://vercel.com/dashboard',
   'Sentry':    'https://sentry.io',
-  'Browserbase': 'https://browserbase.com/dashboard',
 };
 
 // ── Single usage card ─────────────────────────────────────────────────────────

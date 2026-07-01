@@ -290,54 +290,7 @@ async function fetchFirecrawlOpenSeaMeta(url: string, slug: string, logger?: Ana
   }
 }
 
-async function fetchJinaOpenSeaMeta(url: string, slug: string, logger?: AnalyzerDebugLogger): Promise<OpenSeaCollectionMeta | undefined> {
-  try {
-    logDebug(logger, 'info', 'discovery', 'Using Jina');
-    const { discoverWithJina } = await import('@/lib/services/jina.provider');
-    const result = await discoverWithJina(url);
-    if (!result.contract || !ETH_ADDRESS_RE.test(result.contract)) {
-      logDebug(logger, 'warning', 'discovery', 'Jina returned empty contract response');
-      return undefined;
-    }
 
-    logDebug(logger, 'success', 'discovery', 'Jina succeeded');
-    return {
-      name: result.collectionName ?? slug,
-      slug,
-      primaryAssetContractAddress: result.contract.toLowerCase(),
-      chain: normalizeChain(result.chain),
-    };
-  } catch (error) {
-    logDebug(logger, 'warning', 'discovery', `Jina failed: ${error instanceof Error ? error.message : String(error)}`);
-    return undefined;
-  }
-}
-
-async function fetchBrowserbaseOpenSeaMeta(url: string, slug: string, logger?: AnalyzerDebugLogger): Promise<OpenSeaCollectionMeta | undefined> {
-  try {
-    logDebug(logger, 'info', 'discovery', 'Using Browserbase');
-    const { discoverWithBrowserbase } = await import('@/lib/services/browserbase.provider');
-    const result = await discoverWithBrowserbase(url, (message) => {
-      const level: AnalyzerDebugLogLevel = message.includes('failed') ? 'warning' : message.includes('succeeded') ? 'success' : 'info';
-      logDebug(logger, level, 'discovery', message);
-    });
-    if (!result.contract || !ETH_ADDRESS_RE.test(result.contract)) {
-      logDebug(logger, 'warning', 'discovery', 'Browserbase failed: empty contract response');
-      return undefined;
-    }
-
-    logDebug(logger, 'success', 'discovery', 'Browserbase succeeded');
-    return {
-      name: result.collectionName ?? slug,
-      slug,
-      primaryAssetContractAddress: result.contract.toLowerCase(),
-      chain: normalizeChain(result.chain),
-    };
-  } catch (error) {
-    logDebug(logger, 'warning', 'discovery', `Browserbase failed: ${error instanceof Error ? error.message : String(error)}`);
-    return undefined;
-  }
-}
 
 async function resolveOpenSeaCollectionMeta(url: string, slug: string, logger?: AnalyzerDebugLogger, telemetry?: AnalyzerResolutionTelemetry) {
   async function runParallelStage(resolvers: Array<{ name: string; run: (signal?: AbortSignal) => Promise<OpenSeaCollectionMeta | undefined> }>) {
@@ -403,29 +356,14 @@ async function resolveOpenSeaCollectionMeta(url: string, slug: string, logger?: 
   ]);
   if (fastResult) {
     logDebug(logger, 'warning', 'discovery', 'Provider cancelled: Firecrawl');
-    logDebug(logger, 'warning', 'discovery', 'Provider cancelled: Jina');
-    logDebug(logger, 'warning', 'discovery', 'Provider cancelled: Browserbase');
     return fastResult;
   }
 
-  logDebug(logger, 'info', 'discovery', 'Switching to fallback providers');
+  logDebug(logger, 'info', 'discovery', 'Switching to fallback provider: Firecrawl');
   const fallbackResult = await runParallelStage([
     { name: 'Firecrawl', run: () => fetchFirecrawlOpenSeaMeta(url, slug, logger) },
-    { name: 'Jina', run: () => fetchJinaOpenSeaMeta(url, slug, logger) },
   ]);
-  if (fallbackResult) {
-    logDebug(logger, 'warning', 'discovery', 'Provider cancelled: Browserbase');
-    return fallbackResult;
-  }
-
-  const browserbaseStartedAt = Date.now();
-  const browserbase = await fetchBrowserbaseOpenSeaMeta(url, slug, logger);
-  const browserbaseDurationMs = Date.now() - browserbaseStartedAt;
-  const browserbaseStatus = browserbase?.primaryAssetContractAddress ? 'success' : 'failed';
-  telemetry?.providerChain.push({ provider: 'Browserbase', status: browserbaseStatus, durationMs: browserbaseDurationMs });
-  telemetry?.timingBreakdown.push({ stage: 'Browserbase', durationMs: browserbaseDurationMs });
-  logDebug(logger, browserbaseStatus === 'success' ? 'success' : 'warning', 'discovery', `Browserbase completed in ${browserbaseDurationMs}ms`);
-  if (browserbase?.primaryAssetContractAddress) return browserbase;
+  if (fallbackResult) return fallbackResult;
 
   logDebug(logger, 'error', 'contract_resolution', 'No contract found');
   return undefined;

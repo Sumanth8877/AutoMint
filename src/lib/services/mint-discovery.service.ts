@@ -83,7 +83,7 @@ const CRITICAL_FIELDS: Array<keyof DiscoveredRequirements> = [
 
 /**
  * Extract ALL mint requirements from raw page content (markdown, HTML, or text).
- * Called with content from Jina, Firecrawl, or Browserbase.
+ * Called with content from Firecrawl.
  */
 export function extractRequirementsFromContent(
   content: string,
@@ -304,30 +304,7 @@ export function extractRequirementsFromContent(
   return result;
 }
 
-// ─── Tier 2: Jina + Firecrawl ─────────────────────────────────────────────────
-
-async function fetchViaJina(
-  url: string,
-): Promise<Omit<DiscoveredRequirements, 'confidence' | 'source' | 'missingFields'>> {
-  const apiKey = process.env.JINA_API_KEY;
-  // ✅ Bug #4 fixed: full URL passed directly — no http:// prefix added
-  const jinaUrl = `https://r.jina.ai/${url}`;
-
-  const res = await fetch(jinaUrl, {
-    method: 'GET',
-    headers: {
-      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-      Accept: 'text/plain',
-    },
-    signal: AbortSignal.timeout(4_000),
-  });
-
-  if (!res.ok) throw new Error(`Jina ${res.status}: ${res.statusText}`);
-  const text = await res.text();
-
-  logger.info('Jina fetch complete', { area: 'mint-discovery',  chars: text.length, url });
-  return extractRequirementsFromContent(text, url);
-}
+// ─── Tier 2: Firecrawl ───────────────────────────────────────────────────────────
 
 async function fetchViaFirecrawl(
   url: string,
@@ -356,61 +333,6 @@ async function fetchViaFirecrawl(
 
   logger.info('Firecrawl fetch complete', { area: 'mint-discovery',  chars: content.length, url });
   return extractRequirementsFromContent(content, url);
-}
-
-// ─── Tier 3: Browserbase + Playwright ─────────────────────────────────────────
-
-async function fetchViaBrowserbase(
-  url: string,
-): Promise<Omit<DiscoveredRequirements, 'confidence' | 'source' | 'missingFields'>> {
-  const apiKey = process.env.BROWSERBASE_API_KEY;
-  const projectId = process.env.BROWSERBASE_PROJECT_ID;
-  if (!apiKey || !projectId) {
-    throw new Error('Browserbase not configured (BROWSERBASE_API_KEY / BROWSERBASE_PROJECT_ID missing)');
-  }
-
-  // 1. Create session
-  const sessionRes = await fetch('https://api.browserbase.com/v1/sessions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ projectId }),
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (!sessionRes.ok) throw new Error(`Browserbase session ${sessionRes.status}`);
-  const session = (await sessionRes.json()) as { id: string };
-
-  try {
-    // 2. Navigate
-    const navRes = await fetch(`https://api.browserbase.com/v1/sessions/${session.id}/navigate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ url }),
-      signal: AbortSignal.timeout(6_000),
-    });
-    if (!navRes.ok) throw new Error(`Browserbase navigate ${navRes.status}`);
-
-    // 3. Wait for JS execution (countdowns, lazy-loaded mint info)
-    await new Promise((r) => setTimeout(r, 4000));
-
-    // 4. Get full rendered content
-    const contentRes = await fetch(`https://api.browserbase.com/v1/sessions/${session.id}/content`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!contentRes.ok) throw new Error(`Browserbase content ${contentRes.status}`);
-
-    const data = (await contentRes.json()) as { content?: string };
-    const content = data.content ?? '';
-
-    logger.info('Browserbase fetch complete', { area: 'mint-discovery',  chars: content.length, url });
-    return extractRequirementsFromContent(content, url);
-  } finally {
-    // Best-effort cleanup — never let session leak block the response
-    fetch(`https://api.browserbase.com/v1/sessions/${session.id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${apiKey}` },
-    }).catch(() => {});
-  }
 }
 
 // ─── Merge helper ─────────────────────────────────────────────────────────────
@@ -456,12 +378,12 @@ function computeConfidence(req: Partial<DiscoveredRequirements>): number {
 /**
  * discoverMintRequirements
  *
- * Tiered discovery (Tier 1 caller → Tier 2 Jina+Firecrawl → Tier 3 Browserbase).
+ * Tiered discovery (Tier 1 caller → Tier 2 Firecrawl).
  * Wrapped in a hard timeout so it never blocks the API response longer than
  * `maxTimeMs` — critical for Vercel hobby plan (10s function limit).
  *
  * If the timeout fires, returns whatever was resolved so far + a warning log.
- * Tier 3 (Browserbase) is automatically skipped when only <3s remain.
+ * 
  */
 export async function discoverMintRequirements(
   url: string,
@@ -486,50 +408,30 @@ export async function discoverMintRequirements(
 
   logger.info('Missing critical fields — running Tier 2', { area: 'mint-discovery',  missing: initialMissing, budgetMs: maxTimeMs });
 
-  // ── Tier 2: Jina + Firecrawl in parallel, with budget check ───────────────
-  let tier2Source: DiscoverySource = 'merged';
+  // ── Tier 2: Firecrawl (only scraper — Jina and Browserbase removed) ───────
+  const tier2Source: DiscoverySource = 'firecrawl';
   try {
     const tier2Budget = Math.min(deadline - Date.now(), 6000);
     if (tier2Budget > 1500) {
       const timeoutPromise = new Promise<null>((resolve) =>
         setTimeout(() => resolve(null), tier2Budget),
       );
-
-      const tier2Promise = Promise.allSettled([fetchViaJina(url), fetchViaFirecrawl(url)]);
+      const tier2Promise = fetchViaFirecrawl(url);
       const result = await Promise.race([tier2Promise, timeoutPromise]);
-
       if (result !== null) {
-        const [jinaResult, firecrawlResult] = result;
-        let scraperMerged: Partial<DiscoveredRequirements> = {};
-
-        if (jinaResult.status === 'fulfilled') {
-          scraperMerged = merge(scraperMerged, jinaResult.value);
-          tier2Source = 'jina';
-        } else {
-          logger.warn('[mint-discovery] Jina failed:', { error: jinaResult.reason instanceof Error ? jinaResult.reason.message : String(jinaResult.reason) });
-        }
-        if (firecrawlResult.status === 'fulfilled') {
-          scraperMerged = merge(scraperMerged, firecrawlResult.value);
-          if (tier2Source !== 'jina') tier2Source = 'firecrawl';
-        } else {
-          logger.warn('[mint-discovery] Firecrawl failed:', { error: firecrawlResult.reason instanceof Error ? firecrawlResult.reason.message : String(firecrawlResult.reason) });
-        }
-        current = merge(current, scraperMerged);
+        current = merge(current, result);
       } else {
-        logger.warn('[mint-discovery] Tier 2 budget exceeded — skipping Tier 3');
+        logger.warn('[mint-discovery] Tier 2 budget exceeded');
       }
     } else {
-      logger.warn('[mint-discovery] Insufficient budget for Tier 2 — skipping all scrapers');
+      logger.warn('[mint-discovery] Insufficient budget for Tier 2 — skipping scraper');
     }
   } catch (err) {
     logger.warn('Tier 2 threw unexpectedly', { area: 'mint-discovery',  error: String(err) });
     void captureException(err, { area: 'mint-discovery', extra: { tier: 2 } });
   }
 
-  // ── Check Tier 3 budget ───────────────────────────────────────────────────
   const afterTier2Missing = computeMissing(current);
-  const remainingMs = deadline - Date.now();
-
   if (afterTier2Missing.length === 0) {
     return {
       ...current,
@@ -537,35 +439,6 @@ export async function discoverMintRequirements(
       source: tier2Source,
       missingFields: [],
     } as DiscoveredRequirements;
-  }
-
-  if (remainingMs < 3000) {
-    // Skip Tier 3 — not enough budget for a full browser render
-    logger.warn('[mint-discovery] Skipping Tier 3 (Browserbase) — insufficient remaining budget:', { arg0: remainingMs, arg1: 'ms' });
-    return {
-      ...current,
-      confidence: computeConfidence(current),
-      source: tier2Source,
-      missingFields: afterTier2Missing,
-    } as DiscoveredRequirements;
-  }
-
-  logger.info('Still missing after Tier 2 — running Tier 3', { area: 'mint-discovery',  missing: afterTier2Missing, remainingMs });
-
-  // ── Tier 3: Browserbase + Playwright (with remaining time as timeout) ────
-  try {
-    const tier3Promise = fetchViaBrowserbase(url);
-    const tier3Timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), remainingMs - 500));
-    const bbResult = await Promise.race([tier3Promise, tier3Timeout]);
-    if (bbResult !== null) {
-      current = merge(current, bbResult);
-      logger.info('Tier 3 complete', { area: 'mint-discovery' });
-    } else {
-      logger.warn('[mint-discovery] Tier 3 timed out');
-    }
-  } catch (err) {
-    logger.warn('Tier 3 Browserbase failed', { area: 'mint-discovery',  error: String(err) });
-    void captureException(err, { area: 'mint-discovery', extra: { tier: 3 } });
   }
 
   const finalMissing = computeMissing(current);

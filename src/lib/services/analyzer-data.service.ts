@@ -19,7 +19,6 @@ import {
 } from '@/lib/services/analyzer-cache.service';
 import { analyzerHistory } from '@/drizzle/schema';
 import { getDb } from '@/lib/db';
-import { getNFTCollection, getNFTTrades, getNFTStatistics } from '@/lib/services/nftscan.service';
 import { getNFTCollection as getMoralisCollection, getNFTTrades as getMoralisTrades } from '@/lib/services/moralis.service';
 import { checkTokenSecurity } from '@/lib/services/goplus-security.service';
 import type { AnalyzerSocials, AnalyzerTiming } from '@/lib/services/analyzer-resolver.service';
@@ -160,54 +159,30 @@ async function runBlockchainDiscovery(params: {
     return { collectionData: null, trades: null, statistics: null, securityCheck: null };
   }
 
-  params.log('info', 'blockchain_discovery', 'Starting blockchain discovery with NFT Scan, Moralis, and GoPlus Security');
+  params.log('info', 'blockchain_discovery', 'Starting blockchain discovery with Moralis and GoPlus Security');
   let collectionData: BlockchainDiscoveryResult['collectionData'] = null;
   let trades: BlockchainDiscoveryResult['trades'] = null;
-  let statistics: BlockchainDiscoveryResult['statistics'] = null;
+  const statistics: BlockchainDiscoveryResult['statistics'] = null; // NFTScan removed; Moralis provides trades
 
-  params.log('info', 'blockchain_discovery', 'Fetching NFT Scan collection data');
+  params.log('info', 'blockchain_discovery', 'Fetching Moralis collection data');
   try {
-    collectionData = await runTimed(params.timingBreakdown, 'NFT Scan Collection',
-      () => getNFTCollection({ contractAddress: params.contractAddress, chain: params.chain }));
-    if (collectionData) params.log('success', 'blockchain_discovery', `NFT Scan collection found: ${collectionData.name}`);
+    const moralisCollection = await runTimed(params.timingBreakdown, 'Moralis Collection',
+      () => getMoralisCollection({ contractAddress: params.contractAddress, chain: params.chain }));
+    if (moralisCollection) {
+      collectionData = { contractAddress: moralisCollection.tokenAddress, name: moralisCollection.name, symbol: moralisCollection.symbol, contractType: moralisCollection.contractType, ownerCount: 0, totalSupply: 0, totalVolume: '0', floorPrice: '0', floorPriceSymbol: '', logo: '', description: '', website: '', twitter: '', discord: '', telegram: '', isVerified: false };
+      params.log('success', 'blockchain_discovery', `Moralis collection found: ${moralisCollection.name}`);
+    }
   } catch (error) {
-    params.log('warning', 'blockchain_discovery', `NFT Scan collection failed: ${error instanceof Error ? error.message : String(error)}`);
+    params.log('warning', 'blockchain_discovery', `Moralis collection failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  if (!collectionData) {
-    params.log('info', 'blockchain_discovery', 'NFT Scan failed, trying Moralis');
-    try {
-      const moralisCollection = await runTimed(params.timingBreakdown, 'Moralis Collection',
-        () => getMoralisCollection({ contractAddress: params.contractAddress, chain: params.chain }));
-      if (moralisCollection) {
-        collectionData = { contractAddress: moralisCollection.tokenAddress, name: moralisCollection.name, symbol: moralisCollection.symbol, contractType: moralisCollection.contractType, ownerCount: 0, totalSupply: 0, totalVolume: '0', floorPrice: '0', floorPriceSymbol: '', logo: '', description: '', website: '', twitter: '', discord: '', telegram: '', isVerified: false };
-        params.log('success', 'blockchain_discovery', `Moralis collection found: ${moralisCollection.name}`);
-      }
-    } catch (error) {
-      params.log('warning', 'blockchain_discovery', `Moralis collection failed: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  params.log('info', 'blockchain_discovery', 'Fetching recent trades');
+  params.log('info', 'blockchain_discovery', 'Fetching recent trades via Moralis');
   try {
-    trades = await runTimed(params.timingBreakdown, 'NFT Scan Trades',
-      () => getNFTTrades({ contractAddress: params.contractAddress, chain: params.chain, limit: 10 }));
-    if (!trades) {
-      trades = await runTimed(params.timingBreakdown, 'Moralis Trades',
-        () => getMoralisTrades({ contractAddress: params.contractAddress, chain: params.chain, limit: 10 }));
-    }
+    trades = await runTimed(params.timingBreakdown, 'Moralis Trades',
+      () => getMoralisTrades({ contractAddress: params.contractAddress, chain: params.chain, limit: 10 }));
     if (trades && trades.length > 0) params.log('success', 'blockchain_discovery', `Found ${trades.length} recent trades`);
   } catch (error) {
     params.log('warning', 'blockchain_discovery', `Trades fetch failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
-
-  params.log('info', 'blockchain_discovery', 'Fetching collection statistics');
-  try {
-    statistics = await runTimed(params.timingBreakdown, 'NFT Scan Statistics',
-      () => getNFTStatistics({ contractAddress: params.contractAddress, chain: params.chain }));
-    if (statistics) params.log('success', 'blockchain_discovery', `Statistics loaded: ${statistics.totalHolderCount} holders, ${statistics.totalTradeCount} trades`);
-  } catch (error) {
-    params.log('warning', 'blockchain_discovery', `Statistics fetch failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   let securityCheck: BlockchainDiscoveryResult['securityCheck'] = null;

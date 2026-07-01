@@ -40,14 +40,10 @@ export async function GET() {
     { name: 'Etherscan',         configured: check('ETHERSCAN_API_KEY') },
     // AI / Scraping
     { name: 'Gemini AI',         configured: check('GEMINI_API_KEY') },
-    { name: 'Jina AI',           configured: check('JINA_API_KEY') },
     { name: 'Firecrawl',         configured: check('FIRECRAWL_API_KEY') },
-    { name: 'Browserbase',       configured: check('BROWSERBASE_API_KEY') },
     // NFT Data
     { name: 'OpenSea',           configured: check('OPENSEA_API_KEY') },
     { name: 'Moralis',           configured: check('MORALIS_API_KEY') },
-    { name: 'NFTScan',           configured: check('NFTSCAN_API_KEY') },
-    { name: 'Dune Analytics',    configured: check('DUNE_API_KEY') },
     // Security
     { name: 'GoPlus Security',   configured: check('GOPLUS_API_KEY') },
   ];

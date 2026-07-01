@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { extractDiscoveryFields, type DiscoveryProviderResult } from '@/lib/services/jina.provider';
+import { extractDiscoveryFields, type DiscoveryProviderResult } from '@/lib/services/discovery-extractor';
 import { captureException } from '@/lib/observability/sentry';
 
 type FirecrawlScrapeResponse = {

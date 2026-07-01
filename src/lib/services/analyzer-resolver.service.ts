@@ -14,7 +14,7 @@ import {
   type MintIntent,
 } from '@/lib/resolve-mint-intent';
 import { discoverWithFirecrawl } from '@/lib/services/firecrawl.provider';
-import { discoverWithJina, extractDiscoveryFields, type DiscoveryProviderResult, type DiscoverySocials } from '@/lib/services/jina.provider';
+import { extractDiscoveryFields, type DiscoveryProviderResult, type DiscoverySocials } from '@/lib/services/discovery-extractor';
 import {
   ANALYZER_CACHE_KEYS,
   ANALYZER_CACHE_TTL,
@@ -360,37 +360,7 @@ async function runSocialDiscovery(params: {
     }
   }
 
-  for (const targetUrl of crawlCandidates) {
-    params.log('info', 'social_discovery', 'Running Jina discovery');
-    try {
-      const result = await runTimed(params.timingBreakdown, 'Jina Social Discovery',
-        () => discoverWithJina(targetUrl));
-      socials = mergeAnalyzerSocials(socials, socialsFromProviderResult(result));
-      params.log('success', 'social_discovery', `Jina discovery complete: ${targetUrl}`);
-    } catch (error) {
-      params.log('warning', 'social_discovery', `Jina social discovery failed: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  if (Object.keys(socials).length === 0) {
-    for (const targetUrl of crawlCandidates) {
-      params.log('info', 'social_discovery', 'Running Browserbase discovery');
-      try {
-        const result = await runTimed(params.timingBreakdown, 'Browserbase Social Discovery', async () => {
-          const { discoverWithBrowserbase } = await import('@/lib/services/browserbase.provider');
-          return discoverWithBrowserbase(targetUrl, (message) => {
-            const level: AnalyzerDebugLogLevel = message.includes('failed') ? 'warning' : message.includes('succeeded') ? 'success' : 'info';
-            params.log(level, 'social_discovery', message);
-          });
-        });
-        if (!hasDiscoveryResult(result)) { params.log('warning', 'social_discovery', 'Browserbase failed: empty discovery response'); continue; }
-        socials = mergeAnalyzerSocials(socials, socialsFromProviderResult(result));
-        params.log('success', 'social_discovery', `Browserbase discovery complete: ${targetUrl}`);
-      } catch (error) {
-        params.log('warning', 'social_discovery', `Browserbase failed: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    }
-  }
+  // Firecrawl is the sole social-discovery provider (Jina and Browserbase removed).
 
   logSocialFindings(socials, params.log);
   return { socials, socialHealth: getSocialHealth(socials) };

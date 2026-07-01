@@ -11,9 +11,7 @@ type KnownService =
   | 'Alchemy'
   | 'Infura'
   | 'Chainstack'
-  | 'Jina'
   | 'Firecrawl'
-  | 'Browserbase'
   | 'QStash'
   | 'Sentry'
   | 'Database'
@@ -45,10 +43,7 @@ const KNOWN_VARIABLES: Array<{ variableName: string; serviceName: KnownService }
   { variableName: 'ALCHEMY_API_KEY', serviceName: 'Alchemy' },
   { variableName: 'INFURA_API_KEY', serviceName: 'Infura' },
   { variableName: 'CHAINSTACK_API_KEY', serviceName: 'Chainstack' },
-  { variableName: 'JINA_API_KEY', serviceName: 'Jina' },
   { variableName: 'FIRECRAWL_API_KEY', serviceName: 'Firecrawl' },
-  { variableName: 'BROWSERBASE_API_KEY', serviceName: 'Browserbase' },
-  { variableName: 'BROWSERBASE_PROJECT_ID', serviceName: 'Browserbase' },
   { variableName: 'QSTASH_TOKEN', serviceName: 'QStash' },
   { variableName: 'QSTASH_CURRENT_SIGNING_KEY', serviceName: 'QStash' },
   { variableName: 'QSTASH_NEXT_SIGNING_KEY', serviceName: 'QStash' },
@@ -63,9 +58,7 @@ const KNOWN_VARIABLES: Array<{ variableName: string; serviceName: KnownService }
 
 const SERVICE_KEYWORDS: Array<[string, KnownService]> = [
   ['ALCHEMY', 'Alchemy'],
-  ['JINA', 'Jina'],
   ['FIRECRAWL', 'Firecrawl'],
-  ['BROWSERBASE', 'Browserbase'],
   ['QSTASH', 'QStash'],
   ['SENTRY', 'Sentry'],
   ['DATABASE', 'Database'],
@@ -74,7 +67,7 @@ const SERVICE_KEYWORDS: Array<[string, KnownService]> = [
   ['CLERK', 'Clerk'],
 ];
 
-const SERVICE_DISCOVERY_PATTERN = /(ALCHEMY|JINA|FIRECRAWL|BROWSERBASE|QSTASH|SENTRY|CLERK|REDIS|KV_REST)/;
+const SERVICE_DISCOVERY_PATTERN = /(ALCHEMY|FIRECRAWL|QSTASH|SENTRY|CLERK|REDIS|KV_REST)/;
 const GENERIC_SERVICE_SECRET_PATTERN = /^[A-Z][A-Z0-9_]+_(API_KEY|RPC_URL|WSS_URL|DSN)$/;
 const IGNORED_PREFIXES = [
   'npm_',
@@ -114,7 +107,6 @@ const IGNORED_NAMES = new Set([
   'DATABASE_URL_UNPOOLED',
   'ENCRYPTION_KEY',
   'FIRECRAWL_API_URL',
-  'JINA_READER_API_KEY',
   'KV_URL',
   'QSTASH_WEBHOOK_URL',
   'REDIS_URL',
@@ -279,25 +271,6 @@ async function testAlchemy() {
   });
 }
 
-
-async function testJina() {
-  return runTest('Jina', async () => {
-    const token = requireEnv('JINA_API_KEY');
-    const headers: Record<string, string> = { Accept: 'text/plain' };
-    headers.Authorization = `Bearer ${token}`;
-
-    const response = await fetch('https://r.jina.ai/http://example.com', {
-      headers,
-      signal: AbortSignal.timeout(12_000),
-    });
-
-    if (!response.ok) throw new Error(`Jina URL extraction failed with status ${response.status}`);
-
-    const text = await response.text();
-    if (text.trim().length < 20) throw new Error('Jina URL extraction returned an empty response');
-  });
-}
-
 async function testFirecrawl() {
   return runTest('Firecrawl', async () => {
     const apiKey = requireEnv('FIRECRAWL_API_KEY');
@@ -321,14 +294,6 @@ async function testFirecrawl() {
     if (!response.ok) throw new Error(`Firecrawl request failed with status ${response.status}`);
   });
 }
-
-async function testBrowserbase() {
-  return runTest('Browserbase', async () => {
-    requireEnv('BROWSERBASE_API_KEY');
-    requireEnv('BROWSERBASE_PROJECT_ID');
-  });
-}
-
 async function testQStash() {
   return runTest('QStash', async () => {
     requireEnv('QSTASH_TOKEN');
@@ -378,9 +343,7 @@ async function testClerk() {
 async function testAllIntegrations() {
   const results = await Promise.all([
     testAlchemy(),
-    testJina(),
     testFirecrawl(),
-    testBrowserbase(),
     testQStash(),
     testSentry(),
     testDatabase(),
