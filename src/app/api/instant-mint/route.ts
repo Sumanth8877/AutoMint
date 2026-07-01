@@ -14,7 +14,6 @@ import { logger } from '@/lib/logger';
 import { SUPPORTED_CHAINS, type ChainKey } from '@/lib/blockchain/chains';
 import { estimateGas } from '@/lib/blockchain/gas';
 
-import type { MintPhase } from '@/types/mint';
 import { instantMintSchema, formatZodError } from '@/lib/api/schemas';
 
 type MintPhase = {
