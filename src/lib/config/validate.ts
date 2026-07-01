@@ -148,6 +148,13 @@ export function validateEnv(): void {
         name: 'TELEGRAM_WEBHOOK_SECRET',
         reason: 'TELEGRAM_ENABLED=true but webhook secret missing — all webhook requests rejected',
       },
+      {
+        // L-01 fix: the AI interpreter (Telegram natural-language commands) reads
+        // GOOGLE_AI_API_KEY at runtime. Surfacing it here means a missing key is
+        // reported in deploy logs at boot, not as a vague error on the first AI command.
+        name: 'GOOGLE_AI_API_KEY',
+        reason: 'TELEGRAM_ENABLED=true but Gemini API key missing — Telegram AI interpreter commands will fail',
+      },
     );
   }
 
