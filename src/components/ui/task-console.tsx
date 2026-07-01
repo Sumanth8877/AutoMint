@@ -22,7 +22,6 @@ type TaskConsoleProps = {
   taskId: string;
   taskStatus: string;
   contractAddress: string | null;
-  chain?: string | null;
   phase: string | null;
   /** Chain determines which block explorer URL to use for the contract link. */
   chain?: string | null;
