@@ -27,7 +27,7 @@ type MintHistoryRow = {
   gasUsed: string | null;
   status: string;
   transactionHash: string | null;
-  failureReason: string | null;
+  riskReasons: string[] | null;
   executionStartedAt: string;
   executionCompletedAt: string | null;
   updatedAt: string;
@@ -671,7 +671,7 @@ function DetailsModal({ selected, onClose }: { selected: SelectedRow; onClose: (
           ['Cost', formatCost(item)],
           ['Status', status.label],
           ['Transaction Hash', item.transactionHash || 'Not recorded'],
-          ...(item.failureReason ? [['Failure Reason', item.failureReason] as [string, string]] : []),
+          ...(item.riskReasons?.length ? [['Risk Factors', item.riskReasons.join(', ')] as [string, string]] : []),
           ['Execution Started', formatDate(item.executionStartedAt)],
           ['Execution Completed', formatDate(item.executionCompletedAt)],
           ['Completion Time', formatDuration(item.executionStartedAt, item.executionCompletedAt)],

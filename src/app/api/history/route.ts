@@ -107,10 +107,10 @@ async function getMintHistory(userId: string, searchParams: URLSearchParams) {
         gasUsed: mintHistory.gasUsed,
         status: mintTasks.status,
         transactionHash: mintTasks.txHash,
-        failureReason: mintTasks.failureReason,
+        riskReasons: mintTasks.riskReasons,
         executionStartedAt: mintTasks.createdAt,
         // confirmedAt is only set on blockchain confirmation; fall back to
-        // updatedAt for failed/cancelled so "Completion Time" is meaningful.
+        // updatedAt for failed/cancelled so "Completion Time" shows real elapsed time.
         executionCompletedAt: sql<string | null>`COALESCE(${mintTasks.confirmedAt}, CASE WHEN ${mintTasks.status} IN ('failed','cancelled') THEN ${mintTasks.updatedAt} END)`,
         updatedAt: mintTasks.updatedAt,
       })
