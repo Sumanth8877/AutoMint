@@ -63,7 +63,6 @@ export default function ProfileClient() {
 
   useEffect(() => {
     if (!notice || notice.type !== 'success') return;
-
     const timeout = window.setTimeout(() => setNotice(null), 3500);
     return () => window.clearTimeout(timeout);
   }, [notice]);
@@ -71,16 +70,13 @@ export default function ProfileClient() {
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!user) return;
-
     const trimmedName = displayNameValue.trim();
     if (!trimmedName) {
       setNotice({ type: 'error', message: 'Display name is required.' });
       return;
     }
-
     setSavingName(true);
     setNotice(null);
-
     try {
       await user.update(splitDisplayName(trimmedName));
       await user.reload();
@@ -96,15 +92,12 @@ export default function ProfileClient() {
   async function changePassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!user) return;
-
     if (!newPassword || newPassword !== confirmPassword) {
       setNotice({ type: 'error', message: 'New password and confirmation must match.' });
       return;
     }
-
     setSavingPassword(true);
     setNotice(null);
-
     try {
       await user.updatePassword({
         currentPassword: currentPassword || undefined,
@@ -124,12 +117,10 @@ export default function ProfileClient() {
 
   async function deleteAccount() {
     if (!user || deleteConfirmation !== 'DELETE') return;
-
     setDeletingAccount(true);
     setNotice(null);
-
     try {
-      await apiRequest<{ success: true }>('/api/settings/profile', {
+      await apiRequest<{ success: true }>('\/api\/settings\/profile', {
         method: 'DELETE',
         cache: 'no-store',
       });
@@ -168,6 +159,7 @@ export default function ProfileClient() {
       ) : null}
 
       <div className="grid gap-4">
+        {/* Account Details */}
         <Card className="p-5">
           <div className="flex items-start gap-3 border-b border-border pb-5">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-accent/20 bg-accent/10 text-accent">
@@ -178,7 +170,6 @@ export default function ProfileClient() {
               <p className="mt-1 text-sm text-muted">Your email address comes from Clerk and is read-only in AutoMint.</p>
             </div>
           </div>
-
           <form onSubmit={saveProfile} className="mt-5 grid gap-4 lg:grid-cols-2">
             <label className="grid gap-2 text-sm">
               <span className="font-medium text-text">Display Name</span>
@@ -208,6 +199,7 @@ export default function ProfileClient() {
           </form>
         </Card>
 
+        {/* Password */}
         <Card className="p-5">
           <div className="flex items-start gap-3 border-b border-border pb-5">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-warning/20 bg-warning/10 text-warning">
@@ -218,37 +210,24 @@ export default function ProfileClient() {
               <p className="mt-1 text-sm text-muted">Change your Clerk password. AutoMint never stores password values.</p>
             </div>
           </div>
-
           <form onSubmit={changePassword} className="mt-5 grid gap-4 lg:grid-cols-3">
             <label className="grid gap-2 text-sm">
               <span className="font-medium text-text">Current Password</span>
-              <input
-                type="password"
-                value={currentPassword}
-                onChange={(event) => setCurrentPassword(event.target.value)}
+              <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)}
                 className="h-10 rounded-lg border border-border bg-white/5 px-3 text-sm text-text outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-                autoComplete="current-password"
-              />
+                autoComplete="current-password" />
             </label>
             <label className="grid gap-2 text-sm">
               <span className="font-medium text-text">New Password</span>
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
+              <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
                 className="h-10 rounded-lg border border-border bg-white/5 px-3 text-sm text-text outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-                autoComplete="new-password"
-              />
+                autoComplete="new-password" />
             </label>
             <label className="grid gap-2 text-sm">
               <span className="font-medium text-text">Confirm New Password</span>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
+              <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
                 className="h-10 rounded-lg border border-border bg-white/5 px-3 text-sm text-text outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-                autoComplete="new-password"
-              />
+                autoComplete="new-password" />
             </label>
             <div className="lg:col-span-3">
               <Button type="submit" variant="secondary" loading={savingPassword} disabled={!user}>
@@ -259,24 +238,39 @@ export default function ProfileClient() {
           </form>
         </Card>
 
+        {/* Danger Zone */}
         <Card className="border-danger/25 p-5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-danger/20 bg-danger/10 text-danger">
-                <Trash2 className="h-5 w-5" aria-hidden="true" />
-              </div>
+          <div className="flex items-start gap-3 border-b border-border pb-5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-danger/20 bg-danger/10 text-danger">
+              <Trash2 className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-text">Danger Zone</h2>
+              <p className="mt-1 text-sm text-muted">Irreversible actions. Proceed with caution.</p>
+            </div>
+          </div>
+          <div className="mt-4 space-y-3">
+            {/* Reset Data */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-lg border border-border bg-white/[0.02] p-4">
               <div>
-                <h2 className="font-semibold text-text">Danger Zone</h2>
-                <p className="mt-1 max-w-2xl text-sm leading-6 text-muted">
-                  Deleting your account removes your Clerk user account and signs you out. This action cannot be undone.
+                <p className="text-sm font-medium text-text">Reset All Data</p>
+                <p className="text-xs text-muted mt-0.5">
+                  Deletes analyzer history, mint tasks, and transaction history. Wallets and settings are kept.
                 </p>
               </div>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
               <Button type="button" variant="secondary" onClick={() => setResetOpen(true)}>
                 <Trash2 className="h-4 w-4" aria-hidden="true" />
                 Reset Data
               </Button>
+            </div>
+            {/* Delete Account */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-lg border border-danger/20 bg-danger/5 p-4">
+              <div>
+                <p className="text-sm font-medium text-text">Delete Account</p>
+                <p className="text-xs text-muted mt-0.5">
+                  Permanently removes your Clerk account and all data. This cannot be undone.
+                </p>
+              </div>
               <Button type="button" variant="danger" onClick={() => setDeleteOpen(true)}>
                 <Trash2 className="h-4 w-4" aria-hidden="true" />
                 Delete Account
@@ -286,14 +280,13 @@ export default function ProfileClient() {
         </Card>
       </div>
 
+      {/* Delete Account Modal */}
       {deleteOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="delete-account-title">
           <button
             type="button"
             className="absolute inset-0 bg-black/70"
-            onClick={() => {
-              if (!deletingAccount) setDeleteOpen(false);
-            }}
+            onClick={() => { if (!deletingAccount) setDeleteOpen(false); }}
             aria-label="Close delete account confirmation"
           />
           <Card className="relative z-10 w-full max-w-lg p-5 shadow-2xl">
@@ -327,85 +320,8 @@ export default function ProfileClient() {
         </div>
       ) : null}
 
+      {/* Reset Data Modal */}
       {resetOpen && <ResetDataModal onClose={() => setResetOpen(false)} />}
-
-      {/* Danger Zone */}
-      <Card className="border-danger/30 p-5">
-        <div className="flex items-start gap-3 mb-4">
-          <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-lg border border-danger/20 bg-danger/10 text-danger shrink-0">
-            <Trash2 className="h-4 w-4" aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="font-semibold text-text">Danger Zone</h2>
-            <p className="mt-1 text-sm text-muted">
-              Permanently delete your activity data. This cannot be undone.
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-lg border border-danger/20 bg-danger/5 p-4">
-          <div>
-            <p className="text-sm font-medium text-text">Reset All Data</p>
-            <p className="text-xs text-muted mt-0.5">
-              Deletes all analyzer history, mint tasks, scheduled tasks, and mint history. Wallets and collections are kept.
-            </p>
-          </div>
-          <Button
-            type="button"
-            variant="danger"
-            onClick={() => setShowResetModal(true)}
-          >
-            <Trash2 className="h-4 w-4" aria-hidden="true" />
-            Reset Data
-          </Button>
-        </div>
-      </Card>
-
-      {/* Reset Data Confirmation Modal */}
-      {showResetModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-xl">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-danger/10 text-danger shrink-0">
-                <AlertTriangle className="h-5 w-5" aria-hidden="true" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-text">Are you absolutely sure?</h3>
-                <p className="text-sm text-muted">This action cannot be undone.</p>
-              </div>
-            </div>
-            <div className="mb-5 rounded-lg border border-danger/20 bg-danger/5 p-3 text-sm text-muted">
-              <p className="font-medium text-text mb-1">This will permanently delete:</p>
-              <ul className="list-disc list-inside space-y-0.5">
-                <li>All analyzer history</li>
-                <li>All mint tasks (pending &amp; completed)</li>
-                <li>All scheduled tasks</li>
-                <li>All mint transaction history</li>
-              </ul>
-              <p className="mt-2 text-xs">Wallets, collections, and settings are not affected.</p>
-            </div>
-            <div className="flex gap-3">
-              <Button
-                type="button"
-                variant="ghost"
-                className="flex-1"
-                onClick={() => setShowResetModal(false)}
-                disabled={resetting}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="danger"
-                className="flex-1"
-                loading={resetting}
-                onClick={handleResetData}
-              >
-                Yes, Delete Everything
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
