@@ -200,7 +200,6 @@ export default function HomePage() {
                       setUrl(event.target.value);
                       setInputError(null);
                     }}
-                    placeholder="https://magiceden.io/launchpad/collection"
                     aria-invalid={Boolean(inputError)}
                     className="h-12 w-full rounded-lg border border-border bg-background/70 pl-10 pr-3 text-sm text-text outline-none transition placeholder:text-muted/60 focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />

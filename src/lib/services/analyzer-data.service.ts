@@ -257,7 +257,7 @@ export async function runAnalyzerRisk(params: {
   }));
   params.log('success', 'scoring', 'Contract risk complete');
   params.log('success', 'scoring', 'Wallet risk complete');
-  params.log('success', 'scoring', 'Social risk complete');
+  params.log('success', 'scoring', 'Legitimacy check complete');
   params.log('success', 'scoring', `Final risk score: ${risk.riskScore}`);
   return risk;
 }

@@ -31,7 +31,7 @@ import {
   runLogged,
   runTimed,
   resolveIntentWithCache,
-  runSocialDiscoveryWithCache,
+  getSocialHealth,
   type AnalyzerSocials,
   type AnalyzerSocialKey,
   type AnalyzerDebugLogEntry,
@@ -207,10 +207,9 @@ export async function runAnalyzer(params: {
     log('success', 'mint_discovery', `Mint function discovered: ${mintFunction.functionName}`);
 
     // ── Step 5: Social + blockchain discovery (parallel) ───────────────────
-    const [socialDiscovery, blockchainDiscovery] = await Promise.all([
-      runSocialDiscoveryWithCache({ input: params.input, intent, enabled: settings.autoDetectSocials, cacheStats, log, timingBreakdown: telemetry.timingBreakdown }),
-      runBlockchainDiscoveryWithCache({ contractAddress, chain, enabled: true, cacheStats, log, timingBreakdown: telemetry.timingBreakdown }),
-    ]);
+    // Social discovery removed — analyzer focuses purely on on-chain scam signals.
+    const blockchainDiscovery = await runBlockchainDiscoveryWithCache({ contractAddress, chain, enabled: true, cacheStats, log, timingBreakdown: telemetry.timingBreakdown });
+    const socialDiscovery = { socials: {} as AnalyzerSocials, socialHealth: getSocialHealth({}) };
 
     const collectionIntelligence = await fetchCollectionIntelligenceWithCache({
       intent, metadata: { ...metadata, totalSupply: metadata.totalSupply.toString() },
@@ -231,7 +230,7 @@ export async function runAnalyzer(params: {
       mintFunction: mintFunction.functionName, mintPrice: requirements.mintPrice,
       collectionName: metadata.name, owner: metadata.owner,
       tokenStandard: metadata.tokenStandard, totalSupply: metadata.totalSupply.toString(),
-      socials: socialDiscovery.socials, collectionIntelligence, log,
+      collectionIntelligence, log,
       timingBreakdown: telemetry.timingBreakdown,
     });
 
@@ -315,10 +314,7 @@ async function runNonEvmPath(params: {
   log('warning', 'rpc', `RPC Provider Selection skipped for non-EVM chain: ${intent.chain}`);
   log('warning', 'contract_resolution', 'Contract inspection partially completed: non-EVM analyzer fallback used');
 
-  const socialDiscovery = await runSocialDiscoveryWithCache({
-    input: p.input, intent, enabled: settings.autoDetectSocials,
-    cacheStats, log, timingBreakdown: telemetry.timingBreakdown,
-  });
+  const socialDiscovery = { socials: {} as AnalyzerSocials, socialHealth: getSocialHealth({}) };
   const fallbackMetadata = { name: intent.collectionName ?? 'Resolved Collection', symbol: intent.chain.toUpperCase(), totalSupply: '0', tokenStandard: 'Unknown' as const, owner: intent.contractAddress ?? '' };
   const collectionIntelligence = await fetchCollectionIntelligenceWithCache({
     intent, metadata: fallbackMetadata, cacheStats, log, timingBreakdown: telemetry.timingBreakdown,
@@ -327,7 +323,7 @@ async function runNonEvmPath(params: {
     userId: p.userId, contractAddress: intent.contractAddress, chain: intent.chain,
     mintFunction: 'unknown', mintPrice: '0', collectionName: intent.collectionName ?? 'Resolved Collection',
     owner: intent.contractAddress ?? '', tokenStandard: 'Unknown', totalSupply: '0',
-    socials: socialDiscovery.socials, collectionIntelligence, log, timingBreakdown: telemetry.timingBreakdown,
+    collectionIntelligence, log, timingBreakdown: telemetry.timingBreakdown,
   });
 
   const result: AnalyzerResult = {

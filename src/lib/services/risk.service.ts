@@ -282,18 +282,9 @@ function scoreSocialAnalysis(params: {
   if (!params.totalSupply) {
     score += addRisk(reasons, 'Collection supply is unavailable', 3);
   }
-  if (!params.socials?.website) {
-    score += addRisk(reasons, 'Project website was not discovered', 4);
-  }
-  if (!params.socials?.twitter) {
-    score += addRisk(reasons, 'Twitter/X social link was not discovered', 4);
-  }
-  if (!params.socials?.discord) {
-    score += addRisk(reasons, 'Discord social link was not discovered', 4);
-  }
-  if (!params.socials?.telegram) {
-    score += addRisk(reasons, 'Telegram social link was not discovered', 2);
-  }
+  // Social-link penalties removed — social discovery is no longer part of the
+  // pipeline. Legitimacy is now judged purely on on-chain + collection signals
+  // (name, owner, token standard, floor, volume, holders, verification, supply).
 
   return { score: Math.min(score, 20), reasons };
 }

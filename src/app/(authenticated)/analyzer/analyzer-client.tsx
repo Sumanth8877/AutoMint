@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowRight, CheckCircle2, ExternalLink, Gauge, Save, Sparkles, TerminalSquare } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, Gauge, Save, ShieldAlert, ShieldCheck, Sparkles, TerminalSquare } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -42,6 +42,7 @@ interface AnalyzerResponse {
   riskAnalysis: {
     riskScore: number;
     riskLevel: 'Low' | 'Medium' | 'High' | 'Critical';
+    riskFactors: string[];
   };
   collectionIntelligence: {
     collectionName: string;
@@ -54,17 +55,9 @@ interface AnalyzerResponse {
     ownerCount: number | null;
     itemCount: number | null;
   };
-  socials: {
-    website?: string;
-    twitter?: string;
-    discord?: string;
-    telegram?: string;
-  };
   logs: AnalyzerDebugLog[];
   analyzedAt: string;
 }
-
-const SOCIAL_KEYS = ['website', 'twitter', 'discord', 'telegram'] as const;
 
 function formatNumber(value: string | number | null | undefined) {
   if (value === null || value === undefined || value === '') return 'Unavailable';
@@ -80,10 +73,6 @@ function formatMetric(value: string | number | null | undefined) {
 
 function formatLogTime(timestamp: string) {
   return new Date(timestamp).toLocaleTimeString([], { hour12: false });
-}
-
-function formatSocialLabel(value: string) {
-  return value === 'twitter' ? 'Twitter' : value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function displayCollectionName(result: AnalyzerResponse) {
@@ -125,6 +114,46 @@ function deriveScores(result: AnalyzerResponse | null) {
 
 function riskLabel(level: AnalyzerResponse['riskAnalysis']['riskLevel']) {
   return level === 'Critical' ? 'High' : level;
+}
+
+// Scam-detection verdict derived from the on-chain risk score.
+// Lower score = safer. This is the primary output users care about:
+// is this project a scam or legit?
+function getSecurityVerdict(riskScore: number) {
+  if (riskScore <= 25) {
+    return {
+      label: 'Likely Legitimate',
+      description: 'On-chain signals look healthy. Low scam probability.',
+      icon: ShieldCheck,
+      iconClass: 'text-success',
+      className: 'border-success/25 bg-success/10 text-success',
+    };
+  }
+  if (riskScore <= 50) {
+    return {
+      label: 'Proceed with Caution',
+      description: 'Some risk signals present. Verify before minting.',
+      icon: AlertTriangle,
+      iconClass: 'text-warning',
+      className: 'border-warning/25 bg-warning/10 text-warning',
+    };
+  }
+  if (riskScore <= 75) {
+    return {
+      label: 'High Risk',
+      description: 'Multiple risk signals detected. Minting is risky.',
+      icon: ShieldAlert,
+      iconClass: 'text-orange-400',
+      className: 'border-orange-500/25 bg-orange-500/10 text-orange-400',
+    };
+  }
+  return {
+    label: 'Likely Scam',
+    description: 'Strong scam indicators found. Do not mint.',
+    icon: ShieldAlert,
+    iconClass: 'text-danger',
+    className: 'border-danger/25 bg-danger/10 text-danger',
+  };
 }
 
 function LiveDebugConsole({ logs }: { logs: AnalyzerDebugLog[] }) {
@@ -210,6 +239,7 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
   const [logs, setLogs] = useState<AnalyzerDebugLog[]>([]);
   const [saved, setSaved] = useState(false);
   const scores = useMemo(() => deriveScores(result), [result]);
+  const verdict = getSecurityVerdict(result?.riskAnalysis?.riskScore ?? 0);
 
   const analyze = async () => {
     const input = url.trim();
@@ -285,9 +315,9 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
   return (
     <div>
       <PageHeader
-        eyebrow="Flagship Analyzer"
+        eyebrow="Scam Detection"
         title="Analyzer"
-        description="Resolve NFT collection intelligence, risk, readiness, scheduling signals, and mint execution inputs."
+        description="Paste a URL or contract address to check whether an NFT project is a scam or legitimate — on-chain security, contract analysis, and risk scoring."
         actions={
           <Button onClick={analyze} loading={analyzing}>
             Analyze
@@ -367,31 +397,47 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
 
             <Card tone="elevated" className="p-5">
               <div className="mb-4 flex items-center gap-3">
-                <ExternalLink className="h-5 w-5 text-accent" aria-hidden="true" />
-                <h2 className="font-semibold text-text">Social Discovery</h2>
+                <verdict.icon className={`h-5 w-5 ${verdict.iconClass}`} aria-hidden="true" />
+                <h2 className="font-semibold text-text">Security Verdict</h2>
               </div>
-              <div className="grid gap-3 lg:grid-cols-2">
-                {SOCIAL_KEYS.map((key) => {
-                  const value = result.socials[key];
-                  return (
-                    <div key={key} className="flex items-center justify-between gap-4 rounded-lg border border-border bg-white/5 px-3 py-2 text-sm">
-                      <span className="text-muted">{formatSocialLabel(key)}</span>
-                      {value ? (
-                        <a
-                          href={value}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="max-w-[65%] truncate text-right font-medium text-accent hover:text-accent/80"
-                        >
-                          {value}
-                        </a>
-                      ) : (
-                        <span className="text-warning">Not found</span>
-                      )}
-                    </div>
-                  );
-                })}
+
+              <div className={`flex items-center justify-between gap-4 rounded-lg border p-4 ${verdict.className}`}>
+                <div className="flex items-center gap-3">
+                  <verdict.icon className="h-7 w-7 shrink-0" aria-hidden="true" />
+                  <div>
+                    <p className="text-lg font-semibold">{verdict.label}</p>
+                    <p className="text-sm opacity-80">{verdict.description}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="font-mono text-3xl font-bold">{result.riskAnalysis.riskScore}</p>
+                  <p className="text-xs uppercase opacity-70">Risk / 100</p>
+                </div>
               </div>
+
+              {result.riskAnalysis.riskFactors && result.riskAnalysis.riskFactors.length > 0 ? (
+                <div className="mt-4">
+                  <p className="mb-2 text-xs uppercase text-muted">
+                    Risk factors detected ({result.riskAnalysis.riskFactors.length})
+                  </p>
+                  <ul className="space-y-2">
+                    {result.riskAnalysis.riskFactors.map((factor, index) => (
+                      <li
+                        key={`${factor}-${index}`}
+                        className="flex items-start gap-2 rounded-lg border border-border bg-white/5 px-3 py-2 text-sm text-text"
+                      >
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+                        <span>{factor}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <div className="mt-4 flex items-center gap-2 rounded-lg border border-success/20 bg-success/10 px-3 py-2 text-sm text-success">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span>No on-chain risk factors detected.</span>
+                </div>
+              )}
             </Card>
 
             <Card tone="elevated" className="p-5">
@@ -415,7 +461,7 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
           <EmptyState
             icon={Gauge}
             title="Ready to analyze"
-            description="Paste an explorer URL, OpenSea collection URL, or direct contract address to resolve NFT intelligence and execution readiness."
+            description="Paste a mint URL, explorer URL, OpenSea collection URL, or direct contract address to check whether the project is a scam or legitimate."
           />
         )}
 
