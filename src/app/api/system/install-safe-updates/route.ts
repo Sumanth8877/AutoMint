@@ -54,8 +54,18 @@ interface GitHubCommitResponse {
 
 function getGitHubConfig() {
   const token = process.env.GITHUB_PAT ?? process.env.GITHUB_TOKEN;
-  const owner = process.env.GITHUB_OWNER ?? 'Sumanth8877';
-  const repo  = process.env.GITHUB_REPO  ?? 'AutoMint';
+  const owner = process.env.GITHUB_OWNER;
+  const repo  = process.env.GITHUB_REPO;
+
+  // M-2 fix: never silently use hardcoded defaults for owner/repo.
+  // A missing var would commit to the wrong repo — fail explicitly instead.
+  if (!owner || !repo) {
+    throw new Error(
+      'GITHUB_OWNER and GITHUB_REPO must be set in your environment. ' +
+      'Add them to your Vercel environment variables.',
+    );
+  }
+
   return { token, owner, repo };
 }
 

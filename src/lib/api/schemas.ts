@@ -55,3 +55,16 @@ export const analyzerSchema = z.object({
 export function formatZodError(error: z.ZodError): string {
   return error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
 }
+
+// ── POST /api/mints/fanout ────────────────────────────────────────────────────
+export const fanoutSchema = z.object({
+  mintUrl:        urlString,
+  walletIds:      z
+    .array(z.string().min(1, 'Each wallet ID must be non-empty'))
+    .min(1, 'At least one wallet is required')
+    .max(50, 'Maximum 50 wallets per fanout'),
+  quantity:       z.number().int().min(1).max(100).optional().default(1),
+  privateMempool: z.boolean().optional().default(false),
+  overrideRisk:   z.boolean().optional().default(false),
+  maxRetries:     z.number().int().min(0).max(100).optional().default(20),
+});

@@ -13,11 +13,12 @@ export async function GET() {
     // This route is called every 3 days by the QStash keepalive schedule.
     await getDb().execute(sql`SELECT 1`);
     return NextResponse.json({ ok: true, db: 'ok', ts: Date.now() });
-  } catch (error) {
-    // Return 200 so uptime monitors don't false-alarm on a transient DB blip,
-    // but surface the error in the payload so you can investigate if needed.
+  } catch (_error) {
+    // Return 200 so uptime monitors don't false-alarm on a transient DB blip.
+    // Omit the raw error.message — it can expose internal DB connection details
+    // (host, port, credentials) to anyone who hits this public endpoint.
     return NextResponse.json(
-      { ok: false, db: 'error', error: error instanceof Error ? error.message : String(error), ts: Date.now() },
+      { ok: false, db: 'error', ts: Date.now() },
       { status: 200 },
     );
   }

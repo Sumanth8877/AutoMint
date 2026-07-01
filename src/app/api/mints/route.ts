@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getErrorMessage, parseJsonBody, handleRouteError } from '@/lib/api/errors';
-import { addMintTask, getMintTaskById, getUserMintTasks, removeMintTask, executeMintTask } from '@/lib/services/mint.service';
+import { addMintTask, getMintTaskById, getUserMintTasks, removeMintTask } from '@/lib/services/mint.service';
 import { cancelScheduledMint, scheduleMint } from '@/lib/services/qstash.service';
 import { registerContractForMonitoring, unregisterContract } from '@/lib/services/alchemy-webhook.service';
 import { getMintState } from '@/lib/services/mint-state.service';
@@ -408,14 +408,25 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ task });
     }
 
-    const result = await executeMintTask(body.id, authResult.userId);
-    const task = await getMintTaskById(body.id, authResult.userId);
+    // H-1 fix: route through QStash instead of calling executeMintTask() inline.
+    // Inline execution is capped at this route's 10s Vercel maxDuration, which is
+    // shorter than Ethereum's ~12s block time. That kills the function mid-receipt-
+    // wait on every retry, leaving the task stuck in 'running' until recovery picks
+    // it up ~90s later. scheduleMint dispatches immediately (scheduledTime = now,
+    // initialStatus = 'ready') giving execution a fresh invocation budget — exactly
+    // the same path as the normal POST flow after M4.
+    const scheduledTask = await scheduleMint({
+      taskId: body.id,
+      userId: authResult.userId,
+      scheduledTime: new Date(),
+      initialStatus: 'ready',
+    });
 
-    if (!task) {
-      return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+    if (!('id' in scheduledTask)) {
+      return NextResponse.json({ error: 'Task not found or already completed' }, { status: 404 });
     }
 
-    return NextResponse.json({ task, result });
+    return NextResponse.json({ task: scheduledTask, queued: true });
   } catch (error) {
     return handleRouteError(error, 'Failed to process mint request');
   }

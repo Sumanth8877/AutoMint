@@ -125,6 +125,7 @@ export async function estimateGas(chain: string): Promise<GasEstimate> {
     } catch {
       // Chain doesn't support EIP-1559 (e.g. Polygon PoS legacy mode)
       // or the pending block isn't available — fall through to legacy path.
+      // This is expected behaviour, not an error — no Sentry capture needed.
     }
 
     // ── Legacy fallback (Polygon PoS, or any non-EIP-1559 chain) ───────────

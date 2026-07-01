@@ -35,7 +35,7 @@ export interface RecoveryResult {
  *   The transaction IS on-chain (or in mempool). Re-execution would double-spend.
  *   Action: transition to 'unconfirmed', schedule receipt recheck.
  *
- * Both paths use updatedAt < now-10min to avoid touching tasks that are
+ * Both paths use updatedAt < now-90s to avoid touching tasks that are
  * legitimately executing (slow but not crashed).
  */
 export async function recoverStuckMintTasks(): Promise<RecoveryResult> {

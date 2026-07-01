@@ -53,23 +53,9 @@ const REQUIRED_VARS: EnvSpec[] = [
   { name: 'QSTASH_CURRENT_SIGNING_KEY' },
   { name: 'QSTASH_NEXT_SIGNING_KEY' },
 
-  // ── Mint execution behaviour (optional overrides)
-  // L-10 Fix: SKIP_MINT_SIMULATION is referenced in src/lib/blockchain/mint.ts
-  // but was missing from this registry, making it invisible to anyone reading
-  // the env var documentation. It is optional (defaults to false / not set),
-  // so it goes in OPTIONAL_VARS below rather than REQUIRED_VARS.
-
-  // ── GoPlus Security (optional - for contract security scanning)
-  // { name: 'GOPLUS_API_KEY' }, // Optional, not required
-
-  // ── Dune Analytics (optional - for blockchain data and analytics)
-  // { name: 'DUNE_API_KEY' }, // Optional, not required
-
-  // ── Moralis Web3 API (optional - for blockchain data and analytics)
-  // { name: 'MORALIS_API_KEY' }, // Optional, not required
-
-  // ── NFTScan API (optional - for NFT data and analytics)
-  // { name: 'NFTSCAN_API_KEY' }, // Optional, not required
+  // ── Alchemy (primary RPC provider — all mint transactions go through this)
+  // Without this key all on-chain calls fall back to slower providers or fail.
+  { name: 'ALCHEMY_API_KEY' },
 ];
 
 function validateAppUrl(): string | null {
@@ -114,23 +100,66 @@ export function validateEnv(): void {
     const value = process.env[spec.name]?.trim();
 
     if (!value) {
-      errors.push(`  • ${spec.name}: missing`);
+      errors.push(`  \u2022 ${spec.name}: missing`);
       continue;
     }
 
     if (spec.validate) {
       const error = spec.validate(value);
-      if (error) errors.push(`  • ${spec.name}: ${error}`);
+      if (error) errors.push(`  \u2022 ${spec.name}: ${error}`);
     }
   }
 
   const appUrlError = validateAppUrl();
-  if (appUrlError) errors.push(`  â€¢ ${appUrlError}`);
+  if (appUrlError) errors.push(`  \u2022 ${appUrlError}`);
 
   if (errors.length > 0) {
     throw new Error(
-      `\n\n❌ Environment configuration errors (${errors.length} issue(s)):\n${errors.join('\n')}\n\n` +
+      `\n\n\u274c Environment configuration errors (${errors.length} issue(s)):\n${errors.join('\n')}\n\n` +
       'Fix the above variables in your .env.local or Vercel environment settings.\n',
+    );
+  }
+
+  // ── Warn about optional-but-important vars ────────────────────────────────
+  // These do not crash startup but will cause runtime failures for specific
+  // features. Console warnings surface them in deployment logs without blocking.
+  const warnings: string[] = [];
+
+  const optionalImportant: Array<{ name: string; reason: string }> = [
+    {
+      name: 'CRON_SECRET',
+      reason: 'POST /api/recovery/mint returns 503 — stuck-mint recovery loop cannot be triggered',
+    },
+    {
+      name: 'ALCHEMY_WEBHOOK_SIGNING_KEY',
+      reason: 'All Alchemy contract/wallet webhooks will be rejected (signature verification fails)',
+    },
+  ];
+
+  // Telegram vars are only needed when the feature is enabled
+  const telegramEnabled = process.env.TELEGRAM_ENABLED?.trim().toLowerCase() === 'true';
+  if (telegramEnabled) {
+    optionalImportant.push(
+      {
+        name: 'TELEGRAM_BOT_TOKEN',
+        reason: 'TELEGRAM_ENABLED=true but bot token missing — all Telegram notifications will fail',
+      },
+      {
+        name: 'TELEGRAM_WEBHOOK_SECRET',
+        reason: 'TELEGRAM_ENABLED=true but webhook secret missing — all webhook requests rejected',
+      },
+    );
+  }
+
+  for (const { name, reason } of optionalImportant) {
+    if (!process.env[name]?.trim()) {
+      warnings.push(`  \u26a0 ${name}: ${reason}`);
+    }
+  }
+
+  if (warnings.length > 0) {
+    console.warn(
+      `\n\u26a0 AutoMint optional env var warnings (${warnings.length}):\n${warnings.join('\n')}\n`,
     );
   }
 }

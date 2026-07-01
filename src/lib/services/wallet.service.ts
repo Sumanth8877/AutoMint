@@ -101,9 +101,10 @@ export async function getWalletById(id: string, userId: string) {
 }
 
 async function getPublicWalletById(id: string, userId: string) {
-  const [wallet] = await getUserWallets(userId);
-  if (wallet?.id === id) return wallet;
-
+  // M-3 fix: go straight to the targeted query. The previous version fetched
+  // ALL user wallets with a complex join, checked if the first one matched,
+  // then did this query anyway for any wallet that wasn't first — a guaranteed
+  // n+1 for multi-wallet users.
   const result = await getDb()
     .select(publicWalletSelect())
     .from(wallets)

@@ -62,6 +62,21 @@ export async function POST(request: Request) {
     );
   }
 
+  // L-4: warn when running on Vercel — npm install is capped at 10s and will
+  // almost always timeout before completing. This route is designed for local
+  // dev or CI environments where the full npm/git toolchain is available.
+  if (process.env.VERCEL === '1') {
+    return NextResponse.json(
+      {
+        error:
+          'upgrade-branch is not supported on Vercel deployments. ' +
+          'npm install typically takes 20-60s but Vercel functions cap at 10s. ' +
+          'Run this locally: npm run upgrade-branch or use the GitHub API route (/api/system/install-safe-updates) instead.',
+      },
+      { status: 503 },
+    );
+  }
+
   const body = await parseJsonBody<UpgradeBranchBody>(request).catch(() => ({}) as UpgradeBranchBody);
   const { packageNames, includeMinor = false, branchSuffix = '' } = body;
 

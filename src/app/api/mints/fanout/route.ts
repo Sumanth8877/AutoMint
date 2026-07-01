@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { fanoutMintFromUrl } from '@/lib/services/mint-fanout.service';
+import { fanoutSchema, formatZodError } from '@/lib/api/schemas';
+import { parseJsonBody } from '@/lib/api/errors';
 
 /**
  * POST /api/mints/fanout
@@ -32,35 +34,20 @@ export async function POST(req: Request) {
   const authResult = await requireApiUser();
   if ('error' in authResult) return authResult.error;
 
-  const body = await req.json() as {
-    mintUrl?: string;
-    walletIds?: string[];
-    quantity?: number;
-    privateMempool?: boolean;
-    overrideRisk?: boolean;
-    maxRetries?: number;
-  };
-
-  const { mintUrl, walletIds, quantity, privateMempool, overrideRisk, maxRetries } = body;
-
-  if (!mintUrl?.trim()) {
-    return NextResponse.json({ error: 'mintUrl is required' }, { status: 400 });
+  const rawBody = await parseJsonBody(req);
+  const parsed = fanoutSchema.safeParse(rawBody);
+  if (!parsed.success) {
+    return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
   }
 
-  if (!Array.isArray(walletIds) || walletIds.length === 0) {
-    return NextResponse.json({ error: 'walletIds must be a non-empty array' }, { status: 400 });
-  }
-
-  if (walletIds.length > 50) {
-    return NextResponse.json({ error: 'Maximum 50 wallets per fanout' }, { status: 400 });
-  }
+  const { mintUrl, walletIds, quantity, privateMempool, overrideRisk, maxRetries } = parsed.data;
 
   try {
     const result = await fanoutMintFromUrl(
       mintUrl.trim(),
       walletIds,
       authResult.userId,
-      { quantity: quantity ?? 1, privateMempool: privateMempool ?? false, overrideRisk: overrideRisk ?? false, maxRetries: maxRetries ?? 20 },
+      { quantity, privateMempool, overrideRisk, maxRetries },
     );
 
     return NextResponse.json(result);
