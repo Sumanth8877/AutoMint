@@ -320,8 +320,8 @@ export default function ProfileClient() {
           </Card>
         </div>
       ) : null}
-    </div>
 
       {resetOpen && <ResetDataModal onClose={() => setResetOpen(false)} />}
+    </div>
   );
 }
