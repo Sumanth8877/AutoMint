@@ -1,132 +1,174 @@
-import { ExternalLink, BarChart3, TrendingUp, Sparkles } from 'lucide-react';
 import Link from 'next/link';
+import { Activity, BarChart3, Shield, Sparkles, TrendingUp, Wallet, Zap, Eye } from 'lucide-react';
+
+const features = [
+  {
+    icon: Zap,
+    title: 'Auto-Mint Engine',
+    description: 'Fire mints in milliseconds with gas-optimised transactions across all major chains. Whitelist, allowlist, and public phase targeting.',
+    href: '/mints',
+    glow: 'rgba(245,158,11,0.30)',
+    accent: 'text-gold',
+    border: 'border-gold/25',
+    bg: 'bg-gold/8',
+  },
+  {
+    icon: BarChart3,
+    title: 'Mint Analyzer',
+    description: 'AI-powered contract analysis with risk scoring, gas estimation, and market intelligence — before you pull the trigger.',
+    href: '/analyzer',
+    glow: 'rgba(0,245,255,0.25)',
+    accent: 'text-neon',
+    border: 'border-neon/25',
+    bg: 'bg-neon/8',
+  },
+  {
+    icon: Eye,
+    title: 'Whale Tracker',
+    description: 'Monitor elite wallets in real-time. Follow the smart money and mirror mint strategies of top collectors.',
+    href: '/whale-tracker',
+    glow: 'rgba(124,58,237,0.25)',
+    accent: 'text-primary',
+    border: 'border-primary/25',
+    bg: 'bg-primary/8',
+  },
+  {
+    icon: Shield,
+    title: 'Risk Intelligence',
+    description: 'Honeypot detection, rug-pull analysis, and contract security scoring powered by GoPlus and on-chain data.',
+    href: '/analyzer',
+    glow: 'rgba(16,185,129,0.25)',
+    accent: 'text-success',
+    border: 'border-success/25',
+    bg: 'bg-success/8',
+  },
+];
+
+const stats = [
+  { value: '< 50ms', label: 'Mint Latency', icon: Zap },
+  { value: '99.9%', label: 'Uptime', icon: Activity },
+  { value: '15+', label: 'Chains', icon: TrendingUp },
+  { value: '∞', label: 'Wallets', icon: Wallet },
+];
 
 export default function Home() {
   return (
-    <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden p-4">
-      {/* Animated Gradient Background */}
-      <div className="absolute inset-0 -z-10 bg-gradient-to-br from-background via-background to-primary/5">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(120,119,198,0.1),transparent_50%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(120,119,198,0.08),transparent_50%)]" />
-        <div 
-          className="absolute inset-0 opacity-30"
+    <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden p-4 sm:p-8">
+      {/* Atmospheric background */}
+      <div className="absolute inset-0 -z-10">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(124,58,237,0.12),transparent_55%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_70%_80%,rgba(0,245,255,0.08),transparent_55%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_50%,rgba(236,72,153,0.05),transparent_65%)]" />
+        {/* Grid */}
+        <div
+          className="absolute inset-0 opacity-40"
           style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%239C92AC' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+            backgroundImage: 'linear-gradient(rgba(0,245,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,245,255,0.04) 1px, transparent 1px)',
+            backgroundSize: '64px 64px',
           }}
         />
       </div>
 
-      <div className="w-full max-w-5xl space-y-12">
-        {/* Hero Section with Animations */}
-        <div className="text-center space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-1000">
-          {/* Badge */}
-          <div className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-primary/10 to-primary/5 px-4 py-1.5 text-sm font-medium border border-primary/20 backdrop-blur-sm">
-            <Sparkles className="h-3.5 w-3.5 text-primary animate-pulse" />
-            <span>Advanced NFT Minting Platform</span>
+      <div className="w-full max-w-6xl space-y-20">
+        {/* Hero */}
+        <div className="text-center space-y-8">
+          {/* Status pill */}
+          <div className="inline-flex items-center gap-2.5 rounded-full border border-neon/20 bg-neon/5 px-5 py-2 backdrop-blur-sm">
+            <span className="h-2 w-2 rounded-full bg-neon animate-pulse shadow-[0_0_8px_rgba(0,245,255,0.9)]" />
+            <span className="text-xs font-bold uppercase tracking-widest text-neon">Live NFT Minting Intelligence</span>
           </div>
 
-          {/* Title with Gradient */}
-          <h1 className="text-5xl font-bold tracking-tight sm:text-7xl lg:text-8xl animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-150">
-            <span className="bg-gradient-to-br from-foreground via-foreground to-foreground/70 bg-clip-text text-transparent">
-              AutoMint
-            </span>
-          </h1>
+          {/* Heading */}
+          <div>
+            <h1 className="text-6xl font-black tracking-tight sm:text-8xl lg:text-9xl leading-none">
+              <span className="gradient-text-neon">Auto</span>
+              <span className="text-text">Mint</span>
+            </h1>
+            <p className="mt-3 text-sm font-bold uppercase tracking-[0.25em] text-muted">
+              Production NFT Minter · On-Chain · Automated
+            </p>
+          </div>
 
-          {/* Description */}
-          <p className="text-lg sm:text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-300">
-            Analyze NFT mints, track performance, and monitor blockchain activity with real-time insights and advanced analytics.
+          <p className="text-lg text-secondary max-w-2xl mx-auto leading-relaxed">
+            The most advanced automated NFT minting platform. Analyze contracts, execute mints at machine speed,
+            and track alpha from elite wallets — all in one intelligence terminal.
           </p>
+
+          {/* CTAs */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center gap-3 rounded-xl px-8 py-4 text-sm font-black uppercase tracking-widest text-background transition-all duration-300 hover:scale-[1.03] hover:brightness-110"
+              style={{
+                background: 'linear-gradient(135deg, #00F5FF 0%, #7C3AED 100%)',
+                boxShadow: '0 0 40px rgba(0,245,255,0.35), 0 0 12px rgba(124,58,237,0.40)',
+              }}
+            >
+              <Sparkles className="h-4 w-4" />
+              Launch Terminal
+            </Link>
+            <Link
+              href="/analyzer"
+              className="inline-flex items-center gap-3 rounded-xl border border-border-strong px-8 py-4 text-sm font-black uppercase tracking-widest text-text hover:border-neon/40 hover:bg-neon/5 transition-all duration-300"
+            >
+              <BarChart3 className="h-4 w-4 text-neon" />
+              Analyze a Mint
+            </Link>
+          </div>
         </div>
 
-        {/* Feature Cards with Advanced Hover Effects */}
-        <div className="grid gap-6 md:grid-cols-2 animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-500">
-          {/* Analyzer Card */}
-          <Link
-            href="/analyzer"
-            className="group relative overflow-hidden rounded-2xl border bg-card/50 backdrop-blur-sm p-8 transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl hover:shadow-primary/10 hover:border-primary/50"
-          >
-            {/* Gradient Overlay on Hover */}
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+        {/* Stats */}
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {stats.map(s => (
+            <div
+              key={s.label}
+              className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-surface/60 backdrop-blur-sm p-5 text-center"
+            >
+              <s.icon className="h-5 w-5 text-neon" />
+              <p className="text-3xl font-black tracking-tight text-text">{s.value}</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted">{s.label}</p>
+            </div>
+          ))}
+        </div>
 
-            <div className="relative space-y-4">
-              <div className="flex items-center gap-4">
-                <div className="rounded-xl bg-primary/10 p-3 ring-1 ring-primary/20 group-hover:ring-primary/40 group-hover:scale-110 transition-all duration-300">
-                  <BarChart3 className="h-6 w-6 text-primary group-hover:animate-pulse" />
+        {/* Feature grid */}
+        <div className="grid gap-5 md:grid-cols-2">
+          {features.map(f => (
+            <Link
+              key={f.title}
+              href={f.href}
+              className="group relative overflow-hidden rounded-2xl border p-7 transition-all duration-300 hover:scale-[1.02]"
+              style={{
+                background: `radial-gradient(ellipse at 20% 20%, ${f.glow.replace('0.', '0.08')} 0%, transparent 60%), rgba(8,12,20,0.80)`,
+                borderColor: f.border.replace('border-', ''),
+                boxShadow: `0 0 0 1px rgba(255,255,255,0.03)`,
+              }}
+            >
+              {/* Top glow line */}
+              <div
+                className="absolute top-0 left-0 right-0 h-px"
+                style={{ background: `linear-gradient(90deg, transparent, ${f.glow}, transparent)` }}
+              />
+
+              <div className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <div
+                    className={`flex h-12 w-12 items-center justify-center rounded-xl border ${f.border} ${f.bg} transition-all duration-300 group-hover:scale-110`}
+                    style={{ boxShadow: f.glow }}
+                  >
+                    <f.icon className={`h-6 w-6 ${f.accent}`} />
+                  </div>
+                  <h2 className="text-xl font-black tracking-tight text-text">{f.title}</h2>
                 </div>
-                <h2 className="text-2xl font-semibold">Mint Analyzer</h2>
-              </div>
-
-              <p className="text-muted-foreground leading-relaxed">
-                Analyze NFT mint contracts, estimate gas fees, and evaluate minting opportunities with AI-powered insights.
-              </p>
-
-              <div className="flex items-center gap-2 text-sm font-medium text-primary pt-2">
-                <span>Go to Analyzer</span>
-                <ExternalLink className="h-4 w-4 transition-transform group-hover:translate-x-1 group-hover:-translate-y-1" />
-              </div>
-            </div>
-
-            {/* Decorative Elements */}
-            <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-primary/5 blur-3xl group-hover:bg-primary/10 transition-colors duration-500" />
-          </Link>
-
-          {/* Dashboard Card */}
-          <Link
-            href="/mints"
-            className="group relative overflow-hidden rounded-2xl border bg-card/50 backdrop-blur-sm p-8 transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl hover:shadow-primary/10 hover:border-primary/50"
-          >
-            {/* Gradient Overlay on Hover */}
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-
-            <div className="relative space-y-4">
-              <div className="flex items-center gap-4">
-                <div className="rounded-xl bg-primary/10 p-3 ring-1 ring-primary/20 group-hover:ring-primary/40 group-hover:scale-110 transition-all duration-300">
-                  <TrendingUp className="h-6 w-6 text-primary group-hover:animate-pulse" />
+                <p className="text-sm text-secondary leading-relaxed">{f.description}</p>
+                <div className={`flex items-center gap-2 text-xs font-bold uppercase tracking-widest ${f.accent}`}>
+                  <span>Enter Module</span>
+                  <span className="transition-transform duration-200 group-hover:translate-x-1">→</span>
                 </div>
-                <h2 className="text-2xl font-semibold">Mint Dashboard</h2>
               </div>
-
-              <p className="text-muted-foreground leading-relaxed">
-                View your complete mint history, track transfers, and monitor real-time activity across all your mints.
-              </p>
-
-              <div className="flex items-center gap-2 text-sm font-medium text-primary pt-2">
-                <span>Go to Dashboard</span>
-                <ExternalLink className="h-4 w-4 transition-transform group-hover:translate-x-1 group-hover:-translate-y-1" />
-              </div>
-            </div>
-
-            {/* Decorative Elements */}
-            <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-primary/5 blur-3xl group-hover:bg-primary/10 transition-colors duration-500" />
-          </Link>
+            </Link>
+          ))}
         </div>
-
-        {/* Stats Section */}
-        <div className="grid grid-cols-3 gap-6 pt-8 animate-in fade-in duration-1000 delay-700">
-          <div className="text-center space-y-1">
-            <div className="text-3xl font-bold bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text text-transparent">
-              10k+
-            </div>
-            <div className="text-sm text-muted-foreground">NFTs Minted</div>
-          </div>
-          <div className="text-center space-y-1">
-            <div className="text-3xl font-bold bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text text-transparent">
-              50+
-            </div>
-            <div className="text-sm text-muted-foreground">Blockchains</div>
-          </div>
-          <div className="text-center space-y-1">
-            <div className="text-3xl font-bold bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text text-transparent">
-              24/7
-            </div>
-            <div className="text-sm text-muted-foreground">Monitoring</div>
-          </div>
-        </div>
-
-        {/* Footer Note */}
-        <p className="text-center text-sm text-muted-foreground/70 animate-in fade-in duration-1000 delay-1000">
-          Connect your wallet to get started with minting and tracking
-        </p>
       </div>
     </main>
   );
