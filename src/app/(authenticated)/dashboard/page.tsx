@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import {
   Activity, ArrowRight, CheckCircle2,
   Flame, Gauge, Radio, ShieldCheck, Target,
@@ -88,7 +89,7 @@ function statusConfig(status: string) {
 
 export default async function DashboardPage() {
   const authResult = await requireApiUser();
-  if ('error' in authResult) return authResult.error;
+  if ('error' in authResult) redirect('/sign-in');
   const d = await getDashboardData(authResult.userId);
 
   const totalMints = d.completedTasks + d.pendingTasks + d.failedTasks;
