@@ -57,7 +57,13 @@ export const tasks = pgTable('tasks', {
   pendingTasksIdx: index('idx_tasks_status_type_scheduled')
     .on(table.status, table.taskType, table.scheduledFor),
   userIdIdx: index('idx_tasks_user_id').on(table.userId),
-  idempotencyIdx: uniqueIndex('idx_tasks_idempotency_key').on(table.idempotencyKey),
+  // L-04 fix: partial unique index. idempotencyKey is nullable, and Postgres
+  // allows multiple NULLs in a plain unique index — so two NULL-key tasks were
+  // both valid, giving a false uniqueness guarantee. The WHERE clause enforces
+  // uniqueness ONLY on rows that actually set a key.
+  idempotencyIdx: uniqueIndex('idx_tasks_idempotency_key')
+    .on(table.idempotencyKey)
+    .where(sql`idempotency_key IS NOT NULL`),
   deadLetterIdx: index('idx_tasks_dead_letter')
     .on(table.status)
     .where(sql`status = 'dead_letter'`),
