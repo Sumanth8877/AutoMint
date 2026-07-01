@@ -1,49 +1,37 @@
-import type { InputHTMLAttributes, ReactNode } from 'react';
+import type { InputHTMLAttributes } from 'react';
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
   hint?: string;
-  icon?: ReactNode;
+  leftIcon?: React.ReactNode;
+  rightIcon?: React.ReactNode;
 }
 
-export default function Input({
-  label,
-  error,
-  hint,
-  icon,
-  className = '',
-  ...props
-}: InputProps) {
+export default function Input({ label, error, hint, leftIcon, rightIcon, className = '', id, ...props }: InputProps) {
+  const inputId = id ?? (label ? label.toLowerCase().replace(/\s+/g, '-') : undefined);
   return (
-    <div className="w-full">
+    <div className="flex flex-col gap-1.5">
       {label && (
-        <label className="mb-1.5 block text-sm font-medium text-secondary">
+        <label htmlFor={inputId} className="text-xs font-semibold uppercase tracking-widest text-secondary">
           {label}
         </label>
       )}
-      <div className="relative">
-        {icon && (
-          <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted">
-            {icon}
-          </div>
+      <div className="relative flex items-center">
+        {leftIcon && (
+          <span className="absolute left-3 flex items-center text-muted pointer-events-none">{leftIcon}</span>
         )}
         <input
-          className={`h-11 w-full rounded-lg border bg-background/60 px-3.5 text-sm text-text placeholder:text-muted/60 transition-all duration-150 focus:outline-none focus:ring-2 ${
-            icon ? 'pl-10' : ''
-          } ${
-            error
-              ? 'border-danger focus:border-danger focus:ring-danger/20'
-              : 'border-border focus:border-primary focus:ring-primary/20'
-          } ${className}`}
+          id={inputId}
+          className={`h-10 w-full rounded-lg border bg-background/80 text-text placeholder:text-muted/50             transition-all duration-150 text-sm             focus:outline-none focus:border-neon/60 focus:ring-2 focus:ring-neon/15 focus:bg-background             disabled:cursor-not-allowed disabled:opacity-50             ${error ? 'border-danger/60 ring-2 ring-danger/15' : 'border-border hover:border-border-strong'}             ${leftIcon ? 'pl-9' : 'pl-3'}             ${rightIcon ? 'pr-9' : 'pr-3'}             ${className}`}
           {...props}
         />
+        {rightIcon && (
+          <span className="absolute right-3 flex items-center text-muted pointer-events-none">{rightIcon}</span>
+        )}
       </div>
-      {error ? (
-        <p className="mt-1.5 text-sm text-danger">{error}</p>
-      ) : hint ? (
-        <p className="mt-1.5 text-xs text-muted">{hint}</p>
-      ) : null}
+      {error && <p className="text-xs text-danger">{error}</p>}
+      {hint && !error && <p className="text-xs text-muted">{hint}</p>}
     </div>
   );
 }
