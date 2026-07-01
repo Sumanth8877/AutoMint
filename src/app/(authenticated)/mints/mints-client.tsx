@@ -354,7 +354,6 @@ export default function MintsClient() {
                 updatingId={state.updatingId}
                 deletingId={state.deletingId}
               />
-            </div>
           ))
         )}
       </div>
