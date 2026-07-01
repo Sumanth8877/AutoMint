@@ -18,7 +18,7 @@ import { sendMintFailedEmail, sendMintScheduledEmail, sendMintSuccessEmail, send
 import { getClient } from '@/lib/blockchain/client';
 import type { Hex } from 'viem';
 import { unregisterIfIdle } from '@/lib/services/alchemy-webhook.service';
-import { addTaskLog } from '@/lib/services/task-log.service';
+import { addTaskLog, type TaskLogEvent } from '@/lib/services/task-log.service';
 import { getNativeTokenUsdPrice, formatWithUsd } from '@/lib/services/native-price.service';
 
 // Monitoring fix: reduced from 60s to 30s.
@@ -642,7 +642,7 @@ export async function executeScheduledMint(taskId: string) {
         }
       } else if (mintState.status === 'UNKNOWN') {
         // H2: state unreadable on-chain — proceed to execution; simulation gates it.
-        await addTaskLog(taskId, 'mint_state_unknown', 'info', 'Mint state UNKNOWN — attempting mint; pre-broadcast simulation will gate eligibility');
+        await addTaskLog(taskId, 'mint_state_unknown' as TaskLogEvent, 'info', 'Mint state UNKNOWN — attempting mint; pre-broadcast simulation will gate eligibility');
       }
     }
 
