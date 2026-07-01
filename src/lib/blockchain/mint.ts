@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { parseAbi, parseEther, parseGwei, Hex, encodeFunctionData, ContractFunctionRevertedError } from 'viem';
+import { parseAbi, parseEther, parseGwei, formatGwei, formatEther, Hex, encodeFunctionData, ContractFunctionRevertedError } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { getClient } from './client';
 import { getChain } from './chains';
@@ -41,6 +41,12 @@ import {
 // job (runs every 30s with its own budget) finalizes confirmation. The txHash is
 // already persisted via onBroadcast (C1), so this never re-broadcasts.
 const RECEIPT_WAIT_TIMEOUT_MS = 6_000;
+
+// H1 + M1: gas limit + cost ceilings.
+const MAX_GAS_LIMIT = 3_000_000n;      // hard ceiling on gas units — mint txs rarely exceed ~500k
+const GAS_LIMIT_BUFFER_NUM = 12n;      // 1.2× safety buffer on the on-chain estimate
+const GAS_LIMIT_BUFFER_DEN = 10n;
+const DEFAULT_MAX_GAS_PRICE_GWEI = 1500; // sanity ceiling — catches absurd spikes, not normal mints
 
 // ─── Types ───────────────────────────────────────────
 
@@ -365,6 +371,88 @@ export async function simulateMint(
   }
 }
 
+// M2 + M4: simulate the EXACT resolved calldata we will broadcast, via eth_call.
+// Reuses the pre-resolved {to,data,value} so there is no duplicate RPC work and
+// no risk of simulating something different from what actually gets sent.
+async function simulateResolvedMint(
+  address: Hex,
+  chain: string,
+  tx: { to: Hex; data: Hex; value: bigint },
+  userId?: string,
+): Promise<SimulationResult> {
+  try {
+    const client = getClient(chain, userId);
+    await client.call({ account: address, to: tx.to, data: tx.data, value: tx.value });
+    return { success: true };
+  } catch (error) {
+    let revertMsg = '';
+    if (error instanceof ContractFunctionRevertedError) {
+      revertMsg = error.reason ?? error.shortMessage ?? error.message ?? '';
+    } else if (error instanceof Error) {
+      revertMsg = error.message ?? '';
+    }
+    const reason = classifyRevert(revertMsg);
+    addBreadcrumb({
+      category: 'simulation',
+      message: `Mint simulation failed: ${reason}`,
+      level: 'warning',
+      data: { chain, contract: tx.to, revertMsg: revertMsg.slice(0, 200), reason },
+    });
+    return { success: false, reason, revertReason: revertMsg.slice(0, 300) };
+  }
+}
+
+// H1: estimate gas for the resolved calldata, add a 20% buffer, and cap at
+// MAX_GAS_LIMIT. Returns undefined on failure so the caller lets viem estimate.
+async function estimateResolvedGas(
+  address: Hex,
+  chain: string,
+  tx: { to: Hex; data: Hex; value: bigint },
+  userId?: string,
+): Promise<bigint | undefined> {
+  try {
+    const client = getClient(chain, userId);
+    const estimate = await client.estimateGas({ account: address, to: tx.to, data: tx.data, value: tx.value });
+    const buffered = (estimate * GAS_LIMIT_BUFFER_NUM) / GAS_LIMIT_BUFFER_DEN;
+    return buffered > MAX_GAS_LIMIT ? MAX_GAS_LIMIT : buffered;
+  } catch {
+    return undefined;
+  }
+}
+
+// M1: cost ceiling guard. Rejects the mint BEFORE broadcast if the gas price or
+// the worst-case total cost (gas + mint value) exceeds the configured limits.
+// Aborting is strictly safer than silently capping maxFeePerGas below baseFee,
+// which would leave a transaction that can never be included.
+function enforceCostCeiling(
+  gasLimit: bigint | undefined,
+  gasParams: GasParams,
+  value: bigint,
+  options: { maxGasPriceGwei?: number; maxTxCostWei?: bigint },
+): { ok: true } | { ok: false; error: string } {
+  const gasPrice = gasParams.maxFeePerGas ?? gasParams.gasPrice;
+  if (gasPrice !== undefined) {
+    const maxGasPriceWei = parseGwei(String(options.maxGasPriceGwei ?? DEFAULT_MAX_GAS_PRICE_GWEI));
+    if (gasPrice > maxGasPriceWei) {
+      return {
+        ok: false,
+        error: `GasCeilingExceeded: gas price ${formatGwei(gasPrice)} gwei exceeds cap of ${formatGwei(maxGasPriceWei)} gwei. `
+          + 'Network is congested — raise maxGasPriceGwei to override.',
+      };
+    }
+    if (gasLimit !== undefined && options.maxTxCostWei !== undefined) {
+      const totalCost = gasLimit * gasPrice + value;
+      if (totalCost > options.maxTxCostWei) {
+        return {
+          ok: false,
+          error: `GasCeilingExceeded: estimated max cost ${formatEther(totalCost)} ETH exceeds cap of ${formatEther(options.maxTxCostWei)} ETH.`,
+        };
+      }
+    }
+  }
+  return { ok: true };
+}
+
 export async function executeMint(
   address: Hex,
   chain: string,
@@ -373,6 +461,9 @@ export async function executeMint(
   options: {
     walletId: string;          // REQUIRED — wallet to sign with
     privateMempool?: boolean;  // Optional — route via Flashbots/MEV Blocker (Ethereum only)
+    skipSimulation?: boolean;  // M4: per-task simulation bypass (env var remains a global override)
+    maxGasPriceGwei?: number;  // M1: abort if resolved gas price exceeds this (gwei)
+    maxTxCostWei?: bigint;     // M1: abort if worst-case total cost (gas + value) exceeds this
     // C1 fix: invoked the instant the transaction is broadcast (hash known),
     // BEFORE waiting for the receipt. The caller persists the txHash to the DB
     // here so that if the serverless function is killed during the receipt wait
@@ -440,10 +531,25 @@ export async function executeMint(
     //
     // Sequential simulation (the naive approach) would gate broadcast behind an extra
     // round-trip, adding ~100–300ms per mint — critical when racing bots on a live drop.
-    const [simulation, nonceResult, gasParams] = await Promise.all([
-      simulateMint(address, chain, params, userId),
+    // M2: resolve the on-chain call ONCE up front. This performs the SeaDrop
+    // fee-recipient lookup a single time and lets simulation, gas estimation, and
+    // the broadcast all reuse the exact same {to, data, value} — no duplicate RPC
+    // work, and the simulation dry-runs precisely what will be broadcast.
+    const mintTx = await resolveMintTx(address, chain, params, userId);
+
+    // M4: per-task simulation skip (SKIP_MINT_SIMULATION env remains a global override).
+    const skipSimulation = options.skipSimulation === true || process.env.SKIP_MINT_SIMULATION === 'true';
+
+    // C-03 + Simulation + Gas estimate all run in parallel (zero added latency):
+    // eth_call dry-run, nonce allocation, EIP-1559 gas params, and gas-limit estimate
+    // resolve concurrently in the same ~100–300ms RPC window.
+    const [simulation, nonceResult, gasParams, estimatedGas] = await Promise.all([
+      skipSimulation
+        ? Promise.resolve<SimulationResult>({ success: true })
+        : simulateResolvedMint(address, chain, mintTx, userId),
       allocateNonce(address, chain).catch(() => null),
       resolveGasParams(chain, userId),
+      estimateResolvedGas(address, chain, mintTx, userId),
     ]);
     const allocatedNonce: number | undefined = nonceResult?.nonce;
 
@@ -479,6 +585,21 @@ export async function executeMint(
     // Deferring decryption minimises the key's memory window to the sign +
     // broadcast phase (~5–20ms). During the ~100–300ms simulation window the
     // key does not exist in memory. If simulation fails, it is never decrypted.
+    // H1: resolve the gas limit. Prefer an explicit task gasLimit; otherwise use
+    // the buffered on-chain estimate (capped at MAX_GAS_LIMIT). Falls back to
+    // viem's own estimation (undefined) only if estimation failed entirely.
+    const resolvedGasLimit: bigint | undefined =
+      params.gasLimit ? BigInt(params.gasLimit) : estimatedGas;
+
+    // M1: abort BEFORE spending if gas price or worst-case total cost exceeds the ceiling.
+    const costCheck = enforceCostCeiling(resolvedGasLimit, gasParams, mintTx.value, options);
+    if (!costCheck.ok) {
+      if (nonceResult?.nonce !== undefined) {
+        void releaseInflightNonce(address, chain, nonceResult.nonce).catch(() => undefined);
+      }
+      return { success: false, error: costCheck.error };
+    }
+
     let privateKey: Hex;
     try {
       const decrypted = await getDecryptedPrivateKey(options.walletId, userId);
@@ -509,7 +630,7 @@ export async function executeMint(
     // ── Build and broadcast transaction ──────────────────────────────────────
     // Resolve target + calldata + value (handles SeaDrop routing). For SeaDrop
     // this is sent to the SeaDrop contract with value = quantity * mintPrice.
-    const { to: mintTo, data: mintData, value } = await resolveMintTx(address, chain, params, userId);
+    const { to: mintTo, data: mintData, value } = mintTx; // M2: reuse the tx resolved above
     const account = privateKeyToAccount(privateKey);
     const walletClient = getWalletClient(chain, account, { userId });
 
@@ -537,7 +658,7 @@ export async function executeMint(
         to: mintTo,
         data: mintData,
         value,
-        gas: params.gasLimit ? BigInt(params.gasLimit) : undefined,
+        gas: resolvedGasLimit, // H1: estimated + 20% buffer, capped at MAX_GAS_LIMIT
         ...(allocatedNonce !== undefined && { nonce: allocatedNonce }),
       };
 

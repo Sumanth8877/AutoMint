@@ -94,7 +94,7 @@ export async function addMintTask(userId: string, data: {
 export async function executeMintTask(
   taskId: string,
   userId: string,
-  options: { existingLockToken?: string; privateMempool?: boolean; notifyStarted?: boolean; collectionName?: string } = {},
+  options: { existingLockToken?: string; privateMempool?: boolean; notifyStarted?: boolean; collectionName?: string; skipSimulation?: boolean; maxGasPriceGwei?: number; maxTxCostWei?: bigint } = {},
 ): Promise<{ success: boolean; txHash?: string; error?: string }> {
   // Validate that taskId is a UUID, not a contract address
   if (!taskId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
@@ -229,6 +229,10 @@ export async function executeMintTask(
       // User can force-disable via options.privateMempool = false (e.g. if Flashbots latency
       // is unacceptable for high-speed mint races where speed > protection).
       privateMempool: options.privateMempool ?? (chain === 'ethereum'),
+      // M1/M4: pass through per-task cost ceilings + simulation bypass.
+      skipSimulation: options.skipSimulation,
+      maxGasPriceGwei: options.maxGasPriceGwei,
+      maxTxCostWei: options.maxTxCostWei,
       // C1 fix: persist txHash to the DB the instant the tx is broadcast, before the
       // receipt wait. If the function is killed mid-wait the task already has a txHash,
       // so recoverStuckMintTasks routes it to receipt-recheck (Mode B) and NEVER
@@ -299,7 +303,9 @@ export async function executeMintTask(
   await getDb().transaction(async (tx) => {
     await tx.update(mintTasks)
       .set({ status: 'completed', txHash: result.txHash || null, confirmedAt: result.txHash ? now : null, updatedAt: now })
-      .where(eq(mintTasks.id, taskId));
+      // M3: guard the transition — only finalize a task still in an executing state.
+      // Prevents a late recovery/recheck writer from racing the completion write.
+      .where(and(eq(mintTasks.id, taskId), inArray(mintTasks.status, ['running', 'unconfirmed'])));
 
     if (result.txHash) {
       await tx.insert(mintHistory).values({

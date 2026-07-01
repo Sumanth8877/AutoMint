@@ -537,7 +537,13 @@ export async function executeScheduledMint(taskId: string) {
 
       const mintState = await getMintState(task.contractAddress, wallet.chain);
       await addTaskLog(taskId, 'mint_state_check', 'info', `Mint state: ${mintState.status}`);
-      if (mintState.status !== 'LIVE') {
+      // H2: only NOT_STARTED and ENDED enter the watch/reschedule branch.
+      // UNKNOWN (contract exposes no readable state getters — common for custom
+      // or proxy mints, and on Base/Polygon where there's no OpenSea fallback)
+      // now falls through to execution. The pre-broadcast eth_call simulation is
+      // the gate: it will cleanly classify wrong_phase / sold_out / paused if the
+      // mint truly isn't open, instead of the task failing forever as "not live".
+      if (mintState.status === 'NOT_STARTED' || mintState.status === 'ENDED') {
         // H-5 fix: cap reschedule attempts to prevent infinite QStash billing.
         // We repurpose maxRetries as a unified attempt counter — each reschedule
         // for a NOT_STARTED mint decrements it by 1.  When it reaches 0 we mark
@@ -634,6 +640,9 @@ export async function executeScheduledMint(taskId: string) {
           });
           return { success: false, skipped: true, error: `Mint not live: ${mintState.status}` };
         }
+      } else if (mintState.status === 'UNKNOWN') {
+        // H2: state unreadable on-chain — proceed to execution; simulation gates it.
+        await addTaskLog(taskId, 'mint_state_unknown', 'info', 'Mint state UNKNOWN — attempting mint; pre-broadcast simulation will gate eligibility');
       }
     }
 
