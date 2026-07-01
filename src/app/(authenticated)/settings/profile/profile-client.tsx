@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useClerk, useUser } from '@clerk/nextjs';
 import { KeyRound, Save, Trash2, User } from 'lucide-react';
 import Button from '@/components/ui/Button';
+import { ResetDataModal } from '@/components/settings/ResetDataModal';
 import Card from '@/components/ui/Card';
 import { apiRequest } from '@/lib/api/client';
 
@@ -47,6 +48,7 @@ export default function ProfileClient() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
   const [savingName, setSavingName] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
@@ -319,5 +321,7 @@ export default function ProfileClient() {
         </div>
       ) : null}
     </div>
+
+      {resetOpen && <ResetDataModal onClose={() => setResetOpen(false)} />}
   );
 }
