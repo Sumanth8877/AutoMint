@@ -4,8 +4,8 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   ArrowUpCircle, CheckCircle2, ChevronDown, ChevronUp,
   ClipboardCheck, ClipboardCopy, Download, ExternalLink, Package,
-  RefreshCw, ShieldAlert, ShieldCheck, XCircle, Zap, Clock,
-  CalendarClock, ToggleLeft, ToggleRight, Flame, Activity,
+  RefreshCw, ShieldAlert, XCircle, Zap,
+  CalendarClock, Flame, Activity,
 } from 'lucide-react';
 import type {
   DependencyAuditReport,
