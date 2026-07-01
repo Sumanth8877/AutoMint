@@ -104,8 +104,14 @@ export async function GET(req: Request) {
     ]);
 
     const total = Number(countRows[0]?.total ?? 0);
+    // Safely serialize dates to ISO strings for the client
+    const serializedItems = items.map(item => ({
+      ...item,
+      createdAt: item.createdAt instanceof Date ? item.createdAt.toISOString() : item.createdAt,
+    }));
+
     return NextResponse.json({
-      items,
+      items: serializedItems,
       page,
       limit,
       total,

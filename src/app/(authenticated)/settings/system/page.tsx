@@ -1,14 +1,11 @@
 /**
  * app/(authenticated)/settings/system/page.tsx
- *
- * Settings → System → Dependency Update Center
  */
-
 import { redirect } from 'next/navigation';
 import { auth } from '@clerk/nextjs/server';
 import { DependencyUpdateCenter } from '@/components/settings/DependencyUpdateCenter';
+import { MigrationBanner } from '@/components/settings/MigrationBanner';
 
-// Always fresh — dependency state changes frequently
 export const revalidate = 0;
 
 export default async function SystemMaintenancePage() {
@@ -23,6 +20,8 @@ export default async function SystemMaintenancePage() {
           Dependency audits and package updates for AutoMint.
         </p>
       </div>
+
+      <MigrationBanner />
 
       <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
         <DependencyUpdateCenter />
