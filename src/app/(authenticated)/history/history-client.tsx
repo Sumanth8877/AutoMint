@@ -271,7 +271,7 @@ export default function HistoryClient() {
   // Fetch analyzer history with React Query
   const { data: analyzerData, isLoading: analyzerLoading, error: analyzerError } = useQuery({
     queryKey: ['analyzer-history', activeTab, page, search, analyzerFilter],
-    queryFn: () => apiRequest<HistoryResponse<AnalyzerHistoryRow>>(`/api/history?tab=analyzer&page=${page}&search=${search}&filter=${analyzerFilter}`),
+    queryFn: () => apiRequest<HistoryResponse<AnalyzerHistoryRow>>(`/api/analyzer/history?page=${page}&search=${search}&filter=${analyzerFilter}`),
     enabled: activeTab === 'analyzer',
   });
 

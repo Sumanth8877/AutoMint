@@ -2,8 +2,8 @@ import { Suspense } from 'react';
 import HistoryClient from './history-client';
 import { Skeleton } from '@/components/ui/skeleton';
 
-// Cache this page for 4 hours
-export const revalidate = 14400;
+// Always fetch fresh — analyzer results must appear immediately
+export const revalidate = 0;
 
 export default function HistoryPage() {
   return (
