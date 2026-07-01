@@ -40,8 +40,6 @@ export default function HomePage() {
   const [url, setUrl] = useState('');
   const [copied, setCopied] = useState(false);
   const [inputError, setInputError] = useState<string | null>(null);
-  const [isMinting, setIsMinting] = useState(false);
-  const [mintSuccess, setMintSuccess] = useState(false);
 
   const analyzerHref = url.trim() ? `/analyzer?input=${encodeURIComponent(url.trim())}` : '/analyzer';
 
@@ -72,39 +70,7 @@ export default function HomePage() {
     router.push(analyzerHref);
   };
 
-  const instantMint = async () => {
-    if (!url.trim()) {
-      setInputError('Please enter a mint URL');
-      return;
-    }
 
-    setIsMinting(true);
-    setInputError(null);
-    setMintSuccess(false);
-
-    try {
-      const response = await fetch('/api/instant-mint', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: url.trim() }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to execute instant mint');
-      }
-
-      setMintSuccess(true);
-      setUrl('');
-      // Redirect to mints page after successful mint
-      setTimeout(() => router.push('/mints'), 1500);
-    } catch (error) {
-      setInputError(error instanceof Error ? error.message : 'Failed to execute instant mint');
-    } finally {
-      setIsMinting(false);
-    }
-  };
 
   return (
     <main className="automint-shell min-h-screen overflow-hidden">
@@ -211,34 +177,10 @@ export default function HomePage() {
                 </div>
                 {inputError ? <div className="mt-3 rounded-lg border border-danger/20 bg-danger/10 p-3 text-sm text-danger" role="alert">{inputError}</div> : null}
 
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <Button type="button" size="lg" onClick={copyUrl} disabled={!url}>
+                <div className="mt-4">
+                <Button type="button" size="lg" onClick={copyUrl} disabled={!url} className="w-full">
                   {copied ? <CheckCircle2 className="h-4 w-4" aria-hidden="true" /> : <Layers3 className="h-4 w-4" aria-hidden="true" />}
                   {copied ? 'Copied' : 'Copy URL'}
-                </Button>
-                <Button
-                  type="button"
-                  size="lg"
-                  onClick={instantMint}
-                  disabled={!url || isMinting}
-                  className="bg-success hover:bg-success/90"
-                >
-                  {isMinting ? (
-                    <>
-                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                      Minting...
-                    </>
-                  ) : mintSuccess ? (
-                    <>
-                      <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                      Success!
-                    </>
-                  ) : (
-                    <>
-                      Mint
-                      <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                    </>
-                  )}
                 </Button>
                 </div>
               </form>
