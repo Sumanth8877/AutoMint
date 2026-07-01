@@ -1,4 +1,3 @@
-import { Button } from '@/components/ui/button';
 import { ExternalLink, BarChart3, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 
