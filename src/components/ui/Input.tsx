@@ -6,9 +6,12 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   hint?: string;
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
+  /** Alias for leftIcon — accepted for backward compat */
+  icon?: React.ReactNode;
 }
 
-export default function Input({ label, error, hint, leftIcon, rightIcon, className = '', id, ...props }: InputProps) {
+export default function Input({ label, error, hint, leftIcon, icon, rightIcon, className = '', id, ...props }: InputProps) {
+  const resolvedLeftIcon = leftIcon ?? icon;
   const inputId = id ?? (label ? label.toLowerCase().replace(/\s+/g, '-') : undefined);
   return (
     <div className="flex flex-col gap-1.5">
@@ -18,8 +21,8 @@ export default function Input({ label, error, hint, leftIcon, rightIcon, classNa
         </label>
       )}
       <div className="relative flex items-center">
-        {leftIcon && (
-          <span className="absolute left-3 flex items-center text-muted pointer-events-none">{leftIcon}</span>
+        {resolvedLeftIcon && (
+          <span className="absolute left-3 flex items-center text-muted pointer-events-none">{resolvedLeftIcon}</span>
         )}
         <input
           id={inputId}

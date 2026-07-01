@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 
 interface BadgeProps {
   children: ReactNode;
-  variant?: 'default' | 'success' | 'warning' | 'danger' | 'neon' | 'gold' | 'purple';
+  variant?: 'default' | 'success' | 'warning' | 'danger' | 'neon' | 'gold' | 'purple' | 'info';
   dot?: boolean;
   pulse?: boolean;
   className?: string;
@@ -16,6 +16,7 @@ const variantMap = {
   neon:    { bg: 'bg-neon/[0.08]', text: 'text-neon',   border: 'border-neon/20',    dot: 'bg-neon shadow-[0_0_6px_rgba(0,245,255,0.8)]' },
   gold:    { bg: 'bg-gold/[0.08]', text: 'text-gold',   border: 'border-gold/20',    dot: 'bg-gold shadow-[0_0_6px_rgba(245,158,11,0.8)]' },
   purple:  { bg: 'bg-primary/10', text: 'text-primary', border: 'border-primary/25', dot: 'bg-primary shadow-[0_0_6px_rgba(124,58,237,0.8)]' },
+  info:    { bg: 'bg-info/[0.08]',  text: 'text-info',    border: 'border-info/20',    dot: 'bg-info shadow-[0_0_6px_rgba(59,130,246,0.8)]' },
 };
 
 export default function Badge({ children, variant = 'default', dot = false, pulse = false, className = '' }: BadgeProps) {

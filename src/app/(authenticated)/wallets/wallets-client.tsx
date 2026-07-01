@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Copy, Eye, EyeOff, ExternalLink, Plus, RefreshCw, Shield,
-  Star, Trash2, Wallet, Zap, TrendingUp, Activity,
+  Star, Trash2, Wallet, TrendingUp, Activity,
 } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';

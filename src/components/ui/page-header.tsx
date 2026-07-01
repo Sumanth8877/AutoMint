@@ -4,6 +4,8 @@ import type { ReactNode } from 'react';
 interface PageHeaderProps {
   title: string;
   subtitle?: string;
+  eyebrow?: string;
+  description?: string;
   icon?: LucideIcon;
   iconTone?: 'neon' | 'gold' | 'purple' | 'danger' | 'success';
   actions?: ReactNode;
@@ -18,7 +20,7 @@ const iconToneMap: Record<string, { bg: string; text: string; border: string; gl
   success: { bg: 'bg-success/10', text: 'text-success', border: 'border-success/25', glow: '0 0 20px rgba(16,185,129,0.30)' },
 };
 
-export function PageHeader({ title, subtitle, icon: Icon, iconTone = 'neon', actions, badge }: PageHeaderProps) {
+export function PageHeader({ title, subtitle, eyebrow, description, icon: Icon, iconTone = 'neon', actions, badge }: PageHeaderProps) {
   const t = iconToneMap[iconTone];
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -32,11 +34,13 @@ export function PageHeader({ title, subtitle, icon: Icon, iconTone = 'neon', act
           </div>
         )}
         <div>
+          {eyebrow && <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{eyebrow}</p>}
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-black tracking-tight text-text">{title}</h1>
             {badge}
           </div>
           {subtitle && <p className="mt-0.5 text-sm text-muted">{subtitle}</p>}
+          {description && <p className="mt-1 text-xs text-muted">{description}</p>}
         </div>
       </div>
       {actions && <div className="flex items-center gap-2">{actions}</div>}

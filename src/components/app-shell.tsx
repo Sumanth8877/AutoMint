@@ -1,15 +1,15 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import AutoMintUserButton from '@/components/auth/automint-user-button';
 import { apiRequest } from '@/lib/api/client';
 import {
-  BarChart3, Bell, ChevronRight, FolderKanban, Gauge, History,
+  BarChart3, ChevronRight, FolderKanban, Gauge, History,
   LayoutDashboard, Menu, Search, Settings, Sparkles,
-  Telescope, Wallet, X, Zap, Activity, Shield,
+  Telescope, Wallet, X, Zap, Activity,
 } from 'lucide-react';
 
 const navItems = [
@@ -30,13 +30,6 @@ type SearchResult = {
   title: string;
   subtitle: string | null;
   href: string;
-};
-
-type ActivityItem = {
-  id: string;
-  title: string;
-  type: string;
-  createdAt: string;
 };
 
 function Logo() {
@@ -208,8 +201,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const pathname = usePathname();
-
-  useEffect(() => { setMobileOpen(false); }, [pathname]);
 
   async function handleSearch(query: string) {
     if (!query.trim()) { setSearchResults([]); return; }

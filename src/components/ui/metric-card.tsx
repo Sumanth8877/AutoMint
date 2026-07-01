@@ -8,7 +8,7 @@ interface MetricCardProps {
   change?: string;
   changeDir?: 'up' | 'down' | 'neutral';
   icon?: LucideIcon;
-  tone?: 'primary' | 'neon' | 'gold' | 'success' | 'warning' | 'danger' | 'muted';
+  tone?: 'primary' | 'neon' | 'gold' | 'success' | 'warning' | 'danger' | 'muted' | 'accent';
 }
 
 const toneMap: Record<string, { text: string; bg: string; border: string; glow: string }> = {
@@ -19,6 +19,7 @@ const toneMap: Record<string, { text: string; bg: string; border: string; glow: 
   warning: { text: 'text-warning', bg: 'bg-warning/10', border: 'border-warning/20', glow: '0 0 20px rgba(245,158,11,0.20)' },
   danger:  { text: 'text-danger',  bg: 'bg-danger/10',  border: 'border-danger/20',  glow: '0 0 20px rgba(239,68,68,0.20)' },
   muted:   { text: 'text-muted',   bg: 'bg-white/5',    border: 'border-border',      glow: 'none' },
+  accent:  { text: 'text-neon',    bg: 'bg-neon/10',    border: 'border-neon/20',    glow: '0 0 20px rgba(0,245,255,0.25)' },
 };
 
 export function MetricCard({ label, value, detail, change, changeDir = 'neutral', icon: Icon, tone = 'primary' }: MetricCardProps) {

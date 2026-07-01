@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import {
-  Activity, AlertTriangle, ArrowRight, BarChart3, CheckCircle2,
-  Clock3, Flame, Gauge, Radio, ShieldCheck, Sparkles, Target,
-  TrendingUp, Wallet, Zap, Eye, Cpu,
+  Activity, ArrowRight, CheckCircle2,
+  Flame, Gauge, Radio, ShieldCheck, Target,
+  Wallet, Zap, Eye, Cpu,
 } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Card from '@/components/ui/Card';
@@ -87,8 +87,9 @@ function statusConfig(status: string) {
 }
 
 export default async function DashboardPage() {
-  const user = await requireApiUser();
-  const d = await getDashboardData(user.id);
+  const authResult = await requireApiUser();
+  const userId = 'id' in authResult ? (authResult as any).id : (authResult as any).user?.id ?? '';
+  const d = await getDashboardData(userId);
 
   const totalMints = d.completedTasks + d.pendingTasks + d.failedTasks;
   const successRate = totalMints > 0 ? Math.round((d.completedTasks / totalMints) * 100) : 0;
@@ -215,7 +216,7 @@ export default async function DashboardPage() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-text truncate">
-                      {h.contractAddress ? `${h.contractAddress.slice(0, 6)}…${h.contractAddress.slice(-4)}` : 'Unknown Contract'}
+                      {'contractAddress' in h && h.contractAddress ? `${(h.contractAddress as string).slice(0, 6)}…${(h.contractAddress as string).slice(-4)}` : `Mint #${h.id.slice(-6)}`}
                     </p>
                     <p className="text-xs text-muted">
                       {new Date(h.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}

@@ -4,20 +4,19 @@ import { useEffect, useMemo, useReducer, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import {
-  CalendarClock, LinkIcon, MoreHorizontal, Play, Plus, RotateCcw,
-  Trash2, XCircle, Zap, Clock, CheckCircle2, AlertCircle, Shield,
-  TrendingUp, Cpu, Target, ExternalLink,
+  CalendarClock, LinkIcon, Play, Plus, RotateCcw,
+  Trash2, XCircle, Zap, CheckCircle2, AlertCircle,
+  Cpu, ExternalLink,
 } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
-import Card from '@/components/ui/Card';
 import Input from '@/components/ui/Input';
 import { EmptyState } from '@/components/ui/empty-state';
 import { MetricCard } from '@/components/ui/metric-card';
 import { Modal } from '@/components/ui/modal';
 import { PageHeader } from '@/components/ui/page-header';
 import { TaskConsole } from '@/components/ui/task-console';
-import { Skeleton, SkeletonCard } from '@/components/ui/skeleton';
+import { SkeletonCard } from '@/components/ui/skeleton';
 import { apiRequest } from '@/lib/api/client';
 import type { WalletType } from '@/lib/wallets/detection';
 
@@ -31,8 +30,6 @@ type MintTask = {
 };
 
 type WalletRecord = { id: string; address: string; nickname: string | null; chain: string; walletType: WalletType; isDefault: boolean; };
-type CollectionRecord = { id: string; name: string | null; contractAddress: string; chain: string; };
-
 type MintsForm = { mintUrl: string; wlMode: boolean; scheduleTime: string };
 type MintsState = {
   saving: boolean; updatingId: string | null; deletingId: string | null;
@@ -211,7 +208,6 @@ export default function MintsClient() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
 
   const { data: tasks = [], isLoading: tasksLoading } = useQuery<MintTask[]>({
