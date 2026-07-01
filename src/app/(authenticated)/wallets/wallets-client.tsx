@@ -218,7 +218,7 @@ export default function WalletsClient() {
               <option value="SOLANA">Solana</option>
             </select>
           </div>
-          <Input label="Private Key" type="password" placeholder="Enter private key (stored encrypted)" value={form.privateKey} onChange={e => setForm(p => ({ ...p, privateKey: e.target.value }))} required />
+          <Input label="Private Key" type="password" placeholder="Enter private key (stored encrypted)" value={form.privateKey} onChange={e => setForm(p => ({ ...p, privateKey: e.target.value }))} required error={formError ?? undefined} />
           <Input label="Nickname (optional)" placeholder="Hot wallet 1" value={form.nickname} onChange={e => setForm(p => ({ ...p, nickname: e.target.value }))} />
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-bold uppercase tracking-widest text-secondary">Chain</label>
