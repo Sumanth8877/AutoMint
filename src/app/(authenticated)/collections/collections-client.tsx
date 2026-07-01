@@ -126,11 +126,11 @@ export default function CollectionsClient() {
 
   const { data: collections = [], isLoading } = useQuery<Collection[]>({
     queryKey: ['collections'],
-    queryFn: () => apiRequest<Collection[]>('/api/collections'),
+    queryFn: () => apiRequest<{ collections: Collection[] }>('/api/collections').then(r => r.collections ?? []),
   });
 
   const addMutation = useMutation({
-    mutationFn: (body: object) => apiRequest('/api/collections', { method: 'POST', body: JSON.stringify(body) }),
+    mutationFn: (body: object) => apiRequest<{ collection: Collection }>('/api/collections', { method: 'POST', body: JSON.stringify(body) }).then(r => r.collection),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['collections'] }); setAddOpen(false); setForm({ name: '', contractAddress: '', chain: 'ethereum' }); },
     onError: (e: Error) => setFormError(e.message),
   });

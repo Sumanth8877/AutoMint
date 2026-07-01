@@ -210,13 +210,13 @@ export default function MintsClient() {
 
   const { data: tasks = [], isLoading: tasksLoading } = useQuery<MintTask[]>({
     queryKey: ['mints'],
-    queryFn: () => apiRequest<MintTask[]>('/api/mints'),
+    queryFn: () => apiRequest<{ tasks: MintTask[] }>('/api/mints').then(r => r.tasks ?? []),
     refetchInterval: 6000,
   });
 
   const { data: wallets = [] } = useQuery<WalletRecord[]>({
     queryKey: ['wallets'],
-    queryFn: () => apiRequest<WalletRecord[]>('/api/wallets'),
+    queryFn: () => apiRequest<{ wallets: WalletRecord[] }>('/api/wallets').then(r => r.wallets ?? []),
   });
 
   const createMint = useMutation({

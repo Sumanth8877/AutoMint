@@ -121,7 +121,7 @@ function WalletCard({
 
 export default function WalletsClient() {
   const [addOpen, setAddOpen] = useState(false);
-  const [form, setForm] = useState({ address: '', privateKey: '', nickname: '', chain: 'ethereum' });
+  const [form, setForm] = useState({ walletType: 'EVM' as 'EVM' | 'SOLANA', privateKey: '', nickname: '', chain: 'ethereum' });
   const [formError, setFormError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [settingDefaultId, setSettingDefaultId] = useState<string | null>(null);
@@ -130,12 +130,12 @@ export default function WalletsClient() {
 
   const { data: wallets = [], isLoading } = useQuery<WalletRecord[]>({
     queryKey: ['wallets'],
-    queryFn: () => apiRequest<WalletRecord[]>('/api/wallets'),
+    queryFn: () => apiRequest<{ wallets: WalletRecord[] }>('/api/wallets').then(r => r.wallets ?? []),
   });
 
   const addMutation = useMutation({
-    mutationFn: (body: object) => apiRequest('/api/wallets', { method: 'POST', body: JSON.stringify(body) }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['wallets'] }); setAddOpen(false); setForm({ address: '', privateKey: '', nickname: '', chain: 'ethereum' }); },
+    mutationFn: (body: object) => apiRequest<{ wallet: WalletRecord }>('/api/wallets', { method: 'POST', body: JSON.stringify(body) }).then(r => r.wallet),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['wallets'] }); setAddOpen(false); setForm({ walletType: 'EVM', privateKey: '', nickname: '', chain: 'ethereum' }); },
     onError: (e: Error) => setFormError(e.message),
   });
 
@@ -207,7 +207,17 @@ export default function WalletsClient() {
 
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add Wallet" subtitle="Securely add a signing wallet" tone="neon">
         <form onSubmit={e => { e.preventDefault(); setFormError(null); addMutation.mutate(form); }} className="space-y-4">
-          <Input label="Wallet Address" placeholder="0x…" value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))} required error={formError ?? undefined} />
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-bold uppercase tracking-widest text-secondary">Wallet Type</label>
+            <select
+              value={form.walletType}
+              onChange={e => setForm(p => ({ ...p, walletType: e.target.value as 'EVM' | 'SOLANA' }))}
+              className="h-10 w-full rounded-lg border border-border bg-background/80 px-3 text-sm text-text focus:border-neon/60 focus:outline-none focus:ring-2 focus:ring-neon/15"
+            >
+              <option value="EVM">EVM (Ethereum / Base / Polygon)</option>
+              <option value="SOLANA">Solana</option>
+            </select>
+          </div>
           <Input label="Private Key" type="password" placeholder="Enter private key (stored encrypted)" value={form.privateKey} onChange={e => setForm(p => ({ ...p, privateKey: e.target.value }))} required />
           <Input label="Nickname (optional)" placeholder="Hot wallet 1" value={form.nickname} onChange={e => setForm(p => ({ ...p, nickname: e.target.value }))} />
           <div className="flex flex-col gap-1.5">
