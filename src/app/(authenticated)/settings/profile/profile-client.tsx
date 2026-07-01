@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useClerk, useUser } from '@clerk/nextjs';
-import { KeyRound, Save, Trash2, User } from 'lucide-react';
+import { KeyRound, Save, Trash2, User } from 'lucide-react'  // AlertTriangle, Trash2 added;
 import Button from '@/components/ui/Button';
 import { ResetDataModal } from '@/components/settings/ResetDataModal';
 import Card from '@/components/ui/Card';
@@ -53,6 +53,9 @@ export default function ProfileClient() {
   const [savingPassword, setSavingPassword] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
 
   const email = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses[0]?.emailAddress ?? '';
   const clerkDisplayName = useMemo(() => {
@@ -65,6 +68,21 @@ export default function ProfileClient() {
     if (!notice || notice.type !== 'success') return;
 
     const timeout = window.setTimeout(() => setNotice(null), 3500);
+  async function handleResetData() {
+    setResetting(true);
+    try {
+      const resp = await fetch('/api/settings/reset-data', { method: 'DELETE' });
+      if (!resp.ok) throw new Error((await resp.json()).error ?? 'Reset failed');
+      setShowResetModal(false);
+      setResetSuccess(true);
+      setTimeout(() => setResetSuccess(false), 5000);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to reset data');
+    } finally {
+      setResetting(false);
+    }
+  }
+
     return () => window.clearTimeout(timeout);
   }, [notice]);
 
@@ -322,6 +340,84 @@ export default function ProfileClient() {
       ) : null}
 
       {resetOpen && <ResetDataModal onClose={() => setResetOpen(false)} />}
+
+      {/* Danger Zone */}
+      <Card className="border-danger/30 p-5">
+        <div className="flex items-start gap-3 mb-4">
+          <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-lg border border-danger/20 bg-danger/10 text-danger shrink-0">
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+          </div>
+          <div>
+            <h2 className="font-semibold text-text">Danger Zone</h2>
+            <p className="mt-1 text-sm text-muted">
+              Permanently delete your activity data. This cannot be undone.
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-lg border border-danger/20 bg-danger/5 p-4">
+          <div>
+            <p className="text-sm font-medium text-text">Reset All Data</p>
+            <p className="text-xs text-muted mt-0.5">
+              Deletes all analyzer history, mint tasks, scheduled tasks, and mint history. Wallets and collections are kept.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="danger"
+            onClick={() => setShowResetModal(true)}
+          >
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+            Reset Data
+          </Button>
+        </div>
+      </Card>
+
+      {/* Reset Data Confirmation Modal */}
+      {showResetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-danger/10 text-danger shrink-0">
+                <AlertTriangle className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-text">Are you absolutely sure?</h3>
+                <p className="text-sm text-muted">This action cannot be undone.</p>
+              </div>
+            </div>
+            <div className="mb-5 rounded-lg border border-danger/20 bg-danger/5 p-3 text-sm text-muted">
+              <p className="font-medium text-text mb-1">This will permanently delete:</p>
+              <ul className="list-disc list-inside space-y-0.5">
+                <li>All analyzer history</li>
+                <li>All mint tasks (pending &amp; completed)</li>
+                <li>All scheduled tasks</li>
+                <li>All mint transaction history</li>
+              </ul>
+              <p className="mt-2 text-xs">Wallets, collections, and settings are not affected.</p>
+            </div>
+            <div className="flex gap-3">
+              <Button
+                type="button"
+                variant="ghost"
+                className="flex-1"
+                onClick={() => setShowResetModal(false)}
+                disabled={resetting}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                className="flex-1"
+                loading={resetting}
+                onClick={handleResetData}
+              >
+                Yes, Delete Everything
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
