@@ -26,8 +26,12 @@ const isProtectedRoute = createRouteMatcher([
 // should NOT be blocked by Clerk's auth.protect(). Instead, they pass through
 // to the route handler where requireApiUser() validates the token.
 function hasBearerToken(request: NextRequest): boolean {
+  // L-02 fix: only the app's own API keys (prefixed "am_") may bypass Clerk.
+  // Previously ANY "Bearer <anything>" header skipped auth.protect(), so a
+  // browser extension or misconfigured client sending a stray Bearer header
+  // would bypass Clerk and hit requireApiUser() with a confusing 401.
   const authHeader = request.headers.get('authorization');
-  return Boolean(authHeader?.startsWith('Bearer '));
+  return Boolean(authHeader?.startsWith('Bearer am_'));
 }
 
 function isApiRoute(request: NextRequest): boolean {
