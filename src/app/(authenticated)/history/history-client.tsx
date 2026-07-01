@@ -27,6 +27,7 @@ type MintHistoryRow = {
   gasUsed: string | null;
   status: string;
   transactionHash: string | null;
+  failureReason: string | null;
   executionStartedAt: string;
   executionCompletedAt: string | null;
   updatedAt: string;
@@ -189,10 +190,11 @@ function formatCost(item: MintHistoryRow) {
 }
 
 function mintStatus(status: string): { label: string; variant: BadgeVariant } {
-  if (status === 'completed') return { label: 'SUCCESS', variant: 'success' };
+  if (status === 'completed' || status === 'confirmed') return { label: 'SUCCESS', variant: 'success' };
   if (status === 'failed') return { label: 'FAILED', variant: 'danger' };
   if (status === 'cancelled') return { label: 'CANCELLED', variant: 'warning' };
-  return { label: 'PENDING', variant: 'info' };
+  if (status === 'running') return { label: 'RUNNING', variant: 'info' };
+  return { label: 'PENDING', variant: 'default' };
 }
 
 function scheduledStatus(status: string): { label: string; variant: BadgeVariant } {
@@ -497,7 +499,11 @@ function MintHistoryTable({ rows, onSelect }: { rows: MintHistoryRow[]; onSelect
                 <td className="px-5 py-4 font-mono text-sm text-text">{row.quantity}</td>
                 <td className="px-5 py-4 font-mono text-sm text-text">{formatCost(row)}</td>
                 <td className="px-5 py-4"><Badge variant={status.variant}>{status.label}</Badge></td>
-                <td className="px-5 py-4 font-mono text-sm text-muted">{formatDuration(row.executionStartedAt, row.executionCompletedAt)}</td>
+                <td className="px-5 py-4 font-mono text-sm text-muted">
+                  {row.status === 'running' || row.status === 'pending' || row.status === 'ready'
+                    ? <span className="text-neon/70 animate-pulse">In progress…</span>
+                    : formatDuration(row.executionStartedAt, row.executionCompletedAt ?? row.updatedAt)}
+                </td>
               </tr>
             );
           })}
@@ -665,6 +671,7 @@ function DetailsModal({ selected, onClose }: { selected: SelectedRow; onClose: (
           ['Cost', formatCost(item)],
           ['Status', status.label],
           ['Transaction Hash', item.transactionHash || 'Not recorded'],
+          ...(item.failureReason ? [['Failure Reason', item.failureReason] as [string, string]] : []),
           ['Execution Started', formatDate(item.executionStartedAt)],
           ['Execution Completed', formatDate(item.executionCompletedAt)],
           ['Completion Time', formatDuration(item.executionStartedAt, item.executionCompletedAt)],
