@@ -17,7 +17,9 @@ import type { WalletType } from '@/lib/wallets/detection';
 
 type ImportWalletType = 'EVM' | 'SOLANA' | 'BITCOIN';
 
-type Chain = 'ethereum' | 'base' | 'polygon';
+// H-3 fix: Arbitrum was added to chains.ts but never reflected here.
+// Missing entry caused broken explorer links for all Arbitrum wallet addresses.
+type Chain = 'ethereum' | 'base' | 'polygon' | 'arbitrum';
 type SupportedWalletType = Exclude<WalletType, 'UNKNOWN'>;
 type WalletTypeFilter = 'ALL' | SupportedWalletType;
 
@@ -45,8 +47,9 @@ type WalletForm = {
 
 const explorerHosts: Record<Chain, string> = {
   ethereum: 'https://etherscan.io/address/',
-  base: 'https://basescan.org/address/',
-  polygon: 'https://polygonscan.com/address/',
+  base:     'https://basescan.org/address/',
+  polygon:  'https://polygonscan.com/address/',
+  arbitrum: 'https://arbiscan.io/address/',
 };
 
 const typeExplorerHosts: Partial<Record<SupportedWalletType, string>> = {
@@ -63,8 +66,9 @@ const walletTypeFilters: Array<{ value: WalletTypeFilter; label: string }> = [
 
 const chainOptions: Array<{ value: Chain; label: string }> = [
   { value: 'ethereum', label: 'Ethereum' },
-  { value: 'base', label: 'Base' },
-  { value: 'polygon', label: 'Polygon' },
+  { value: 'base',     label: 'Base' },
+  { value: 'polygon',  label: 'Polygon' },
+  { value: 'arbitrum', label: 'Arbitrum' },
 ];
 
 function shortAddress(address: string) {

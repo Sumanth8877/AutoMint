@@ -664,6 +664,7 @@ export default function MintsClient() {
           taskStatus={tasks.find(t => t.id === consoleTaskId)?.status ?? 'unknown'}
           contractAddress={tasks.find(t => t.id === consoleTaskId)?.contractAddress ?? null}
           phase={tasks.find(t => t.id === consoleTaskId)?.phase ?? null}
+          chain={collectionById.get(tasks.find(t => t.id === consoleTaskId)?.collectionId ?? '')?.chain ?? null}
         />
       ) : null}
 

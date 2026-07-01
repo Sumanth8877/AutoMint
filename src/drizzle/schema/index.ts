@@ -326,7 +326,13 @@ export const mintHistory = pgTable('mint_history', {
   blockNumber: text('block_number'),
   confirmedAt: timestamp('confirmed_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  // H-1 fix: missing indexes caused full table scans on every dashboard load and
+  // history query. These three cover the common WHERE/ORDER BY access patterns.
+  userIdIdx:         index('idx_mint_history_user_id').on(table.userId),
+  userCreatedAtIdx:  index('idx_mint_history_user_created_at').on(table.userId, table.createdAt),
+  statusIdx:         index('idx_mint_history_status').on(table.status),
+}));
 
 export const analyzerHistory = pgTable('analyzer_history', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -378,7 +384,11 @@ export const activities = pgTable('activities', {
   title: text('title').notNull(),
   metadata: json('metadata').$type<Record<string, unknown>>(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  // H-1 fix: activities are queried by userId on every notification-bell open.
+  userIdIdx:        index('idx_activities_user_id').on(table.userId),
+  userCreatedAtIdx: index('idx_activities_user_created_at').on(table.userId, table.createdAt),
+}));
 
 // ─── Task Logs ───────────────────────────────────────
 export const taskLogs = pgTable('task_logs', {
@@ -388,7 +398,12 @@ export const taskLogs = pgTable('task_logs', {
   status: text('status').notNull(),
   message: text('message'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  // H-1 fix: task console polls /api/mints/:id/logs every 2s on active tasks.
+  // Without this index every poll is a full table scan on task_logs.
+  taskIdIdx:           index('idx_task_logs_task_id').on(table.taskId),
+  taskIdCreatedAtIdx:  index('idx_task_logs_task_id_created_at').on(table.taskId, table.createdAt),
+}));
 
 // ─── Collection Syncs ────────────────────────────────
 export const collectionSyncs = pgTable('collection_syncs', {

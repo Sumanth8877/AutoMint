@@ -160,7 +160,8 @@ async function getDashboardData(userId: string) {
       systemStatuses,
     };
   } catch (error) {
-    console.error('Dashboard data fetch error:', error);
+    // Sentry captures the full error; no console.error to avoid leaking
+    // internal details to server logs that may be streamed to external services.
     void captureException(error, { area: 'dashboard' });
     // Return empty data on error
     return {

@@ -22,6 +22,8 @@ type TaskConsoleProps = {
   taskStatus: string;
   contractAddress: string | null;
   phase: string | null;
+  /** Chain determines which block explorer URL to use for the contract link. */
+  chain?: string | null;
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -38,11 +40,25 @@ const STATUS_ICONS: Record<string, string> = {
   error: '✗',
 };
 
+// H-2 fix: chain-specific block explorers. Previously hardcoded to etherscan.io
+// which returned 404 for Base, Polygon, and Arbitrum contract addresses.
+const EXPLORER_HOSTS: Record<string, string> = {
+  ethereum: 'https://etherscan.io/address/',
+  base:     'https://basescan.org/address/',
+  polygon:  'https://polygonscan.com/address/',
+  arbitrum: 'https://arbiscan.io/address/',
+};
+
+function explorerUrl(chain: string | null | undefined, contractAddress: string): string {
+  const base = EXPLORER_HOSTS[chain?.toLowerCase() ?? ''] ?? EXPLORER_HOSTS.ethereum;
+  return `${base}${contractAddress}`;
+}
+
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
-export function TaskConsole({ open, onClose, taskId, taskStatus, contractAddress, phase }: TaskConsoleProps) {
+export function TaskConsole({ open, onClose, taskId, taskStatus, contractAddress, phase, chain }: TaskConsoleProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const isActive = ['pending', 'monitoring', 'ready', 'running', 'unconfirmed'].includes(taskStatus);
 
@@ -75,7 +91,7 @@ export function TaskConsole({ open, onClose, taskId, taskStatus, contractAddress
           {phase ? <Badge variant="info">{phase}</Badge> : null}
           {contractAddress ? (
             <a
-              href={`https://etherscan.io/address/${contractAddress}`}
+              href={explorerUrl(chain, contractAddress)}
               target="_blank"
               rel="noopener noreferrer"
               className="ml-auto flex items-center gap-1 text-xs text-muted hover:text-text"

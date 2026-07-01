@@ -26,13 +26,6 @@ import AutoMintUserButton from '@/components/auth/automint-user-button';
 
 const badges = ['Real-Time Analysis', 'Risk Detection', 'Demand Forecasting', 'Automation Ready'];
 
-const stats = [
-  { label: 'Collections Analyzed', value: '42.8K' },
-  { label: 'Success Rate', value: '86%' },
-  { label: 'Average ROI', value: '2.7x' },
-  { label: 'Launchpads Monitored', value: '128' },
-];
-
 const features = [
   { title: 'Contract Detection', description: 'Identify verified mint contracts, function selectors, and launchpad mechanics.', icon: Radar },
   { title: 'Risk Scoring', description: 'Score contract, liquidity, holder, timing, and bot-pressure risk before committing capital.', icon: ShieldAlert },
@@ -40,12 +33,6 @@ const features = [
   { title: 'Mint Strategy Engine', description: 'Generate wallet count, fee, timing, and fallback recommendations for each drop.', icon: Target },
   { title: 'Wallet Optimization', description: 'Track funding, chain readiness, exposure, and nonce health across execution wallets.', icon: Wallet },
   { title: 'Automation Preparation', description: 'Package requirements, calldata, guardrails, and readiness checks for execution.', icon: Zap },
-];
-
-const recent = [
-  { name: 'Tensorian Seeds', chain: 'Solana', risk: 'Low', demand: 'High', score: 91 },
-  { name: 'Eclipse Foundry', chain: 'Base', risk: 'Medium', demand: 'Very high', score: 84 },
-  { name: 'Night Market Pass', chain: 'Ethereum', risk: 'Elevated', demand: 'Moderate', score: 69 },
 ];
 
 export default function HomePage() {
@@ -265,17 +252,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="border-y border-border bg-surface/35">
-        <div className="mx-auto grid max-w-[1280px] grid-cols-2 gap-px px-4 py-6 sm:px-6 lg:grid-cols-4">
-          {stats.map((stat) => (
-            <div key={stat.label} className="p-4">
-              <p className="font-mono text-3xl font-semibold text-text">{stat.value}</p>
-              <p className="mt-1 text-sm text-muted">{stat.label}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
       <section className="mx-auto max-w-[1280px] px-4 py-16 sm:px-6">
         <div className="mb-8 max-w-2xl">
           <p className="text-xs font-semibold uppercase text-accent">Platform</p>
@@ -290,31 +266,6 @@ export default function HomePage() {
             </Card>
           ))}
         </div>
-      </section>
-
-      <section className="mx-auto max-w-[1280px] px-4 pb-16 sm:px-6">
-        <Card className="overflow-hidden" tone="elevated">
-          <div className="flex flex-col gap-2 border-b border-border p-5 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase text-accent">Recent Analyses</p>
-              <h2 className="mt-1 text-xl font-semibold text-text">Latest mint intelligence</h2>
-            </div>
-            <Link href="/history" className="text-sm text-accent hover:text-text">View history</Link>
-          </div>
-          <div className="divide-y divide-border">
-            {recent.map((item) => (
-              <div key={item.name} className="grid gap-3 p-5 sm:grid-cols-[1fr_110px_110px_80px] sm:items-center">
-                <div>
-                  <p className="font-medium text-text">{item.name}</p>
-                  <p className="text-sm text-muted">{item.chain}</p>
-                </div>
-                <Badge variant={item.risk === 'Low' ? 'success' : item.risk === 'Medium' ? 'warning' : 'danger'}>{item.risk} risk</Badge>
-                <p className="text-sm text-muted">{item.demand}</p>
-                <p className="font-mono text-lg text-text">{item.score}</p>
-              </div>
-            ))}
-          </div>
-        </Card>
       </section>
 
       <footer className="border-t border-border px-4 py-8 sm:px-6">
