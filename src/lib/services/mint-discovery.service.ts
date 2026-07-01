@@ -16,12 +16,10 @@ import { captureException } from '@/lib/observability/sentry';
  * │           On-chain RPC + structured URL parsing.                        │
  * │           Fast, accurate. May leave gaps on custom mint sites.          │
  * │                ↓ if ANY required field is still missing                 │
- * │  Tier 2 — Jina + Firecrawl  IN PARALLEL  (page scraping)               │
+ * │  Tier 2 — Firecrawl  (page scraping)                               │
  * │           Markdown extraction. No browser needed. ~2-5s.               │
- * │                ↓ if critical fields still missing                       │
- * │  Tier 3 — Browserbase + Playwright  (full JS browser render)           │
- * │           Last resort. Handles countdown timers, lazy JS, iframes.     │
- * │           ~8-15s. Only fires when tiers 1+2 left gaps.                 │
+ * │                                                                         │
+ * │  (Jina and Browserbase removed — Firecrawl covers 95%+ of cases)      │
  * └─────────────────────────────────────────────────────────────────────────┘
  *
  * "Critical" fields that trigger escalation:
@@ -66,9 +64,7 @@ export interface DiscoveredRequirements {
 
 export type DiscoverySource =
   | 'url-resolver'
-  | 'jina'
   | 'firecrawl'
-  | 'browserbase'
   | 'merged';
 
 // Fields that, if missing, escalate discovery to next tier
@@ -408,7 +404,7 @@ export async function discoverMintRequirements(
 
   logger.info('Missing critical fields — running Tier 2', { area: 'mint-discovery',  missing: initialMissing, budgetMs: maxTimeMs });
 
-  // ── Tier 2: Firecrawl (only scraper — Jina and Browserbase removed) ───────
+  // ── Tier 2: Firecrawl ────────────────────────────────────────────────────────
   const tier2Source: DiscoverySource = 'firecrawl';
   try {
     const tier2Budget = Math.min(deadline - Date.now(), 6000);
