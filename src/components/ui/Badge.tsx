@@ -2,33 +2,29 @@ import type { ReactNode } from 'react';
 
 interface BadgeProps {
   children: ReactNode;
-  variant?: 'default' | 'success' | 'warning' | 'danger' | 'info';
+  variant?: 'default' | 'success' | 'warning' | 'danger' | 'neon' | 'gold' | 'purple';
   dot?: boolean;
+  pulse?: boolean;
   className?: string;
 }
 
-const dotColors = {
-  default: 'bg-muted',
-  success: 'bg-success',
-  warning: 'bg-warning',
-  danger: 'bg-danger',
-  info: 'bg-accent',
+const variantMap = {
+  default: { bg: 'bg-white/[0.06]', text: 'text-secondary', border: 'border-border', dot: 'bg-secondary' },
+  success: { bg: 'bg-success/10', text: 'text-success', border: 'border-success/25', dot: 'bg-success shadow-[0_0_6px_rgba(16,185,129,0.8)]' },
+  warning: { bg: 'bg-warning/10', text: 'text-warning', border: 'border-warning/25', dot: 'bg-warning shadow-[0_0_6px_rgba(245,158,11,0.8)]' },
+  danger:  { bg: 'bg-danger/10',  text: 'text-danger',  border: 'border-danger/25',  dot: 'bg-danger shadow-[0_0_6px_rgba(239,68,68,0.8)]' },
+  neon:    { bg: 'bg-neon/[0.08]', text: 'text-neon',   border: 'border-neon/20',    dot: 'bg-neon shadow-[0_0_6px_rgba(0,245,255,0.8)]' },
+  gold:    { bg: 'bg-gold/[0.08]', text: 'text-gold',   border: 'border-gold/20',    dot: 'bg-gold shadow-[0_0_6px_rgba(245,158,11,0.8)]' },
+  purple:  { bg: 'bg-primary/10', text: 'text-primary', border: 'border-primary/25', dot: 'bg-primary shadow-[0_0_6px_rgba(124,58,237,0.8)]' },
 };
 
-export default function Badge({ children, variant = 'default', dot = false, className = '' }: BadgeProps) {
-  const variants = {
-    default: 'bg-white/[0.06] text-secondary border-border',
-    success: 'bg-success/10 text-success border-success/25',
-    warning: 'bg-warning/10 text-warning border-warning/25',
-    danger: 'bg-danger/10 text-danger border-danger/25',
-    info: 'bg-accent/10 text-accent border-accent/25',
-  };
-
+export default function Badge({ children, variant = 'default', dot = false, pulse = false, className = '' }: BadgeProps) {
+  const v = variantMap[variant];
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium ${variants[variant]} ${className}`}
-    >
-      {dot ? <span className={`h-1.5 w-1.5 rounded-full ${dotColors[variant]}`} aria-hidden="true" /> : null}
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold tracking-wide ${v.bg} ${v.text} ${v.border} ${className}`}>
+      {dot && (
+        <span className={`h-1.5 w-1.5 rounded-full ${v.dot} ${pulse ? 'animate-pulse' : ''}`} aria-hidden="true" />
+      )}
       {children}
     </span>
   );
