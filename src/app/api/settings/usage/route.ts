@@ -48,5 +48,6 @@ export async function GET() {
     { name: 'GoPlus Security',   configured: check('GOPLUS_API_KEY') },
   ];
 
-  return NextResponse.json({ services, fetchedAt: new Date().toISOString() } satisfies UsageResponse);
+  // Only return services that are configured — unconfigured ones should not appear in the UI
+  return NextResponse.json({ services: services.filter((s) => s.configured), fetchedAt: new Date().toISOString() } satisfies UsageResponse);
 }
