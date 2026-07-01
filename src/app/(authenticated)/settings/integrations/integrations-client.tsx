@@ -78,7 +78,7 @@ export default function IntegrationsClient({ configured }: { configured: boolean
           <h3 className="text-sm font-semibold text-text">Service Integrations</h3>
           {services.length > 0 ? (
             <span className="text-xs text-muted">
-              {configuredCount} of {services.length} configured
+              {configuredCount} configured
             </span>
           ) : null}
         </div>
