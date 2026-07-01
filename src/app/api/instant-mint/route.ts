@@ -17,6 +17,14 @@ import { estimateGas } from '@/lib/blockchain/gas';
 import type { MintPhase } from '@/types/mint';
 import { instantMintSchema, formatZodError } from '@/lib/api/schemas';
 
+type MintPhase = {
+  type: 'whitelist' | 'allowlist' | 'public';
+  startTime?: Date;
+  endTime?: Date;
+  price?: string;
+  proofRequired?: boolean;
+};
+
 function asSupportedChain(chain: string): ChainKey {
   if (!(chain in SUPPORTED_CHAINS)) {
     throw new Error(`Unsupported chain. Supported: ${Object.keys(SUPPORTED_CHAINS).join(', ')}`);
