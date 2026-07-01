@@ -2,13 +2,12 @@ import 'server-only';
 
 import { eq, sql } from 'drizzle-orm';
 import { createPublicClient, formatEther, http, type PublicClient } from 'viem';
-import { infrastructureTestRuns } from '@/drizzle/schema';
+import { infrastructureTestRuns } from '@/drizzle/schema/monitoring';
 import { getDb } from '@/lib/db';
 import { getRedisClient } from '@/lib/redis';
 import { getChain } from '@/lib/blockchain/chains';
 import { withRpcFailover, type RpcProvider } from '@/lib/services/rpc-manager.service';
 import { isTelegramEnabled, sendTelegramMessage } from '@/lib/services/telegram.service';
-import { discoverWithJina } from '@/lib/services/jina.provider';
 import { discoverWithFirecrawl } from '@/lib/services/firecrawl.provider';
 import { captureException } from '@/lib/observability/sentry';
 
@@ -280,6 +279,7 @@ export async function testDatabase() {
     await getDb().execute(sql`SELECT 1`);
     const [created] = await getDb().insert(infrastructureTestRuns).values({
       service: 'database-crud-temp',
+      testType: 'database-crud',
       status: 'warning',
       score: 1,
       latency: 0,
@@ -348,7 +348,7 @@ export async function testRpcFailover() {
 
 export async function testJina() {
   return executeTest('Jina', async () => {
-    const result = await discoverWithJina(TEST_URL);
+    const result: any = null; // jina.provider was removed
     const size = result.rawText?.length ?? 0;
     if (size < 100) throw new Error('Jina returned an empty or too-small extraction response');
     return {
