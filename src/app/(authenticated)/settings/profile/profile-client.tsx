@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useClerk, useUser } from '@clerk/nextjs';
-import { KeyRound, Save, Trash2, User } from 'lucide-react'  // AlertTriangle, Trash2 added;
+import { KeyRound, Save, Trash2, User } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import { ResetDataModal } from '@/components/settings/ResetDataModal';
 import Card from '@/components/ui/Card';
@@ -53,9 +53,6 @@ export default function ProfileClient() {
   const [savingPassword, setSavingPassword] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [showResetModal, setShowResetModal] = useState(false);
-  const [resetting, setResetting] = useState(false);
-  const [resetSuccess, setResetSuccess] = useState(false);
 
   const email = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses[0]?.emailAddress ?? '';
   const clerkDisplayName = useMemo(() => {
@@ -68,21 +65,6 @@ export default function ProfileClient() {
     if (!notice || notice.type !== 'success') return;
 
     const timeout = window.setTimeout(() => setNotice(null), 3500);
-  async function handleResetData() {
-    setResetting(true);
-    try {
-      const resp = await fetch('/api/settings/reset-data', { method: 'DELETE' });
-      if (!resp.ok) throw new Error((await resp.json()).error ?? 'Reset failed');
-      setShowResetModal(false);
-      setResetSuccess(true);
-      setTimeout(() => setResetSuccess(false), 5000);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to reset data');
-    } finally {
-      setResetting(false);
-    }
-  }
-
     return () => window.clearTimeout(timeout);
   }, [notice]);
 
@@ -290,10 +272,16 @@ export default function ProfileClient() {
                 </p>
               </div>
             </div>
-            <Button type="button" variant="danger" onClick={() => setDeleteOpen(true)}>
-              <Trash2 className="h-4 w-4" aria-hidden="true" />
-              Delete Account
-            </Button>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button type="button" variant="secondary" onClick={() => setResetOpen(true)}>
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+                Reset Data
+              </Button>
+              <Button type="button" variant="danger" onClick={() => setDeleteOpen(true)}>
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+                Delete Account
+              </Button>
+            </div>
           </div>
         </Card>
       </div>
