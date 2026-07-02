@@ -224,6 +224,8 @@ export const collections = pgTable('collections', {
   mintStart: timestamp('mint_start'),
   mintEnd: timestamp('mint_end'),
   floorPrice: text('floor_price'),
+  previousFloorPrice: text('previous_floor_price'),
+  floorChangePercent: text('floor_change_percent'),
   lastSyncedAt: timestamp('last_synced_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),

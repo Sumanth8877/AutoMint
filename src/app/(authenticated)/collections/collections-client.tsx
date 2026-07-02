@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ExternalLink, FolderKanban, Plus, Search, Trash2, Zap, Shield } from 'lucide-react';
+import { ExternalLink, FolderKanban, Plus, RefreshCw, Search, Trash2, TrendingDown, TrendingUp, Zap, Shield } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -18,6 +18,7 @@ type Collection = {
   id: string; name: string | null; contractAddress: string; chain: string;
   mintPrice: string | null; totalSupply: number | null; mintedCount: number | null;
   createdAt: string; riskScore: number | null; isPublic: boolean | null;
+  floorPrice?: string | null; previousFloorPrice?: string | null; floorChangePercent?: string | null;
 };
 
 const chainColors: Record<string, string> = {
@@ -34,7 +35,28 @@ function riskBadge(score: number | null) {
   return <Badge variant="success" dot>Safe {score}</Badge>;
 }
 
-function CollectionCard({ col, onDelete, deleting }: { col: Collection; onDelete: (id: string) => void; deleting: boolean }) {
+function FloorMovement({ changePercent }: { changePercent?: string | null }) {
+  if (!changePercent) return null;
+  const value = parseFloat(changePercent);
+  if (Number.isNaN(value)) return null;
+  const up = value >= 0;
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-[10px] font-bold ${up ? 'text-success' : 'text-danger'}`}>
+      {up ? <TrendingUp className="h-2.5 w-2.5" /> : <TrendingDown className="h-2.5 w-2.5" />}
+      {changePercent}%
+    </span>
+  );
+}
+
+function CollectionCard({
+  col, onDelete, deleting, onRefreshFloor, refreshingFloor,
+}: {
+  col: Collection;
+  onDelete: (id: string) => void;
+  deleting: boolean;
+  onRefreshFloor: (id: string) => void;
+  refreshingFloor: boolean;
+}) {
   const filled = col.mintedCount !== null && col.totalSupply ? Math.min((col.mintedCount / col.totalSupply) * 100, 100) : null;
   const chainStyle = chainColors[col.chain] ?? 'text-muted border-border bg-surface';
 
@@ -57,7 +79,7 @@ function CollectionCard({ col, onDelete, deleting }: { col: Collection; onDelete
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3 mb-4">
+      <div className="grid grid-cols-4 gap-2 mb-4">
         <div className="rounded-lg bg-background/50 p-2.5 text-center">
           <p className="text-[9px] font-bold uppercase tracking-widest text-muted mb-1">Supply</p>
           <p className="text-sm font-black text-text">{col.totalSupply?.toLocaleString() ?? '–'}</p>
@@ -69,6 +91,11 @@ function CollectionCard({ col, onDelete, deleting }: { col: Collection; onDelete
         <div className="rounded-lg bg-background/50 p-2.5 text-center">
           <p className="text-[9px] font-bold uppercase tracking-widest text-muted mb-1">Price</p>
           <p className="text-sm font-black text-gold">{col.mintPrice ?? 'Free'}</p>
+        </div>
+        <div className="rounded-lg bg-background/50 p-2.5 text-center">
+          <p className="text-[9px] font-bold uppercase tracking-widest text-muted mb-1">Floor</p>
+          <p className="stat-value text-sm font-black text-text">{col.floorPrice ?? '–'}</p>
+          <FloorMovement changePercent={col.floorChangePercent} />
         </div>
       </div>
 
@@ -107,6 +134,15 @@ function CollectionCard({ col, onDelete, deleting }: { col: Collection; onDelete
           >
             <ExternalLink className="h-3 w-3" />
           </a>
+          <button
+            onClick={() => onRefreshFloor(col.id)}
+            disabled={refreshingFloor}
+            aria-label="Refresh floor price"
+            title="Refresh floor price"
+            className="flex h-7 w-7 items-center justify-center rounded-lg border border-border text-muted hover:text-text hover:border-border-strong transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3 w-3 ${refreshingFloor ? 'animate-spin' : ''}`} />
+          </button>
           <Button variant="ghost" size="xs" onClick={() => onDelete(col.id)} loading={deleting} className="hover:text-danger">
             <Trash2 className="h-3 w-3" />
           </Button>
@@ -140,6 +176,17 @@ export default function CollectionsClient() {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['collections'] }); setDeletingId(null); },
     onError: () => setDeletingId(null),
   });
+
+  const [refreshingFloorId, setRefreshingFloorId] = useState<string | null>(null);
+  const refreshFloorMutation = useMutation({
+    mutationFn: (id: string) => apiRequest<{ collection: Collection }>(`/api/collections/${id}/refresh-floor`, { method: 'POST' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['collections'] }),
+    onSettled: () => setRefreshingFloorId(null),
+  });
+  const handleRefreshFloor = (id: string) => {
+    setRefreshingFloorId(id);
+    refreshFloorMutation.mutate(id);
+  };
 
   const filtered = collections.filter(c =>
     c.name?.toLowerCase().includes(searchQ.toLowerCase()) ||
@@ -195,6 +242,8 @@ export default function CollectionsClient() {
               col={col}
               onDelete={id => { setDeletingId(id); deleteMutation.mutate(id); }}
               deleting={deletingId === col.id}
+              onRefreshFloor={handleRefreshFloor}
+              refreshingFloor={refreshingFloorId === col.id}
             />
           ))}
         </div>

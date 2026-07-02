@@ -11,6 +11,7 @@ import { addBreadcrumb, captureException, captureMessage, startSpan } from '@/li
 import { acquireLock, releaseLock } from '@/lib/services/mint-lock.service';
 import type { Hex } from 'viem';
 import { unregisterIfIdle } from '@/lib/services/alchemy-webhook.service';
+import { ensureCollectionForMint } from '@/lib/services/collection.service';
 
 export async function getUserMintTasks(userId: string) {
   const result = await getDb().select().from(mintTasks).where(eq(mintTasks.userId, userId)).orderBy(desc(mintTasks.createdAt));
@@ -300,6 +301,32 @@ export async function executeMintTask(
   }
 
   const now = new Date();
+
+  // If this mint wasn't linked to a tracked collection (e.g. minted directly
+  // via the Analyzer rather than from an already-added Collections entry),
+  // auto-create/link one now so a successful mint always shows up on the
+  // Collections page. Best-effort: never blocks mint completion.
+  let resolvedCollectionId = claimed.collectionId;
+  if (!resolvedCollectionId && result.txHash) {
+    try {
+      const ensured = await ensureCollectionForMint(claimed.userId, {
+        contractAddress: claimed.contractAddress,
+        chain,
+        name: options.collectionName,
+      });
+      if (ensured) {
+        resolvedCollectionId = ensured.id;
+        await getDb().update(mintTasks).set({ collectionId: ensured.id, updatedAt: now }).where(eq(mintTasks.id, taskId));
+      }
+    } catch (error) {
+      captureException(error, {
+        area: 'minting',
+        context: { taskId, userId: claimed.userId, contractAddress: claimed.contractAddress, chain },
+        fingerprint: ['mint', 'ensure-collection-for-mint-failed'],
+      });
+    }
+  }
+
   await getDb().transaction(async (tx) => {
     await tx.update(mintTasks)
       .set({ status: 'completed', txHash: result.txHash || null, confirmedAt: result.txHash ? now : null, updatedAt: now })
@@ -311,7 +338,7 @@ export async function executeMintTask(
       await tx.insert(mintHistory).values({
         userId: claimed.userId,
         walletId: claimed.walletId,
-        collectionId: claimed.collectionId,
+        collectionId: resolvedCollectionId,
         status: 'pending',
         transactionHash: result.txHash,
         idempotencyKey: `mint:${taskId}:${result.txHash}`,
@@ -320,13 +347,13 @@ export async function executeMintTask(
         confirmedAt: result.blockNumber ? now : undefined,
       }).onConflictDoNothing();
 
-      if (claimed.collectionId) {
+      if (resolvedCollectionId) {
         await tx.update(collections)
           .set({
             lastSyncedAt: now,
             updatedAt: now,
           })
-          .where(eq(collections.id, claimed.collectionId));
+          .where(eq(collections.id, resolvedCollectionId));
       }
     }
   });
