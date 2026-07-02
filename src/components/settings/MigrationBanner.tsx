@@ -5,19 +5,36 @@ import { AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react';
 
 type State = 'checking' | 'pending' | 'applying' | 'done' | 'up-to-date' | 'error';
 
-export function MigrationBanner() {
+interface MigrationBannerProps {
+  /** API route implementing GET (status check) + POST (apply). */
+  endpoint?: string;
+  /** Shown in the pending-state description, e.g. "analyzer_history" or "collections". */
+  tableLabel?: string;
+  /** What breaks if this isn't applied, e.g. "Analyzer History" or "Collections floor tracking". */
+  affectedFeature?: string;
+}
+
+// Generalized from the original analyzer-only banner so any table needing a
+// self-serve column migration (this repo uses drizzle-kit push, not versioned
+// migration files, so schema changes need a one-time endpoint hit post-deploy)
+// can reuse the same UI instead of a bespoke component per table.
+export function MigrationBanner({
+  endpoint = '/api/system/apply-analyzer-migration',
+  tableLabel = 'analyzer_history',
+  affectedFeature = 'Analyzer History',
+}: MigrationBannerProps = {}) {
   const [state, setState] = useState<State>('checking');
   const [message, setMessage] = useState<string | null>(null);
 
-  // On mount, ask the server whether analyzer_history is actually missing
-  // any columns. This replaces the old behavior of always showing "pending"
+  // On mount, ask the server whether the table is actually missing any
+  // columns. This replaces the old behavior of always showing "pending"
   // regardless of real database state (which caused the banner to reappear
   // after every refresh, even once the migration had already been applied).
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch('/api/system/apply-analyzer-migration', { method: 'GET' });
+        const res = await fetch(endpoint, { method: 'GET' });
         const data = await res.json() as { pending: boolean; missing?: string[]; error?: string };
         if (cancelled) return;
         setState(data.pending ? 'pending' : 'up-to-date');
@@ -29,12 +46,12 @@ export function MigrationBanner() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [endpoint]);
 
   async function applyMigration() {
     setState('applying');
     try {
-      const res = await fetch('/api/system/apply-analyzer-migration', { method: 'POST' });
+      const res = await fetch(endpoint, { method: 'POST' });
       const data = await res.json() as { ok: boolean; message?: string; applied?: number; failed?: number };
       setMessage(data.message ?? (data.ok ? 'Migration applied.' : 'Migration failed.'));
       setState(data.ok ? 'done' : 'error');
@@ -62,7 +79,7 @@ export function MigrationBanner() {
           <p className="text-xs text-muted mt-0.5">
             {state === 'error'
               ? message
-              : 'The analyzer_history table is missing new columns. Run the migration to fix Analyzer History.'}
+              : `The ${tableLabel} table is missing new columns. Run the migration to fix ${affectedFeature}.`}
           </p>
         </div>
       </div>
