@@ -2,13 +2,14 @@
 
 import type { ReactNode } from 'react';
 import { useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import AutoMintUserButton from '@/components/auth/automint-user-button';
 import { apiRequest } from '@/lib/api/client';
 import {
   BarChart3, ChevronRight, FolderKanban, Gauge, History,
-  LayoutDashboard, Menu, Search, Settings, Sparkles,
+  LayoutDashboard, Menu, Search, Settings,
   Telescope, Wallet, X, Zap, Activity,
 } from 'lucide-react';
 
@@ -36,12 +37,10 @@ function Logo() {
   return (
     <Link href="/" className="flex items-center gap-3 group" aria-label="AutoMint home">
       <div
-        className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-neon/25 bg-gradient-to-br from-primary/30 via-primary/15 to-neon/10 transition-all duration-300 group-hover:scale-105"
-        style={{ boxShadow: '0 0 20px rgba(0,245,255,0.15), inset 0 1px 0 rgba(255,255,255,0.08)' }}
+        className="relative h-10 w-10 shrink-0 overflow-hidden rounded-xl transition-transform duration-300 group-hover:scale-105"
+        style={{ boxShadow: '0 0 20px rgba(0,245,255,0.15)' }}
       >
-        <Sparkles className="h-4 w-4 text-neon" aria-hidden="true" />
-        {/* Orbiting dot */}
-        <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-neon shadow-[0_0_8px_rgba(0,245,255,0.9)] animate-pulse" />
+        <Image src="/icon-192.png" alt="" fill sizes="40px" className="object-contain" priority />
       </div>
       <div>
         <p className="text-sm font-black tracking-tight text-text">AutoMint</p>
