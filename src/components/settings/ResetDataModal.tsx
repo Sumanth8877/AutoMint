@@ -109,8 +109,8 @@ export function ResetDataModal({ onClose }: { onClose: () => void }) {
             <p className="text-[10px] font-bold uppercase tracking-widest text-danger mb-2.5">Will be deleted</p>
             <div className="space-y-1.5">
               {TABLES.map(t => (
-                <div key={t.key} className="flex items-start gap-2">
-                  <div className="mt-0.5 h-1.5 w-1.5 rounded-full bg-danger/60 shrink-0" />
+                <div key={t.key} className="flex items-center gap-2">
+                  <div className="h-1.5 w-1.5 rounded-full bg-danger/60 shrink-0" />
                   <div>
                     <span className="text-xs font-semibold text-danger/90">{t.label}</span>
                     <span className="text-xs text-muted"> — {t.desc}</span>
