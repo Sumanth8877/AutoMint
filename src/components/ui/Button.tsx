@@ -22,7 +22,7 @@ export default function Button({
     'inline-flex shrink-0 items-center justify-center font-semibold rounded-lg transition-all duration-200 ' +
     'focus:outline-none focus-visible:ring-2 focus-visible:ring-neon/50 focus-visible:ring-offset-2 ' +
     'focus-visible:ring-offset-background active:scale-[0.97] disabled:active:scale-100 ' +
-    'tracking-wide uppercase text-[0.7rem]';
+    'tracking-normal';
 
   const variants: Record<string, string> = {
     primary:
@@ -44,11 +44,11 @@ export default function Button({
   };
 
   const sizes: Record<string, string> = {
-    xs: 'h-7 px-2.5 text-[0.625rem] gap-1',
-    sm: 'h-8 px-3 gap-1.5',
-    md: 'h-10 px-4 gap-2',
-    lg: 'h-11 px-5 gap-2.5',
-    xl: 'h-13 px-7 text-sm gap-3',
+    xs: 'h-7 px-2.5 text-xs gap-1',
+    sm: 'h-8 px-3 text-xs gap-1.5',
+    md: 'h-10 px-4 text-sm gap-2',
+    lg: 'h-11 px-5 text-sm gap-2.5',
+    xl: 'h-13 px-7 text-base gap-3',
   };
 
   const glowStyle = glow && variant === 'neon'

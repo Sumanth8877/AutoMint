@@ -136,13 +136,17 @@ export default async function DashboardPage() {
             </div>
             <Badge variant="neon" dot pulse>Live</Badge>
           </div>
-          <div className="flex items-end gap-1.5 h-32">
+          <div
+            className="flex items-end gap-1.5 h-32"
+            role="img"
+            aria-label={`7-day mint activity bar chart. ${d.chartData.map(c => `${c.day}: ${c.completed} completed, ${c.failed} failed`).join('; ')}.`}
+          >
             {d.chartData.map(c => {
               const total = c.completed + c.failed;
               const heightPct = total > 0 ? (total / maxBar) * 100 : 4;
               const successPct = total > 0 ? (c.completed / total) * 100 : 0;
               return (
-                <div key={c.day} className="flex-1 flex flex-col items-center gap-1">
+                <div key={c.day} className="flex-1 flex flex-col items-center gap-1" aria-hidden="true">
                   <div className="w-full flex flex-col justify-end rounded-t overflow-hidden" style={{ height: `${heightPct}%` }}>
                     <div className="w-full rounded overflow-hidden">
                       <div className="w-full" style={{ height: `${successPct}%`, background: 'rgba(16,185,129,0.70)', minHeight: total > 0 ? 2 : 0 }} />
@@ -154,6 +158,23 @@ export default async function DashboardPage() {
               );
             })}
           </div>
+
+          {/* Screen-reader accessible data table backing the visual chart above */}
+          <table className="sr-only">
+            <caption>7-Day Mint Activity</caption>
+            <thead>
+              <tr><th scope="col">Day</th><th scope="col">Completed</th><th scope="col">Failed</th></tr>
+            </thead>
+            <tbody>
+              {d.chartData.map(c => (
+                <tr key={c.day}>
+                  <th scope="row">{c.day}</th>
+                  <td>{c.completed}</td>
+                  <td>{c.failed}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
           <div className="mt-3 flex items-center gap-4">
             <span className="flex items-center gap-1.5 text-[10px] text-muted"><span className="h-2 w-2 rounded-sm bg-success/70" />Success</span>
             <span className="flex items-center gap-1.5 text-[10px] text-muted"><span className="h-2 w-2 rounded-sm bg-danger/50" />Failed</span>
