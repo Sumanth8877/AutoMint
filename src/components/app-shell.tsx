@@ -13,17 +13,39 @@ import {
   Telescope, Wallet, X, Zap, Activity,
 } from 'lucide-react';
 
-const navItems = [
-  { href: '/dashboard',     label: 'Dashboard',     icon: LayoutDashboard, glow: 'rgba(0,245,255,0.15)' },
-  { href: '/analyzer',      label: 'Analyzer',      icon: Gauge,           glow: 'rgba(124,58,237,0.15)' },
-  { href: '/collections',   label: 'Collections',   icon: FolderKanban,    glow: 'rgba(236,72,153,0.15)' },
-  { href: '/mints',         label: 'Mints',         icon: Zap,             glow: 'rgba(245,158,11,0.15)' },
-  { href: '/wallets',       label: 'Wallets',        icon: Wallet,          glow: 'rgba(16,185,129,0.15)' },
-  { href: '/whale-tracker', label: 'Whale Tracker',  icon: Telescope,       glow: 'rgba(59,130,246,0.15)' },
-  { href: '/analytics',     label: 'Analytics',     icon: BarChart3,       glow: 'rgba(0,245,255,0.12)' },
-  { href: '/history',       label: 'History',        icon: History,         glow: 'rgba(124,58,237,0.12)' },
-  { href: '/settings',      label: 'Settings',       icon: Settings,        glow: 'rgba(100,100,100,0.10)' },
+const navGroups = [
+  {
+    label: 'Overview',
+    items: [
+      { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, glow: 'rgba(0,245,255,0.15)' },
+      { href: '/analytics', label: 'Analytics', icon: BarChart3, glow: 'rgba(0,245,255,0.12)' },
+    ],
+  },
+  {
+    label: 'Mint Ops',
+    items: [
+      { href: '/analyzer', label: 'Analyzer', icon: Gauge, glow: 'rgba(124,58,237,0.15)' },
+      { href: '/mints', label: 'Mints', icon: Zap, glow: 'rgba(245,158,11,0.15)' },
+      { href: '/collections', label: 'Collections', icon: FolderKanban, glow: 'rgba(236,72,153,0.15)' },
+    ],
+  },
+  {
+    label: 'Intelligence',
+    items: [
+      { href: '/whale-tracker', label: 'Whale Tracker', icon: Telescope, glow: 'rgba(59,130,246,0.15)' },
+      { href: '/history', label: 'History', icon: History, glow: 'rgba(124,58,237,0.12)' },
+    ],
+  },
+  {
+    label: 'Account',
+    items: [
+      { href: '/wallets', label: 'Wallets', icon: Wallet, glow: 'rgba(16,185,129,0.15)' },
+      { href: '/settings', label: 'Settings', icon: Settings, glow: 'rgba(100,100,100,0.10)' },
+    ],
+  },
 ];
+
+const navItems = navGroups.flatMap((group) => group.items);
 
 type SearchResult = {
   id: string;
@@ -54,42 +76,49 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
 
   return (
-    <nav className="space-y-0.5" aria-label="Main navigation">
-      {navItems.map((item) => {
-        const Icon = item.icon;
-        const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+    <nav className="space-y-5" aria-label="Main navigation">
+      {navGroups.map((group) => (
+        <div key={group.label} className="space-y-0.5">
+          <p className="px-3 pb-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-muted/50">
+            {group.label}
+          </p>
+          {group.items.map((item) => {
+            const Icon = item.icon;
+            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
 
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={onNavigate}
-            aria-current={active ? 'page' : undefined}
-            className={`group relative flex h-10 items-center justify-between rounded-xl px-3 text-sm transition-all duration-200 ${
-              active
-                ? 'nav-item-active font-semibold'
-                : 'text-muted hover:bg-white/5 hover:text-text'
-            }`}
-            style={active ? { boxShadow: `0 0 20px ${item.glow}` } : undefined}
-          >
-            {active && (
-              <span
-                className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full"
-                style={{ background: 'linear-gradient(to bottom, #00F5FF, #7C3AED)', boxShadow: '0 0 8px rgba(0,245,255,0.8)' }}
-                aria-hidden="true"
-              />
-            )}
-            <span className="flex items-center gap-3">
-              <Icon
-                className={`h-4 w-4 transition-colors ${active ? 'text-neon' : 'text-muted group-hover:text-secondary'}`}
-                aria-hidden="true"
-              />
-              <span className="truncate">{item.label}</span>
-            </span>
-            {active && <ChevronRight className="h-3 w-3 text-neon/50" aria-hidden="true" />}
-          </Link>
-        );
-      })}
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={onNavigate}
+                aria-current={active ? 'page' : undefined}
+                className={`group relative flex h-10 items-center justify-between rounded-xl px-3 text-sm transition-all duration-200 ${
+                  active
+                    ? 'nav-item-active font-semibold'
+                    : 'text-muted hover:bg-white/5 hover:text-text'
+                }`}
+                style={active ? { boxShadow: `0 0 20px ${item.glow}` } : undefined}
+              >
+                {active && (
+                  <span
+                    className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full"
+                    style={{ background: 'linear-gradient(to bottom, #00F5FF, #7C3AED)', boxShadow: '0 0 8px rgba(0,245,255,0.8)' }}
+                    aria-hidden="true"
+                  />
+                )}
+                <span className="flex items-center gap-3">
+                  <Icon
+                    className={`h-4 w-4 transition-colors ${active ? 'text-neon' : 'text-muted group-hover:text-secondary'}`}
+                    aria-hidden="true"
+                  />
+                  <span className="truncate">{item.label}</span>
+                </span>
+                {active && <ChevronRight className="h-3 w-3 text-neon/50" aria-hidden="true" />}
+              </Link>
+            );
+          })}
+        </div>
+      ))}
     </nav>
   );
 }
