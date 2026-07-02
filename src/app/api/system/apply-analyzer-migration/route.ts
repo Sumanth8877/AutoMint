@@ -12,6 +12,43 @@ import { sql } from 'drizzle-orm';
  */
 export const dynamic = 'force-dynamic';
 
+// Columns the app expects to exist on analyzer_history. Keep in sync with the
+// ALTER TABLE statements below.
+const REQUIRED_COLUMNS = [
+  'source_url', 'collection_name', 'contract_address', 'chain', 'risk_score',
+  'risk_level', 'risk_factors', 'floor_price', 'floor_currency', 'floor_symbol',
+  'owner_count', 'volume', 'market_status', 'health_score', 'opportunity_score',
+  'readiness_score', 'mint_state', 'provider_used', 'cache_used',
+  'rpc_provider_used', 'socials', 'social_count', 'analysis_duration_ms',
+];
+
+/**
+ * GET /api/system/apply-analyzer-migration
+ *
+ * Checks the real database schema to see whether analyzer_history is
+ * actually missing any of the expected columns. Used so the UI only shows
+ * "migration pending" when it's genuinely still needed, instead of showing
+ * it unconditionally on every page load.
+ */
+export async function GET() {
+  const auth = await requireApiUser();
+  if ('error' in auth) return auth.error;
+
+  try {
+    const db = getDb();
+    const result = await db.execute(sql.raw(
+      `SELECT column_name FROM information_schema.columns WHERE table_name = 'analyzer_history'`
+    ));
+    const rows = (result as unknown as { rows: { column_name: string }[] }).rows ?? [];
+    const existing = new Set(rows.map((r) => r.column_name));
+    const missing = REQUIRED_COLUMNS.filter((c) => !existing.has(c));
+    return NextResponse.json({ pending: missing.length > 0, missing });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Status check failed';
+    return NextResponse.json({ pending: true, error: message }, { status: 500 });
+  }
+}
+
 export async function POST() {
   const auth = await requireApiUser();
   if ('error' in auth) return auth.error;
