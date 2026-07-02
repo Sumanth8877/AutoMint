@@ -1,10 +1,10 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import AutoMintUserButton from '@/components/auth/automint-user-button';
 import { apiRequest } from '@/lib/api/client';
 import {
@@ -155,7 +155,37 @@ function TopBar({
   searching: boolean;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const current = navItems.find(n => pathname.startsWith(n.href));
+
+  const listboxId = 'topbar-search-results';
+  const visibleResults = searchResults.slice(0, 6);
+  const open = searchOpen && visibleResults.length > 0;
+  const [activeIndex, setActiveIndex] = useState(-1);
+  // Clamp in render so the highlight can never point past a shrunk result list.
+  const safeActiveIndex = activeIndex < visibleResults.length ? activeIndex : -1;
+
+  function handleSearchKeyDown(e: ReactKeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Escape') {
+      setSearchQuery('');
+      setActiveIndex(-1);
+      return;
+    }
+    if (!open) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIndex((safeActiveIndex + 1) % visibleResults.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIndex(safeActiveIndex <= 0 ? visibleResults.length - 1 : safeActiveIndex - 1);
+    } else if (e.key === 'Enter' && safeActiveIndex >= 0) {
+      e.preventDefault();
+      const r = visibleResults[safeActiveIndex];
+      setSearchQuery('');
+      setActiveIndex(-1);
+      router.push(r.href);
+    }
+  }
 
   return (
     <header className="flex h-16 shrink-0 items-center gap-4 border-b border-border px-4 sm:px-6">
@@ -176,31 +206,47 @@ function TopBar({
       <div className="flex flex-1 items-center justify-end gap-3">
         {/* Search */}
         <div className="relative">
-          <div className="flex items-center gap-2 h-9 rounded-lg border border-border bg-surface px-3 text-sm text-muted hover:border-border-strong hover:text-text transition-all duration-200 cursor-pointer min-w-[200px] sm:min-w-[260px]">
-            <Search className="h-3.5 w-3.5 shrink-0" />
+          <div className="flex items-center gap-2 h-9 rounded-lg border border-border bg-surface px-3 text-sm text-muted hover:border-border-strong hover:text-text transition-all duration-200 min-w-[200px] sm:min-w-[260px]">
+            <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <input
               type="text"
+              role="combobox"
+              aria-expanded={open}
+              aria-controls={listboxId}
+              aria-autocomplete="list"
+              aria-activedescendant={safeActiveIndex >= 0 ? `${listboxId}-${safeActiveIndex}` : undefined}
+              aria-label="Search wallets, collections and mints"
               placeholder="Search wallets, contracts…"
               value={searchQuery}
-              onChange={e => { setSearchQuery(e.target.value); onSearch(e.target.value); }}
+              onChange={e => { setSearchQuery(e.target.value); setActiveIndex(-1); onSearch(e.target.value); }}
+              onKeyDown={handleSearchKeyDown}
               className="flex-1 bg-transparent outline-none placeholder:text-muted/60 text-text text-xs"
             />
-            {searching && <div className="h-3 w-3 rounded-full border border-neon/40 border-t-neon animate-spin shrink-0" />}
+            {searching && <div className="h-3 w-3 rounded-full border border-neon/40 border-t-neon animate-spin shrink-0" aria-hidden="true" />}
           </div>
 
-          {searchOpen && searchResults.length > 0 && (
-            <div className="absolute right-0 top-full mt-1.5 w-72 rounded-xl border border-border-strong bg-elevated shadow-[0_12px_48px_rgba(0,0,0,0.70)] z-50 overflow-hidden">
+          {open && (
+            <div
+              id={listboxId}
+              role="listbox"
+              aria-label="Search results"
+              className="absolute right-0 top-full mt-1.5 w-72 rounded-xl border border-border-strong bg-elevated shadow-[0_12px_48px_rgba(0,0,0,0.70)] z-50 overflow-hidden"
+            >
               <div className="px-3 py-2 border-b border-border">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted">{searchResults.length} Results</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted">{visibleResults.length} Results</p>
               </div>
-              {searchResults.slice(0, 6).map(r => (
+              {visibleResults.map((r, i) => (
                 <Link
                   key={r.id}
+                  id={`${listboxId}-${i}`}
+                  role="option"
+                  aria-selected={i === safeActiveIndex}
                   href={r.href}
-                  className="flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 transition-colors"
-                  onClick={() => setSearchQuery('')}
+                  className={`flex items-center gap-3 px-3 py-2.5 transition-colors ${i === safeActiveIndex ? 'bg-white/10' : 'hover:bg-white/5'}`}
+                  onMouseEnter={() => setActiveIndex(i)}
+                  onClick={() => { setSearchQuery(''); setActiveIndex(-1); }}
                 >
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-surface text-[10px] font-bold text-muted uppercase">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-surface text-[10px] font-bold text-muted uppercase" aria-hidden="true">
                     {r.type[0]}
                   </span>
                   <div className="min-w-0 flex-1">

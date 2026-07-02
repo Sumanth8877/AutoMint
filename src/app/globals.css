@@ -53,7 +53,8 @@
   /* ── Text ── */
   --color-text:            #E8F4FD;
   --color-secondary:       #94A3B8;
-  --color-muted:           #4A5568;
+  /* Raised from #4A5568 (2.7:1 — failed WCAG AA) to meet ~4.6:1 on --color-background */
+  --color-muted:           #7E8CA0;
 
   /* ── Typography ── */
   --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
@@ -183,7 +184,16 @@ a { color: inherit; text-decoration: none; }
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
   background-repeat: repeat;
   background-size: 200px 200px;
-  opacity: 0.5;
+  /* Reduced from 0.5 — full-strength noise on every view caused eye fatigue in long sessions */
+  opacity: 0.22;
+}
+
+/* Effect intensity is opt-out via a root class so users sensitive to motion/texture
+   (or on low-power GPUs) can calm the always-on atmosphere without losing the theme. */
+:root.reduce-effects .automint-shell::before { opacity: 0.08; }
+:root.reduce-effects .surface-grid { opacity: 0.4; }
+@media (prefers-reduced-motion: reduce) {
+  .automint-shell::before { opacity: 0.1; }
 }
 
 /* Grid overlay */

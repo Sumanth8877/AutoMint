@@ -97,7 +97,7 @@ export default function Home() {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
               href="/dashboard"
-              className="inline-flex items-center gap-3 rounded-xl px-8 py-4 text-sm font-black uppercase tracking-widest text-background transition-all duration-300 hover:scale-[1.03] hover:brightness-110"
+              className="inline-flex items-center gap-3 rounded-xl px-8 py-4 text-sm font-black tracking-tight text-background transition-all duration-300 hover:scale-[1.03] hover:brightness-110"
               style={{
                 background: 'linear-gradient(135deg, #00F5FF 0%, #7C3AED 100%)',
                 boxShadow: '0 0 40px rgba(0,245,255,0.35), 0 0 12px rgba(124,58,237,0.40)',
@@ -108,7 +108,7 @@ export default function Home() {
             </Link>
             <Link
               href="/analyzer"
-              className="inline-flex items-center gap-3 rounded-xl border border-border-strong px-8 py-4 text-sm font-black uppercase tracking-widest text-text hover:border-neon/40 hover:bg-neon/5 transition-all duration-300"
+              className="inline-flex items-center gap-3 rounded-xl border border-border-strong px-8 py-4 text-sm font-black tracking-tight text-text hover:border-neon/40 hover:bg-neon/5 transition-all duration-300"
             >
               <BarChart3 className="h-4 w-4 text-neon" />
               Analyze a Mint
