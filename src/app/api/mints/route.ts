@@ -13,6 +13,7 @@ import { getEffectiveExecutionDefaults } from '@/lib/services/execution-settings
 import { SUPPORTED_CHAINS, type ChainKey } from '@/lib/blockchain/chains';
 import { resolveMintIntent, type MintIntent } from '@/lib/resolve-mint-intent';
 import { discoverMintRequirements } from '@/lib/services/mint-discovery.service';
+import { isUnsupportedMintFunction, UNSUPPORTED_MINT_PREFIX } from '@/lib/services/mint-calldata.service';
 import { logger } from '@/lib/logger';
 import { mintCreateSchema, mintActionSchema, mintDeleteSchema, formatZodError } from '@/lib/api/schemas';
 import type { MintPhase } from '@/types/mint';
@@ -186,6 +187,29 @@ export async function POST(req: Request) {
     if (mintState.status === 'ENDED') {
       return NextResponse.json(
         { error: 'This mint has already ended and is no longer mintable.' },
+        { status: 422 },
+      );
+    }
+
+    // ── Phase 0: proof-gated detection ──────────────────────────────────────
+    // Allowlist / claim-with-proof / signed-voucher / token-id mints need data
+    // AutoMint cannot generate yet (there is no proof source). fetchMintRequirements
+    // flags these by storing an `unsupported:<fn>` sentinel in mintFunction. Reject
+    // here — BEFORE creating a task and scheduling QStash — with a clear message,
+    // instead of letting the task fail with a late on-chain revert inside the
+    // webhook execution. This keeps the "paste → clear feedback" contract honest
+    // until proof-based minting lands (Phase 1).
+    if (isUnsupportedMintFunction(requirements.mintFunction)) {
+      const fnName = (requirements.mintFunction ?? '').replace(UNSUPPORTED_MINT_PREFIX, '') || 'allowlist/claim';
+      return NextResponse.json(
+        {
+          error:
+            `This collection's mint function (${fnName}) needs data AutoMint can't generate yet — ` +
+            'typically an allowlist Merkle proof, a signed voucher, claim conditions, or a token id. ' +
+            "Proof-based WL/allowlist minting isn't supported yet, so this mint would revert on-chain. " +
+            'Please mint it manually for now.',
+          code: 'PROOF_REQUIRED',
+        },
         { status: 422 },
       );
     }

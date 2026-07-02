@@ -373,7 +373,7 @@ export default function MintsClient() {
           <div className="flex items-center justify-between rounded-xl border border-border bg-surface-hover p-4">
             <div>
               <p className="text-sm font-bold text-text">Whitelist Mode</p>
-              <p className="text-xs text-muted mt-0.5">Target WL/allowlist phases before public</p>
+              <p className="text-xs text-muted mt-0.5">Targets the WL/allowlist phase timing &amp; price only</p>
             </div>
             <button
               type="button"
@@ -389,6 +389,17 @@ export default function MintsClient() {
               />
             </button>
           </div>
+
+          {state.form.wlMode && (
+            <p className="-mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-warning">
+              <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
+              <span>
+                Proof-based allowlist minting isn&apos;t supported yet. This only targets the WL/allowlist
+                phase&apos;s timing &amp; price. If the contract requires an allowlist Merkle proof or signed
+                voucher, the mint is rejected before it&apos;s queued instead of failing on-chain.
+              </span>
+            </p>
+          )}
 
           <Input
             label="Schedule Time (optional)"
