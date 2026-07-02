@@ -9,8 +9,14 @@
  *
  * Supported sources:
  * - OpenSea collection/mint pages (opensea.io)
- * - Direct contract address URLs (etherscan, basescan, polygonscan, etc.)
+ * - Direct contract address URLs (etherscan, basescan, polygonscan, arbiscan, …)
+ * - Marketplace / launchpad URLs that embed the contract in the path
+ *   (Magic Eden, Zora, Blur, Rarible, mint.fun, … — chain read from the path)
+ * - A bare contract address pasted on its own ('0xabc…', 'base:0xabc…')
  * - Custom mint sites (detected + flagged as unknown)
+ *
+ * When no chain is given, the address is probed across every supported chain
+ * (ethereum, base, polygon, arbitrum) and resolved on whichever one it exists.
  *
  * Result correctness is prioritized over breadth.
  */
@@ -74,6 +80,44 @@ const ETH_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 const ETH_ADDRESS_SCAN_RE = /0x[0-9a-fA-F]{40}/;
 const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
+// ─── Chain aliases (path / prefix tokens → canonical chain key) ─────────────
+// Marketplaces encode the chain in the URL path in many spellings, e.g.
+// magiceden.io/collections/base/0x…, zora.co/collect/base:0x…,
+// opensea.io/assets/matic/0x…, rarible.com/collection/polygon/0x…. We map every
+// alias we recognise to a canonical chain key so a pasted collection URL
+// resolves on the RIGHT chain instead of silently defaulting to Ethereum.
+const CHAIN_ALIASES: Record<string, string> = {
+  eth: 'ethereum', ethereum: 'ethereum', mainnet: 'ethereum', 'eth-mainnet': 'ethereum',
+  base: 'base', 'base-mainnet': 'base',
+  polygon: 'polygon', matic: 'polygon', 'polygon-pos': 'polygon', pol: 'polygon',
+  arbitrum: 'arbitrum', arb: 'arbitrum', 'arbitrum-one': 'arbitrum', arb1: 'arbitrum',
+  solana: 'solana', sol: 'solana',
+};
+
+// Chains we can actually validate + mint on (see src/lib/blockchain/chains.ts).
+// A bare / ambiguous contract address is probed against these in parallel.
+const SUPPORTED_EVM_CHAINS = ['ethereum', 'base', 'polygon', 'arbitrum'] as const;
+
+/** Map a raw token (path segment or prefix) to a canonical chain key, if known. */
+function chainFromToken(token: string | undefined): string | undefined {
+  if (!token) return undefined;
+  return CHAIN_ALIASES[token.trim().toLowerCase()];
+}
+
+/**
+ * Detect the chain from any path segment. Handles both standalone segments
+ * ('base', 'matic', …) and compound 'chain:address' tokens ('base:0xabc…').
+ */
+function detectChainFromPath(pathSegments: string[]): string | undefined {
+  for (const seg of pathSegments) {
+    for (const part of seg.split(':')) {
+      const chain = chainFromToken(part);
+      if (chain) return chain;
+    }
+  }
+  return undefined;
+}
+
 /**
  * Try to detect chain from URL host.
  */
@@ -91,8 +135,11 @@ function detectChainFromHost(host: string): string | undefined {
  */
 function extractAddressFromPath(pathSegments: string[]): string | undefined {
   for (const seg of pathSegments) {
-    if (ETH_ADDRESS_RE.test(seg)) {
-      return seg;
+    // Marketplaces sometimes glue the chain onto the address as 'base:0xabc…'.
+    for (const part of seg.split(':')) {
+      if (ETH_ADDRESS_RE.test(part)) {
+        return part;
+      }
     }
   }
   return undefined;
@@ -434,6 +481,38 @@ async function resolveContractWithTiming(
   return result;
 }
 
+/**
+ * Probe a contract address across all supported chains (preferred chain first)
+ * and return the first chain where an on-chain lookup confirms it exists.
+ *
+ * This is what makes "just paste a bare contract address / a marketplace URL
+ * with no chain hint" work: instead of forcing the user to tell us the chain,
+ * we find it. All probes run in parallel; preference order is preserved when
+ * more than one chain would match (rare). Returns { chain, valid:true } on the
+ * first hit, else the preferred (or Ethereum) chain with valid:false.
+ */
+async function resolveContractAcrossChains(
+  contractAddress: string,
+  preferredChain: string | undefined,
+  telemetry?: AnalyzerResolutionTelemetry,
+): Promise<{ chain: string; valid: boolean }> {
+  const ordered = [
+    ...(preferredChain ? [preferredChain] : []),
+    ...SUPPORTED_EVM_CHAINS.filter((c) => c !== preferredChain),
+  ];
+  const startedAt = Date.now();
+  const results = await Promise.all(
+    ordered.map(async (chain) => ({ chain, ...(await resolveContractOnChain(contractAddress, chain)) })),
+  );
+  telemetry?.timingBreakdown.push({ stage: 'Multi-chain Validation', durationMs: Date.now() - startedAt });
+  // `ordered` already has preferredChain first, so this honours preference.
+  const hit = ordered
+    .map((c) => results.find((r) => r.chain === c))
+    .find((r): r is { chain: string; valid: boolean } => Boolean(r?.valid));
+  if (hit) return { chain: hit.chain, valid: true };
+  return { chain: preferredChain ?? 'ethereum', valid: false };
+}
+
 export async function resolveMintIntent(
   url: string,
   logger?: AnalyzerDebugLogger,
@@ -449,9 +528,48 @@ export async function resolveMintIntent(
     };
   }
 
+  const trimmed = url.trim();
+
+  // ───────────────────────────────────────────────────────────────────────
+  // 0. Bare contract address (not a URL at all)
+  //    Accepts '0xabc…', 'base:0xabc…', 'polygon/0xabc…', or a Solana mint.
+  //    Lets the user paste JUST the address with no explorer/marketplace link.
+  // ───────────────────────────────────────────────────────────────────────
+  if (!/^https?:\/\//i.test(trimmed)) {
+    const prefixMatch = trimmed.match(/^([a-z0-9-]+)\s*[:/]\s*(0x[0-9a-fA-F]{40})$/i);
+    const bareEth = ETH_ADDRESS_RE.test(trimmed) ? trimmed : prefixMatch?.[2];
+    if (bareEth) {
+      const preferred = chainFromToken(prefixMatch?.[1]);
+      logDebug(logger, 'success', 'contract_resolution', `Contract address pasted directly: ${bareEth.toLowerCase()}`);
+      const { chain, valid } = await resolveContractAcrossChains(bareEth, preferred, telemetry);
+      telemetry?.providerChain.push({ provider: 'Direct Address', status: valid ? 'success' : 'failed', durationMs: 0 });
+      logDebug(logger, valid ? 'success' : 'warning', 'contract_resolution', valid ? `Validated on ${chain}` : 'On-chain validation failed on all supported chains');
+      return {
+        sourceUrl: url,
+        contractAddress: bareEth.toLowerCase(),
+        chain,
+        isValid: valid,
+        confidence: valid ? 0.95 : 0.4,
+        sourcePlatform: 'contract',
+      };
+    }
+    if (SOLANA_ADDRESS_RE.test(trimmed)) {
+      logDebug(logger, 'success', 'contract_resolution', `Solana address pasted directly: ${trimmed}`);
+      return {
+        sourceUrl: url,
+        contractAddress: trimmed,
+        chain: 'solana',
+        isValid: false, // Solana minting is not supported by the EVM client
+        confidence: 0.5,
+        sourcePlatform: 'contract',
+      };
+    }
+  }
+
   let parsed: URL;
   try {
-    parsed = new URL(url.trim());
+    // Accept URLs pasted without a scheme (e.g. 'magiceden.io/…') by assuming https.
+    parsed = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
   } catch {
     return {
       sourceUrl: url,
@@ -599,20 +717,23 @@ export async function resolveMintIntent(
   // ─────────────────────────────────────────────
   const directAddress = extractAddressFromPath(pathSegments);
   if (directAddress) {
-    const chain = platform ?? 'ethereum';
+    // Prefer an explicit chain hint — explorer host → path token ('base',
+    // 'matic', 'base:0x…') → none. When there's no hint we probe every supported
+    // chain so a marketplace/launchpad URL (Magic Eden, Zora, Blur, Rarible, …)
+    // resolves on whichever chain the contract actually lives on.
+    const preferred = platform ?? detectChainFromPath(pathSegments);
     logDebug(logger, 'success', 'contract_resolution', `Contract detected: ${directAddress.toLowerCase()}`);
+    const { chain, valid } = await resolveContractAcrossChains(directAddress, preferred, telemetry);
     logDebug(logger, 'success', 'contract_resolution', `Chain detected: ${chain}`);
-    const startedAt = Date.now();
-    const onChain = await resolveContractWithTiming(directAddress, chain, telemetry);
-    telemetry?.providerChain.push({ provider: 'Direct Contract', status: onChain.valid ? 'success' : 'failed', durationMs: Date.now() - startedAt });
-    logDebug(logger, onChain.valid ? 'success' : 'warning', 'contract_resolution', onChain.valid ? 'On-chain validation passed' : 'On-chain validation failed');
+    telemetry?.providerChain.push({ provider: 'Direct Contract', status: valid ? 'success' : 'failed', durationMs: 0 });
+    logDebug(logger, valid ? 'success' : 'warning', 'contract_resolution', valid ? `On-chain validation passed on ${chain}` : 'On-chain validation failed on all supported chains');
 
     return {
       sourceUrl: url,
       contractAddress: directAddress.toLowerCase(),
       chain,
-      isValid: onChain.valid,
-      confidence: onChain.valid ? 0.9 : 0.4,
+      isValid: valid,
+      confidence: valid ? 0.9 : 0.4,
       sourcePlatform: 'contract',
     };
   }
