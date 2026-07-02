@@ -13,7 +13,7 @@
   --color-overlay:         #131D2E;
 
   /* ── Borders ── */
-  --color-border:          rgba(99,179,237,0.08);
+  --color-border:          rgba(99,179,237,0.13);
   --color-border-strong:   rgba(99,179,237,0.18);
   --color-border-glow:     rgba(139,92,246,0.35);
 
@@ -32,6 +32,17 @@
 
   --color-accent:          #EC4899;
   --color-accent-soft:     rgba(236,72,153,0.10);
+
+  /* ── Accent usage discipline (design system rule, not enforced by types) ──
+     Keep exactly ONE semantic meaning per accent so the UI stays scannable
+     instead of every color firing at once on the same view:
+       --color-neon    (cyan)   -> live / real-time / "happening now" states only
+       --color-primary (violet) -> primary brand actions, nav active-state, CTAs
+       --color-gold              -> risk, alerts, warnings only
+       --color-success (green)   -> success / completed states only
+       --color-accent  (pink)    -> rare single-use highlight; never pair with
+                                     more than one other accent in the same view
+  ── */
 
   /* ── Semantic ── */
   --color-success:         #10B981;
@@ -91,6 +102,66 @@ a { color: inherit; text-decoration: none; }
   outline: 2px solid var(--color-neon);
   outline-offset: 2px;
   border-radius: 6px;
+}
+
+/* ── Accessibility: respect reduced-motion preference ── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Motion: reusable live-state + hover utilities ──
+   Use .live-dot anywhere data is real-time (nav status, hero pill, console
+   header) instead of hand-rolling animate-pulse + boxShadow per component. */
+.live-dot {
+  position: relative;
+  display: inline-block;
+  height: 0.5rem;
+  width: 0.5rem;
+  border-radius: 9999px;
+  background: var(--color-neon);
+  box-shadow: 0 0 8px rgba(0,245,255,0.9);
+  animation: live-pulse 2s ease-in-out infinite;
+}
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.55; transform: scale(0.82); }
+}
+
+.hover-lift {
+  transition: transform 0.25s cubic-bezier(0.4,0,0.2,1), box-shadow 0.25s cubic-bezier(0.4,0,0.2,1);
+}
+.hover-lift:hover {
+  transform: translateY(-3px);
+}
+
+/* ── Typography: monospace tabular treatment for stat/metric numbers ── */
+.stat-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+/* ── Terminal scanline overlay (TaskConsole) ── */
+.terminal-scanline {
+  position: relative;
+}
+.terminal-scanline::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0,245,255,0.02) 0px,
+    rgba(0,245,255,0.02) 1px,
+    transparent 1px,
+    transparent 3px
+  );
 }
 
 /* ─────────────────────────── APP SHELL ATMOSPHERE ─────────── */

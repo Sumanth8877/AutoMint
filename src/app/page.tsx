@@ -58,7 +58,6 @@ export default function Home() {
       <div className="absolute inset-0 -z-10">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(124,58,237,0.12),transparent_55%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_70%_80%,rgba(0,245,255,0.08),transparent_55%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_50%,rgba(236,72,153,0.05),transparent_65%)]" />
         {/* Grid */}
         <div
           className="absolute inset-0 opacity-40"
@@ -74,7 +73,7 @@ export default function Home() {
         <div className="text-center space-y-8">
           {/* Status pill */}
           <div className="inline-flex items-center gap-2.5 rounded-full border border-neon/20 bg-neon/5 px-5 py-2 backdrop-blur-sm">
-            <span className="h-2 w-2 rounded-full bg-neon animate-pulse shadow-[0_0_8px_rgba(0,245,255,0.9)]" />
+            <span className="live-dot" />
             <span className="text-xs font-bold uppercase tracking-widest text-neon">Live NFT Minting Intelligence</span>
           </div>
 
@@ -122,13 +121,28 @@ export default function Home() {
           {stats.map(s => (
             <div
               key={s.label}
-              className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-surface/60 backdrop-blur-sm p-5 text-center"
+              className="hover-lift flex flex-col items-center gap-2 rounded-2xl border border-border bg-surface/60 backdrop-blur-sm p-5 text-center"
             >
               <s.icon className="h-5 w-5 text-neon" />
-              <p className="text-3xl font-black tracking-tight text-text">{s.value}</p>
+              <p className="stat-value text-3xl font-black tracking-tight text-text">{s.value}</p>
               <p className="text-[10px] font-bold uppercase tracking-widest text-muted">{s.label}</p>
             </div>
           ))}
+        </div>
+
+        {/* Trust strip */}
+        <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-[11px] font-semibold uppercase tracking-widest text-muted/70">
+          <span>Security scoring by GoPlus</span>
+          <span className="h-1 w-1 rounded-full bg-muted/40" />
+          <span>Ethereum</span>
+          <span className="h-1 w-1 rounded-full bg-muted/40" />
+          <span>Base</span>
+          <span className="h-1 w-1 rounded-full bg-muted/40" />
+          <span>Arbitrum</span>
+          <span className="h-1 w-1 rounded-full bg-muted/40" />
+          <span>Polygon</span>
+          <span className="h-1 w-1 rounded-full bg-muted/40" />
+          <span>+11 more chains</span>
         </div>
 
         {/* Feature grid */}
@@ -137,7 +151,7 @@ export default function Home() {
             <Link
               key={f.title}
               href={f.href}
-              className="group relative overflow-hidden rounded-2xl border p-7 transition-all duration-300 hover:scale-[1.02]"
+              className="hover-lift group relative overflow-hidden rounded-2xl border p-7 transition-all duration-300 hover:scale-[1.02]"
               style={{
                 background: `radial-gradient(ellipse at 20% 20%, ${f.glow.replace('0.', '0.08')} 0%, transparent 60%), rgba(8,12,20,0.80)`,
                 borderColor: f.border.replace('border-', ''),

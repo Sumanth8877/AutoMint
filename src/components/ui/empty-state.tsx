@@ -12,7 +12,7 @@ export function EmptyState({ icon: Icon, title, description, action }: EmptyStat
   return (
     <div className="flex flex-col items-center justify-center gap-5 py-20 text-center">
       {Icon && (
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-surface">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-border-strong bg-surface" style={{ boxShadow: '0 0 20px rgba(0,245,255,0.08)' }}>
           <Icon className="h-7 w-7 text-muted" aria-hidden="true" />
         </div>
       )}

@@ -135,7 +135,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       <div className="space-y-2">
         <AutoMintUserButton />
         <div className="flex items-center justify-center gap-1.5">
-          <span className="h-1.5 w-1.5 rounded-full bg-success shadow-[0_0_6px_rgba(16,185,129,0.9)] animate-pulse" />
+          <span className="live-dot" style={{ background: 'var(--color-success)', boxShadow: '0 0 6px rgba(16,185,129,0.9)' }} />
           <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-muted/70">System Live</span>
         </div>
       </div>

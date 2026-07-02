@@ -37,13 +37,14 @@ export function TaskConsole({ taskId, onClose }: { taskId: string; onClose?: () 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [logs]);
 
   return (
-    <div className="rounded-xl border border-border bg-[#020408] overflow-hidden">
+    <div className="terminal-scanline rounded-xl border border-border bg-[#020408] overflow-hidden">
       {/* Console header */}
       <div className="flex items-center justify-between border-b border-border px-4 py-2.5 bg-surface">
         <div className="flex items-center gap-2">
           <Terminal className="h-3.5 w-3.5 text-neon" />
           <span className="text-[10px] font-bold uppercase tracking-widest text-neon">Execution Log</span>
           <span className="text-[10px] font-mono text-muted">#{taskId.slice(-8)}</span>
+          {!loading && <span className="live-dot" aria-label="Live" />}
         </div>
         <div className="flex items-center gap-2">
           {loading && <div className="h-3 w-3 rounded-full border border-neon/40 border-t-neon animate-spin" />}
@@ -69,6 +70,9 @@ export function TaskConsole({ taskId, onClose }: { taskId: string; onClose?: () 
             <span className={levelStyles[log.level]}>{log.message}</span>
           </div>
         ))}
+        {!loading && (
+          <span className="inline-block h-3.5 w-1.5 bg-neon/80 animate-pulse align-middle" aria-hidden="true" />
+        )}
         <div ref={bottomRef} />
       </div>
     </div>

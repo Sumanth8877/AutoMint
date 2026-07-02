@@ -28,11 +28,11 @@ export function MetricCard({ label, value, detail, change, changeDir = 'neutral'
   const changePrefix = changeDir === 'up' ? '↑' : changeDir === 'down' ? '↓' : '';
 
   return (
-    <Card tone="neon" className="p-5 group hover:scale-[1.01] transition-transform duration-200">
+    <Card tone="neon" className="hover-lift p-5 group transition-transform duration-200">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted mb-2">{label}</p>
-          <p className="text-3xl font-black tracking-tight text-text tabular-nums" style={{ fontVariantNumeric: 'tabular-nums' }}>{value}</p>
+          <p className="stat-value text-3xl font-black tracking-tight text-text">{value}</p>
           <div className="mt-1.5 flex items-center gap-2">
             {detail && <p className="text-xs text-muted truncate">{detail}</p>}
             {change && (
