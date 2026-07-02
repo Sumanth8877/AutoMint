@@ -121,7 +121,7 @@ function WalletCard({
 
 export default function WalletsClient() {
   const [addOpen, setAddOpen] = useState(false);
-  const [form, setForm] = useState({ walletType: 'EVM' as 'EVM' | 'SOLANA', privateKey: '', nickname: '', chain: 'ethereum' });
+  const [form, setForm] = useState({ walletType: 'EVM' as 'EVM' | 'SOLANA' | 'BITCOIN', privateKey: '', nickname: '', chain: 'ethereum' });
   const [formError, setFormError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [settingDefaultId, setSettingDefaultId] = useState<string | null>(null);
@@ -135,7 +135,7 @@ export default function WalletsClient() {
 
   const addMutation = useMutation({
     mutationFn: (body: object) => apiRequest<{ wallet: WalletRecord }>('/api/wallets', { method: 'POST', body: JSON.stringify(body) }).then(r => r.wallet),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['wallets'] }); setAddOpen(false); setForm({ walletType: 'EVM', privateKey: '', nickname: '', chain: 'ethereum' }); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['wallets'] }); setAddOpen(false); setForm({ walletType: 'EVM' as 'EVM' | 'SOLANA' | 'BITCOIN', privateKey: '', nickname: '', chain: 'ethereum' }); },
     onError: (e: Error) => setFormError(e.message),
   });
 
@@ -211,23 +211,24 @@ export default function WalletsClient() {
             <label className="text-xs font-bold uppercase tracking-widest text-secondary">Wallet Type</label>
             <select
               value={form.walletType}
-              onChange={e => setForm(p => ({ ...p, walletType: e.target.value as 'EVM' | 'SOLANA' }))}
+              onChange={e => setForm(p => ({ ...p, walletType: e.target.value as 'EVM' | 'SOLANA' | 'BITCOIN' }))}
               className="h-10 w-full rounded-lg border border-border bg-background/80 px-3 text-sm text-text focus:border-neon/60 focus:outline-none focus:ring-2 focus:ring-neon/15"
             >
               <option value="EVM">EVM (Ethereum / Base / Polygon)</option>
               <option value="SOLANA">Solana</option>
+              <option value="BITCOIN">Bitcoin</option>
             </select>
           </div>
           <Input label="Private Key" type="password" placeholder="Enter private key (stored encrypted)" value={form.privateKey} onChange={e => setForm(p => ({ ...p, privateKey: e.target.value }))} required error={formError ?? undefined} />
           <Input label="Nickname (optional)" placeholder="Hot wallet 1" value={form.nickname} onChange={e => setForm(p => ({ ...p, nickname: e.target.value }))} />
-          <div className="flex flex-col gap-1.5">
+          {form.walletType === 'EVM' && <div className="flex flex-col gap-1.5">
             <label className="text-xs font-bold uppercase tracking-widest text-secondary">Chain</label>
             <select value={form.chain} onChange={e => setForm(p => ({ ...p, chain: e.target.value }))}
               className="h-10 w-full rounded-lg border border-border bg-background/80 px-3 text-sm text-text focus:border-neon/60 focus:outline-none focus:ring-2 focus:ring-neon/15"
             >
-              {['ethereum','base','polygon','arbitrum','optimism'].map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
+              {['ethereum','base','polygon','arbitrum'].map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
             </select>
-          </div>
+          </div>}
           <div className="flex items-start gap-2 rounded-xl border border-warning/20 bg-warning/5 p-3">
             <Shield className="h-4 w-4 text-warning shrink-0 mt-0.5" />
             <p className="text-xs text-warning">Private keys are AES-256 encrypted at rest and never logged.</p>

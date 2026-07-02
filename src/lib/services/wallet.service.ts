@@ -1,6 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
-import { executionSettings, mintTasks, wallets, walletPermissions } from '@/drizzle/schema';
+import { executionSettings, mintTasks, wallets } from '@/drizzle/schema';
 import { getWalletBalance } from '@/lib/blockchain/wallet';
 import { encryptPrivateKey, decryptPrivateKey } from '@/lib/security/encryption';
 import { getCache, setCache } from '@/lib/redis';
@@ -240,13 +240,6 @@ export async function importWallet(userId: string, data: { walletType: ImportWal
       });
   }
 
-  await getDb().insert(walletPermissions).values({
-    userId,
-    walletId: wallet.id,
-    canMint: wallet.walletType === 'EVM',
-    canMonitor: true,
-  });
-
   await logActivity(userId, 'wallet_imported', 'Wallet imported', {
     walletId: wallet.id,
     address: wallet.address,
@@ -421,7 +414,7 @@ export async function fetchBalance(address: string, chain: string) {
 }
 
 // ─── Default mint wallet resolution ──────────────────────────────
-// Shared utility used by copy-mint and whale-consensus flows.
+// Shared utility used by copy-mint flows.
 // Tries chain-specific wallet first, then falls back to any EVM wallet.
 export async function getDefaultMintWallet(
   userId: string,

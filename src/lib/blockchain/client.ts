@@ -1,7 +1,5 @@
-import { createPublicClient, createWalletClient, fallback, http, type Account, type PublicClient, type WalletClient } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
+import { createPublicClient, fallback, http, type PublicClient } from 'viem';
 import { getChain } from '@/lib/blockchain/chains';
-import type { Hex } from 'viem';
 
 // ── RPC URL helpers ──────────────────────────────────────────────────────────
 
@@ -63,8 +61,9 @@ function buildTransport(chainName: string) {
 
 // ── Client cache (singleton per chain) ──────────────────────────────────────
 
+// Fix #10: cap public client cache (one per chain — typically 4 entries max)
+const MAX_PUBLIC_CLIENTS = 10;
 const publicClients = new Map<string, PublicClient>();
-const walletClients = new Map<string, WalletClient>();
 
 // _userId is accepted for backward compatibility (callers pass it for RPC routing context)
 // but is unused since Viem's fallback() handles provider selection automatically.
@@ -79,22 +78,5 @@ export function getClient(chain: string, _userId?: string): PublicClient {
   return publicClients.get(key)!;
 }
 
-export function getWalletClient(chain: string, accountOrKey: Account | string): WalletClient {
-  const account: Account = typeof accountOrKey === 'string'
-    ? getAccountFromPrivateKey(accountOrKey)
-    : accountOrKey;
-  const key = `${chain.toLowerCase()}:${account.address}`;
-  if (!walletClients.has(key)) {
-    walletClients.set(key, createWalletClient({
-      chain: getChain(chain.toLowerCase()),
-      transport: buildTransport(chain.toLowerCase()),
-      account,
-    }));
-  }
-  return walletClients.get(key)!;
-}
 
-export function getAccountFromPrivateKey(privateKey: string): Account {
-  const hex = privateKey.startsWith('0x') ? privateKey as Hex : `0x${privateKey}` as Hex;
-  return privateKeyToAccount(hex);
-}
+

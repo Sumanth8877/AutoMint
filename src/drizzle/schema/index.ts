@@ -26,9 +26,6 @@ export const users = pgTable('users', {
   clerkId: text('clerk_id').notNull(),
   email: text('email').notNull(),
   username: text('username'),
-  consensusEnabled: boolean('consensus_enabled').default(false).notNull(),
-  consensusThreshold: integer('consensus_threshold').default(3).notNull(),
-  consensusAutoMint: boolean('consensus_auto_mint').default(false).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
@@ -164,16 +161,7 @@ export const trustedWallets = pgTable('trusted_wallets', {
   activeIdx: index('idx_trusted_wallets_active').on(table.active),
 }));
 
-export const consensusEvents = pgTable('consensus_events', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  collection: text('collection').notNull(),
-  walletAddress: text('wallet_address').notNull(),
-  detectedAt: timestamp('detected_at').defaultNow().notNull(),
-}, (table) => ({
-  collectionIdx: index('idx_consensus_events_collection').on(table.collection),
-  walletAddressIdx: index('idx_consensus_events_wallet_address').on(table.walletAddress),
-  collectionWalletIdx: uniqueIndex('idx_consensus_events_collection_wallet').on(table.collection, table.walletAddress),
-}));
+
 
 export const analyticsEvents = pgTable('analytics_events', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -191,20 +179,7 @@ export const analyticsEvents = pgTable('analytics_events', {
   createdAtIdx: index('idx_analytics_events_created_at').on(table.createdAt),
 }));
 
-export const walletReputation = pgTable('wallet_reputation', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  walletAddress: text('wallet_address').notNull(),
-  chain: chainEnum('chain').notNull().default('ethereum'),
-  reputationScore: integer('reputation_score').default(50).notNull(),
-  totalMints: integer('total_mints').default(0).notNull(),
-  successfulProjects: integer('successful_projects').default(0).notNull(),
-  failedProjects: integer('failed_projects').default(0).notNull(),
-  rugProjects: integer('rug_projects').default(0).notNull(),
-  lastUpdated: timestamp('last_updated').defaultNow().notNull(),
-}, (table) => ({
-  walletChainIdx: uniqueIndex('idx_wallet_reputation_wallet_chain').on(table.walletAddress, table.chain),
-  scoreIdx: index('idx_wallet_reputation_score').on(table.reputationScore),
-}));
+
 
 export const collectionOutcomes = pgTable('collection_outcomes', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -258,18 +233,7 @@ export const collections = pgTable('collections', {
   contractAddressIdx: index('idx_collections_contract_address').on(table.contractAddress),
 }));
 
-// ─── Wallet Permissions ──────────────────────────────
-export const walletPermissions = pgTable('wallet_permissions', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
-  walletId: uuid('wallet_id').references(() => wallets.id, { onDelete: 'cascade' }).notNull(),
-  canMint: boolean('can_mint').default(false).notNull(),
-  canMonitor: boolean('can_monitor').default(true).notNull(),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-}, (table) => ({
-  userIdIdx: index('idx_wallet_permissions_user_id').on(table.userId),
-  walletIdIdx: index('idx_wallet_permissions_wallet_id').on(table.walletId),
-}));
+
 
 // ─── Mint Tasks ──────────────────────────────────────
 export const mintTasks = pgTable('mint_tasks', {

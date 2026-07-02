@@ -17,7 +17,6 @@ import {
   taskLogs,
   telegramAccounts,
   users,
-  walletPermissions,
   wallets,
   watchedWallets,
 } from '@/drizzle/schema';
@@ -39,13 +38,12 @@ function ids(rows: Array<{ id: string }>) {
   return rows.map((row) => row.id);
 }
 
-async function deleteWhereIn<TColumn>(table: Parameters<ReturnType<typeof getDb>['delete']>[0], column: TColumn, values: string[]) {
-  if (values.length === 0) return;
-  await getDb().delete(table).where(inArray(column as never, values));
-}
+
 
 async function deleteAutoMintUserData(userId: string, clerkId: string) {
-  const [user] = await getDb()
+  const db = getDb();
+
+  const [user] = await db
     .select({ id: users.id })
     .from(users)
     .where(and(eq(users.id, userId), eq(users.clerkId, clerkId)))
@@ -53,41 +51,48 @@ async function deleteAutoMintUserData(userId: string, clerkId: string) {
 
   if (!user) return;
 
-  const [userMintTasks, userCollections, userTasks, userWebsites] = await Promise.all([
-    getDb().select({ id: mintTasks.id }).from(mintTasks).where(eq(mintTasks.userId, userId)),
-    getDb().select({ id: collections.id }).from(collections).where(eq(collections.userId, userId)),
-    getDb().select({ id: tasks.id }).from(tasks).where(eq(tasks.userId, userId)),
-    getDb().select({ id: monitoredWebsites.id }).from(monitoredWebsites).where(eq(monitoredWebsites.userId, userId)),
-  ]);
+  // Fix #28: wrap all deletes in a single transaction so partial failures
+  // cannot orphan data. If any delete fails, the entire operation rolls back.
+  await db.transaction(async (tx) => {
+    const [userMintTasks, userCollections, userTasks, userWebsites] = await Promise.all([
+      tx.select({ id: mintTasks.id }).from(mintTasks).where(eq(mintTasks.userId, userId)),
+      tx.select({ id: collections.id }).from(collections).where(eq(collections.userId, userId)),
+      tx.select({ id: tasks.id }).from(tasks).where(eq(tasks.userId, userId)),
+      tx.select({ id: monitoredWebsites.id }).from(monitoredWebsites).where(eq(monitoredWebsites.userId, userId)),
+    ]);
 
-  const mintTaskIds = ids(userMintTasks);
-  const collectionIds = ids(userCollections);
-  const taskIds = ids(userTasks);
-  const websiteIds = ids(userWebsites);
+    const mintTaskIds = ids(userMintTasks);
+    const collectionIds = ids(userCollections);
+    const taskIds = ids(userTasks);
+    const websiteIds = ids(userWebsites);
 
-  await deleteWhereIn(taskExecutions, taskExecutions.taskId, taskIds);
-  await deleteWhereIn(browserSessions, browserSessions.websiteId, websiteIds);
-  await deleteWhereIn(monitoringEvents, monitoringEvents.websiteId, websiteIds);
-  await deleteWhereIn(taskLogs, taskLogs.taskId, mintTaskIds);
-  await deleteWhereIn(collectionSyncs, collectionSyncs.collectionId, collectionIds);
+    // Child tables first (FK dependencies)
+    if (taskIds.length > 0) await tx.delete(taskExecutions).where(inArray(taskExecutions.taskId as never, taskIds));
+    if (websiteIds.length > 0) {
+      await tx.delete(browserSessions).where(inArray(browserSessions.websiteId as never, websiteIds));
+      await tx.delete(monitoringEvents).where(inArray(monitoringEvents.websiteId as never, websiteIds));
+    }
+    if (mintTaskIds.length > 0) await tx.delete(taskLogs).where(inArray(taskLogs.taskId as never, mintTaskIds));
+    if (collectionIds.length > 0) await tx.delete(collectionSyncs).where(inArray(collectionSyncs.collectionId as never, collectionIds));
 
-  await getDb().delete(telegramAccounts).where(eq(telegramAccounts.userId, userId));
-  await getDb().delete(emailNotificationPreferences).where(eq(emailNotificationPreferences.userId, userId));
-  await getDb().delete(executionSettings).where(eq(executionSettings.userId, userId));
-  await getDb().delete(rpcProviderSettings).where(eq(rpcProviderSettings.userId, userId));
-  await getDb().delete(walletPermissions).where(eq(walletPermissions.userId, userId));
-  await getDb().delete(watchedWallets).where(eq(watchedWallets.userId, userId));
-  await getDb().delete(copyMintRules).where(eq(copyMintRules.userId, userId));
-  await getDb().delete(analyticsEvents).where(eq(analyticsEvents.userId, userId));
-  await getDb().delete(analyzerHistory).where(eq(analyzerHistory.userId, userId));
-  await getDb().delete(activities).where(eq(activities.userId, userId));
-  await getDb().delete(mintHistory).where(eq(mintHistory.userId, userId));
-  await getDb().delete(mintTasks).where(eq(mintTasks.userId, userId));
-  await getDb().delete(wallets).where(eq(wallets.userId, userId));
-  await getDb().delete(collections).where(eq(collections.userId, userId));
-  await getDb().delete(monitoredWebsites).where(eq(monitoredWebsites.userId, userId));
-  await getDb().delete(tasks).where(eq(tasks.userId, userId));
-  await getDb().delete(users).where(and(eq(users.id, userId), eq(users.clerkId, clerkId)));
+    // User-owned tables
+    await tx.delete(telegramAccounts).where(eq(telegramAccounts.userId, userId));
+    await tx.delete(emailNotificationPreferences).where(eq(emailNotificationPreferences.userId, userId));
+    await tx.delete(executionSettings).where(eq(executionSettings.userId, userId));
+    await tx.delete(rpcProviderSettings).where(eq(rpcProviderSettings.userId, userId));
+    await tx.delete(watchedWallets).where(eq(watchedWallets.userId, userId));
+    await tx.delete(copyMintRules).where(eq(copyMintRules.userId, userId));
+    await tx.delete(analyticsEvents).where(eq(analyticsEvents.userId, userId));
+    await tx.delete(analyzerHistory).where(eq(analyzerHistory.userId, userId));
+    await tx.delete(activities).where(eq(activities.userId, userId));
+    await tx.delete(mintHistory).where(eq(mintHistory.userId, userId));
+    await tx.delete(mintTasks).where(eq(mintTasks.userId, userId));
+    await tx.delete(wallets).where(eq(wallets.userId, userId));
+    await tx.delete(collections).where(eq(collections.userId, userId));
+    await tx.delete(monitoredWebsites).where(eq(monitoredWebsites.userId, userId));
+    await tx.delete(tasks).where(eq(tasks.userId, userId));
+    await tx.delete(users).where(and(eq(users.id, userId), eq(users.clerkId, clerkId)));
+  });
 }
 
 export async function deleteAccount(input: DeleteAccountInput) {

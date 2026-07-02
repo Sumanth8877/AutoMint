@@ -368,7 +368,6 @@ export async function handleAlchemyWalletWebhook(payload: AlchemyWebhookPayload)
       const trustedType = classifyActivity(activity, address);
       const trustedContract = getActivityContract(activity);
       if (trustedType === 'mint' && trustedContract) {
-        // Whale consensus copy-mint removed — whale tracker handles monitoring
       }
 
       const watcher = watcherByAddress.get(address);

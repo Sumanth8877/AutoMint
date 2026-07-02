@@ -878,6 +878,9 @@ export async function executeScheduledMint(taskId: string) {
       // Pass the resolved collection name so success/failure messages from
       // executeMintTask also show it instead of the raw contract address.
       collectionName,
+      // Fix #5: honeypot check above already ran an eth_call simulation.
+      // Skip the duplicate simulation inside executeMint to halve RPC calls.
+      skipSimulation: true,
     });
     await addTaskLog(taskId, mintResult.txHash ? 'tx_submitted' : 'task_completed', mintResult.success ? 'success' : 'error', mintResult.txHash ? `Transaction submitted: ${mintResult.txHash}` : mintResult.error ?? 'Unknown error');
 

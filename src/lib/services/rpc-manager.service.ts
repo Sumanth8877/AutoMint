@@ -35,7 +35,20 @@ const CIRCUIT_FAILURE_THRESHOLD = 3;
 const CIRCUIT_OPEN_MS = 60_000;
 const HEALTH_TTL_SECONDS = 24 * 60 * 60;
 const publicClients = new Map<string, RpcClient>();
+
+// Fix #10: Bounded wallet client cache — evicts oldest entries when the cap is
+// reached so decrypted-key Account objects do not accumulate in memory forever.
+const MAX_WALLET_CLIENTS = 20;
 const walletClients = new Map<string, WalletClient>();
+
+function walletClientsCacheSet(key: string, client: WalletClient) {
+  if (walletClients.size >= MAX_WALLET_CLIENTS) {
+    // Evict oldest entry (first key inserted — Map preserves insertion order)
+    const oldest = walletClients.keys().next().value;
+    if (oldest !== undefined) walletClients.delete(oldest);
+  }
+  walletClients.set(key, client);
+}
 
 type RpcFailoverOptions = {
   providerOrder?: RpcProvider[];
@@ -315,7 +328,7 @@ async function getProviderWalletClient(provider: RpcProvider, chainName: string,
     chain,
     transport: http(url, { timeout: normalizedTimeout * 1000 }),
   });
-  walletClients.set(key, client);
+  walletClientsCacheSet(key, client);
   return client;
 }
 

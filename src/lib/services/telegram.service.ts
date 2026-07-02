@@ -1030,47 +1030,6 @@ async function handleRiskCallback(callback: TelegramCallbackQuery) {
   }
 }
 
-async function handleConsensusCallback(callback: TelegramCallbackQuery) {
-  try {
-    const [scope, action, collection] = (callback.data || '').split(':');
-    if (scope !== 'consensus' || !action || !collection) {
-      await answerCallbackQuery(callback.id);
-      return { handled: false };
-    }
-
-    const account = await getTelegramAccountByTelegramId(String(callback.from.id));
-    if (!account) {
-      await answerCallbackQuery(callback.id, 'Telegram is not linked.');
-      return { handled: true };
-    }
-
-    if (action === 'ignore') {
-      await answerCallbackQuery(callback.id, 'Ignored.');
-      return { handled: true };
-    }
-
-    if (action === 'copy') {
-      // Consensus copy-mint removed — use the whale tracker to copy mints manually
-      await answerCallbackQuery(callback.id, 'Copy mint not available. Use the whale tracker.');
-      await sendTelegramMessage(account.chatId, `\u26a0️ Consensus copy-mint is disabled.\nCollection: ${collection}\n\nUse the AutoMint dashboard to add a mint task manually.`);
-      return { handled: true };
-    }
-
-    await answerCallbackQuery(callback.id);
-    return { handled: false };
-  } catch (error) {
-    await captureException(error, {
-      area: 'telegram',
-      context: {
-        telegramId: String(callback.from.id),
-        chatId: callback.message?.chat.id ? String(callback.message.chat.id) : undefined,
-        callbackData: callback.data,
-      },
-      fingerprint: ['telegram', 'consensus-callback'],
-    });
-    throw error;
-  }
-}
 
 
 async function handleScheduledMintCallback(callback: TelegramCallbackQuery) {
@@ -1134,7 +1093,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
     // Then risk approval/cancel callbacks
     const riskResult = await handleRiskCallback(update.callback_query);
     if (riskResult.handled) return riskResult;
-    return handleConsensusCallback(update.callback_query);
+    return { handled: false };
   }
 
   const message = update.message ?? update.edited_message;

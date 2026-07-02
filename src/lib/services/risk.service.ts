@@ -7,6 +7,7 @@ import { logActivity } from '@/lib/monitoring';
 import { getMintState } from '@/lib/services/mint-state.service';
 import { addBreadcrumb, captureException, startSpan } from '@/lib/observability/sentry';
 import { isTelegramEnabled } from '@/lib/services/telegram.service';
+import { getEffectiveExecutionDefaults } from '@/lib/services/execution-settings.service';
 import { checkTokenSecurity } from '@/lib/services/goplus-security.service';
 
 // Inline fixed-weight scorer — adaptive learning removed
@@ -376,6 +377,19 @@ export async function analyzeMintRisk(taskId: string): Promise<RiskAnalysis> {
   return startSpan('risk.analyze_mint', { area: 'risk', taskId }, async () => {
   const subject = await loadRiskSubject(taskId);
   if (!subject?.task) throw new Error('Mint task not found');
+
+  // Fix #11: respect the riskAnalysisEnabled toggle. When the user disables
+  // risk analysis in settings, skip the scoring and return a safe result so
+  // mints proceed without a risk gate.
+  const execDefaults = await getEffectiveExecutionDefaults(subject.task.userId);
+  if (!execDefaults.riskAnalysisEnabled) {
+    return {
+      riskScore: 0,
+      riskReasons: ['Risk analysis disabled by user'],
+      safeModeEnabled: false,
+      weights: { contractAnalysis: 0, trustedWalletActivity: 0, socialAnalysis: 0, domainAge: 0 },
+    };
+  }
 
   const { task, wallet, collection } = subject;
   const [contract, trustedWallet, social, domainAge] = await Promise.all([

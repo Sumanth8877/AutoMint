@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { desc, eq, inArray } from 'drizzle-orm';
-import { activities, copyMintRules, walletReputation } from '@/drizzle/schema';
+import { desc, eq } from 'drizzle-orm';
+import { activities, copyMintRules } from '@/drizzle/schema';
 import { parseJsonBody, handleRouteError } from '@/lib/api/errors';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getDb } from '@/lib/db';
@@ -27,11 +27,8 @@ export async function GET() {
 
     const rows = await getUserWatchedWallets(authResult.userId);
     const addresses = Array.from(new Set(rows.map((wallet) => wallet.walletAddress)));
-    const [rules, reputations, recentActivities] = await Promise.all([
+    const [rules, recentActivities] = await Promise.all([
       getDb().select().from(copyMintRules).where(eq(copyMintRules.userId, authResult.userId)),
-      addresses.length > 0
-        ? getDb().select().from(walletReputation).where(inArray(walletReputation.walletAddress, addresses))
-        : Promise.resolve([]),
       getDb().select().from(activities)
         .where(eq(activities.userId, authResult.userId))
         .orderBy(desc(activities.createdAt))
@@ -39,16 +36,13 @@ export async function GET() {
     ]);
 
     const ruleByWallet = new Map(rules.map((rule) => [rule.walletAddress, rule]));
-    const reputationByWallet = new Map(reputations.map((reputation) => [`${reputation.walletAddress}:${reputation.chain}`, reputation]));
 
     const wallets = rows.map((wallet) => {
       const rule = ruleByWallet.get(wallet.walletAddress);
       const lastActivity = recentActivities.find((activity) => metadataWallet(activity.metadata) === wallet.walletAddress.toLowerCase());
-      const reputation = reputationByWallet.get(`${wallet.walletAddress}:${wallet.chain}`);
-
       return {
         ...wallet,
-        reputationScore: reputation?.reputationScore ?? 50,
+        reputationScore: 50,
         copyMintStatus: rule ? (rule.enabled ? 'enabled' : 'disabled') : 'none',
         lastActivityAt: lastActivity?.createdAt ?? null,
       };
