@@ -8,6 +8,7 @@ import { logActivity } from '@/lib/monitoring';
 import { deriveWalletFromPrivateKey, type ImportWalletType } from '@/lib/wallets/private-key';
 import { addBreadcrumb } from '@/lib/observability/sentry';
 import { ConflictError, NotFoundError } from '@/lib/api/errors';
+import type { ChainKey } from '@/lib/blockchain/chains';
 
 const DEFAULT_EVM_CHAIN = 'ethereum' as const;
 
@@ -428,7 +429,12 @@ export async function getDefaultMintWallet(
   destinationWalletId?: string | null,
 ) {
   const db = getDb();
-  const chainTyped = chain as 'ethereum' | 'base' | 'polygon';
+  // Fix #2: this cast previously excluded 'arbitrum', silently mistyping any
+  // Arbitrum lookup even though the DB enum (chainEnum) and ChainKey both
+  // support it. The eq() comparison worked correctly at runtime regardless
+  // (Drizzle just compares the string value), but the type was misleading
+  // and masked exactly this class of bug at the type-checker level.
+  const chainTyped = chain as ChainKey;
 
   if (destinationWalletId) {
     const [dest] = await db

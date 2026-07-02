@@ -1,10 +1,34 @@
 import 'server-only';
 
 import { createPublicClient, webSocket } from 'viem';
-import { getChain } from '@/lib/blockchain/chains';
+import { getChain, CHAIN_KEYS, type ChainKey } from '@/lib/blockchain/chains';
 import { getMintState } from '@/lib/services/mint-state.service';
 import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
 import { getAllSettings } from '@/lib/services/integration-settings.service';
+
+// Fix #2: Record<ChainKey, string> is exhaustive — TypeScript will fail to
+// compile if a new chain is added to chains.ts (CHAIN_KEYS) without adding a
+// subdomain entry here. This replaces the old if/else chain that silently
+// fell through to the Ethereum URL for any unrecognized chain (including
+// Arbitrum).
+const ALCHEMY_WSS_SUBDOMAIN: Record<ChainKey, string> = {
+  ethereum: 'eth-mainnet',
+  base: 'base-mainnet',
+  polygon: 'polygon-mainnet',
+  arbitrum: 'arb-mainnet',
+};
+
+const INFURA_WSS_HOST: Record<ChainKey, string> = {
+  ethereum: 'mainnet',
+  base: 'base-mainnet',
+  polygon: 'polygon-mainnet',
+  arbitrum: 'arbitrum-mainnet',
+};
+
+function asChainKey(chain: string): ChainKey | null {
+  const lower = chain.toLowerCase();
+  return (CHAIN_KEYS as readonly string[]).includes(lower) ? (lower as ChainKey) : null;
+}
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -32,15 +56,15 @@ export type MonitorResult =
 async function getWebSocketUrl(chain: string): Promise<string | null> {
   try {
     const settings = await getAllSettings();
-    const chainLower = chain.toLowerCase();
+    // Fix #2: unrecognized chain now falls through to env-var/null instead of
+    // silently mismapping to Ethereum's endpoint.
+    const chainKey = asChainKey(chain);
 
     // 1. Alchemy WSS — derived from the same API key used for HTTP.
     //    Always tried first: lowest latency, most reliable.
     const alchemyKey = settings.ALCHEMY_API_KEY?.value || process.env.ALCHEMY_API_KEY;
-    if (alchemyKey) {
-      if (chainLower === 'base')    return `wss://base-mainnet.g.alchemy.com/v2/${alchemyKey}`;
-      if (chainLower === 'polygon') return `wss://polygon-mainnet.g.alchemy.com/v2/${alchemyKey}`;
-      return `wss://eth-mainnet.g.alchemy.com/v2/${alchemyKey}`;
+    if (alchemyKey && chainKey) {
+      return `wss://${ALCHEMY_WSS_SUBDOMAIN[chainKey]}.g.alchemy.com/v2/${alchemyKey}`;
     }
 
     // 2. Infura WSS — same API key as HTTP, different subdomain + /ws/ path.
@@ -49,10 +73,8 @@ async function getWebSocketUrl(chain: string): Promise<string | null> {
     //    With this fallback: detection latency is 0–12s (ETH) / 0–2s (Base)
     //    even when Alchemy is unavailable.
     const infuraKey = settings.INFURA_API_KEY?.value || process.env.INFURA_API_KEY;
-    if (infuraKey) {
-      if (chainLower === 'base')    return `wss://base-mainnet.infura.io/ws/v3/${infuraKey}`;
-      if (chainLower === 'polygon') return `wss://polygon-mainnet.infura.io/ws/v3/${infuraKey}`;
-      return `wss://mainnet.infura.io/ws/v3/${infuraKey}`;
+    if (infuraKey && chainKey) {
+      return `wss://${INFURA_WSS_HOST[chainKey]}.infura.io/ws/v3/${infuraKey}`;
     }
 
     // 3. Explicit env-var WSS URLs (e.g. Chainstack or custom node).

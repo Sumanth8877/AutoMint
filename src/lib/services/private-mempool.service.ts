@@ -32,10 +32,14 @@ const PRIVATE_ENDPOINTS: Record<string, string[]> = {
     'https://rpc.mevblocker.io',          // MEV Blocker (fallback)
     'https://rpc.flashbots.net/fast',     // Flashbots Fast (last resort)
   ],
-  // Base and Polygon do not have widely available private mempool endpoints.
-  // Transactions fall back to the standard public broadcast path.
+  // Base, Polygon, and Arbitrum do not have widely available private mempool
+  // endpoints. Transactions fall back to the standard public broadcast path.
+  // Fix #2: Arbitrum was previously absent entirely (relying on the `?? []`
+  // fallback at the lookup site below) — now explicit so it's clear this is
+  // an intentional "no private mempool for this chain" decision, not a gap.
   base: [],
   polygon: [],
+  arbitrum: [],
 };
 
 export interface PrivateBroadcastResult {

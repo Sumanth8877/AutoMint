@@ -80,10 +80,16 @@ function validateAddress(address: string, networkType: WatchedWalletNetworkType)
   return isValidBitcoinAddress(address);
 }
 
+// Fix #2: previously had no Arbitrum branch, so watching/detecting an
+// Arbitrum wallet silently recorded it (and matched incoming webhook
+// activity) as Ethereum. Arbitrum's network identifiers ("arb-mainnet",
+// "arbitrum-one", "arbitrum") are now matched explicitly, same pattern as
+// the other chains.
 function normalizeChain(chain: string | undefined): SupportedChain {
   const value = (chain || 'ethereum').toLowerCase();
   if (value.includes('base')) return 'base';
-  if (value.includes('polygon') || value.includes('matic') || value.includes('polygon-mainnet')) return 'polygon';
+  if (value.includes('polygon') || value.includes('matic')) return 'polygon';
+  if (value.includes('arbitrum') || value.includes('arb-')) return 'arbitrum';
   return 'ethereum';
 }
 

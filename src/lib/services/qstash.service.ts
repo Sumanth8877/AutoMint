@@ -208,7 +208,20 @@ export async function scheduleMint(params: {
   if (task.status === 'completed' || task.status === 'running') return task;
 
   const overrideRiskFlag = params.overrideRiskFlag ?? task.overrideRiskFlag ?? false;
-  if (!overrideRiskFlag) {
+
+  // ── Live vs. scheduled risk-scoring policy (intentional) ──────────────────
+  // Live/instant mints (initialStatus: 'ready') execute immediately — there is
+  // no safe window to delay execution for a synchronous risk analysis, so they
+  // deliberately skip the pre-flight risk gate AND the original-risk snapshot
+  // below. This matches executeMintTask()'s execution-time gate
+  // (requireRiskApproval({ action: 'mint' })), which auto-approves an unscored
+  // task by design for exactly this path — see risk.service.ts.
+  // Scheduled/upcoming mints (initialStatus: 'monitoring', the default) DO get
+  // risk-scored here before the QStash message is published, and get a
+  // one-hour-before recheck via getRiskCheckTime().
+  const isLiveMint = (params.initialStatus ?? 'monitoring') === 'ready';
+
+  if (!overrideRiskFlag && !isLiveMint) {
     const riskGate = await requireRiskApproval({ taskId: task.id, action: 'schedule' });
     if (!riskGate.approved) {
       const [blocked] = await getDb()
@@ -233,10 +246,16 @@ export async function scheduleMint(params: {
     await deleteQStashMessage(task.qstashMessageId);
   }
 
-  const originalRisk = await storeOriginalRiskSnapshot(task.id);
-  const riskCheckTime = getRiskCheckTime(scheduledTime);
-  if (riskCheckTime && !overrideRiskFlag) {
-    await publishQStashMessage(task.id, riskCheckTime, 'risk_check');
+  // Live mints: no snapshot, no pre-execution recheck — nothing to "recheck"
+  // for a mint that's already executing now. Scheduled mints: score now and
+  // arm the one-hour-before recheck as before.
+  let originalRisk: { riskScore: number | null; riskReasons: string[] } = { riskScore: null, riskReasons: [] };
+  if (!isLiveMint) {
+    originalRisk = await storeOriginalRiskSnapshot(task.id);
+    const riskCheckTime = getRiskCheckTime(scheduledTime);
+    if (riskCheckTime && !overrideRiskFlag) {
+      await publishQStashMessage(task.id, riskCheckTime, 'risk_check');
+    }
   }
 
   const qstash = await publishQStashMessage(task.id, scheduledTime, 'execute');

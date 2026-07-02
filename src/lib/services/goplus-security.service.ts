@@ -3,80 +3,58 @@ import 'server-only';
 import { captureException } from '@/lib/observability/sentry';
 import { logger } from '@/lib/logger';
 
-type GoPlusTokenSecurityResponse = {
+// Fix #3: this service previously called GoPlus Labs' fungible-token
+// (ERC-20) security endpoint (`/api/v1/token_security/{chainId}`) against
+// NFT contract addresses. That endpoint's schema (buy_tax, sell_tax,
+// lp_holders, is_in_dex, etc.) is built around DEX-tradeable tokens with
+// tax/liquidity-pool mechanics — it has no concept of an NFT contract and
+// most real NFT collections return no data from it, silently disabling the
+// entire GoPlus contribution to risk scoring.
+//
+// This now calls the dedicated NFT Security API instead:
+//   GET https://api.gopluslabs.io/api/v1/nft_security/{chain_id}?contract_addresses=...
+// Response fields below are the ones GoPlus documents for NFT contracts
+// (docs.gopluslabs.io/reference/getnftinfousingget_1 + response-details
+// pages): open-source status, malicious-contract/behavior flags, and the
+// NFT-specific privileged-operation risk flags (privileged minting,
+// transfer-without-approval, self-destruct, oversupply minting). GoPlus's
+// schema does evolve, so treat every field as optional and re-verify against
+// a live response if GoPlus changes their API.
+
+type GoPlusNftSecurityResponse = {
   code: number;
-  result?: Record<string, GoPlusTokenSecurity>;
+  result?: Record<string, GoPlusNftSecurity>;
   message?: string;
 };
 
-type GoPlusTokenSecurity = {
-  token_address: string;
-  token_name: string;
-  token_symbol: string;
-  chainId: string;
-  contract_type: string;
-  contract_creator: string;
-  contract_deploy_tx: string;
-  owner_balance: string;
-  owner_percentage: string;
-  is_honeypot: string;
-  is_open_source: string;
-  is_proxy: string;
-  proxy_imp: string;
-  honeypot_with_same_creator: string;
-  buy_tax: string;
-  sell_tax: string;
-  buy_gas: string;
-  sell_gas: string;
-  slippage: string;
-  cannot_buy: string;
-  cannot_sell_all: string;
-  transfer_pausable: string;
-  owner_can_change_balance: string;
-  is_anti_whale: string;
-  is_blacklisted: string;
-  is_in_dex: string;
-  is_true_token: string;
-  confidence: string;
-  trust_list: string;
-  audit: string;
-  is_mintable: string;
-  is_trading_cooldown: string;
-  is_anti_whale_enabled: string;
-  take_ownership_back: string;
-  personal_slippage: string;
-  is_hidden_owner: string;
-  lp_holders: string;
-  lp_holder_count: string;
-  lp_total_supply: string;
-  lp_balance: string;
-  lp_token_name: string;
-  lp_token_symbol: string;
-  lp_holder_percent: string;
-  lp_holder_address: string;
-  lp_holder_balance: string;
-  lp_holder_txs: string;
-  lp_holder_age: string;
-  is_airdrop_scam: string;
-  token_abi: string;
-  holder_count: string;
+type GoPlusNftSecurity = {
+  nft_address?: string;
+  nft_name?: string;
+  nft_symbol?: string;
+  nft_erc?: string;
+  creator_address?: string;
+  deployed_time?: string;
+  is_open_source?: string;             // '1' | '0'
+  malicious_nft_contract?: string;     // '1' | '0'
+  malicious_address?: string;          // some GoPlus responses use this key instead
+  malicious_behavior?: string[];
+  privileged_minting?: string;         // '1' | '0' — owner/creator can mint arbitrarily
+  transfer_without_approval?: string;  // '1' | '0' — NFTs movable without owner approval
+  self_destruct?: string;              // '1' | '0'
+  oversupply_minting?: string;         // '1' | '0' — supply cap can be bypassed
+  trust_list?: string;                 // '1' | '0'
+  same_nfts?: string;                  // '1' | '0' — near-duplicate of a known collection
 };
 
-type GoPlusSecurityResult = {
-  isHoneypot: boolean;
+type GoPlusNftSecurityResult = {
   isOpenSource: boolean;
-  isProxy: boolean;
-  buyTax: number;
-  sellTax: number;
-  cannotBuy: boolean;
-  cannotSell: boolean;
-  isBlacklisted: boolean;
-  isMintable: boolean;
-  isTradingCooldown: boolean;
-  isAirdropScam: boolean;
-  confidence: number;
+  isMaliciousContract: boolean;
+  maliciousBehaviors: string[];
+  privilegedMinting: boolean;
+  transferWithoutApproval: boolean;
+  selfDestruct: boolean;
+  oversupplyMinting: boolean;
   trustList: boolean;
-  audit: string;
   riskScore: number;
   riskFactors: string[];
 };
@@ -97,106 +75,70 @@ function getChainId(chain: string): string {
   return CHAIN_ID_MAP[chain.toLowerCase()] || chain;
 }
 
-function parseBoolean(value: string): boolean {
+function parseBoolean(value: string | undefined): boolean {
   return value === '1';
 }
 
-function parseNumber(value: string): number {
-  const parsed = parseFloat(value);
-  return isNaN(parsed) ? 0 : parsed;
-}
-
-function calculateGoPlusRiskScore(data: GoPlusTokenSecurity): number {
+function calculateGoPlusNftRiskScore(data: GoPlusNftSecurity): { score: number; factors: string[] } {
   let score = 0;
   const factors: string[] = [];
 
-  // Critical risks (high points)
-  if (data.is_honeypot === '1') {
-    score += 50;
-    factors.push('Honeypot detected - token cannot be sold');
-  }
-  if (data.cannot_buy === '1') {
+  // Critical risks — contract-level red flags for NFTs
+  if (parseBoolean(data.malicious_nft_contract) || parseBoolean(data.malicious_address)) {
     score += 40;
-    factors.push('Cannot buy token');
+    factors.push('GoPlus: NFT contract flagged as malicious');
   }
-  if (data.cannot_sell_all === '1') {
+  if (parseBoolean(data.self_destruct)) {
     score += 35;
-    factors.push('Cannot sell all tokens');
+    factors.push('GoPlus: Contract can self-destruct');
   }
-  if (data.is_airdrop_scam === '1') {
+  if (parseBoolean(data.transfer_without_approval)) {
     score += 30;
-    factors.push('Airdrop scam detected');
-  }
-  if (data.is_blacklisted === '1') {
-    score += 25;
-    factors.push('Token is blacklisted');
+    factors.push('GoPlus: NFTs can be transferred without owner approval');
   }
 
-  // High risks (medium points)
-  if (data.buy_tax && parseNumber(data.buy_tax) > 20) {
-    score += 15;
-    factors.push(`High buy tax: ${data.buy_tax}%`);
+  // High risks
+  if (parseBoolean(data.privileged_minting)) {
+    score += 20;
+    factors.push('GoPlus: Privileged/unrestricted minting detected');
   }
-  if (data.sell_tax && parseNumber(data.sell_tax) > 20) {
-    score += 15;
-    factors.push(`High sell tax: ${data.sell_tax}%`);
+  if (parseBoolean(data.oversupply_minting)) {
+    score += 20;
+    factors.push('GoPlus: Supply cap can be bypassed (oversupply minting)');
   }
-  if (data.is_mintable === '1') {
+  if (parseBoolean(data.same_nfts)) {
     score += 10;
-    factors.push('Token is mintable (inflation risk)');
+    factors.push('GoPlus: Contract closely matches a known/duplicated collection');
   }
-  if (data.is_trading_cooldown === '1') {
-    score += 10;
-    factors.push('Trading cooldown enabled');
-  }
-  if (data.owner_can_change_balance === '1') {
+  if (Array.isArray(data.malicious_behavior) && data.malicious_behavior.length > 0) {
     score += 15;
-    factors.push('Owner can change user balances');
-  }
-  if (data.transfer_pausable === '1') {
-    score += 10;
-    factors.push('Transfers can be paused');
+    factors.push(`GoPlus: Malicious behavior detected — ${data.malicious_behavior.join(', ')}`);
   }
 
-  // Medium risks (low points)
+  // Medium/low risks
   if (data.is_open_source === '0') {
     score += 8;
-    factors.push('Contract source code not verified');
-  }
-  if (data.is_proxy === '1' && data.proxy_imp === '1') {
-    score += 5;
-    factors.push('Proxy contract with implementation risk');
-  }
-  if (data.is_anti_whale === '1') {
-    score += 5;
-    factors.push('Anti-whale mechanism enabled');
-  }
-  if (data.is_hidden_owner === '1') {
-    score += 5;
-    factors.push('Hidden owner detected');
-  }
-  if (data.honeypot_with_same_creator && parseNumber(data.honeypot_with_same_creator) > 0) {
-    score += 10;
-    factors.push(`Creator has ${data.honeypot_with_same_creator} honeypot tokens`);
-  }
-
-  // Low risks (very low points)
-  if (!data.audit || data.audit === '0') {
-    score += 3;
-    factors.push('No audit information available');
+    factors.push('GoPlus: Contract source code not verified');
   }
   if (data.trust_list === '0') {
     score += 3;
-    factors.push('Token not in trust list');
+    factors.push('GoPlus: Contract not in GoPlus trust list');
   }
 
-  return Math.min(score, 100);
+  return { score: Math.min(score, 100), factors };
 }
 
+/**
+ * Checks NFT-specific contract security via GoPlus Labs' NFT Security API.
+ * Kept the name `checkTokenSecurity` (rather than renaming) so existing
+ * callers (risk.service.ts, analyzer-data.service.ts) don't need signature
+ * changes beyond the result shape — only the endpoint and response fields
+ * changed.
+ */
 export async function checkTokenSecurity(params: {
   contractAddress: string;
   chain: string;
-}): Promise<GoPlusSecurityResult | null> {
+}): Promise<GoPlusNftSecurityResult | null> {
   const apiKey = process.env.GOPLUS_API_KEY;
   if (!apiKey) {
     logger.warn('GoPlus API key not found, skipping security check');
@@ -204,7 +146,7 @@ export async function checkTokenSecurity(params: {
   }
 
   const chainId = getChainId(params.chain);
-  const url = `https://api.gopluslabs.io/api/v1/token_security/${chainId}?contract_addresses=${params.contractAddress}`;
+  const url = `https://api.gopluslabs.io/api/v1/nft_security/${chainId}?contract_addresses=${params.contractAddress}`;
 
   try {
     const response = await fetch(url, {
@@ -215,66 +157,39 @@ export async function checkTokenSecurity(params: {
     });
 
     if (!response.ok) {
-      logger.error(`GoPlus API failed with status ${response.status}`);
+      logger.error(`GoPlus NFT Security API failed with status ${response.status}`);
       return null;
     }
 
-    const data: GoPlusTokenSecurityResponse = await response.json();
+    const data: GoPlusNftSecurityResponse = await response.json();
 
     if (data.code !== 1 || !data.result) {
-      logger.error(`GoPlus API returned error: ${data.message}`);
+      logger.error(`GoPlus NFT Security API returned error: ${data.message}`);
       return null;
     }
 
-    const tokenData = data.result[params.contractAddress.toLowerCase()];
-    if (!tokenData) {
-      logger.error(`GoPlus API did not return data for contract ${params.contractAddress}`);
+    const nftData = data.result[params.contractAddress.toLowerCase()];
+    if (!nftData) {
+      logger.error(`GoPlus NFT Security API did not return data for contract ${params.contractAddress}`);
       return null;
     }
 
-    const riskScore = calculateGoPlusRiskScore(tokenData);
-    const riskFactors: string[] = [];
-
-    // Extract risk factors from the score calculation
-    if (tokenData.is_honeypot === '1') riskFactors.push('Honeypot detected');
-    if (tokenData.cannot_buy === '1') riskFactors.push('Cannot buy token');
-    if (tokenData.cannot_sell_all === '1') riskFactors.push('Cannot sell all tokens');
-    if (tokenData.is_airdrop_scam === '1') riskFactors.push('Airdrop scam');
-    if (tokenData.is_blacklisted === '1') riskFactors.push('Blacklisted token');
-    if (tokenData.buy_tax && parseNumber(tokenData.buy_tax) > 20) riskFactors.push(`High buy tax: ${tokenData.buy_tax}%`);
-    if (tokenData.sell_tax && parseNumber(tokenData.sell_tax) > 20) riskFactors.push(`High sell tax: ${tokenData.sell_tax}%`);
-    if (tokenData.is_mintable === '1') riskFactors.push('Mintable token');
-    if (tokenData.is_trading_cooldown === '1') riskFactors.push('Trading cooldown');
-    if (tokenData.owner_can_change_balance === '1') riskFactors.push('Owner can change balances');
-    if (tokenData.transfer_pausable === '1') riskFactors.push('Transfers pausable');
-    if (tokenData.is_open_source === '0') riskFactors.push('Source code not verified');
-    if (tokenData.is_proxy === '1') riskFactors.push('Proxy contract');
-    if (tokenData.is_anti_whale === '1') riskFactors.push('Anti-whale mechanism');
-    if (tokenData.is_hidden_owner === '1') riskFactors.push('Hidden owner');
-    if (tokenData.honeypot_with_same_creator && parseNumber(tokenData.honeypot_with_same_creator) > 0) {
-      riskFactors.push(`Creator has ${tokenData.honeypot_with_same_creator} honeypots`);
-    }
+    const { score: riskScore, factors: riskFactors } = calculateGoPlusNftRiskScore(nftData);
 
     return {
-      isHoneypot: parseBoolean(tokenData.is_honeypot),
-      isOpenSource: parseBoolean(tokenData.is_open_source),
-      isProxy: parseBoolean(tokenData.is_proxy),
-      buyTax: parseNumber(tokenData.buy_tax || '0'),
-      sellTax: parseNumber(tokenData.sell_tax || '0'),
-      cannotBuy: parseBoolean(tokenData.cannot_buy),
-      cannotSell: parseBoolean(tokenData.cannot_sell_all),
-      isBlacklisted: parseBoolean(tokenData.is_blacklisted),
-      isMintable: parseBoolean(tokenData.is_mintable),
-      isTradingCooldown: parseBoolean(tokenData.is_trading_cooldown),
-      isAirdropScam: parseBoolean(tokenData.is_airdrop_scam),
-      confidence: parseNumber(tokenData.confidence || '0'),
-      trustList: parseBoolean(tokenData.trust_list),
-      audit: tokenData.audit || '0',
+      isOpenSource: parseBoolean(nftData.is_open_source),
+      isMaliciousContract: parseBoolean(nftData.malicious_nft_contract) || parseBoolean(nftData.malicious_address),
+      maliciousBehaviors: nftData.malicious_behavior ?? [],
+      privilegedMinting: parseBoolean(nftData.privileged_minting),
+      transferWithoutApproval: parseBoolean(nftData.transfer_without_approval),
+      selfDestruct: parseBoolean(nftData.self_destruct),
+      oversupplyMinting: parseBoolean(nftData.oversupply_minting),
+      trustList: parseBoolean(nftData.trust_list),
       riskScore,
       riskFactors,
     };
   } catch (error) {
-    logger.error('GoPlus Security check failed:', { error: error instanceof Error ? error.message : String(error) });
+    logger.error('GoPlus NFT Security check failed:', { error: error instanceof Error ? error.message : String(error) });
     void captureException(error, { area: 'goplus-security' });
     return null;
   }
@@ -283,8 +198,8 @@ export async function checkTokenSecurity(params: {
 export async function checkMultipleTokenSecurity(params: {
   contractAddresses: string[];
   chain: string;
-}): Promise<Map<string, GoPlusSecurityResult>> {
-  const results = new Map<string, GoPlusSecurityResult>();
+}): Promise<Map<string, GoPlusNftSecurityResult>> {
+  const results = new Map<string, GoPlusNftSecurityResult>();
 
   for (const address of params.contractAddresses) {
     const result = await checkTokenSecurity({ contractAddress: address, chain: params.chain });

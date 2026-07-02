@@ -59,10 +59,14 @@ export interface AnalyzerResolutionTelemetry {
 
 // ─── Chain detection ───────────────────────────────
 
+// Fix #2: was missing arbiscan.io, so pasting an Arbiscan contract URL never
+// detected Arbitrum. Kept in sync with src/lib/intent/chain-detector.ts
+// (tracked as duplicated logic — see IMP-05 note at the top of this file).
 const CHAIN_DOMAINS: Record<string, string> = {
   'etherscan.io': 'ethereum',
   'basescan.org': 'base',
   'polygonscan.com': 'polygon',
+  'arbiscan.io': 'arbitrum',
   'solscan.io': 'solana',
 };
 
@@ -542,6 +546,7 @@ export async function resolveMintIntent(
     host.endsWith('etherscan.io')
     || host.endsWith('basescan.org')
     || host.endsWith('polygonscan.com')
+    || host.endsWith('arbiscan.io')
     || host.endsWith('solscan.io')
   ) {
     const chain = platform ?? 'ethereum';

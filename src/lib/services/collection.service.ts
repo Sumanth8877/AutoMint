@@ -5,9 +5,14 @@ import { getCollectionMetadata } from '@/lib/blockchain/collections';
 import { logActivity } from '@/lib/monitoring';
 import { captureException } from '@/lib/observability/sentry';
 import { ConflictError, NotFoundError } from '@/lib/api/errors';
+import { CHAIN_KEYS, type ChainKey } from '@/lib/blockchain/chains';
 
-const SUPPORTED_CHAINS = ['ethereum', 'base', 'polygon'] as const;
-type SupportedChain = (typeof SUPPORTED_CHAINS)[number];
+// Fix #2: this used to be a hand-rolled `['ethereum', 'base', 'polygon']`
+// tuple that silently rejected Arbitrum ("Unsupported chain") even though
+// chains.ts already supports it. Derive from the single source of truth so
+// adding a chain to chains.ts is the only place that needs to change.
+const SUPPORTED_CHAINS = CHAIN_KEYS;
+type SupportedChain = ChainKey;
 
 export async function getUserCollections(userId: string) {
   const result = await getDb().select().from(collections).where(eq(collections.userId, userId)).orderBy(collections.createdAt);

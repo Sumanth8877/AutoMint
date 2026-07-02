@@ -1,5 +1,11 @@
 import { getClient } from '@/lib/blockchain/client';
 import type { Abi, AbiFunction, Hex } from 'viem';
+import { CHAIN_KEYS, type ChainKey } from '@/lib/blockchain/chains';
+
+function asChainKey(chain: string): ChainKey | null {
+  const lower = chain.toLowerCase();
+  return (CHAIN_KEYS as readonly string[]).includes(lower) ? (lower as ChainKey) : null;
+}
 
 export type AbiSource = 'etherscan' | 'cached' | 'selector_inspection' | 'fallback';
 
@@ -15,10 +21,15 @@ const MINT_FUNCTIONS = [
 ] as const;
 
 // ─── Chain → Etherscan API mapping ───────────────────────────────
-const ETHERSCAN_APIS: Record<string, string> = {
+// Fix #2: Record<ChainKey, string> is exhaustive — adding a new chain to
+// chains.ts without an entry here is now a compile error, instead of a
+// silent `return null` (which previously made Arbitrum contracts always
+// fail Etherscan ABI lookup).
+const ETHERSCAN_APIS: Record<ChainKey, string> = {
   ethereum: 'https://api.etherscan.io/api',
   base:     'https://api.basescan.org/api',
   polygon:  'https://api.polygonscan.com/api',
+  arbitrum: 'https://api.arbiscan.io/api',
 };
 
 function getEtherscanApiKey(chain: string): string | undefined {
@@ -35,7 +46,8 @@ async function fetchAbiFromEtherscan(
   contractAddress: string,
   chain: string,
 ): Promise<Abi | null> {
-  const baseUrl = ETHERSCAN_APIS[chain.toLowerCase()];
+  const chainKey = asChainKey(chain);
+  const baseUrl = chainKey ? ETHERSCAN_APIS[chainKey] : undefined;
   if (!baseUrl) return null;
 
   const apiKey = getEtherscanApiKey(chain);

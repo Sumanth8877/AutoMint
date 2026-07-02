@@ -6,10 +6,14 @@
  */
 
 // Domain → chain name mapping
+// Fix #2: was missing arbiscan.io, so pasting an Arbiscan contract URL never
+// detected Arbitrum. Kept in sync with src/lib/resolve-mint-intent.ts
+// (tracked as duplicated logic — see IMP-05 note there).
 const CHAIN_DOMAINS: Record<string, string> = {
   'etherscan.io': 'ethereum',
   'basescan.org': 'base',
   'polygonscan.com': 'polygon',
+  'arbiscan.io': 'arbitrum',
   'solscan.io': 'solana',
 };
 

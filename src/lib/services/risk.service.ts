@@ -144,26 +144,30 @@ async function scoreContractAnalysis(params: {
         const goPlusScore = Math.min(goPlusResult.riskScore * 0.4, 40);
         score += goPlusScore;
 
-        // Critical GoPlus checks
-        if (goPlusResult.isHoneypot) {
+        // Fix #3: these were previously ERC-20 token checks (honeypot,
+        // cannotBuy/cannotSell, airdrop scam, blacklist) that don't map onto
+        // an NFT contract and were effectively always false for real NFT
+        // collections. Replaced with the NFT-specific critical checks GoPlus
+        // actually reports for NFT contracts via the NFT Security API.
+        if (goPlusResult.isMaliciousContract) {
           score = Math.min(score + 30, 40);
-          addRisk(reasons, 'GoPlus: Honeypot detected - extremely dangerous', 30);
+          addRisk(reasons, 'GoPlus: NFT contract flagged as malicious', 30);
         }
-        if (goPlusResult.cannotBuy) {
+        if (goPlusResult.selfDestruct) {
           score = Math.min(score + 25, 40);
-          addRisk(reasons, 'GoPlus: Cannot buy token', 25);
+          addRisk(reasons, 'GoPlus: Contract can self-destruct', 25);
         }
-        if (goPlusResult.cannotSell) {
+        if (goPlusResult.transferWithoutApproval) {
           score = Math.min(score + 25, 40);
-          addRisk(reasons, 'GoPlus: Cannot sell token', 25);
+          addRisk(reasons, 'GoPlus: NFTs can be transferred without owner approval', 25);
         }
-        if (goPlusResult.isAirdropScam) {
-          score = Math.min(score + 20, 40);
-          addRisk(reasons, 'GoPlus: Airdrop scam detected', 20);
-        }
-        if (goPlusResult.isBlacklisted) {
+        if (goPlusResult.privilegedMinting) {
           score = Math.min(score + 15, 40);
-          addRisk(reasons, 'GoPlus: Token is blacklisted', 15);
+          addRisk(reasons, 'GoPlus: Privileged/unrestricted minting detected', 15);
+        }
+        if (goPlusResult.oversupplyMinting) {
+          score = Math.min(score + 15, 40);
+          addRisk(reasons, 'GoPlus: Supply cap can be bypassed (oversupply minting)', 15);
         }
       }
     } catch (error) {

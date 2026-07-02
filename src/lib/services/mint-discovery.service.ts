@@ -88,12 +88,45 @@ export function extractRequirementsFromContent(
   const result: Omit<DiscoveredRequirements, 'confidence' | 'source' | 'missingFields'> = {};
 
   // ── Contract address ──────────────────────────────────────────────────────
-  // Prefer 0x addresses near "contract" / "address" keywords, fall back to first found
-  const contractNearby = content.match(
-    /(?:contract|address|addr)[^\n]{0,40}(0x[a-fA-F0-9]{40})/i,
+  // Fix #4: previously took the first 0x address found ANYWHERE on the page
+  // with no filtering — a malicious mint site could plant a prominent
+  // "official contract: 0x<attacker>" string to redirect the auto-discovered
+  // address. Priority order now is:
+  //   1. Address inside a link to a known block explorer's /address/ page —
+  //      requires an attacker to fabricate a full explorer URL, not just a
+  //      plain-text string.
+  //   2. Address near an explicit "contract"/"address"/"addr" label, but
+  //      only when it's the UNIQUE such match — if multiple distinct
+  //      addresses are labeled this way we refuse to guess.
+  //   3. First address anywhere on the page — ONLY when it is the single
+  //      unambiguous 0x address present. If the page contains multiple
+  //      distinct addresses and none matched a stronger signal above, we
+  //      leave contractAddress unset (forcing the caller's "could not
+  //      resolve a contract address" / manual-verification error path)
+  //      rather than silently guessing which one is real.
+  const explorerLinkMatch = content.match(
+    /(?:etherscan\.io|basescan\.org|polygonscan\.com|arbiscan\.io)\/(?:address|token|nft)\/(0x[a-fA-F0-9]{40})/i,
   );
-  const contractAnywhere = content.match(/\b(0x[a-fA-F0-9]{40})\b/);
-  const rawContract = contractNearby?.[1] ?? contractAnywhere?.[1];
+
+  const distinctAddresses = Array.from(
+    new Set((content.match(/\b0x[a-fA-F0-9]{40}\b/g) ?? []).map((a) => a.toLowerCase())),
+  );
+
+  const contractNearbyMatches = Array.from(
+    content.matchAll(/(?:contract|address|addr)[^\n]{0,40}(0x[a-fA-F0-9]{40})/ig),
+  ).map((m) => m[1].toLowerCase());
+  const distinctNearby = Array.from(new Set(contractNearbyMatches));
+
+  let rawContract: string | undefined;
+  if (explorerLinkMatch?.[1]) {
+    rawContract = explorerLinkMatch[1];
+  } else if (distinctNearby.length === 1) {
+    rawContract = distinctNearby[0];
+  } else if (distinctAddresses.length === 1) {
+    rawContract = distinctAddresses[0];
+  }
+  // else: ambiguous (0 or 2+ candidates with no stronger signal) — leave unset.
+
   if (rawContract) result.contractAddress = rawContract.toLowerCase();
 
   // ── Chain detection ───────────────────────────────────────────────────────

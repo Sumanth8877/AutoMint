@@ -28,7 +28,7 @@ export type DiscoveryProviderResult = {
 };
 
 // ── Regex patterns ────────────────────────────────────────────────────────────
-const CONTRACT_RE = /0x[a-fA-F0-9]{40}/;
+const CONTRACT_SCAN_RE = /\b0x[a-fA-F0-9]{40}\b/g;
 const PRICE_RE = /(?:mint\s*)?(?:price|cost)\D{0,30}(\d+(?:\.\d+)?)\s*(ETH|WETH|MATIC|POL|USDC|USDT)/i;
 const FALLBACK_PRICE_RE = /(\d+(?:\.\d+)?)\s*(ETH|WETH|MATIC|POL|USDC|USDT)/i;
 const DATE_RE = /\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2}(?:,\s*\d{4})?(?:\s+(?:at\s+)?\d{1,2}(?::\d{2})?\s*(?:AM|PM|UTC|EST|EDT|PST|PDT|GMT)?)?/i;
@@ -121,8 +121,32 @@ function extractSocials(text: string): DiscoverySocials {
  * Extract NFT mint discovery fields from raw page text/markdown.
  * Used by Firecrawl (and previously Jina) after fetching page content.
  */
+// Fix #4: previously matched the first 0x address ANYWHERE in the page with
+// no contextual filtering (see mint-discovery.service.ts for the same fix
+// applied to the higher-stakes custom-mint-site discovery tier). Now prefers
+// a block-explorer-linked address, then a uniquely-labeled "contract/address"
+// match, then falls back to a bare first-match ONLY if it's the single
+// unambiguous address on the page.
+const EXPLORER_LINK_RE = /(?:etherscan\.io|basescan\.org|polygonscan\.com|arbiscan\.io)\/(?:address|token|nft)\/(0x[a-fA-F0-9]{40})/i;
+const CONTRACT_NEARBY_RE = /(?:contract|address|addr)[^\n]{0,40}(0x[a-fA-F0-9]{40})/ig;
+
+function extractContractAddress(text: string): string | undefined {
+  const explorerMatch = text.match(EXPLORER_LINK_RE)?.[1];
+  if (explorerMatch) return explorerMatch.toLowerCase();
+
+  const nearby = Array.from(text.matchAll(CONTRACT_NEARBY_RE)).map((m) => m[1].toLowerCase());
+  const distinctNearby = Array.from(new Set(nearby));
+  if (distinctNearby.length === 1) return distinctNearby[0];
+
+  const distinctAll = Array.from(new Set((text.match(CONTRACT_SCAN_RE) ?? []).map((a) => a.toLowerCase())));
+  if (distinctAll.length === 1) return distinctAll[0];
+
+  // Ambiguous (0 or 2+ candidates with no stronger signal) — don't guess.
+  return undefined;
+}
+
 export function extractDiscoveryFields(text: string, title?: string): DiscoveryProviderResult {
-  const contract = text.match(CONTRACT_RE)?.[0]?.toLowerCase();
+  const contract = extractContractAddress(text);
   const socials = extractSocials(text);
   return {
     collectionName: extractCollectionName(title, text),
