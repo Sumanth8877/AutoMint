@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import {
@@ -176,13 +177,19 @@ export default async function DashboardPage() {
         </div>
 
         {d.recentHistory.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 gap-3">
-            <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-border bg-surface-hover">
-              <Zap className="h-6 w-6 text-muted" />
+          <div className="flex flex-col items-center justify-center gap-4 py-10 text-center">
+            <div className="relative aspect-[16/9] w-full max-w-md overflow-hidden rounded-2xl border border-border bg-white">
+              <Image
+                src="/illustrations/empty-dashboard.jpeg"
+                alt="A small character standing behind a control panel with idle gauges and an unpressed red button, ready to begin."
+                fill
+                sizes="(min-width: 640px) 28rem, 90vw"
+                className="object-contain p-3"
+              />
             </div>
-            <p className="text-sm font-semibold text-text">No mints yet</p>
-            <p className="text-xs text-muted">Your mint history will appear here</p>
-            <Link href="/mints" className="mt-2 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover transition-colors">
+            <p className="text-base font-semibold text-text">No mints yet</p>
+            <p className="max-w-sm text-xs text-muted">The control panel is idle. Queue your first mint to bring it to life.</p>
+            <Link href="/mints" className="mt-1 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover transition-colors">
               <Zap className="h-3 w-3" />Queue your first mint
             </Link>
           </div>

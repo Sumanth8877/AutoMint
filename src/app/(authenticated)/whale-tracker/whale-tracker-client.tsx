@@ -534,7 +534,8 @@ export default function WhaleTrackerClient() {
           ) : (
             <div className="p-5">
               <EmptyState
-                icon={Eye}
+                image="/illustrations/empty-tracked-wallets.jpeg"
+                imageAlt="A small character stands on a crate peering through a long periscope, watching for whales that haven't shown up yet."
                 title="No tracked wallets."
                 description="Add a wallet to start monitoring mint activity and configuring copy-mint rules."
                 action={<Button type="button" onClick={openAddWallet}><Plus className="h-4 w-4" aria-hidden="true" />Add Wallet</Button>}
@@ -590,7 +591,13 @@ export default function WhaleTrackerClient() {
               })}
               </Stagger>
             ) : (
-              <EmptyState icon={Zap} title="No copy mint rules." description="Create a rule from a tracked wallet to record or execute copy-mint actions." action={<Button type="button" onClick={() => openAddRule()}><Plus className="h-4 w-4" aria-hidden="true" />Create Rule</Button>} />
+              <EmptyState
+                image="/illustrations/empty-copy-rules.jpeg"
+                imageAlt="A small character holds an open blank rulebook with a pen floating nearby, ready to write the first rule."
+                title="No copy mint rules."
+                description="Create a rule from a tracked wallet to record or execute copy-mint actions."
+                action={<Button type="button" onClick={() => openAddRule()}><Plus className="h-4 w-4" aria-hidden="true" />Create Rule</Button>}
+              />
             )}
           </div>
         </Card>
@@ -624,7 +631,12 @@ export default function WhaleTrackerClient() {
               ))}
               </Stagger>
             ) : (
-              <EmptyState icon={ShieldCheck} title="No reputation records." description="Reputation appears after tracked wallets produce copy-mint outcomes." />
+              <EmptyState
+                image="/illustrations/empty-reputation.jpeg"
+                imageAlt="A small character stands in front of a tall blank scoreboard holding a piece of chalk, unsure what to write yet."
+                title="No reputation records."
+                description="Reputation appears after tracked wallets produce copy-mint outcomes."
+              />
             )}
           </div>
         </Card>
@@ -654,7 +666,12 @@ export default function WhaleTrackerClient() {
               ))}
               </Stagger>
             ) : (
-              <EmptyState icon={Activity} title="No detected mint activity." description="Detected mints appear after tracked wallet webhook activity is recorded." />
+              <EmptyState
+                image="/illustrations/empty-tracker-activity.jpeg"
+                imageAlt="A small character sits on a stool watching a blank radar screen with a slow sweeping arm, listening for signals."
+                title="No detected mint activity."
+                description="Detected mints appear after tracked wallet webhook activity is recorded."
+              />
             )}
           </div>
         </Card>

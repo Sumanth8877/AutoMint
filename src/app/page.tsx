@@ -191,41 +191,46 @@ export default async function Home() {
             </div>
           </FadeIn>
 
-          {/* Hero visual — 3D-tilt terminal mockup */}
+          {/* Hero visual — Xiaohei mint machine illustration */}
           <Reveal amount={0.1} className="mx-auto w-full max-w-4xl pt-6">
             <TiltCard max={6} className="w-full">
               <div
-                className="relative overflow-hidden rounded-2xl border border-border-strong bg-surface/90 text-left shadow-lg backdrop-blur-sm"
+                className="relative overflow-hidden rounded-2xl border border-border-strong bg-white text-left shadow-lg backdrop-blur-sm"
                 style={{ boxShadow: '0 30px 80px rgba(0,0,0,0.08), 0 0 0 1px rgba(79,70,229,0.03)' }}
               >
-                <div className="flex items-center gap-2 border-b border-border px-5 py-3">
+                <div className="flex items-center gap-2 border-b border-border bg-surface/90 px-5 py-3">
                   <span className="h-2.5 w-2.5 rounded-full bg-danger/70" />
                   <span className="h-2.5 w-2.5 rounded-full bg-gold/70" />
                   <span className="h-2.5 w-2.5 rounded-full bg-success/70" />
                   <span className="ml-3 font-mono text-[11px] text-muted">automint — mission-control</span>
                   <span className="ml-auto flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted">
-                    Sample preview
+                    How it works
                   </span>
                 </div>
-                <div className="grid gap-px bg-border sm:grid-cols-3">
+                <div className="relative aspect-[16/9] w-full">
+                  <Image
+                    src="/illustrations/hero-mint-machine.jpeg"
+                    alt="A small character energetically cranking a hand-drawn mint machine while a stream of minted NFTs flies out the chute."
+                    fill
+                    sizes="(min-width: 1024px) 56rem, 90vw"
+                    priority
+                    className="object-contain p-4"
+                  />
+                </div>
+                <div className="grid gap-px border-t border-border bg-border sm:grid-cols-3">
                   {[
-                    { label: 'Active Mints', value: '—', icon: Zap, tone: 'text-primary' },
-                    { label: 'Risk Score', value: '—', icon: Shield, tone: 'text-success' },
-                    { label: 'Gas', value: '—', icon: TrendingUp, tone: 'text-gold' },
+                    { label: 'Latency', value: '< 50 ms', icon: Zap, tone: 'text-primary' },
+                    { label: 'Custody', value: 'Non-custodial', icon: Shield, tone: 'text-success' },
+                    { label: 'Chains', value: '15+ EVM', icon: TrendingUp, tone: 'text-gold' },
                   ].map((s) => (
                     <div key={s.label} className="bg-surface p-5">
                       <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted">
                         <s.icon className={`h-3 w-3 ${s.tone}`} />
                         {s.label}
                       </div>
-                      <p className="stat-value text-2xl font-medium text-text">{s.value}</p>
+                      <p className="stat-value text-lg font-medium text-text">{s.value}</p>
                     </div>
                   ))}
-                </div>
-                <div className="space-y-2 p-5 font-mono text-[12px] leading-relaxed text-secondary">
-                  <p><span className="text-muted">$</span> analyze --contract 0x...</p>
-                  <p className="text-muted">Run a real analysis from your dashboard to see live results here.</p>
-                  <p><span className="text-muted">$</span> <span className="animate-pulse">▍</span></p>
                 </div>
               </div>
             </TiltCard>
