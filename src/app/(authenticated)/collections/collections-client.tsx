@@ -250,10 +250,19 @@ export default function CollectionsClient() {
         </div>
       ) : filtered.length === 0 ? (
         <EmptyState
-          icon={FolderKanban}
-          title={searchQ ? 'No matching collections' : 'No collections yet'}
-          description={searchQ ? 'Try a different search term' : 'Add your first NFT collection to start tracking and minting.'}
-          action={!searchQ ? <Button variant="primary" onClick={() => setAddOpen(true)}><Plus className="h-3.5 w-3.5" />Add Collection</Button> : undefined}
+          {...(searchQ
+            ? {
+                icon: FolderKanban,
+                title: 'No matching collections',
+                description: 'Try a different search term',
+              }
+            : {
+                image: '/illustrations/empty-collections.jpeg',
+                imageAlt: 'A character holding an empty picture frame beside an empty filing drawer.',
+                title: 'No collections yet',
+                description: 'Analyzed mints get saved here. Add your first NFT collection to start tracking floor prices, risk, and mint activity.',
+                action: <Button variant="primary" onClick={() => setAddOpen(true)}><Plus className="h-3.5 w-3.5" />Add Collection</Button>,
+              })}
         />
       ) : (
         <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" inView stagger={0.06}>

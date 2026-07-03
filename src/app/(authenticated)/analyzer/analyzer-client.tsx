@@ -469,9 +469,10 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
           </div>
         ) : (
           <EmptyState
-            icon={Gauge}
+            image="/illustrations/empty-analyzer.jpeg"
+            imageAlt="A character with a magnifying glass waiting beside an empty URL input."
             title="Ready to analyze"
-            description="Paste a mint URL, explorer URL, OpenSea collection URL, or direct contract address to check whether the project is a scam or legitimate."
+            description="Paste a mint URL, explorer URL, OpenSea collection URL, or direct contract address. AutoMint checks the contract, gas, and rug/honeypot signals in seconds."
           />
         )}
 

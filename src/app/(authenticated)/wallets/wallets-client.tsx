@@ -186,9 +186,10 @@ export default function WalletsClient() {
         </div>
       ) : wallets.length === 0 ? (
         <EmptyState
-          icon={Wallet}
-          title="No wallets connected"
-          description="Add a wallet to start auto-minting NFTs across all supported chains."
+          image="/illustrations/empty-wallets.jpeg"
+          imageAlt="An empty encrypted vault waiting for its first key."
+          title="No wallets yet"
+          description="Import a signing wallet to start auto-minting NFTs across every supported chain. Keys stay encrypted, custody stays yours."
           action={<Button variant="success" onClick={() => setAddOpen(true)}><Plus className="h-3.5 w-3.5" />Add Wallet</Button>}
         />
       ) : (

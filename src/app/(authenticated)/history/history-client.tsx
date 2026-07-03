@@ -444,9 +444,16 @@ export default function HistoryClient() {
         ) : activeItems.length === 0 ? (
           <div className="p-5">
             <EmptyState
-              icon={activeTab === 'mints' ? ReceiptText : activeTab === 'scheduled' ? CalendarClock : Gauge}
-              title={activeTab === 'mints' ? 'No mint history' : activeTab === 'scheduled' ? 'No scheduled tasks' : 'No analyzer history'}
-              description="No matching operational records were found."
+              {...(activeTab === 'mints'
+                ? {
+                    image: '/illustrations/empty-history.jpeg',
+                    imageAlt: 'A character holding an empty history clipboard, waiting for the first mint to land.',
+                    title: 'No mint history',
+                    description: 'Your first confirmed mint lands here.',
+                  }
+                : activeTab === 'scheduled'
+                  ? { icon: CalendarClock, title: 'No scheduled tasks', description: 'No matching operational records were found.' }
+                  : { icon: Gauge, title: 'No analyzer history', description: 'No matching operational records were found.' })}
             />
           </div>
         ) : activeTab === 'mints' ? (

@@ -336,9 +336,10 @@ export default function MintsClient() {
           Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} lines={2} />)
         ) : filtered.length === 0 ? (
           <EmptyState
-            icon={Zap}
+            image="/illustrations/empty-mints.jpeg"
+            imageAlt="A character sitting on an empty inbox tray, holding a MINT sign above an empty URL bar."
             title="No mints in queue"
-            description="Queue a mint URL to get started. AutoMint will analyze the contract and execute automatically."
+            description="Queue a mint URL to get started. AutoMint will analyze the contract and execute automatically the moment the mint opens."
             action={
               <Button variant="neon" onClick={() => dispatch({ type: 'OPEN_QUEUE' })}>
                 <Plus className="h-3.5 w-3.5" />Queue Mint
