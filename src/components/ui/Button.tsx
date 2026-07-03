@@ -1,6 +1,16 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+'use client';
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
+import { springs } from '@/components/motion';
+
+// framer-motion redefines a few DOM handlers, so omit them to avoid type clashes.
+type NativeButtonProps = Omit<
+  ButtonHTMLAttributes<HTMLButtonElement>,
+  'onAnimationStart' | 'onAnimationEnd' | 'onDragStart' | 'onDragEnd' | 'onDrag'
+>;
+
+interface ButtonProps extends NativeButtonProps {
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'success' | 'neon' | 'gold';
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   loading?: boolean;
@@ -18,11 +28,11 @@ export default function Button({
   disabled,
   ...props
 }: ButtonProps) {
+  const reduce = useReducedMotion();
   const base =
-    'inline-flex shrink-0 items-center justify-center font-semibold rounded-lg transition-all duration-200 ' +
+    'inline-flex shrink-0 items-center justify-center font-semibold rounded-lg transition-colors duration-200 ' +
     'focus:outline-none focus-visible:ring-2 focus-visible:ring-neon/50 focus-visible:ring-offset-2 ' +
-    'focus-visible:ring-offset-background active:scale-[0.97] disabled:active:scale-100 ' +
-    'tracking-normal';
+    'focus-visible:ring-offset-background tracking-normal will-change-transform';
 
   const variants: Record<string, string> = {
     primary:
@@ -57,13 +67,18 @@ export default function Button({
     ? { boxShadow: '0 0 30px rgba(124,58,237,0.50), 0 0 8px rgba(124,58,237,0.70)' }
     : undefined;
 
+  const isDisabled = disabled || loading;
+
   return (
-    <button
+    <motion.button
       className={`${base} ${variants[variant]} ${sizes[size]} ${
-        disabled || loading ? 'cursor-not-allowed opacity-50' : ''
+        isDisabled ? 'cursor-not-allowed opacity-50' : ''
       } ${className}`}
       style={glowStyle}
-      disabled={disabled || loading}
+      disabled={isDisabled}
+      whileHover={reduce || isDisabled ? undefined : { scale: 1.02 }}
+      whileTap={reduce || isDisabled ? undefined : { scale: 0.96 }}
+      transition={springs.snappy}
       {...props}
     >
       {loading && (
@@ -73,6 +88,6 @@ export default function Button({
         </svg>
       )}
       {children}
-    </button>
+    </motion.button>
   );
 }

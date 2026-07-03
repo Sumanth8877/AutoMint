@@ -9,6 +9,7 @@ import Badge from '@/components/ui/Badge';
 import Card from '@/components/ui/Card';
 import { MetricCard } from '@/components/ui/metric-card';
 import { PageHeader } from '@/components/ui/page-header';
+import { Stagger, StaggerItem, Reveal } from '@/components/motion';
 import { MintActivityChart } from '@/components/dashboard/mint-activity-chart';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getDb } from '@/lib/db';
@@ -117,15 +118,15 @@ export default async function DashboardPage() {
       />
 
       {/* Metrics */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard label="Active Mints" value={d.pendingTasks} detail="Queued & monitoring" icon={Radio} tone="neon" />
-        <MetricCard label="Completed" value={d.completedTasks} detail={`${successRate}% success rate`} icon={CheckCircle2} tone="success" />
-        <MetricCard label="Portfolio ETH" value={`${d.portfolioEth.toFixed(3)} ETH`} detail={formatUsd(d.portfolioUsdValue)} icon={Wallet} tone="gold" />
-        <MetricCard label="Collections" value={d.collectionCount} detail={`${d.fundedWalletCount} funded wallets`} icon={Target} tone="primary" />
-      </div>
+      <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StaggerItem><MetricCard label="Active Mints" value={d.pendingTasks} detail="Queued & monitoring" icon={Radio} tone="neon" /></StaggerItem>
+        <StaggerItem><MetricCard label="Completed" value={d.completedTasks} detail={`${successRate}% success rate`} icon={CheckCircle2} tone="success" /></StaggerItem>
+        <StaggerItem><MetricCard label="Portfolio ETH" value={`${d.portfolioEth.toFixed(3)} ETH`} detail={formatUsd(d.portfolioUsdValue)} icon={Wallet} tone="gold" /></StaggerItem>
+        <StaggerItem><MetricCard label="Collections" value={d.collectionCount} detail={`${d.fundedWalletCount} funded wallets`} icon={Target} tone="primary" /></StaggerItem>
+      </Stagger>
 
       {/* Main grid */}
-      <div className="grid gap-6 lg:grid-cols-3">
+      <Reveal className="grid gap-6 lg:grid-cols-3">
 
         {/* 7-day chart */}
         <Card tone="neon" className="p-6 lg:col-span-2">
@@ -160,9 +161,10 @@ export default async function DashboardPage() {
             ))}
           </div>
         </Card>
-      </div>
+      </Reveal>
 
       {/* Recent activity */}
+      <Reveal>
       <Card tone="neon" className="p-6">
         <div className="mb-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -209,19 +211,20 @@ export default async function DashboardPage() {
           </div>
         )}
       </Card>
+      </Reveal>
 
       {/* Quick actions */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" inView>
         {[
           { href: '/analyzer',      icon: Gauge,     label: 'Analyze Mint',    desc: 'AI contract scan',      tone: 'text-neon',    glow: 'rgba(0,245,255,0.20)',    border: 'border-neon/20' },
           { href: '/collections',   icon: Target,    label: 'Collections',     desc: 'Manage watchlist',    tone: 'text-primary', glow: 'rgba(124,58,237,0.20)', border: 'border-primary/20' },
           { href: '/wallets',       icon: Wallet,    label: 'Wallets',          desc: 'Fund & configure',    tone: 'text-success', glow: 'rgba(16,185,129,0.20)', border: 'border-success/20' },
           { href: '/whale-tracker', icon: Eye,       label: 'Whale Tracker',   desc: 'Follow smart money',  tone: 'text-gold',    glow: 'rgba(245,158,11,0.20)',  border: 'border-gold/20' },
         ].map(a => (
+          <StaggerItem key={a.href}>
           <Link
-            key={a.href}
             href={a.href}
-            className="group flex items-center gap-4 rounded-xl border bg-surface p-4 hover:bg-surface-hover transition-all duration-200 hover:scale-[1.02]"
+            className="group flex h-full items-center gap-4 rounded-xl border bg-surface p-4 hover:bg-surface-hover transition-all duration-200 hover:scale-[1.02]"
             style={{ borderColor: a.border.replace('border-', ''), boxShadow: `0 0 20px transparent` }}
           >
             <div
@@ -236,8 +239,9 @@ export default async function DashboardPage() {
             </div>
             <ArrowRight className="ml-auto h-3.5 w-3.5 text-muted opacity-0 group-hover:opacity-100 transition-opacity" />
           </Link>
+          </StaggerItem>
         ))}
-      </div>
+      </Stagger>
     </div>
   );
 }
