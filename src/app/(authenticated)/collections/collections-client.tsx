@@ -164,11 +164,8 @@ export default function CollectionsClient() {
     queryFn: () => apiRequest<{ collections: Collection[] }>('/api/collections').then(r => r.collections ?? []),
   });
 
-  
-    onError: (e: Error) => setFormError(e.message),
-  });
 
-  
+
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => apiRequest(`/api/collections/${id}`, { method: 'DELETE' }),
