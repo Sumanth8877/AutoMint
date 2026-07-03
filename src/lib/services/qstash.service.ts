@@ -750,12 +750,17 @@ export async function executeScheduledMint(taskId: string) {
     // below returns before reaching, so a low-balance mint only ever showed
     // "❌ Mint Failed" with no preceding "⚡ Executing". executeMintTask() is
     // called with notifyStarted:false below to avoid a duplicate on success.
-    await sendScheduledMintNotification(task.userId, 'mint_executing', {
+    // Speed fix: this Telegram/email notification used to be awaited right
+    // before the balance check and broadcast on every mint. That put a full
+    // external API round-trip (often 200ms-1s+) on the critical execution
+    // path for a purely informational message. Fire-and-forget it instead so
+    // it never delays the actual on-chain balance check / transaction.
+    void sendScheduledMintNotification(task.userId, 'mint_executing', {
       taskId,
       collectionName,
       contractAddress: task.contractAddress || undefined,
       mintPrice: effectiveMintPrice || undefined,
-    });
+    }).catch(() => {});
 
     const balance = await getWalletBalance(wallet.address, wallet.chain);
     if (!hasEnoughBalance(balance.balance, effectiveMintPrice, task.quantity)) {
