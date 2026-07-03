@@ -219,6 +219,16 @@ function TopBar({
               onKeyDown={handleSearchKeyDown}
               className="flex-1 bg-transparent outline-none placeholder:text-muted/60 text-text text-xs"
             />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => { setSearchQuery(''); setActiveIndex(-1); onSearch(''); }}
+                  className="flex items-center justify-center text-muted hover:text-text transition-colors"
+                  aria-label="Clear search"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             {searching && <div className="h-3 w-3 rounded-full border border-primary/20 border-t-primary animate-spin shrink-0" aria-hidden="true" />}
           </div>
 
