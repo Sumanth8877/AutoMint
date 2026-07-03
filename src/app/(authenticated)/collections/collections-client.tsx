@@ -23,10 +23,10 @@ type Collection = {
 };
 
 const chainColors: Record<string, string> = {
-  ethereum: 'text-neon border-neon/25 bg-neon/8',
-  base:     'text-primary border-primary/25 bg-primary/8',
-  polygon:  'text-accent border-accent/25 bg-accent/8',
-  arbitrum: 'text-info border-info/25 bg-info/8',
+  ethereum: 'text-primary border-primary/15 bg-indigo-50',
+  base:     'text-primary border-primary/15 bg-indigo-50',
+  polygon:  'text-primary border-primary/15 bg-indigo-50',
+  arbitrum: 'text-info border-slate-200 bg-slate-100',
 };
 
 function riskBadge(score: number | null) {
@@ -42,7 +42,7 @@ function FloorMovement({ changePercent }: { changePercent?: string | null }) {
   if (Number.isNaN(value)) return null;
   const up = value >= 0;
   return (
-    <span className={`inline-flex items-center gap-0.5 text-[10px] font-bold ${up ? 'text-success' : 'text-danger'}`}>
+    <span className={`inline-flex items-center gap-0.5 text-xs font-bold ${up ? 'text-success' : 'text-danger'}`}>
       {up ? <TrendingUp className="h-2.5 w-2.5" /> : <TrendingDown className="h-2.5 w-2.5" />}
       {changePercent}%
     </span>
@@ -67,36 +67,36 @@ function CollectionCard({
       {/* Header */}
       <div className="flex items-start justify-between gap-3 mb-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-background">
-            <FolderKanban className="h-4 w-4 text-neon" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-surface">
+            <FolderKanban className="h-4 w-4 text-primary" />
           </div>
           <div>
             <p className="font-bold text-text text-sm">{col.name ?? 'Unnamed Collection'}</p>
-            <p className="text-[10px] font-mono text-muted">{col.contractAddress.slice(0, 10)}…{col.contractAddress.slice(-6)}</p>
+            <p className="text-xs font-mono text-muted">{col.contractAddress.slice(0, 10)}…{col.contractAddress.slice(-6)}</p>
           </div>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${chainStyle}`}>{col.chain}</span>
+          <span className={`rounded-full border px-2 py-0.5 text-xs font-bold uppercase tracking-wider ${chainStyle}`}>{col.chain}</span>
         </div>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-4 gap-2 mb-4">
-        <div className="rounded-lg bg-background/50 p-2.5 text-center">
-          <p className="text-[9px] font-bold uppercase tracking-widest text-muted mb-1">Supply</p>
-          <p className="text-sm font-black text-text">{col.totalSupply?.toLocaleString() ?? '–'}</p>
+        <div className="rounded-lg bg-surface-hover p-2.5 text-center">
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted mb-1">Supply</p>
+          <p className="text-sm font-bold text-text">{col.totalSupply?.toLocaleString() ?? '–'}</p>
         </div>
-        <div className="rounded-lg bg-background/50 p-2.5 text-center">
-          <p className="text-[9px] font-bold uppercase tracking-widest text-muted mb-1">Minted</p>
-          <p className="text-sm font-black text-text">{col.mintedCount?.toLocaleString() ?? '–'}</p>
+        <div className="rounded-lg bg-surface-hover p-2.5 text-center">
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted mb-1">Minted</p>
+          <p className="text-sm font-bold text-text">{col.mintedCount?.toLocaleString() ?? '–'}</p>
         </div>
-        <div className="rounded-lg bg-background/50 p-2.5 text-center">
-          <p className="text-[9px] font-bold uppercase tracking-widest text-muted mb-1">Price</p>
-          <p className="text-sm font-black text-gold">{col.mintPrice ?? 'Free'}</p>
+        <div className="rounded-lg bg-surface-hover p-2.5 text-center">
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted mb-1">Price</p>
+          <p className="text-sm font-bold text-gold">{col.mintPrice ?? 'Free'}</p>
         </div>
-        <div className="rounded-lg bg-background/50 p-2.5 text-center">
-          <p className="text-[9px] font-bold uppercase tracking-widest text-muted mb-1">Floor</p>
-          <p className="stat-value text-sm font-black text-text">{col.floorPrice ?? '–'}</p>
+        <div className="rounded-lg bg-surface-hover p-2.5 text-center">
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted mb-1">Floor</p>
+          <p className="stat-value text-sm font-bold text-text">{col.floorPrice ?? '–'}</p>
           <FloorMovement changePercent={col.floorChangePercent} />
         </div>
       </div>
@@ -105,10 +105,10 @@ function CollectionCard({
       {filled !== null && (
         <div className="mb-4">
           <div className="flex justify-between mb-1.5">
-            <span className="text-[10px] text-muted">Mint Progress</span>
-            <span className="text-[10px] font-bold text-neon">{filled.toFixed(1)}%</span>
+            <span className="text-xs text-muted">Mint Progress</span>
+            <span className="text-xs font-bold text-primary">{filled.toFixed(1)}%</span>
           </div>
-          <div className="h-1.5 w-full rounded-full bg-white/5 overflow-hidden">
+          <div className="h-1.5 w-full rounded-full bg-surface-hover overflow-hidden">
             <div className="mint-progress-bar h-full" style={{ width: `${filled}%` }} />
           </div>
         </div>
@@ -266,7 +266,7 @@ export default function CollectionsClient() {
             <select
               value={form.chain}
               onChange={e => setForm(p => ({ ...p, chain: e.target.value }))}
-              className="h-10 w-full rounded-lg border border-border bg-background/80 px-3 text-sm text-text focus:border-neon/60 focus:outline-none focus:ring-2 focus:ring-neon/15"
+              className="h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm text-text focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/15"
             >
               {['ethereum', 'base', 'polygon', 'arbitrum', 'optimism'].map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
             </select>

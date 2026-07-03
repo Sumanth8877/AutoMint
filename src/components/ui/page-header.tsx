@@ -13,12 +13,12 @@ interface PageHeaderProps {
   badge?: ReactNode;
 }
 
-const iconToneMap: Record<string, { bg: string; text: string; border: string; glow: string }> = {
-  neon:    { bg: 'bg-neon/10',    text: 'text-neon',    border: 'border-neon/25',    glow: '0 0 20px rgba(0,255,136,0.30)' },
-  gold:    { bg: 'bg-gold/10',    text: 'text-gold',    border: 'border-gold/25',    glow: '0 0 20px rgba(240,169,59,0.30)' },
-  purple:  { bg: 'bg-primary/10', text: 'text-primary', border: 'border-primary/25', glow: '0 0 20px rgba(0,255,136,0.30)' },
-  danger:  { bg: 'bg-danger/10',  text: 'text-danger',  border: 'border-danger/25',  glow: '0 0 20px rgba(255,77,77,0.30)' },
-  success: { bg: 'bg-success/10', text: 'text-success', border: 'border-success/25', glow: '0 0 20px rgba(0,255,136,0.30)' },
+const iconToneMap: Record<string, { bg: string; text: string; border: string }> = {
+  neon:    { bg: 'bg-indigo-50',  text: 'text-primary', border: 'border-primary/15' },
+  gold:    { bg: 'bg-amber-50',   text: 'text-gold',    border: 'border-gold/15' },
+  purple:  { bg: 'bg-indigo-50',  text: 'text-primary', border: 'border-primary/15' },
+  danger:  { bg: 'bg-red-50',     text: 'text-danger',  border: 'border-danger/15' },
+  success: { bg: 'bg-emerald-50', text: 'text-success', border: 'border-success/15' },
 };
 
 // NOTE: this is a Server Component on purpose. It's rendered from every
@@ -39,20 +39,18 @@ export function PageHeader({ title, subtitle, eyebrow, description, icon: Icon, 
       <div className="flex items-center gap-4">
         {Icon && (
           <PopIn
-            className={`flex h-12 w-12 items-center justify-center rounded-2xl border ${t.bg} ${t.text} ${t.border}`}
-            style={{ boxShadow: t.glow }}
-            rotate={12}
+            className={`flex h-11 w-11 items-center justify-center rounded-xl border ${t.bg} ${t.text} ${t.border}`}
           >
             <Icon className="h-5 w-5" aria-hidden="true" />
           </PopIn>
         )}
         <div>
-          {eyebrow && <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{eyebrow}</p>}
+          {eyebrow && <p className="text-xs font-semibold uppercase tracking-wider text-muted">{eyebrow}</p>}
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-black tracking-tight text-text">{title}</h1>
+            <h1 className="text-xl font-bold tracking-tight text-text">{title}</h1>
             {badge}
           </div>
-          {subtitle && <p className="mt-0.5 text-sm text-muted">{subtitle}</p>}
+          {subtitle && <p className="mt-0.5 text-sm text-secondary">{subtitle}</p>}
           {description && <p className="mt-1 text-xs text-muted">{description}</p>}
         </div>
       </div>

@@ -44,8 +44,8 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
                     className={[
                       'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
                       active
-                        ? 'bg-primary/10 text-primary'
-                        : 'text-muted hover:bg-white/5 hover:text-text',
+                        ? 'bg-indigo-50 text-primary'
+                        : 'text-muted hover:bg-surface-hover hover:text-text',
                     ].join(' ')}
                   >
                     <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />

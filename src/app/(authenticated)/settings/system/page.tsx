@@ -15,7 +15,7 @@ export default async function SystemMaintenancePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-black tracking-tight text-text">System</h2>
+        <h2 className="text-xl font-bold tracking-tight text-text">System</h2>
         <p className="mt-1 max-w-2xl text-sm text-muted">
           Dependency audits and package updates for AutoMint.
         </p>

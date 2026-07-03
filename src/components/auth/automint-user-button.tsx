@@ -53,7 +53,7 @@ export default function AutoMintUserButton() {
         aria-expanded={open}
       >
         {/* Avatar */}
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-primary/30 bg-primary/15 text-xs font-bold text-text">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-primary/20 bg-indigo-50 text-xs font-bold text-text">
           {user?.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={user.imageUrl} alt="" className="h-full w-full object-cover" />
@@ -64,7 +64,7 @@ export default function AutoMintUserButton() {
         {/* Name + email */}
         <div className="min-w-0 flex-1">
           <p className="truncate text-xs font-bold text-text">{name}</p>
-          {email && <p className="truncate text-[10px] text-muted">{email}</p>}
+          {email && <p className="truncate text-xs text-muted">{email}</p>}
         </div>
         {/* Chevron */}
         <svg className="h-3.5 w-3.5 shrink-0 text-muted transition-transform group-aria-expanded:rotate-180" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24" aria-hidden="true">
@@ -73,7 +73,7 @@ export default function AutoMintUserButton() {
       </button>
 
       {open ? (
-        <div className="absolute left-0 bottom-10 z-50 w-64 overflow-hidden rounded-xl border border-border-strong bg-elevated shadow-[0_-12px_48px_rgba(0,0,0,0.65)]">
+        <div className="absolute left-0 bottom-10 z-50 w-64 overflow-hidden rounded-xl border border-border-strong bg-surface shadow-[0_-12px_48px_rgba(0,0,0,0.08)]">
           <div className="border-b border-border px-4 py-3">
             <p className="truncate text-sm font-semibold text-text">{displayName}</p>
             {email ? <p className="mt-1 truncate text-xs text-muted">{email}</p> : null}
@@ -81,7 +81,7 @@ export default function AutoMintUserButton() {
           <button
             type="button"
             onClick={() => void signOut({ redirectUrl: '/' })}
-            className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-danger/80 hover:bg-danger/5 hover:text-danger transition-colors"
+            className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-danger hover:bg-red-50 hover:text-danger transition-colors"
           >
             <LogOut className="h-4 w-4" aria-hidden="true" />
             Sign out

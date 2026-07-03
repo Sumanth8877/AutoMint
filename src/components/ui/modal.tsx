@@ -23,10 +23,10 @@ const sizes = {
 };
 
 const toneMap: Record<string, string> = {
-  default: 'border-border-strong',
-  neon:    'border-neon/30',
-  gold:    'border-gold/30',
-  danger:  'border-danger/30',
+  default: 'border-border',
+  neon:    'border-primary/20',
+  gold:    'border-gold/20',
+  danger:  'border-danger/20',
 };
 
 export function Modal({ open, onClose, title, subtitle, children, size = 'md', tone = 'default' }: ModalProps) {
@@ -39,7 +39,7 @@ export function Modal({ open, onClose, title, subtitle, children, size = 'md', t
     return () => document.removeEventListener('keydown', handler);
   }, [open, onClose]);
 
-  const panelInitial = reduce ? { opacity: 0 } : { opacity: 0, scale: 0.94, y: 16 };
+  const panelInitial = reduce ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: 12 };
   const panelShow = reduce ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 };
 
   return (
@@ -48,7 +48,7 @@ export function Modal({ open, onClose, title, subtitle, children, size = 'md', t
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
           {/* Backdrop */}
           <motion.div
-            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
             onClick={onClose}
             aria-hidden="true"
             initial={{ opacity: 0 }}
@@ -58,8 +58,7 @@ export function Modal({ open, onClose, title, subtitle, children, size = 'md', t
           />
           {/* Panel */}
           <motion.div
-            className={`relative z-10 w-full ${sizes[size]} rounded-2xl border ${toneMap[tone]} bg-elevated shadow-[0_24px_80px_rgba(0,0,0,0.70)] overflow-hidden`}
-            style={tone === 'neon' ? { boxShadow: '0 24px 80px rgba(0,0,0,0.70), 0 0 40px rgba(0,255,136,0.08)' } : undefined}
+            className={`relative z-10 w-full ${sizes[size]} rounded-xl border ${toneMap[tone]} bg-surface shadow-lg overflow-hidden`}
             initial={panelInitial}
             animate={panelShow}
             exit={panelInitial}
@@ -67,20 +66,20 @@ export function Modal({ open, onClose, title, subtitle, children, size = 'md', t
           >
             {/* Top accent line */}
             <div className={`h-px w-full ${
-              tone === 'neon' ? 'bg-gradient-to-r from-transparent via-neon/60 to-transparent' :
-              tone === 'gold' ? 'bg-gradient-to-r from-transparent via-gold/60 to-transparent' :
-              tone === 'danger' ? 'bg-gradient-to-r from-transparent via-danger/60 to-transparent' :
-              'bg-gradient-to-r from-transparent via-border-strong to-transparent'
+              tone === 'neon' ? 'bg-gradient-to-r from-transparent via-primary/40 to-transparent' :
+              tone === 'gold' ? 'bg-gradient-to-r from-transparent via-gold/40 to-transparent' :
+              tone === 'danger' ? 'bg-gradient-to-r from-transparent via-danger/40 to-transparent' :
+              'bg-gradient-to-r from-transparent via-border to-transparent'
             }`} />
             {/* Header */}
             <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-4">
               <div>
-                <h2 className="text-base font-black tracking-tight text-text">{title}</h2>
+                <h2 className="text-base font-bold tracking-tight text-text">{title}</h2>
                 {subtitle && <p className="mt-0.5 text-xs text-muted">{subtitle}</p>}
               </div>
               <button
                 onClick={onClose}
-                className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:text-text hover:bg-white/5 transition-colors -mt-0.5 -mr-1"
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:text-text hover:bg-surface-hover transition-colors -mt-0.5 -mr-1"
                 aria-label="Close modal"
               >
                 <X className="h-4 w-4" />

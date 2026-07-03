@@ -51,17 +51,17 @@ export function ResetDataModal({ onClose }: { onClose: () => void }) {
   if (phase === 'done' && result) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-        <div className="relative z-10 w-full max-w-md rounded-2xl border border-success/30 bg-elevated overflow-hidden"
-          style={{ boxShadow: '0 24px 80px rgba(0,0,0,0.70), 0 0 40px rgba(0,255,136,0.08)' }}
+        <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
+        <div className="relative z-10 w-full max-w-md rounded-2xl border border-success/30 bg-surface overflow-hidden"
+          style={{ boxShadow: '0 24px 80px rgba(0,0,0,0.08), 0 0 40px rgba(79,70,229,0.04)' }}
         >
           <div className="h-px bg-gradient-to-r from-transparent via-success/60 to-transparent" />
           <div className="p-6 space-y-5 text-center">
-            <div className="flex h-14 w-14 mx-auto items-center justify-center rounded-2xl border border-success/25 bg-success/10">
+            <div className="flex h-14 w-14 mx-auto items-center justify-center rounded-2xl border border-success/20 bg-emerald-50">
               <Check className="h-7 w-7 text-success" />
             </div>
             <div>
-              <p className="text-lg font-black text-text">History cleared</p>
+              <p className="text-lg font-bold text-text">History cleared</p>
               <p className="mt-1 text-sm text-muted">{result.message}</p>
             </div>
             <div className="rounded-xl border border-border bg-surface p-4 text-left space-y-1.5">
@@ -74,7 +74,7 @@ export function ResetDataModal({ onClose }: { onClose: () => void }) {
             </div>
             <button
               onClick={() => { onClose(); window.location.reload(); }}
-              className="w-full rounded-xl border border-neon/30 bg-neon/10 py-2.5 text-sm font-bold text-neon hover:bg-neon/20 transition-all"
+              className="w-full rounded-xl border border-primary/20 bg-indigo-50 py-2.5 text-sm font-bold text-primary hover:bg-primary/20 transition-all"
             >
               Done — Reload page
             </button>
@@ -86,27 +86,27 @@ export function ResetDataModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={phase === 'confirm' ? onClose : undefined} />
-      <div className="relative z-10 w-full max-w-md rounded-2xl border border-danger/30 bg-elevated overflow-hidden"
-        style={{ boxShadow: '0 24px 80px rgba(0,0,0,0.70), 0 0 40px rgba(255,77,77,0.06)' }}
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={phase === 'confirm' ? onClose : undefined} />
+      <div className="relative z-10 w-full max-w-md rounded-2xl border border-danger/30 bg-surface overflow-hidden"
+        style={{ boxShadow: '0 24px 80px rgba(0,0,0,0.08), 0 0 40px rgba(239,68,68,0.04)' }}
       >
         <div className="h-px bg-gradient-to-r from-transparent via-danger/60 to-transparent" />
 
         {/* Header */}
         <div className="p-6 pb-4">
           <div className="flex items-center gap-3 mb-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-danger/30 bg-danger/10">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-danger/30 bg-red-50">
               <Trash2 className="h-5 w-5 text-danger" />
             </div>
             <div>
-              <p className="text-base font-black text-text">Reset All Data</p>
+              <p className="text-base font-bold text-text">Reset All Data</p>
               <p className="text-xs text-muted">This action is permanent and cannot be undone</p>
             </div>
           </div>
 
           {/* What gets deleted */}
-          <div className="rounded-xl border border-danger/20 bg-danger/5 p-4 mb-4">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-danger mb-2.5">Will be deleted</p>
+          <div className="rounded-xl border border-danger/20 bg-red-50 p-4 mb-4">
+            <p className="text-xs font-bold uppercase tracking-widest text-danger mb-2.5">Will be deleted</p>
             <div className="space-y-1.5">
               {TABLES.map(t => (
                 <div key={t.key} className="flex items-center gap-2">
@@ -121,8 +121,8 @@ export function ResetDataModal({ onClose }: { onClose: () => void }) {
           </div>
 
           {/* What is kept */}
-          <div className="rounded-xl border border-success/20 bg-success/5 p-4 mb-5">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-success mb-2.5">Will be kept</p>
+          <div className="rounded-xl border border-success/20 bg-emerald-50 p-4 mb-5">
+            <p className="text-xs font-bold uppercase tracking-widest text-success mb-2.5">Will be kept</p>
             <div className="space-y-1.5">
               {KEPT.map(k => (
                 <div key={k} className="flex items-center gap-2">
@@ -135,7 +135,7 @@ export function ResetDataModal({ onClose }: { onClose: () => void }) {
 
           {/* Confirmation input */}
           {phase === 'error' ? (
-            <div className="rounded-xl border border-danger/25 bg-danger/8 px-4 py-3 text-sm text-danger mb-4">
+            <div className="rounded-xl border border-danger/20 bg-red-50 px-4 py-3 text-sm text-danger mb-4">
               <AlertTriangle className="h-4 w-4 inline mr-2" />{errorMsg}
             </div>
           ) : (
@@ -149,7 +149,7 @@ export function ResetDataModal({ onClose }: { onClose: () => void }) {
                 onChange={e => { setTyped(e.target.value); setPhase('typing'); }}
                 placeholder="reset my data"
                 autoFocus
-                className="h-10 w-full rounded-lg border border-border bg-background/80 px-3 text-sm text-text placeholder:text-muted/40 focus:border-danger/50 focus:outline-none focus:ring-2 focus:ring-danger/15 transition-all font-mono"
+                className="h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm text-text placeholder:text-muted/40 focus:border-danger/50 focus:outline-none focus:ring-2 focus:ring-danger/15 transition-all font-mono"
               />
             </div>
           )}
@@ -165,8 +165,8 @@ export function ResetDataModal({ onClose }: { onClose: () => void }) {
             <button
               onClick={() => { void handleReset(); }}
               disabled={!canReset || phase === 'running'}
-              className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border border-danger/30 bg-danger/10 py-2.5 text-sm font-bold text-danger hover:bg-danger/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-              style={canReset ? { boxShadow: '0 0 20px rgba(255,77,77,0.20)' } : undefined}
+              className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border border-danger/30 bg-red-50 py-2.5 text-sm font-bold text-danger hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              style={canReset ? { boxShadow: '0 0 20px rgba(239,68,68,0.10)' } : undefined}
             >
               {phase === 'running'
                 ? <><RefreshCw className="h-4 w-4 animate-spin" /> Clearing…</>

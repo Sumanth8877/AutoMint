@@ -57,7 +57,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full`}>
-      <body className="min-h-full bg-background font-sans text-text antialiased">
+      <body className="min-h-full bg-surface font-sans text-text antialiased">
         <ClerkProvider
           afterSignOutUrl="/"
           appearance={clerkAppearance}

@@ -30,27 +30,27 @@ export default function Button({
 }: ButtonProps) {
   const reduce = useReducedMotion();
   const base =
-    'inline-flex shrink-0 items-center justify-center font-semibold rounded-lg transition-colors duration-200 ' +
-    'focus:outline-none focus-visible:ring-2 focus-visible:ring-neon/50 focus-visible:ring-offset-2 ' +
-    'focus-visible:ring-offset-background tracking-normal will-change-transform';
+    'inline-flex shrink-0 items-center justify-center font-semibold rounded-lg transition-all duration-200 ' +
+    'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 ' +
+    'focus-visible:ring-offset-background tracking-tight will-change-transform';
 
   const variants: Record<string, string> = {
     primary:
-      'bg-gradient-to-r from-primary to-purple-500 text-white shadow-lg shadow-primary/30 ' +
-      'hover:shadow-primary/50 hover:brightness-110 border border-primary/40',
+      'bg-primary text-white shadow-sm shadow-primary/20 ' +
+      'hover:bg-primary-hover hover:shadow-md hover:shadow-primary/25',
     secondary:
-      'bg-surface text-text border border-border hover:border-border-strong hover:bg-elevated',
-    ghost: 'bg-transparent text-secondary hover:text-text hover:bg-white/5',
+      'bg-surface text-text border border-border hover:border-border-strong hover:bg-surface-hover shadow-sm',
+    ghost: 'bg-transparent text-secondary hover:text-text hover:bg-surface-hover',
     danger:
-      'bg-gradient-to-r from-danger to-red-600 text-white shadow-md shadow-danger/25 hover:brightness-110',
+      'bg-danger text-white shadow-sm shadow-danger/20 hover:bg-red-600 hover:shadow-md',
     success:
-      'bg-gradient-to-r from-success to-emerald-500 text-white shadow-md shadow-success/25 hover:brightness-110',
+      'bg-success text-white shadow-sm shadow-success/20 hover:bg-emerald-600 hover:shadow-md',
     neon:
-      'bg-neon-soft text-neon border border-neon/30 hover:bg-neon/20 hover:border-neon/60 ' +
-      'shadow-[0_0_20px_rgba(0,255,136,0.15)] hover:shadow-[0_0_30px_rgba(0,255,136,0.30)]',
+      'bg-primary-soft text-primary border border-primary/20 hover:bg-indigo-50 hover:border-primary/30 ' +
+      'shadow-sm',
     gold:
-      'bg-gold-soft text-gold border border-gold/30 hover:bg-gold/15 hover:border-gold/60 ' +
-      'shadow-[0_0_20px_rgba(240,169,59,0.15)] hover:shadow-[0_0_30px_rgba(240,169,59,0.30)]',
+      'bg-gold-soft text-gold border border-gold/20 hover:bg-amber-50 hover:border-gold/40 ' +
+      'shadow-sm',
   };
 
   const sizes: Record<string, string> = {
@@ -62,9 +62,9 @@ export default function Button({
   };
 
   const glowStyle = glow && variant === 'neon'
-    ? { boxShadow: '0 0 30px rgba(0,255,136,0.40), 0 0 8px rgba(0,255,136,0.60)' }
+    ? { boxShadow: '0 0 0 1px rgba(79,70,229,0.15), 0 2px 12px rgba(79,70,229,0.15)' }
     : glow && variant === 'primary'
-    ? { boxShadow: '0 0 30px rgba(0,255,136,0.50), 0 0 8px rgba(0,255,136,0.70)' }
+    ? { boxShadow: '0 0 0 1px rgba(79,70,229,0.20), 0 2px 12px rgba(79,70,229,0.20)' }
     : undefined;
 
   const isDisabled = disabled || loading;
@@ -77,7 +77,7 @@ export default function Button({
       style={glowStyle}
       disabled={isDisabled}
       whileHover={reduce || isDisabled ? undefined : { scale: 1.02 }}
-      whileTap={reduce || isDisabled ? undefined : { scale: 0.96 }}
+      whileTap={reduce || isDisabled ? undefined : { scale: 0.97 }}
       transition={springs.snappy}
       {...props}
     >

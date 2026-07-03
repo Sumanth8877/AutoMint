@@ -50,7 +50,7 @@ export default function TelegramClient() {
 
   if (fetchError) {
     return (
-      <div className="flex items-center gap-3 rounded-lg border border-danger/30 bg-danger/10 p-4 text-danger">
+      <div className="flex items-center gap-3 rounded-lg border border-danger/30 bg-red-50 p-4 text-danger">
         <AlertCircle className="h-4 w-4 shrink-0" />
         <span className="text-sm">{fetchError}</span>
       </div>
@@ -133,7 +133,7 @@ export default function TelegramClient() {
                 <span className="text-sm text-muted">2. Send this command:</span>
               </div>
               <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-                <code className="min-w-0 rounded bg-black/20 px-3 py-2 font-mono text-sm leading-6 text-text break-all">
+                <code className="min-w-0 rounded bg-slate-900/20 px-3 py-2 font-mono text-sm leading-6 text-text break-all">
                   /start {data.token}
                 </code>
                 <Button
@@ -152,7 +152,7 @@ export default function TelegramClient() {
                     href={data.deepLink}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 text-sm text-accent hover:underline"
+                    className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
                   >
                     <LinkIcon className="h-4 w-4" />
                     Or click to open in Telegram

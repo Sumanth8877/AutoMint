@@ -127,7 +127,7 @@ function getSecurityVerdict(riskScore: number) {
       description: 'On-chain signals look healthy. Low scam probability.',
       icon: ShieldCheck,
       iconClass: 'text-success',
-      className: 'border-success/25 bg-success/10 text-success',
+      className: 'border-success/20 bg-emerald-50 text-success',
     };
   }
   if (riskScore <= 50) {
@@ -136,7 +136,7 @@ function getSecurityVerdict(riskScore: number) {
       description: 'Some risk signals present. Verify before minting.',
       icon: AlertTriangle,
       iconClass: 'text-warning',
-      className: 'border-warning/25 bg-warning/10 text-warning',
+      className: 'border-warning/20 bg-amber-50 text-warning',
     };
   }
   if (riskScore <= 75) {
@@ -153,7 +153,7 @@ function getSecurityVerdict(riskScore: number) {
     description: 'Strong scam indicators found. Do not mint.',
     icon: ShieldAlert,
     iconClass: 'text-danger',
-    className: 'border-danger/25 bg-danger/10 text-danger',
+    className: 'border-danger/20 bg-red-50 text-danger',
   };
 }
 
@@ -172,10 +172,10 @@ function LiveDebugConsole({ logs }: { logs: AnalyzerDebugLog[] }) {
   };
 
   return (
-    <Card className="overflow-hidden border-accent/20 bg-black/40">
+    <Card className="overflow-hidden border-primary/15 bg-slate-900/40">
       <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
         <span className="flex items-center gap-3">
-          <TerminalSquare className="h-5 w-5 text-accent" aria-hidden="true" />
+          <TerminalSquare className="h-5 w-5 text-primary" aria-hidden="true" />
           <span className="font-semibold text-text">Live Debug Console</span>
         </span>
         <Badge variant={logs.some((log) => log.level === 'error') ? 'danger' : logs.length > 0 ? 'info' : 'default'}>
@@ -206,7 +206,7 @@ function DetailGrid({ rows }: { rows: Array<[string, string]> }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {rows.map(([label, value]) => (
-        <div key={label} className="rounded-lg border border-border bg-white/5 p-3">
+        <div key={label} className="rounded-lg border border-border bg-surface-hover p-3">
           <p className="text-xs uppercase text-muted">{label}</p>
           <p className="mt-1 break-words text-sm font-medium text-text">{value}</p>
         </div>
@@ -354,7 +354,7 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
               </Button>
             </div>
             {error ? (
-              <div className="rounded-lg border border-danger/20 bg-danger/10 p-3 text-sm text-danger" role="alert">
+              <div className="rounded-lg border border-danger/20 bg-red-50 p-3 text-sm text-danger" role="alert">
                 {error}
               </div>
             ) : null}
@@ -381,7 +381,7 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
             <Reveal>
             <Card tone="elevated" className="p-5">
               <div className="mb-4 flex items-center gap-3">
-                <Sparkles className="h-5 w-5 text-accent" aria-hidden="true" />
+                <Sparkles className="h-5 w-5 text-primary" aria-hidden="true" />
                 <h2 className="font-semibold text-text">Collection Overview</h2>
               </div>
               <DetailGrid rows={[
@@ -431,7 +431,7 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
                         initial={{ opacity: 0, x: -8 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: Math.min(index, 10) * 0.04, duration: 0.25 }}
-                        className="flex items-start gap-2 rounded-lg border border-border bg-white/5 px-3 py-2 text-sm text-text"
+                        className="flex items-start gap-2 rounded-lg border border-border bg-surface-hover px-3 py-2 text-sm text-text"
                       >
                         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
                         <span>{factor}</span>
@@ -440,7 +440,7 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
                   </ul>
                 </div>
               ) : (
-                <div className="mt-4 flex items-center gap-2 rounded-lg border border-success/20 bg-success/10 px-3 py-2 text-sm text-success">
+                <div className="mt-4 flex items-center gap-2 rounded-lg border border-success/20 bg-emerald-50 px-3 py-2 text-sm text-success">
                   <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
                   <span>No on-chain risk factors detected.</span>
                 </div>
@@ -451,7 +451,7 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
             <Reveal>
             <Card tone="elevated" className="p-5">
               <div className="mb-4 flex items-center gap-3">
-                <Save className="h-5 w-5 text-accent" aria-hidden="true" />
+                <Save className="h-5 w-5 text-primary" aria-hidden="true" />
                 <h2 className="font-semibold text-text">Actions</h2>
               </div>
               <div className="flex flex-wrap gap-2">

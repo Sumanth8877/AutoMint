@@ -51,13 +51,13 @@ function ArcGauge({ score, label }: { score: number; label: string }) {
   const radius = (size - strokeWidth) / 2;
   const circumference = Math.PI * radius; // semicircle
   const filled = (score / 100) * circumference;
-  const color = score >= 80 ? '#00FF88' : score >= 60 ? '#F0A93B' : '#FF4D4D';
-  const glowColor = score >= 80 ? 'rgba(0,255,136,0.40)' : score >= 60 ? 'rgba(240,169,59,0.40)' : 'rgba(255,77,77,0.40)';
+  const color = score >= 80 ? '#4F46E5' : score >= 60 ? '#F59E0B' : '#FF4D4D';
+  const glowColor = score >= 80 ? 'rgba(79,70,229,0.25)' : score >= 60 ? 'rgba(245,158,11,0.25)' : 'rgba(239,68,68,0.25)';
   const bgClass = score >= 80
-    ? 'border-success/20 bg-success/5'
+    ? 'border-success/20 bg-emerald-50'
     : score >= 60
-    ? 'border-warning/20 bg-warning/5'
-    : 'border-danger/20 bg-danger/5';
+    ? 'border-warning/20 bg-amber-50'
+    : 'border-danger/20 bg-red-50';
 
   return (
     <div className={`flex flex-1 min-w-0 flex-col items-center gap-1.5 rounded-xl border px-2 py-4 ${bgClass}`}>
@@ -94,7 +94,7 @@ function ArcGauge({ score, label }: { score: number; label: string }) {
           {score}
         </text>
       </svg>
-      <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted">{label}</span>
+      <span className="text-xs font-bold uppercase tracking-[0.15em] text-muted">{label}</span>
     </div>
   );
 }
@@ -105,16 +105,16 @@ function ArcGauge({ score, label }: { score: number; label: string }) {
 
 function StatTile({ label, value, tone }: { label: string; value: number; tone: 'neutral' | 'good' | 'warn' | 'danger' | 'info' }) {
   const styles = {
-    neutral: 'border-border bg-white/[0.03] text-secondary',
-    good:    'border-success/20 bg-success/5 text-success',
-    warn:    'border-warning/20 bg-warning/5 text-warning',
-    danger:  'border-danger/20 bg-danger/5 text-danger',
-    info:    'border-neon/20 bg-neon/5 text-neon',
+    neutral: 'border-border bg-surface-hover text-secondary',
+    good:    'border-success/20 bg-emerald-50 text-success',
+    warn:    'border-warning/20 bg-amber-50 text-warning',
+    danger:  'border-danger/20 bg-red-50 text-danger',
+    info:    'border-primary/20 bg-indigo-50 text-primary',
   }[tone];
   return (
     <div className={`rounded-xl border px-3 py-2.5 ${styles}`}>
-      <div className="text-xl font-black tabular-nums">{value}</div>
-      <div className="text-[10px] font-bold uppercase tracking-wider mt-0.5 opacity-75">{label}</div>
+      <div className="text-xl font-bold tabular-nums">{value}</div>
+      <div className="text-xs font-bold uppercase tracking-wider mt-0.5 opacity-75">{label}</div>
     </div>
   );
 }
@@ -125,17 +125,17 @@ function StatTile({ label, value, tone }: { label: string; value: number; tone: 
 
 function ClassBadge({ classification }: { classification: UpdateClassification }) {
   if (classification === 'SAFE') return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-success/25 bg-success/10 px-2.5 py-0.5 text-xs font-bold text-success">
+    <span className="inline-flex items-center gap-1 rounded-full border border-success/20 bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-success">
       <CheckCircle2 className="h-3 w-3" /> Safe
     </span>
   );
   if (classification === 'MINOR_REVIEW') return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-warning/25 bg-warning/10 px-2.5 py-0.5 text-xs font-bold text-warning">
+    <span className="inline-flex items-center gap-1 rounded-full border border-warning/20 bg-amber-50 px-2.5 py-0.5 text-xs font-bold text-warning">
       ~ Review
     </span>
   );
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-danger/25 bg-danger/10 px-2.5 py-0.5 text-xs font-bold text-danger">
+    <span className="inline-flex items-center gap-1 rounded-full border border-danger/20 bg-red-50 px-2.5 py-0.5 text-xs font-bold text-danger">
       <XCircle className="h-3 w-3" /> Breaking
     </span>
   );
@@ -147,10 +147,10 @@ function ClassBadge({ classification }: { classification: UpdateClassification }
 
 function SeverityBadge({ severity }: { severity: SecuritySeverity }) {
   const map: Record<SecuritySeverity, string> = {
-    CRITICAL: 'border-danger/40 bg-danger/20 text-danger shadow-[0_0_8px_rgba(255,77,77,0.30)]',
+    CRITICAL: 'border-danger/40 bg-danger/20 text-danger shadow-[0_0_8px_rgba(239,68,68,0.25)]',
     HIGH:     'border-warning/40 bg-warning/20 text-warning',
-    MEDIUM:   'border-warning/25 bg-warning/10 text-warning/80',
-    LOW:      'border-border bg-white/5 text-muted',
+    MEDIUM:   'border-warning/20 bg-amber-50 text-warning/80',
+    LOW:      'border-border bg-surface-hover text-muted',
   };
   return (
     <span className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-bold ${map[severity]}`}>
@@ -165,8 +165,8 @@ function SeverityBadge({ severity }: { severity: SecuritySeverity }) {
 
 function MintCriticalBadge() {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-neon/30 bg-neon/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-neon"
-      style={{ boxShadow: '0 0 8px rgba(0,255,136,0.15)' }}
+    <span className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-indigo-50 px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-primary"
+      style={{ boxShadow: '0 0 8px rgba(79,70,229,0.08)' }}
     >
       <Flame className="h-2.5 w-2.5" /> Mint
     </span>
@@ -185,13 +185,13 @@ function NeonCheckbox({ checked, onChange, label }: { checked: boolean; onChange
       aria-checked={checked}
       aria-label={label}
       onClick={onChange}
-      className={`flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded border transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon/40 ${
+      className={`flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded border transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
         checked
-          ? 'border-neon bg-neon/20 shadow-[0_0_8px_rgba(0,255,136,0.35)]'
-          : 'border-border bg-white/5 hover:border-border-strong'
+          ? 'border-primary bg-primary/20 shadow-[0_0_8px_rgba(79,70,229,0.20)]'
+          : 'border-border bg-surface-hover hover:border-border-strong'
       }`}
     >
-      {checked && <CheckCircle2 className="h-3 w-3 text-neon" strokeWidth={2.5} />}
+      {checked && <CheckCircle2 className="h-3 w-3 text-primary" strokeWidth={2.5} />}
     </button>
   );
 }
@@ -228,7 +228,7 @@ function PackageRow({ pkg, selected, onToggle, showSelect }: {
 
   return (
     <>
-      <tr className={`border-b border-border transition-colors hover:bg-white/[0.03] ${rowBorder} ${rowBg}`}>
+      <tr className={`border-b border-border transition-colors hover:bg-surface-hover ${rowBorder} ${rowBg}`}>
         {showSelect && (
           <td className="pl-4 py-3 w-10">
             {pkg.updateType !== 'current' && (
@@ -240,9 +240,9 @@ function PackageRow({ pkg, selected, onToggle, showSelect }: {
           <div className="flex flex-wrap items-center gap-1.5">
             <code className="text-sm font-semibold text-text font-mono">{pkg.name}</code>
             {critical && <MintCriticalBadge />}
-            {pkg.isDev && <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-muted">dev</span>}
-            {pkg.deprecated && <span className="rounded border border-warning/20 bg-warning/10 px-1.5 py-0.5 text-[10px] font-medium text-warning">deprecated</span>}
-            {pkg.isAbandoned && <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-muted">abandoned</span>}
+            {pkg.isDev && <span className="rounded bg-surface-hover px-1.5 py-0.5 text-xs font-medium text-muted">dev</span>}
+            {pkg.deprecated && <span className="rounded border border-warning/20 bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-warning">deprecated</span>}
+            {pkg.isAbandoned && <span className="rounded bg-surface-hover px-1.5 py-0.5 text-xs font-medium text-muted">abandoned</span>}
           </div>
           {pkg.updateType !== 'current' && (
             <div className="mt-0.5 text-[11px] text-muted font-mono">
@@ -270,7 +270,7 @@ function PackageRow({ pkg, selected, onToggle, showSelect }: {
                 href={changelogUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex h-7 w-7 items-center justify-center rounded-lg border border-border text-muted hover:text-neon hover:border-neon/30 transition-colors"
+                className="flex h-7 w-7 items-center justify-center rounded-lg border border-border text-muted hover:text-primary hover:border-primary/30 transition-colors"
                 title="View changelog / homepage"
               >
                 <ExternalLink className="h-3 w-3" />
@@ -279,7 +279,7 @@ function PackageRow({ pkg, selected, onToggle, showSelect }: {
             {/* Expand details */}
             {hasDetails && (
               <button type="button" onClick={() => setExpanded(e => !e)}
-                className="inline-flex items-center gap-1 text-xs text-neon hover:text-neon/80 font-medium">
+                className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium">
                 {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
               </button>
             )}
@@ -287,17 +287,17 @@ function PackageRow({ pkg, selected, onToggle, showSelect }: {
         </td>
       </tr>
       {expanded && (
-        <tr className="bg-white/[0.02]">
+        <tr className="bg-surface-hover">
           <td colSpan={showSelect ? 7 : 6} className="px-6 pb-4 pt-2">
             <div className="space-y-2 text-sm">
               {pkg.deprecationMessage && (
-                <div className="rounded-lg border border-warning/20 bg-warning/5 px-3 py-2 text-sm">
+                <div className="rounded-lg border border-warning/20 bg-amber-50 px-3 py-2 text-sm">
                   <span className="font-semibold text-warning">Deprecated: </span>
                   <span className="text-warning/80">{pkg.deprecationMessage}</span>
                 </div>
               )}
               {pkg.securityAdvisories.map(adv => (
-                <div key={adv.id} className="rounded-lg border border-danger/20 bg-danger/5 px-3 py-2">
+                <div key={adv.id} className="rounded-lg border border-danger/20 bg-red-50 px-3 py-2">
                   <div className="flex items-center gap-2 mb-1">
                     <SeverityBadge severity={adv.severity} />
                     <span className="font-semibold text-danger text-sm">{adv.title}</span>
@@ -306,7 +306,7 @@ function PackageRow({ pkg, selected, onToggle, showSelect }: {
                     <div>Affected: <code className="font-mono">{adv.affectedVersions}</code></div>
                     <div>Patched: <code className="font-mono">{adv.patchedVersions}</code></div>
                     {adv.cve && <div>CVE: <span className="font-mono font-bold">{adv.cve}</span></div>}
-                    <a href={adv.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-neon hover:text-neon/80 underline">
+                    <a href={adv.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:text-primary/80 underline">
                       View Advisory <ExternalLink className="h-3 w-3" />
                     </a>
                   </div>
@@ -315,7 +315,7 @@ function PackageRow({ pkg, selected, onToggle, showSelect }: {
               {/* Changelog link in expanded view too */}
               {changelogUrl && (
                 <a href={changelogUrl} target="_blank" rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-xs text-neon hover:text-neon/80">
+                  className="inline-flex items-center gap-1.5 text-xs text-primary hover:text-primary/80">
                   <ExternalLink className="h-3 w-3" /> View changelog / homepage
                 </a>
               )}
@@ -346,7 +346,7 @@ function PackageTable({ packages, selectedPackages, onToggle, showSelect }: {
   return (
     <div className="overflow-x-auto rounded-xl border border-border">
       <table className="w-full text-sm">
-        <thead className="bg-white/[0.03] text-[11px] font-bold text-muted uppercase tracking-wider">
+        <thead className="bg-surface-hover text-[11px] font-bold text-muted uppercase tracking-wider">
           <tr>
             {showSelect && <th className="pl-4 py-3 w-10" />}
             <th className="px-4 py-3 text-left">Package</th>
@@ -377,11 +377,11 @@ function PackageTable({ packages, selectedPackages, onToggle, showSelect }: {
 function ModernizationCard({ opp }: { opp: ModernizationOpportunity }) {
   const resolved = opp.status === 'resolved';
   const effortStyle = resolved
-    ? 'border-success/25 bg-success/10 text-success'
-    : { low: 'border-success/25 bg-success/10 text-success', medium: 'border-warning/25 bg-warning/10 text-warning', high: 'border-danger/25 bg-danger/10 text-danger' }[opp.effort];
+    ? 'border-success/20 bg-emerald-50 text-success'
+    : { low: 'border-success/20 bg-emerald-50 text-success', medium: 'border-warning/20 bg-amber-50 text-warning', high: 'border-danger/20 bg-red-50 text-danger' }[opp.effort];
   const typeIcon = { 'deprecated-api': '⚠️', 'better-alternative': '💡', 'performance': '⚡', 'security-hardening': '🔒' }[opp.type];
   return (
-    <div className={`rounded-xl border p-4 space-y-2.5 ${resolved ? 'border-success/20 bg-success/5' : 'border-border bg-surface'}`}>
+    <div className={`rounded-xl border p-4 space-y-2.5 ${resolved ? 'border-success/20 bg-emerald-50' : 'border-border bg-surface'}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
           {resolved
@@ -391,18 +391,18 @@ function ModernizationCard({ opp }: { opp: ModernizationOpportunity }) {
           <code className="text-sm font-semibold text-text font-mono">{opp.package}</code>
         </div>
         {resolved
-          ? <span className="rounded-full border border-success/25 bg-success/10 px-2.5 py-0.5 text-xs font-semibold shrink-0 text-success">✓ Resolved</span>
+          ? <span className="rounded-full border border-success/20 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold shrink-0 text-success">✓ Resolved</span>
           : <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold capitalize shrink-0 ${effortStyle}`}>{opp.effort} effort</span>
         }
       </div>
       <p className="text-sm text-muted">{opp.description}</p>
-      <div className={`rounded-lg px-3 py-2 border ${resolved ? 'bg-success/5 border-success/15' : 'bg-neon/5 border-neon/15'}`}>
-        <p className={`text-xs font-semibold mb-0.5 ${resolved ? 'text-success' : 'text-neon'}`}>{resolved ? 'Status' : 'Recommendation'}</p>
-        <p className={`text-xs ${resolved ? 'text-success/80' : 'text-neon/80'}`}>{opp.recommendation}</p>
+      <div className={`rounded-lg px-3 py-2 border ${resolved ? 'bg-emerald-50 border-success/15' : 'bg-indigo-50 border-primary/15'}`}>
+        <p className={`text-xs font-semibold mb-0.5 ${resolved ? 'text-success' : 'text-primary'}`}>{resolved ? 'Status' : 'Recommendation'}</p>
+        <p className={`text-xs ${resolved ? 'text-success/80' : 'text-primary/80'}`}>{opp.recommendation}</p>
       </div>
       {opp.docsUrl && (
         <a href={opp.docsUrl} target="_blank" rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-xs text-neon hover:text-neon/80">
+          className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80">
           View Documentation <ExternalLink className="h-3 w-3" />
         </a>
       )}
@@ -418,11 +418,11 @@ function Toast({ message, type, onClose }: { message: string; type: 'success' | 
   const styles = {
     success: 'border-success/40 text-text',
     error:   'border-danger/40 text-text',
-    info:    'border-neon/40 text-text',
+    info:    'border-primary/20 text-text',
   }[type];
-  const dot = { success: 'bg-success shadow-[0_0_6px_rgba(0,255,136,0.8)]', error: 'bg-danger shadow-[0_0_6px_rgba(255,77,77,0.8)]', info: 'bg-neon shadow-[0_0_6px_rgba(0,255,136,0.8)]' }[type];
+  const dot = { success: 'bg-success shadow-[0_0_6px_rgba(79,70,229,0.5)]', error: 'bg-danger shadow-[0_0_6px_rgba(239,68,68,0.5)]', info: 'bg-primary shadow-[0_0_6px_rgba(79,70,229,0.5)]' }[type];
   return (
-    <div className={`fixed bottom-6 right-6 z-50 max-w-sm rounded-xl border bg-elevated px-4 py-3 shadow-[0_12px_48px_rgba(0,0,0,0.65)] ${styles}`}>
+    <div className={`fixed bottom-6 right-6 z-50 max-w-sm rounded-xl border bg-surface px-4 py-3 shadow-[0_12px_48px_rgba(0,0,0,0.08)] ${styles}`}>
       <div className="flex items-center gap-3">
         <div className={`h-2 w-2 rounded-full shrink-0 ${dot}`} />
         <span className="text-sm flex-1">{message}</span>
@@ -449,21 +449,21 @@ function AutoUpdateCard({ enabled, onToggle }: { enabled: boolean; onToggle: () 
   return (
     <div className={`rounded-xl border p-4 transition-all duration-200 ${
       enabled
-        ? 'border-neon/25 bg-neon/[0.04] shadow-[0_0_20px_rgba(0,255,136,0.08)]'
+        ? 'border-primary/15 bg-primary/[0.04] shadow-[0_0_20px_rgba(79,70,229,0.04)]'
         : 'border-border bg-surface'
     }`}>
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className={`flex h-10 w-10 items-center justify-center rounded-xl border ${
-            enabled ? 'border-neon/25 bg-neon/10' : 'border-border bg-white/5'
+            enabled ? 'border-primary/15 bg-indigo-50' : 'border-border bg-surface-hover'
           }`}>
-            <CalendarClock className={`h-4 w-4 ${enabled ? 'text-neon' : 'text-muted'}`} />
+            <CalendarClock className={`h-4 w-4 ${enabled ? 'text-primary' : 'text-muted'}`} />
           </div>
           <div>
             <p className="text-sm font-bold text-text">Scheduled Auto-Update</p>
             <p className="text-xs text-muted">
               {enabled
-                ? <>Next run: <span className="text-neon font-semibold">{nextRunStr}</span> — safe patches only</>
+                ? <>Next run: <span className="text-primary font-semibold">{nextRunStr}</span> — safe patches only</>
                 : 'Auto-apply safe patch updates weekly'
               }
             </p>
@@ -474,16 +474,16 @@ function AutoUpdateCard({ enabled, onToggle }: { enabled: boolean; onToggle: () 
           role="switch"
           aria-checked={enabled}
           onClick={onToggle}
-          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon/40 ${
+          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
             enabled
-              ? 'border-neon/50 bg-neon/20 shadow-[0_0_12px_rgba(0,255,136,0.25)]'
-              : 'border-border bg-white/5'
+              ? 'border-primary/50 bg-primary/20 shadow-[0_0_12px_rgba(79,70,229,0.12)]'
+              : 'border-border bg-surface-hover'
           }`}
         >
           <span
             className={`inline-block h-4 w-4 transform rounded-full transition-all duration-200 ${
               enabled
-                ? 'translate-x-6 bg-neon shadow-[0_0_8px_rgba(0,255,136,0.80)]'
+                ? 'translate-x-6 bg-primary shadow-[0_0_8px_rgba(79,70,229,0.5)]'
                 : 'translate-x-1 bg-muted'
             }`}
           />
@@ -491,7 +491,7 @@ function AutoUpdateCard({ enabled, onToggle }: { enabled: boolean; onToggle: () 
       </div>
       {enabled && (
         <div className="mt-3 flex items-center gap-2 text-xs text-muted">
-          <Activity className="h-3 w-3 text-neon animate-pulse" />
+          <Activity className="h-3 w-3 text-primary animate-pulse" />
           <span>Commits package.json to GitHub → Vercel auto-deploys with updated packages</span>
         </div>
       )}
@@ -671,21 +671,21 @@ export function DependencyUpdateCenter() {
   ];
 
   const tabActiveStyle: Record<string, string> = {
-    green:  'bg-success/10 text-success ring-1 ring-success/30',
-    yellow: 'bg-warning/10 text-warning ring-1 ring-warning/30',
-    red:    'bg-danger/10 text-danger ring-1 ring-danger/30',
-    neon:   'bg-neon/10 text-neon ring-1 ring-neon/30',
-    indigo: 'bg-primary/10 text-primary ring-1 ring-primary/30',
-    gray:   'bg-white/10 text-secondary',
+    green:  'bg-emerald-50 text-success ring-1 ring-success/30',
+    yellow: 'bg-amber-50 text-warning ring-1 ring-warning/30',
+    red:    'bg-red-50 text-danger ring-1 ring-danger/30',
+    neon:   'bg-indigo-50 text-primary ring-1 ring-primary/30',
+    indigo: 'bg-indigo-50 text-primary ring-1 ring-primary/30',
+    gray:   'bg-surface-hover text-secondary',
   };
 
   const tabCountStyle: Record<string, string> = {
     green:  'bg-success/20 text-success',
     yellow: 'bg-warning/20 text-warning',
     red:    'bg-danger/20 text-danger',
-    neon:   'bg-neon/20 text-neon',
+    neon:   'bg-primary/20 text-primary',
     indigo: 'bg-primary/20 text-primary',
-    gray:   'bg-white/10 text-secondary',
+    gray:   'bg-surface-hover text-secondary',
   };
 
   return (
@@ -695,14 +695,14 @@ export function DependencyUpdateCenter() {
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-neon/25 bg-neon/10"
-              style={{ boxShadow: '0 0 16px rgba(0,255,136,0.12)' }}
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-primary/15 bg-indigo-50"
+              style={{ boxShadow: '0 0 16px rgba(79,70,229,0.06)' }}
             >
-              <Package className="h-4 w-4 text-neon" />
+              <Package className="h-4 w-4 text-primary" />
             </div>
-            <h2 className="text-lg font-black tracking-tight text-text">Dependency Update Center</h2>
+            <h2 className="text-lg font-bold tracking-tight text-text">Dependency Update Center</h2>
             {report && (
-              <span className="rounded-full border border-success/25 bg-success/10 px-2.5 py-0.5 text-xs font-bold text-success">
+              <span className="rounded-full border border-success/20 bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-success">
                 Scanned
               </span>
             )}
@@ -716,8 +716,8 @@ export function DependencyUpdateCenter() {
           type="button"
           onClick={() => { void handleCheck(); }}
           disabled={isScanning}
-          className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-neon/30 bg-neon/10 px-5 py-2.5 text-sm font-bold text-neon hover:bg-neon/20 hover:border-neon/50 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-neon/40 transition-all"
-          style={{ boxShadow: '0 0 20px rgba(0,255,136,0.10)' }}
+          className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-primary/20 bg-indigo-50 px-5 py-2.5 text-sm font-bold text-primary hover:bg-primary/20 hover:border-primary/50 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 transition-all"
+          style={{ boxShadow: '0 0 20px rgba(79,70,229,0.05)' }}
         >
           <RefreshCw className={`h-4 w-4 ${isScanning ? 'animate-spin' : ''}`} />
           {isScanning ? 'Scanning…' : 'Check for Updates'}
@@ -726,11 +726,11 @@ export function DependencyUpdateCenter() {
 
       {/* ── Error banner ───────────────────────────────────────── */}
       {error && !report && (
-        <div className="flex items-start gap-3 rounded-xl border border-danger/25 bg-danger/8 px-4 py-3">
+        <div className="flex items-start gap-3 rounded-xl border border-danger/20 bg-red-50 px-4 py-3">
           <XCircle className="h-5 w-5 text-danger shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-bold text-danger">Scan failed</p>
-            <p className="text-sm text-danger/80">{error}</p>
+            <p className="text-sm text-danger">{error}</p>
           </div>
         </div>
       )}
@@ -738,17 +738,17 @@ export function DependencyUpdateCenter() {
       {/* ── Empty state ────────────────────────────────────────── */}
       {!report && !isScanning && (
         <div className="rounded-2xl border-2 border-dashed border-border py-20 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-neon/20 bg-neon/5 mb-4"
-            style={{ boxShadow: '0 0 24px rgba(0,255,136,0.08)' }}
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/20 bg-indigo-50 mb-4"
+            style={{ boxShadow: '0 0 24px rgba(79,70,229,0.04)' }}
           >
-            <Package className="h-8 w-8 text-neon" />
+            <Package className="h-8 w-8 text-primary" />
           </div>
           <h3 className="text-base font-bold text-text mb-1">No audit data yet</h3>
           <p className="text-sm text-muted mb-6">
-            Click <strong className="text-neon">Check for Updates</strong> to scan all npm dependencies against the registry.
+            Click <strong className="text-primary">Check for Updates</strong> to scan all npm dependencies against the registry.
           </p>
           <button onClick={() => { void handleCheck(); }}
-            className="inline-flex items-center gap-2 rounded-xl border border-neon/30 bg-neon/10 px-5 py-2.5 text-sm font-bold text-neon hover:bg-neon/20 transition-all">
+            className="inline-flex items-center gap-2 rounded-xl border border-primary/20 bg-indigo-50 px-5 py-2.5 text-sm font-bold text-primary hover:bg-primary/20 transition-all">
             <RefreshCw className="h-4 w-4" /> Scan Now
           </button>
         </div>
@@ -757,8 +757,8 @@ export function DependencyUpdateCenter() {
       {/* ── Loading state with progress bar ────────────────────── */}
       {isScanning && !report && (
         <div className="rounded-2xl border border-border bg-surface py-14 px-8 text-center space-y-5">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-neon/20 bg-neon/5">
-            <RefreshCw className="h-8 w-8 text-neon animate-spin" />
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/20 bg-indigo-50">
+            <RefreshCw className="h-8 w-8 text-primary animate-spin" />
           </div>
           <div>
             <p className="text-sm font-bold text-text mb-1">
@@ -772,13 +772,13 @@ export function DependencyUpdateCenter() {
           </div>
           {scanProgress && scanProgress.total > 0 && (
             <div className="mx-auto max-w-sm space-y-1.5">
-              <div className="h-2 w-full rounded-full bg-white/5 overflow-hidden">
+              <div className="h-2 w-full rounded-full bg-surface-hover overflow-hidden">
                 <div
                   className="h-full rounded-full transition-all duration-300"
                   style={{
                     width: `${Math.round((scanProgress.processed / scanProgress.total) * 100)}%`,
-                    background: 'linear-gradient(90deg, #00FF88, #00FF88)',
-                    boxShadow: '0 0 8px rgba(0,255,136,0.40)',
+                    background: 'linear-gradient(90deg, #4F46E5, #4F46E5)',
+                    boxShadow: '0 0 8px rgba(79,70,229,0.25)',
                   }}
                 />
               </div>
@@ -802,7 +802,7 @@ export function DependencyUpdateCenter() {
           {/* Score arcs + stats */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="rounded-2xl border border-border bg-surface p-5">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted mb-4">Health Scores</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-muted mb-4">Health Scores</p>
               <div className="flex gap-2">
                 <ArcGauge score={report.healthScore} label="Health" />
                 <ArcGauge score={report.securityScore} label="Security" />
@@ -810,7 +810,7 @@ export function DependencyUpdateCenter() {
               </div>
             </div>
             <div className="rounded-2xl border border-border bg-surface p-5">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted mb-4">Package Summary</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-muted mb-4">Package Summary</p>
               <div className="grid grid-cols-3 gap-2.5">
                 <StatTile label="Total" value={report.totalPackages} tone="neutral" />
                 <StatTile label="Outdated" value={report.outdatedPackages} tone={report.outdatedPackages > 0 ? 'warn' : 'good'} />
@@ -841,7 +841,7 @@ export function DependencyUpdateCenter() {
                 type="button"
                 disabled={installState === 'loading' || (safeCount === 0 && selectedPackages.size === 0)}
                 onClick={() => { void handleInstall(); }}
-                className="inline-flex items-center gap-2 rounded-xl border border-success/30 bg-success/10 px-4 py-2.5 text-sm font-bold text-success hover:bg-success/20 hover:border-success/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                className="inline-flex items-center gap-2 rounded-xl border border-success/30 bg-emerald-50 px-4 py-2.5 text-sm font-bold text-success hover:bg-emerald-50 hover:border-success/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               >
                 {installState === 'loading'
                   ? <><RefreshCw className="h-4 w-4 animate-spin" /> Installing…</>
@@ -876,7 +876,7 @@ export function DependencyUpdateCenter() {
 
             {/* Install result */}
             {installResult && installResult.updated.length > 0 && (
-              <div className="rounded-xl border border-success/25 bg-success/8 p-4 space-y-2">
+              <div className="rounded-xl border border-success/20 bg-emerald-50 p-4 space-y-2">
                 <p className="text-sm font-bold text-success flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4" />
                   {installResult.updated.length} package(s) committed — Vercel is redeploying
@@ -884,7 +884,7 @@ export function DependencyUpdateCenter() {
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {installResult.updated.map(pkg => (
-                    <span key={pkg} className="rounded-full border border-success/20 bg-success/10 px-2.5 py-0.5 text-xs font-mono font-medium text-success">
+                    <span key={pkg} className="rounded-full border border-success/20 bg-emerald-50 px-2.5 py-0.5 text-xs font-mono font-medium text-success">
                       {pkg}
                     </span>
                   ))}
@@ -903,13 +903,13 @@ export function DependencyUpdateCenter() {
                     className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-bold transition-all ${
                       isActive
                         ? tabActiveStyle[tab.color]
-                        : 'text-muted hover:text-secondary hover:bg-white/5'
+                        : 'text-muted hover:text-secondary hover:bg-surface-hover'
                     }`}>
                     {tab.id === 'mint-critical' && <Flame className="h-3.5 w-3.5" />}
                     {tab.label}
                     {tab.count > 0 && (
                       <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${
-                        isActive ? tabCountStyle[tab.color] : 'bg-white/5 text-muted'
+                        isActive ? tabCountStyle[tab.color] : 'bg-surface-hover text-muted'
                       }`}>
                         {tab.count}
                       </span>
@@ -923,7 +923,7 @@ export function DependencyUpdateCenter() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {report.modernizationOpportunities.length === 0 ? (
                   <div className="col-span-2 rounded-xl border border-dashed border-border py-12 text-center">
-                    <Zap className="h-7 w-7 text-neon mx-auto mb-2" />
+                    <Zap className="h-7 w-7 text-primary mx-auto mb-2" />
                     <p className="text-sm text-muted">No modernization issues detected.</p>
                   </div>
                 ) : (
@@ -945,7 +945,7 @@ export function DependencyUpdateCenter() {
             )}
             {activeTab === 'mint-critical' && (
               <p className="text-xs text-muted flex items-center gap-1.5">
-                <Flame className="h-3.5 w-3.5 text-neon" />
+                <Flame className="h-3.5 w-3.5 text-primary" />
                 Packages directly used in the mint execution pipeline. Breaking updates here can halt all minting operations.
               </p>
             )}

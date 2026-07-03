@@ -9,13 +9,13 @@ export default function Card({ children, className = '', tone = 'default', ...pr
   const tones: Record<string, string> = {
     default:     'card-base',
     elevated:    'card-elevated',
-    interactive: 'card-base transition-all duration-200 hover:border-border-strong hover:bg-surface-hover hover:shadow-md cursor-pointer',
+    interactive: 'card-base transition-all duration-200 hover:border-border-strong hover:shadow-md cursor-pointer',
     neon:        'card-neon',
     gold:        'card-gold',
-    glass:       'bg-white/[0.03] border border-white/[0.06] backdrop-blur-md',
+    glass:       'bg-surface-hover0 border border-border backdrop-blur-sm',
   };
   return (
-    <div className={`rounded-2xl ${tones[tone]} ${className}`} {...props}>
+    <div className={`rounded-xl ${tones[tone]} ${className}`} {...props}>
       {children}
     </div>
   );

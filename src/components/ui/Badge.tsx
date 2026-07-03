@@ -9,20 +9,20 @@ interface BadgeProps {
 }
 
 const variantMap = {
-  default: { bg: 'bg-white/[0.06]', text: 'text-secondary', border: 'border-border', dot: 'bg-secondary' },
-  success: { bg: 'bg-success/10', text: 'text-success', border: 'border-success/25', dot: 'bg-success shadow-[0_0_6px_rgba(0,255,136,0.8)]' },
-  warning: { bg: 'bg-warning/10', text: 'text-warning', border: 'border-warning/25', dot: 'bg-warning shadow-[0_0_6px_rgba(240,169,59,0.8)]' },
-  danger:  { bg: 'bg-danger/10',  text: 'text-danger',  border: 'border-danger/25',  dot: 'bg-danger shadow-[0_0_6px_rgba(255,77,77,0.8)]' },
-  neon:    { bg: 'bg-neon/[0.08]', text: 'text-neon',   border: 'border-neon/20',    dot: 'bg-neon shadow-[0_0_6px_rgba(0,255,136,0.8)]' },
-  gold:    { bg: 'bg-gold/[0.08]', text: 'text-gold',   border: 'border-gold/20',    dot: 'bg-gold shadow-[0_0_6px_rgba(240,169,59,0.8)]' },
-  purple:  { bg: 'bg-primary/10', text: 'text-primary', border: 'border-primary/25', dot: 'bg-primary shadow-[0_0_6px_rgba(0,255,136,0.8)]' },
-  info:    { bg: 'bg-info/[0.08]',  text: 'text-info',    border: 'border-info/20',    dot: 'bg-info shadow-[0_0_6px_rgba(156,163,175,0.8)]' },
+  default: { bg: 'bg-slate-100', text: 'text-secondary', border: 'border-border', dot: 'bg-secondary' },
+  success: { bg: 'bg-emerald-50', text: 'text-success', border: 'border-success/20', dot: 'bg-success' },
+  warning: { bg: 'bg-amber-50', text: 'text-warning', border: 'border-warning/20', dot: 'bg-warning' },
+  danger:  { bg: 'bg-red-50',  text: 'text-danger',  border: 'border-danger/20',  dot: 'bg-danger' },
+  neon:    { bg: 'bg-indigo-50', text: 'text-primary', border: 'border-primary/20', dot: 'bg-primary' },
+  gold:    { bg: 'bg-amber-50', text: 'text-gold',   border: 'border-gold/20',    dot: 'bg-gold' },
+  purple:  { bg: 'bg-indigo-50', text: 'text-primary', border: 'border-primary/20', dot: 'bg-primary' },
+  info:    { bg: 'bg-slate-100', text: 'text-info',    border: 'border-slate-200',    dot: 'bg-info' },
 };
 
 export default function Badge({ children, variant = 'default', dot = false, pulse = false, className = '' }: BadgeProps) {
   const v = variantMap[variant];
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold tracking-wide ${v.bg} ${v.text} ${v.border} ${className}`}>
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold tracking-tight ${v.bg} ${v.text} ${v.border} ${className}`}>
       {dot && (
         <span className={`h-1.5 w-1.5 rounded-full ${v.dot} ${pulse ? 'animate-pulse' : ''}`} aria-hidden="true" />
       )}

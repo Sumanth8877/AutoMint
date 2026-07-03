@@ -45,16 +45,16 @@ function Toggle({ checked, onChange, disabled = false }: { checked: boolean; onC
       aria-checked={checked}
       onClick={onChange}
       disabled={disabled}
-      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon/50 disabled:cursor-not-allowed disabled:opacity-50 ${
+      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50 ${
         checked
-          ? 'border-neon/50 bg-neon/20 shadow-[0_0_12px_rgba(0,255,136,0.25)]'
-          : 'border-border bg-white/5'
+          ? 'border-primary/50 bg-primary/20 shadow-[0_0_12px_rgba(79,70,229,0.12)]'
+          : 'border-border bg-surface-hover'
       }`}
     >
       <span
         className={`inline-block h-4 w-4 transform rounded-full shadow-sm transition-all duration-200 ${
           checked
-            ? 'translate-x-6 bg-neon shadow-[0_0_8px_rgba(0,255,136,0.80)]'
+            ? 'translate-x-6 bg-primary shadow-[0_0_8px_rgba(79,70,229,0.5)]'
             : 'translate-x-1 bg-muted'
         }`}
       />
@@ -71,14 +71,14 @@ function Checkbox({ checked, onChange, disabled = false }: { checked: boolean; o
       aria-checked={checked}
       onClick={onChange}
       disabled={disabled}
-      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon/50 disabled:cursor-not-allowed disabled:opacity-50 ${
+      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50 ${
         checked
-          ? 'border-neon bg-neon/20 shadow-[0_0_8px_rgba(0,255,136,0.40)]'
-          : 'border-border bg-white/5 hover:border-border-strong'
+          ? 'border-primary bg-primary/20 shadow-[0_0_8px_rgba(79,70,229,0.25)]'
+          : 'border-border bg-surface-hover hover:border-border-strong'
       }`}
     >
       {checked && (
-        <Check className="h-3 w-3 text-neon" strokeWidth={3} aria-hidden="true" />
+        <Check className="h-3 w-3 text-primary" strokeWidth={3} aria-hidden="true" />
       )}
     </button>
   );
@@ -160,7 +160,7 @@ export default function EmailNotificationsClient() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-base font-black tracking-tight text-text">Email</h3>
+          <h3 className="text-base font-bold tracking-tight text-text">Email</h3>
           <p className="mt-0.5 text-sm text-muted">Choose which AutoMint emails are delivered to your account address.</p>
         </div>
         <Button variant="neon" onClick={handleSave} loading={saving} glow size="sm">
@@ -171,10 +171,10 @@ export default function EmailNotificationsClient() {
 
       {/* Banners */}
       {error && (
-        <div className="rounded-xl border border-danger/25 bg-danger/8 px-4 py-3 text-sm text-danger">{error}</div>
+        <div className="rounded-xl border border-danger/20 bg-red-50 px-4 py-3 text-sm text-danger">{error}</div>
       )}
       {success && (
-        <div className="rounded-xl border border-success/25 bg-success/8 px-4 py-3 text-sm text-success">{success}</div>
+        <div className="rounded-xl border border-success/20 bg-emerald-50 px-4 py-3 text-sm text-success">{success}</div>
       )}
 
       <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
@@ -184,8 +184,8 @@ export default function EmailNotificationsClient() {
           <Card tone="neon" className="p-5">
             <div className="flex items-center justify-between gap-6">
               <div className="flex items-center gap-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-neon/25 bg-neon/8">
-                  <Mail className="h-4 w-4 text-neon" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-primary/15 bg-indigo-50">
+                  <Mail className="h-4 w-4 text-primary" />
                 </div>
                 <div>
                   <p className="text-sm font-bold text-text">Email Notifications</p>
@@ -193,7 +193,7 @@ export default function EmailNotificationsClient() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <span className={`text-[10px] font-bold uppercase tracking-widest ${draft?.emailEnabled ? 'text-neon' : 'text-muted'}`}>
+                <span className={`text-xs font-bold uppercase tracking-widest ${draft?.emailEnabled ? 'text-primary' : 'text-muted'}`}>
                   {draft?.emailEnabled ? 'ON' : 'OFF'}
                 </span>
                 <Toggle
@@ -207,7 +207,7 @@ export default function EmailNotificationsClient() {
           {/* Notification types */}
           {draft?.emailEnabled && (
             <div className="space-y-2">
-              <p className="px-1 text-[10px] font-bold uppercase tracking-[0.18em] text-muted">Notification Types</p>
+              <p className="px-1 text-xs font-bold uppercase tracking-wider text-muted">Notification Types</p>
               {notificationTypes.map(({ key, label, description }) => {
                 const isChecked = !!draft?.[key];
                 return (
@@ -217,7 +217,7 @@ export default function EmailNotificationsClient() {
                     onClick={() => toggle(key)}
                     className={`group flex w-full items-start gap-4 rounded-xl border p-4 text-left transition-all duration-150 hover:bg-surface-hover ${
                       isChecked
-                        ? 'border-neon/20 bg-neon/[0.04]'
+                        ? 'border-primary/20 bg-primary/[0.04]'
                         : 'border-border bg-surface'
                     }`}
                   >
@@ -235,7 +235,7 @@ export default function EmailNotificationsClient() {
           )}
 
           {!draft?.emailEnabled && (
-            <div className="rounded-xl border border-border bg-surface/50 px-4 py-6 text-center">
+            <div className="rounded-xl border border-border bg-surface px-4 py-6 text-center">
               <p className="text-sm text-muted">Enable email notifications to configure individual alert types.</p>
             </div>
           )}
@@ -243,11 +243,11 @@ export default function EmailNotificationsClient() {
 
         {/* Right — destination panel */}
         <div className="space-y-3">
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">Email Destination</p>
+          <p className="text-xs font-bold uppercase tracking-wider text-muted">Email Destination</p>
           <Card tone="elevated" className="p-5 space-y-4">
             {settings?.destinationEmail && (
               <div>
-                <p className="text-[9px] font-bold uppercase tracking-widest text-muted mb-1.5">Authenticated Account</p>
+                <p className="text-xs font-semibold uppercase tracking-widest text-muted mb-1.5">Authenticated Account</p>
                 <p className="text-sm font-semibold text-text truncate">{settings.destinationEmail}</p>
               </div>
             )}

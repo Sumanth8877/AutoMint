@@ -56,7 +56,7 @@ function maxValue(points: ChartPoint[]) {
 function SectionHeader({ icon: Icon, title, description }: { icon: typeof Activity; title: string; description: string }) {
   return (
     <div className="mb-5 flex items-start gap-3">
-      <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-lg border border-accent/20 bg-accent/10 text-accent">
+      <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-lg border border-primary/15 bg-indigo-50 text-primary">
         <Icon className="h-4 w-4" aria-hidden="true" />
       </div>
       <div className="min-w-0">
@@ -71,7 +71,7 @@ function StatGrid({ items }: { items: Array<{ label: string; value: string | num
   return (
     <div className="grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-3">
       {items.map((item) => (
-        <div key={item.label} className="min-w-0 rounded-lg border border-border bg-background/60 p-4">
+        <div key={item.label} className="min-w-0 rounded-lg border border-border bg-surface-hover p-4">
           <p className="text-wrap text-xs font-medium uppercase text-muted">{item.label}</p>
           <p className="mt-2 break-words font-mono text-2xl font-semibold text-text">{item.value}</p>
           {item.detail ? <p className="mt-1 text-xs text-muted">{item.detail}</p> : null}
@@ -84,7 +84,7 @@ function StatGrid({ items }: { items: Array<{ label: string; value: string | num
 function BarChart({ points, dual = false }: { points: ChartPoint[]; dual?: boolean }) {
   const max = maxValue(points);
   return (
-    <div className="h-44 min-w-0 overflow-hidden rounded-lg border border-border bg-background/60 p-4">
+    <div className="h-44 min-w-0 overflow-hidden rounded-lg border border-border bg-surface-hover p-4">
       <div className="flex h-32 min-w-0 items-end gap-2">
         {points.map((point) => (
           <div key={point.label} className="group flex min-w-0 flex-1 flex-col items-center gap-2">
@@ -102,7 +102,7 @@ function BarChart({ points, dual = false }: { points: ChartPoint[]; dual?: boole
                 />
               ) : null}
             </div>
-            <span className="truncate font-mono text-[10px] text-muted">{point.label}</span>
+            <span className="truncate text-xs text-muted">{point.label}</span>
           </div>
         ))}
       </div>
@@ -123,7 +123,7 @@ function OutcomeBars({ points }: { points: ChartPoint[] }) {
               <span className="min-w-0 truncate text-muted">{point.label}</span>
               <span className="font-mono text-text">{point.value}</span>
             </div>
-            <div className="h-2 overflow-hidden rounded-full bg-white/5">
+            <div className="h-2 overflow-hidden rounded-full bg-surface-hover">
               <div className={`h-full rounded-full ${isFailure ? 'bg-danger' : 'bg-success'}`} style={{ width: `${Math.max(total > 0 ? 4 : 0, width)}%` }} />
             </div>
           </div>
@@ -155,7 +155,7 @@ function CardSkeleton() {
       <Skeleton className="mb-4 h-5 w-48" />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {[...Array(4)].map((_, i) => (
-          <div key={i} className="rounded-lg border border-border bg-background/60 p-4">
+          <div key={i} className="rounded-lg border border-border bg-surface-hover p-4">
             <Skeleton className="mb-2 h-3 w-20" />
             <Skeleton className="h-7 w-12" />
           </div>
