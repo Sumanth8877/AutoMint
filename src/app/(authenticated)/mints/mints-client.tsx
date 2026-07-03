@@ -27,7 +27,7 @@ type MintTask = {
   mintPrice: string | null; scheduledTime: string | null;
   phase: 'whitelist' | 'allowlist' | 'public' | null;
   riskReasons: string[] | null; failureReason: string | null;
-  qstashMessageId: string | null; createdAt: string;
+  qstashMessageId: string | null; createdAt: string; confirmedAt: string | null;
 };
 
 type WalletRecord = { id: string; address: string; nickname: string | null; chain: string; walletType: WalletType; isDefault: boolean; };
@@ -234,6 +234,12 @@ function logLineTone(status: string) {
   }
 }
 
+function formatDuration(ms: number) {
+  if (ms < 0) return '0.00s';
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  return `${(ms / 1000).toFixed(2)}s`;
+}
+
 function TaskConsole({ taskId, task, onClose, onStart, updatingId }: {
   taskId: string;
   task: MintTask | undefined;
@@ -252,6 +258,24 @@ function TaskConsole({ taskId, task, onClose, onStart, updatingId }: {
   const isActive = task ? ['pending', 'monitoring', 'ready', 'running', 'unconfirmed'].includes(task.status) : false;
   const canRetry = task?.status === 'failed';
 
+  // Real, measured "queued -> confirmed" timing — no estimates. task.createdAt
+  // is the moment the task was created (right after URL/contract resolution).
+  // task.confirmedAt is set by executeMintTask() the instant the receipt comes
+  // back on-chain. While still active we tick against the latest log entry
+  // (or now) so you can watch the live elapsed time count up in real time.
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    if (!isActive) return;
+    const interval = setInterval(() => setNowTick(Date.now()), 100);
+    return () => clearInterval(interval);
+  }, [isActive]);
+
+  const startedAt = task ? new Date(task.createdAt).getTime() : null;
+  const lastLogAt = logs.length > 0 ? new Date(logs[logs.length - 1].createdAt).getTime() : null;
+  const endedAt = task?.confirmedAt ? new Date(task.confirmedAt).getTime() : (!isActive ? lastLogAt : null);
+  const elapsedMs = startedAt != null ? (endedAt ?? nowTick) - startedAt : null;
+  const elapsedLabel = task?.confirmedAt ? 'Confirmed in' : isActive ? 'Elapsed' : 'Time to failure';
+
   return (
     <Modal
       open={!!taskId}
@@ -269,6 +293,11 @@ function TaskConsole({ taskId, task, onClose, onStart, updatingId }: {
               <span className="flex items-center gap-1.5 text-xs text-muted">
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
                 Live{isFetching ? '…' : ''}
+              </span>
+            )}
+            {elapsedMs != null && (
+              <span className="rounded-full border border-primary/20 bg-indigo-50 px-2 py-0.5 font-mono text-xs font-bold text-primary">
+                {elapsedLabel}: {formatDuration(elapsedMs)}
               </span>
             )}
           </div>
