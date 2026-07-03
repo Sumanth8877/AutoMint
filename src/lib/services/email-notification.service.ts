@@ -4,6 +4,7 @@ import { and, eq } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
 import { collections, emailNotificationPreferences, mintTasks, users, wallets } from '@/drizzle/schema';
 import { captureException } from '@/lib/observability/sentry';
+import { renderEmailTemplate } from '@/lib/email-templates';
 
 type PreferenceUpdate = Partial<Pick<
   typeof emailNotificationPreferences.$inferInsert,
@@ -42,15 +43,6 @@ const EMAIL_FROM = 'AutoMint <onboarding@resend.dev>';
 
 function getResendApiKey() {
   return process.env.RESEND_API_KEY;
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }
 
 // Explicit allowlist of env var names that hold secrets.
@@ -191,40 +183,6 @@ async function getTaskEmailDetails(userId: string, payload: MintEmailPayload): P
   };
 }
 
-function renderEmailHtml(heading: string, preview: string, details: TaskEmailDetails) {
-  const rows = ([
-    ['Task', details.taskName],
-    ['Collection', details.collectionName],
-    ['Chain', details.chain],
-    ['Timestamp', details.timestamp],
-    ['Status', details.status],
-    ['Contract', details.contractAddress],
-    ['Transaction', details.txHash],
-    ['Reason', details.reason],
-  ] satisfies Array<[string, string | undefined]>).filter((row): row is [string, string] => Boolean(row[1]));
-
-  return `<!doctype html>
-<html>
-  <body style="margin:0;background:#070a15;color:#f8fafc;font-family:Arial,sans-serif;">
-    <div style="max-width:560px;margin:0 auto;padding:32px 20px;">
-      <div style="border:1px solid #20283a;border-radius:12px;background:#101626;padding:24px;">
-        <p style="margin:0 0 12px;color:#22d3ee;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">AutoMint</p>
-        <h1 style="margin:0 0 12px;font-size:24px;line-height:1.25;color:#ffffff;">${escapeHtml(heading)}</h1>
-        <p style="margin:0 0 24px;color:#a8b3cf;font-size:14px;line-height:1.6;">${escapeHtml(preview)}</p>
-        <table style="width:100%;border-collapse:collapse;">
-          ${rows.map(([label, value]) => `
-            <tr>
-              <td style="border-top:1px solid #20283a;padding:10px 0;color:#8ea0c4;font-size:12px;text-transform:uppercase;">${escapeHtml(label)}</td>
-              <td style="border-top:1px solid #20283a;padding:10px 0;color:#f8fafc;font-size:14px;text-align:right;">${escapeHtml(String(value))}</td>
-            </tr>
-          `).join('')}
-        </table>
-      </div>
-    </div>
-  </body>
-</html>`;
-}
-
 async function sendEmail(to: string, subject: string, html: string) {
   const apiKey = getResendApiKey();
   if (!apiKey) return false;
@@ -257,7 +215,7 @@ async function sendNotificationEmail(userId: string, type: EmailType, heading: s
     if (!allowed) return false;
 
     const details = await getTaskEmailDetails(userId, payload);
-    const html = renderEmailHtml(heading, preview, details);
+    const html = renderEmailTemplate(type, heading, preview, details);
 
     return await sendEmail(allowed.user.email, `AutoMint: ${heading}`, html);
   } catch (error) {

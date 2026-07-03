@@ -26,6 +26,7 @@ export const users = pgTable('users', {
   clerkId: text('clerk_id').notNull(),
   email: text('email').notNull(),
   username: text('username'),
+  onboardingCompletedAt: timestamp('onboarding_completed_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({

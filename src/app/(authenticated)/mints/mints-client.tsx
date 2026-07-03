@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useReducer, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
+import Image from 'next/image';
 import {
   CalendarClock, LinkIcon, Play, Plus, RotateCcw,
   Trash2, XCircle, Zap, CheckCircle2, AlertCircle, Cpu, ExternalLink,
@@ -134,6 +135,16 @@ function MintRow({
           <p className="mt-1.5 text-xs text-danger bg-red-50 rounded px-2 py-1 border border-danger/15">
             ⚠ {task.failureReason}
           </p>
+        )}
+        {task.failureReason && /sold.out|ended|supply|max.supply/i.test(task.failureReason) && (
+          <div className="relative mt-2 h-16 w-24 overflow-hidden rounded-lg">
+            <Image src="/illustrations/sold-out.jpeg" alt="Sold out sign" fill sizes="96px" className="object-contain" />
+          </div>
+        )}
+        {task.failureReason && /gas|insufficient|balance|funds/i.test(task.failureReason) && (
+          <div className="relative mt-2 h-16 w-24 overflow-hidden rounded-lg">
+            <Image src="/illustrations/out-of-gas.jpeg" alt="Out of gas" fill sizes="96px" className="object-contain" />
+          </div>
         )}
         {task.riskReasons && task.riskReasons.length > 0 && (
           <div className="mt-1.5 flex flex-wrap gap-1">
@@ -330,6 +341,19 @@ export default function MintsClient() {
         ))}
       </div>
 
+      {/* Risk warning banner */}
+      {tasks.some(t => t.riskReasons?.length && ['pending', 'monitoring', 'ready', 'running'].includes(t.status)) && (
+        <div className="mb-4 flex items-center gap-4 rounded-xl border border-amber-300/30 bg-amber-50 p-4">
+          <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl">
+            <Image src="/illustrations/risk-warning.jpeg" alt="A small character holding up a warning sign" fill sizes="64px" className="object-contain" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-amber-800">Risk Detected</p>
+            <p className="text-xs text-amber-700">Some active mints have risk flags. Review risk reasons before execution.</p>
+          </div>
+        </div>
+      )}
+
       {/* Mint list */}
       <div className="space-y-3">
         {tasksLoading ? (
@@ -361,6 +385,18 @@ export default function MintsClient() {
             />
           )
         ) : (
+          <>
+            {filterStatus === 'completed' && filtered.length > 0 && (
+              <div className="mb-6 flex items-center gap-4 rounded-xl border border-success/20 bg-emerald-50 p-4">
+                <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl">
+                  <Image src="/illustrations/mint-success-trophy.jpeg" alt="A small character celebrating with a golden trophy" fill sizes="80px" className="object-contain" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-text">Mints Completed</p>
+                  <p className="text-xs text-muted">{filtered.length} mint{filtered.length !== 1 ? 's' : ''} successfully executed. Your collection is growing.</p>
+                </div>
+              </div>
+            )}
           <Stagger className="space-y-3" stagger={0.05}>
             {filtered.map(task => (
               <StaggerItem key={task.id}>
@@ -376,6 +412,7 @@ export default function MintsClient() {
               </StaggerItem>
             ))}
           </Stagger>
+          </>
         )}
       </div>
 
