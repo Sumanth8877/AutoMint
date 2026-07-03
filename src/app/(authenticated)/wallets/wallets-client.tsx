@@ -212,6 +212,13 @@ export default function WalletsClient() {
 
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add Wallet" subtitle="Securely add a signing wallet" tone="neon">
         <form onSubmit={e => { e.preventDefault(); setFormError(null); addMutation.mutate(form); }} className="space-y-4">
+          <div className="relative mx-auto aspect-[16/9] w-full max-w-sm overflow-hidden rounded-xl border border-border bg-white">
+            <img
+              src="/illustrations/wallet-import-vault.jpeg"
+              alt="A small character guides a wallet into an open encrypted vault labeled keys never leave."
+              className="h-full w-full object-contain p-2"
+            />
+          </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-bold uppercase tracking-widest text-secondary">Wallet Type</label>
             <select

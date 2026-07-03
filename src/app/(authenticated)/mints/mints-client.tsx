@@ -335,17 +335,31 @@ export default function MintsClient() {
         {tasksLoading ? (
           Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} lines={2} />)
         ) : filtered.length === 0 ? (
-          <EmptyState
-            image="/illustrations/empty-mints.jpeg"
-            imageAlt="A character sitting on an empty inbox tray, holding a MINT sign above an empty URL bar."
-            title="No mints in queue"
-            description="Queue a mint URL to get started. AutoMint will analyze the contract and execute automatically the moment the mint opens."
-            action={
-              <Button variant="neon" onClick={() => dispatch({ type: 'OPEN_QUEUE' })}>
-                <Plus className="h-3.5 w-3.5" />Queue Mint
-              </Button>
-            }
-          />
+          filterStatus !== 'all' && tasks.length > 0 ? (
+            <EmptyState
+              image="/illustrations/mint-scheduled.jpeg"
+              imageAlt="A small character turning a giant kitchen-timer dial, setting it to T equals zero — queued and waiting."
+              title={`No ${filterStatus} mints`}
+              description={`You have ${tasks.length} mint task${tasks.length === 1 ? '' : 's'} in other states. Switch filters or queue a new mint.`}
+              action={
+                <Button variant="neon" onClick={() => dispatch({ type: 'OPEN_QUEUE' })}>
+                  <Plus className="h-3.5 w-3.5" />Queue Mint
+                </Button>
+              }
+            />
+          ) : (
+            <EmptyState
+              image="/illustrations/empty-mints.jpeg"
+              imageAlt="A character sitting on an empty inbox tray, holding a MINT sign above an empty URL bar."
+              title="No mints in queue"
+              description="Queue a mint URL to get started. AutoMint will analyze the contract and execute automatically the moment the mint opens."
+              action={
+                <Button variant="neon" onClick={() => dispatch({ type: 'OPEN_QUEUE' })}>
+                  <Plus className="h-3.5 w-3.5" />Queue Mint
+                </Button>
+              }
+            />
+          )
         ) : (
           <Stagger className="space-y-3" stagger={0.05}>
             {filtered.map(task => (

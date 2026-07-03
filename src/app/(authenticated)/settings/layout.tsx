@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
@@ -23,9 +24,20 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:py-10">
-      <header className="mb-8">
-        <h1 className="text-2xl font-semibold text-text sm:text-3xl">Settings</h1>
-        <p className="mt-1 text-sm text-muted">Configure your AutoMint workspace.</p>
+      <header className="mb-8 grid gap-6 md:grid-cols-[minmax(0,1fr)_200px] md:items-center">
+        <div>
+          <h1 className="text-2xl font-semibold text-text sm:text-3xl">Settings</h1>
+          <p className="mt-1 text-sm text-muted">Configure your AutoMint workspace.</p>
+        </div>
+        <div className="relative hidden aspect-[16/9] w-full overflow-hidden rounded-xl border border-border bg-white md:block">
+          <Image
+            src="/illustrations/settings-wrench.jpeg"
+            alt="A small character tightens a gear on an exposed machine panel with a wrench, tuning things up."
+            fill
+            sizes="200px"
+            className="object-contain p-1"
+          />
+        </div>
       </header>
 
       <div className="grid gap-8 lg:grid-cols-[220px_minmax(0,1fr)]">

@@ -469,8 +469,8 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
           </div>
         ) : (
           <EmptyState
-            image="/illustrations/empty-analyzer.jpeg"
-            imageAlt="A character with a magnifying glass waiting beside an empty URL input."
+            image="/illustrations/analyzer-pre-paste.jpeg"
+            imageAlt="A small character holding a magnifying glass to a blank sheet of paper with a floating question mark."
             title="Ready to analyze"
             description="Paste a mint URL, explorer URL, OpenSea collection URL, or direct contract address. AutoMint checks the contract, gas, and rug/honeypot signals in seconds."
           />

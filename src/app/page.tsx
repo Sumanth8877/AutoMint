@@ -362,6 +362,15 @@ export default async function Home() {
               <div className="mx-auto flex w-fit items-center gap-2 rounded-full border border-primary/20 bg-indigo-50 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-primary">
                 <CheckCircle2 className="h-3.5 w-3.5" /> No custody, no black box
               </div>
+              <div className="relative mx-auto aspect-[16/9] w-full max-w-lg overflow-hidden rounded-2xl border border-border bg-white">
+                <Image
+                  src="/illustrations/cta-open-door.jpeg"
+                  alt="A small character holding a door wide open, gesturing you inside where a few NFT squares float in the warm light."
+                  fill
+                  sizes="(min-width: 640px) 32rem, 90vw"
+                  className="object-contain p-3"
+                />
+              </div>
               <h2 className="text-3xl font-medium tracking-tight text-text sm:text-5xl">Ready to mint smarter?</h2>
               <p className="mx-auto max-w-xl text-secondary">
                 Set up your wallets and run your first risk analysis in under two minutes.
