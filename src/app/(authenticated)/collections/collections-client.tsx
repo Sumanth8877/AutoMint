@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import type { FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ExternalLink, FolderKanban, Plus, RefreshCw, Search, Trash2, TrendingDown, TrendingUp, Zap, Shield } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
@@ -14,6 +15,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { SkeletonCard } from '@/components/ui/skeleton';
 import { Stagger, StaggerItem, TiltCard } from '@/components/motion';
 import { apiRequest } from '@/lib/api/client';
+import { isValidEvmAddress, sanitizeText } from '@/lib/validation';
 
 type Collection = {
   id: string; name: string | null; contractAddress: string; chain: string;
@@ -170,9 +172,25 @@ export default function CollectionsClient() {
 
   const addMutation = useMutation({
     mutationFn: (body: object) => apiRequest<{ collection: Collection }>('/api/collections', { method: 'POST', body: JSON.stringify(body) }).then(r => r.collection),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['collections'] }); setAddOpen(false); setForm({ name: '', contractAddress: '', chain: 'ethereum' }); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['collections'] }); setAddOpen(false); setForm({ name: '', contractAddress: '', chain: 'ethereum' }); setFormError(null); },
     onError: (e: Error) => setFormError(e.message),
   });
+
+  function handleAddSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const name = sanitizeText(form.name);
+    const contractAddress = form.contractAddress.trim();
+    if (!contractAddress) {
+      setFormError('Contract address is required.');
+      return;
+    }
+    if (!isValidEvmAddress(contractAddress)) {
+      setFormError('Enter a valid contract address (0x followed by 40 hex characters).');
+      return;
+    }
+    setFormError(null);
+    addMutation.mutate({ ...form, name, contractAddress });
+  }
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => apiRequest(`/api/collections/${id}`, { method: 'DELETE' }),
@@ -254,13 +272,13 @@ export default function CollectionsClient() {
       )}
 
       {/* Add modal */}
-      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add Collection" subtitle="Track a new NFT contract" tone="neon">
+      <Modal open={addOpen} onClose={() => { setAddOpen(false); setFormError(null); }} title="Add Collection" subtitle="Track a new NFT contract" tone="neon">
         <form
-          onSubmit={e => { e.preventDefault(); setFormError(null); addMutation.mutate(form); }}
+          onSubmit={handleAddSubmit}
           className="space-y-4"
         >
           <Input label="Collection Name" placeholder="Bored Apes…" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
-          <Input label="Contract Address" placeholder="0x…" value={form.contractAddress} onChange={e => setForm(p => ({ ...p, contractAddress: e.target.value }))} required error={formError ?? undefined} />
+          <Input label="Contract Address" placeholder="0x…" value={form.contractAddress} onChange={e => setForm(p => ({ ...p, contractAddress: e.target.value }))} required error={formError ?? undefined} hint={!formError ? 'Must be a valid 0x contract address.' : undefined} />
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-bold uppercase tracking-widest text-secondary">Chain</label>
             <select
@@ -272,7 +290,7 @@ export default function CollectionsClient() {
             </select>
           </div>
           <div className="flex gap-3 pt-2">
-            <Button type="button" variant="secondary" onClick={() => setAddOpen(false)} className="flex-1">Cancel</Button>
+            <Button type="button" variant="secondary" onClick={() => { setAddOpen(false); setFormError(null); }} className="flex-1">Cancel</Button>
             <Button type="submit" variant="neon" loading={addMutation.isPending} className="flex-1"><Plus className="h-3.5 w-3.5" />Add</Button>
           </div>
         </form>

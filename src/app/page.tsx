@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { auth } from '@clerk/nextjs/server';
 import {
   Activity, ArrowRight, BarChart3, ChevronRight, Eye, Shield,
   Sparkles, TrendingUp, Wallet, Zap, Radio, CheckCircle2, FileCode2,
@@ -67,7 +68,10 @@ const steps = [
   { n: '04', title: 'Execute at Machine Speed', description: 'AutoMint fires the transaction the instant conditions are met — then tracks confirmation and outcome in your dashboard.' },
 ];
 
-export default function Home() {
+export default async function Home() {
+  const { userId } = await auth();
+  const isSignedIn = Boolean(userId);
+
   return (
     <main className="relative flex min-h-screen flex-col overflow-hidden">
       {/* ── Nav ── */}
@@ -85,16 +89,18 @@ export default function Home() {
             <a href="#chains" className="transition-colors hover:text-text">Chains</a>
           </nav>
           <div className="flex items-center gap-3">
-            <Link href="/sign-in" className="hidden text-sm font-medium text-secondary transition-colors hover:text-text sm:inline">
-              Sign in
-            </Link>
+            {!isSignedIn && (
+              <Link href="/sign-in" className="hidden text-sm font-medium text-secondary transition-colors hover:text-text sm:inline">
+                Sign in
+              </Link>
+            )}
             <Magnetic strength={0.25}>
               <Link
                 href="/dashboard"
                 className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-background transition-transform"
                 style={{ background: 'var(--color-primary)', boxShadow: '0 0 24px rgba(79,70,229,0.15)' }}
               >
-                Launch Terminal
+                {isSignedIn ? 'Go to Dashboard' : 'Launch Terminal'}
               </Link>
             </Magnetic>
           </div>
@@ -145,7 +151,7 @@ export default function Home() {
                   style={{ background: 'var(--color-primary)', boxShadow: '0 0 40px rgba(79,70,229,0.20), 0 0 12px rgba(79,70,229,0.25)' }}
                 >
                   <Sparkles className="h-4 w-4" />
-                  Launch Terminal
+                  {isSignedIn ? 'Go to Dashboard' : 'Launch Terminal'}
                 </Link>
               </Magnetic>
               <Magnetic strength={0.3}>
@@ -318,7 +324,7 @@ export default function Home() {
                     className="inline-flex items-center gap-3 rounded-xl px-8 py-4 text-sm font-semibold text-background transition-transform hover:brightness-105"
                     style={{ background: 'var(--color-primary)', boxShadow: '0 0 40px rgba(79,70,229,0.20)' }}
                   >
-                    Get Started <ChevronRight className="h-4 w-4" />
+                    {isSignedIn ? 'Go to Dashboard' : 'Get Started'} <ChevronRight className="h-4 w-4" />
                   </Link>
                 </Magnetic>
               </div>

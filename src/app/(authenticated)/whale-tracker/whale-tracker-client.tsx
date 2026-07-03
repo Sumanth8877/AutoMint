@@ -15,6 +15,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Stagger, StaggerItem } from '@/components/motion';
 import { apiRequest } from '@/lib/api/client';
+import { isValidWalletAddress, walletAddressHint, sanitizeText, clampNumeric } from '@/lib/validation';
 
 type NetworkType = 'EVM' | 'SOLANA' | 'BITCOIN';
 type Chain = 'ethereum' | 'base' | 'polygon';
@@ -304,17 +305,30 @@ export default function WhaleTrackerClient() {
 
   async function submitWallet(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSaving(true);
     setFormError(null);
 
+    const walletName = sanitizeText(walletForm.walletName);
+    const walletAddress = walletForm.walletAddress.trim();
+
+    if (!walletAddress) {
+      setFormError('Wallet address is required.');
+      return;
+    }
+    if (walletModal === 'add' && !isValidWalletAddress(walletAddress, walletForm.networkType)) {
+      setFormError(walletAddressHint(walletForm.networkType));
+      return;
+    }
+
+    setSaving(true);
     try {
       await walletMutation.mutateAsync({
-        walletName: walletForm.walletName.trim() || null,
-        walletAddress: walletForm.walletAddress.trim(),
+        walletName: walletName || null,
+        walletAddress,
         networkType: walletForm.networkType,
         id: walletModal === 'edit' ? editingWallet?.id : undefined,
       });
       setWalletModal(null);
+      setWalletForm({ walletName: '', walletAddress: '', networkType: 'EVM' });
     } catch (requestError) {
       setFormError(requestError instanceof Error ? requestError.message : 'Failed to save tracked wallet.');
     } finally {
@@ -350,15 +364,38 @@ export default function WhaleTrackerClient() {
 
   async function submitRule(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSaving(true);
     setFormError(null);
 
+    if (!ruleForm.walletAddress.trim()) {
+      setFormError('Select a tracked wallet.');
+      return;
+    }
+    const quantity = clampNumeric(ruleForm.quantity, 1, 1000);
+    if (quantity === null || !Number.isInteger(quantity)) {
+      setFormError('Max quantity must be a whole number of at least 1.');
+      return;
+    }
+    if (ruleForm.maxPrice.trim()) {
+      const maxPrice = clampNumeric(ruleForm.maxPrice, 0, Number.MAX_SAFE_INTEGER);
+      if (maxPrice === null) {
+        setFormError('Max spend must be a valid non-negative number.');
+        return;
+      }
+    }
+    const riskThreshold = clampNumeric(ruleForm.riskThreshold, 0, 100);
+    if (riskThreshold === null) {
+      setFormError('Risk threshold must be a number between 0 and 100.');
+      return;
+    }
+
+    setSaving(true);
+
     const body = {
-      walletAddress: ruleForm.walletAddress,
+      walletAddress: ruleForm.walletAddress.trim(),
       autoMint: ruleForm.autoMint,
-      quantity: ruleForm.quantity,
-      maxPrice: ruleForm.maxPrice || null,
-      riskThreshold: ruleForm.riskThreshold,
+      quantity: String(quantity),
+      maxPrice: ruleForm.maxPrice.trim() || null,
+      riskThreshold: String(riskThreshold),
       destinationWalletId: ruleForm.destinationWalletId || null,
       enabled: ruleForm.enabled,
     };
@@ -371,6 +408,7 @@ export default function WhaleTrackerClient() {
         id: ruleModal === 'edit' ? editingRule?.id : undefined,
       });
       setRuleModal(null);
+      setRuleForm(emptyRuleForm);
     } catch (requestError) {
       setFormError(requestError instanceof Error ? requestError.message : 'Failed to save copy rule.');
     } finally {
@@ -622,10 +660,10 @@ export default function WhaleTrackerClient() {
         </Card>
       </section>
 
-      <Modal open={walletModal !== null} title={walletModal === 'edit' ? 'Edit Tracked Wallet' : 'Add Tracked Wallet'} onClose={() => setWalletModal(null)}>
+      <Modal open={walletModal !== null} title={walletModal === 'edit' ? 'Edit Tracked Wallet' : 'Add Tracked Wallet'} onClose={() => { setWalletModal(null); setFormError(null); }}>
         <form onSubmit={submitWallet} className="space-y-4">
           <Input label="Wallet Name" value={walletForm.walletName} onChange={(event) => setWalletForm((current) => ({ ...current, walletName: event.target.value }))} placeholder="Main Whale" />
-          <Input label="Wallet Address" value={walletForm.walletAddress} onChange={(event) => setWalletForm((current) => ({ ...current, walletAddress: event.target.value }))} placeholder="0x, Solana, or Bitcoin address" disabled={walletModal === 'edit'} required />
+          <Input label="Wallet Address" value={walletForm.walletAddress} onChange={(event) => setWalletForm((current) => ({ ...current, walletAddress: event.target.value }))} placeholder="0x, Solana, or Bitcoin address" disabled={walletModal === 'edit'} required hint={walletModal === 'add' ? walletAddressHint(walletForm.networkType) : undefined} />
           <label className="block text-sm font-medium text-muted">
             Network
             <select
@@ -639,13 +677,13 @@ export default function WhaleTrackerClient() {
           </label>
           {formError ? <div className="rounded-lg border border-danger/20 bg-red-50 p-3 text-sm text-danger" role="alert">{formError}</div> : null}
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={() => setWalletModal(null)}>Cancel</Button>
+            <Button type="button" variant="secondary" onClick={() => { setWalletModal(null); setFormError(null); }}>Cancel</Button>
             <Button type="submit" loading={saving}>{walletModal === 'edit' ? 'Save Wallet' : 'Add Wallet'}</Button>
           </div>
         </form>
       </Modal>
 
-      <Modal open={ruleModal !== null} title={ruleModal === 'edit' ? 'Edit Copy Mint Rule' : 'Create Copy Mint Rule'} onClose={() => setRuleModal(null)}>
+      <Modal open={ruleModal !== null} title={ruleModal === 'edit' ? 'Edit Copy Mint Rule' : 'Create Copy Mint Rule'} onClose={() => { setRuleModal(null); setFormError(null); }}>
         <form onSubmit={submitRule} className="space-y-4">
           <label className="block text-sm font-medium text-muted">
             Tracked Wallet
@@ -696,7 +734,7 @@ export default function WhaleTrackerClient() {
           </div>
           {formError ? <div className="rounded-lg border border-danger/20 bg-red-50 p-3 text-sm text-danger" role="alert">{formError}</div> : null}
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={() => setRuleModal(null)}>Cancel</Button>
+            <Button type="button" variant="secondary" onClick={() => { setRuleModal(null); setFormError(null); }}>Cancel</Button>
             <Button type="submit" loading={saving}>{ruleModal === 'edit' ? 'Save Rule' : 'Create Rule'}</Button>
           </div>
         </form>
