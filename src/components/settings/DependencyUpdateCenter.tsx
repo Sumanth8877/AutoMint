@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import Checkbox from '@/components/ui/Checkbox';
 import {
   ArrowUpCircle, CheckCircle2, ChevronDown, ChevronUp,
   ClipboardCheck, ClipboardCopy, Download, ExternalLink, Package,
@@ -173,28 +174,6 @@ function MintCriticalBadge() {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Neon checkbox
-// ─────────────────────────────────────────────────────────────────
-
-function NeonCheckbox({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) {
-  return (
-    <button
-      type="button"
-      role="checkbox"
-      aria-checked={checked}
-      aria-label={label}
-      onClick={onChange}
-      className={`flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded border transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
-        checked
-          ? 'border-primary bg-primary/20 shadow-[0_0_8px_rgba(79,70,229,0.20)]'
-          : 'border-border bg-surface-hover hover:border-border-strong'
-      }`}
-    >
-      {checked && <CheckCircle2 className="h-3 w-3 text-primary" strokeWidth={2.5} />}
-    </button>
-  );
-}
 
 // ─────────────────────────────────────────────────────────────────
 // Package row — with risk coloring, changelog link, mint-critical badge
@@ -232,7 +211,7 @@ function PackageRow({ pkg, selected, onToggle, showSelect }: {
         {showSelect && (
           <td className="pl-4 py-3 w-10">
             {pkg.updateType !== 'current' && (
-              <NeonCheckbox checked={selected} onChange={onToggle} label={`Select ${pkg.name}`} />
+              <Checkbox checked={selected} onChange={onToggle} aria-label={`Select ${pkg.name}`} />
             )}
           </td>
         )}

@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Check, Mail, Save } from 'lucide-react';
+import { Mail, Save } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
+import Checkbox from '@/components/ui/Checkbox';
 import { apiRequest } from '@/lib/api/client';
 
 type EmailPreferences = {
@@ -62,27 +63,7 @@ function Toggle({ checked, onChange, disabled = false }: { checked: boolean; onC
   );
 }
 
-// ── Neon checkbox ─────────────────────────────────────────────────
-function Checkbox({ checked, onChange, disabled = false }: { checked: boolean; onChange: () => void; disabled?: boolean }) {
-  return (
-    <button
-      type="button"
-      role="checkbox"
-      aria-checked={checked}
-      onClick={onChange}
-      disabled={disabled}
-      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50 ${
-        checked
-          ? 'border-primary bg-primary/20 shadow-[0_0_8px_rgba(79,70,229,0.25)]'
-          : 'border-border bg-surface-hover hover:border-border-strong'
-      }`}
-    >
-      {checked && (
-        <Check className="h-3 w-3 text-primary" strokeWidth={3} aria-hidden="true" />
-      )}
-    </button>
-  );
-}
+
 
 export default function EmailNotificationsClient() {
   const queryClient = useQueryClient();

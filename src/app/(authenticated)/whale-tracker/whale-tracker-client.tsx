@@ -6,6 +6,7 @@ import { Activity, Eye, Pause, Pencil, Play, Plus, Radar, ShieldCheck, Trash2, Z
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
+import Checkbox from '@/components/ui/Checkbox';
 import Input from '@/components/ui/Input';
 import { EmptyState } from '@/components/ui/empty-state';
 import { MetricCard } from '@/components/ui/metric-card';
@@ -678,12 +679,18 @@ export default function WhaleTrackerClient() {
             </label>
           </div>
           <div className="flex flex-wrap gap-4">
-            <label className="flex items-center gap-2 text-sm text-text">
-              <input type="checkbox" checked={ruleForm.autoMint} onChange={(event) => setRuleForm((current) => ({ ...current, autoMint: event.target.checked }))} className="h-4 w-4 rounded border-border bg-surface" />
+            <label className="flex items-center gap-2 text-sm text-text cursor-pointer">
+              <Checkbox
+                checked={ruleForm.autoMint}
+                onChange={() => setRuleForm((current) => ({ ...current, autoMint: !current.autoMint }))}
+              />
               Auto Copy Enabled
             </label>
-            <label className="flex items-center gap-2 text-sm text-text">
-              <input type="checkbox" checked={ruleForm.enabled} onChange={(event) => setRuleForm((current) => ({ ...current, enabled: event.target.checked }))} className="h-4 w-4 rounded border-border bg-surface" />
+            <label className="flex items-center gap-2 text-sm text-text cursor-pointer">
+              <Checkbox
+                checked={ruleForm.enabled}
+                onChange={() => setRuleForm((current) => ({ ...current, enabled: !current.enabled }))}
+              />
               Rule Enabled
             </label>
           </div>
