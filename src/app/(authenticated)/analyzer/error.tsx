@@ -7,7 +7,7 @@ import Card from '@/components/ui/Card';
 export default function AnalyzerError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
     <Card className="p-8 text-center">
-      <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-lg border border-danger/20 bg-danger/10 text-danger">
+      <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-lg border border-danger/20 bg-red-50 text-danger">
         <AlertTriangle className="h-5 w-5" aria-hidden="true" />
       </div>
       <h2 className="mt-4 text-base font-semibold text-text">Analyzer failed to load</h2>

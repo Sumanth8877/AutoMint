@@ -24,16 +24,16 @@ type WalletRecord = {
 };
 
 const chainGlow: Record<string, string> = {
-  ethereum: '0 0 20px rgba(0,255,136,0.20)',
-  base:     '0 0 20px rgba(0,255,136,0.20)',
-  polygon:  '0 0 20px rgba(0,255,136,0.20)',
+  ethereum: '0 0 20px rgba(79,70,229,0.10)',
+  base:     '0 0 20px rgba(79,70,229,0.10)',
+  polygon:  '0 0 20px rgba(79,70,229,0.10)',
   arbitrum: '0 0 20px rgba(156,163,175,0.20)',
 };
 const chainAccent: Record<string, string> = {
-  ethereum: 'text-neon border-neon/25 bg-neon/8',
-  base:     'text-primary border-primary/25 bg-primary/8',
-  polygon:  'text-accent border-accent/25 bg-accent/8',
-  arbitrum: 'text-info border-info/25 bg-info/8',
+  ethereum: 'text-primary border-primary/15 bg-indigo-50',
+  base:     'text-primary border-primary/15 bg-indigo-50',
+  polygon:  'text-primary border-primary/15 bg-indigo-50',
+  arbitrum: 'text-info border-slate-200 bg-slate-100',
 };
 
 function WalletCard({
@@ -66,32 +66,32 @@ function WalletCard({
       <div className="flex items-start justify-between gap-3 mb-4">
         <div className="flex items-center gap-3">
           <div
-            className="flex h-11 w-11 items-center justify-center rounded-xl border bg-background text-neon"
-            style={{ borderColor: wallet.isDefault ? 'rgba(0,255,136,0.30)' : undefined, boxShadow: wallet.isDefault ? '0 0 12px rgba(0,255,136,0.20)' : undefined }}
+            className="flex h-11 w-11 items-center justify-center rounded-xl border bg-surface text-primary"
+            style={{ borderColor: wallet.isDefault ? 'rgba(79,70,229,0.15)' : undefined, boxShadow: wallet.isDefault ? '0 0 12px rgba(79,70,229,0.10)' : undefined }}
           >
             <Wallet className="h-5 w-5" />
           </div>
           <div>
             <p className="font-bold text-text text-sm">{wallet.nickname ?? 'Unnamed Wallet'}</p>
-            <p className="text-[10px] text-muted font-mono">
+            <p className="text-xs text-muted font-mono">
               {revealed ? wallet.address : `${wallet.address.slice(0, 10)}…${wallet.address.slice(-6)}`}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap justify-end">
           {wallet.isDefault && <Badge variant="gold" dot pulse>Default</Badge>}
-          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${accentClass}`}>{wallet.chain}</span>
+          <span className={`rounded-full border px-2 py-0.5 text-xs font-bold uppercase ${accentClass}`}>{wallet.chain}</span>
           <Badge variant={funded ? 'success' : 'default'} dot={funded}>{funded ? 'Funded' : 'Empty'}</Badge>
         </div>
       </div>
 
       {/* Balance */}
-      <div className="mb-4 rounded-xl border border-border bg-background/60 p-4 flex items-center justify-between">
+      <div className="mb-4 rounded-xl border border-border bg-surface-hover p-4 flex items-center justify-between">
         <div>
-          <p className="text-[9px] font-bold uppercase tracking-widest text-muted mb-1">Balance</p>
-          <p className="text-2xl font-black text-text tabular-nums">{bal.toFixed(4)} <span className="text-sm text-muted">ETH</span></p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted mb-1">Balance</p>
+          <p className="text-2xl font-bold text-text tabular-nums">{bal.toFixed(4)} <span className="text-sm text-muted">ETH</span></p>
         </div>
-        <div className={`h-12 w-12 rounded-xl flex items-center justify-center ${funded ? 'bg-success/10 border border-success/25' : 'bg-white/5 border border-border'}`}>
+        <div className={`h-12 w-12 rounded-xl flex items-center justify-center ${funded ? 'bg-emerald-50 border border-success/20' : 'bg-surface-hover border border-border'}`}>
           <Activity className={`h-5 w-5 ${funded ? 'text-success' : 'text-muted'}`} />
         </div>
       </div>
@@ -216,7 +216,7 @@ export default function WalletsClient() {
             <select
               value={form.walletType}
               onChange={e => setForm(p => ({ ...p, walletType: e.target.value as 'EVM' | 'SOLANA' | 'BITCOIN' }))}
-              className="h-10 w-full rounded-lg border border-border bg-background/80 px-3 text-sm text-text focus:border-neon/60 focus:outline-none focus:ring-2 focus:ring-neon/15"
+              className="h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm text-text focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/15"
             >
               <option value="EVM">EVM (Ethereum / Base / Polygon)</option>
               <option value="SOLANA">Solana</option>
@@ -228,12 +228,12 @@ export default function WalletsClient() {
           {form.walletType === 'EVM' && <div className="flex flex-col gap-1.5">
             <label className="text-xs font-bold uppercase tracking-widest text-secondary">Chain</label>
             <select value={form.chain} onChange={e => setForm(p => ({ ...p, chain: e.target.value }))}
-              className="h-10 w-full rounded-lg border border-border bg-background/80 px-3 text-sm text-text focus:border-neon/60 focus:outline-none focus:ring-2 focus:ring-neon/15"
+              className="h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm text-text focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/15"
             >
               {['ethereum','base','polygon','arbitrum'].map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
             </select>
           </div>}
-          <div className="flex items-start gap-2 rounded-xl border border-warning/20 bg-warning/5 p-3">
+          <div className="flex items-start gap-2 rounded-xl border border-warning/20 bg-amber-50 p-3">
             <Shield className="h-4 w-4 text-warning shrink-0 mt-0.5" />
             <p className="text-xs text-warning">Private keys are AES-256 encrypted at rest and never logged.</p>
           </div>

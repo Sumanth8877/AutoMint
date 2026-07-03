@@ -14,40 +14,40 @@ const features = [
     title: 'Auto-Mint Engine',
     description: 'Fire mints in milliseconds with gas-optimised transactions across all major chains. Whitelist, allowlist, and public phase targeting.',
     href: '/mints',
-    glow: 'rgba(240,169,59,0.30)',
+    glow: 'rgba(245,158,11,0.15)',
     accent: 'text-gold',
-    border: 'border-gold/25',
-    bg: 'bg-gold/8',
+    border: 'border-gold/15',
+    bg: 'bg-amber-50',
   },
   {
     icon: BarChart3,
     title: 'Mint Analyzer',
     description: 'AI-powered contract analysis with risk scoring, gas estimation, and market intelligence — before you pull the trigger.',
     href: '/analyzer',
-    glow: 'rgba(0,255,136,0.25)',
-    accent: 'text-neon',
-    border: 'border-neon/25',
-    bg: 'bg-neon/8',
+    glow: 'rgba(79,70,229,0.12)',
+    accent: 'text-primary',
+    border: 'border-primary/15',
+    bg: 'bg-indigo-50',
   },
   {
     icon: Eye,
     title: 'Whale Tracker',
     description: 'Monitor elite wallets in real-time. Follow the smart money and mirror mint strategies of top collectors.',
     href: '/whale-tracker',
-    glow: 'rgba(0,255,136,0.25)',
+    glow: 'rgba(79,70,229,0.12)',
     accent: 'text-primary',
-    border: 'border-primary/25',
-    bg: 'bg-primary/8',
+    border: 'border-primary/15',
+    bg: 'bg-indigo-50',
   },
   {
     icon: Shield,
     title: 'Risk Intelligence',
     description: 'Honeypot detection, rug-pull analysis, and contract security scoring powered by GoPlus and on-chain data.',
     href: '/analyzer',
-    glow: 'rgba(0,255,136,0.25)',
+    glow: 'rgba(79,70,229,0.12)',
     accent: 'text-success',
-    border: 'border-success/25',
-    bg: 'bg-success/8',
+    border: 'border-success/20',
+    bg: 'bg-emerald-50',
   },
 ];
 
@@ -71,11 +71,11 @@ export default function Home() {
   return (
     <main className="relative flex min-h-screen flex-col overflow-hidden">
       {/* ── Nav ── */}
-      <header className="sticky top-0 z-50 border-b border-border/60 bg-background/70 backdrop-blur-xl">
+      <header className="sticky top-0 z-50 border-b border-border/60 bg-surface/70 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-8">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-neon/25 bg-neon/10">
-              <Zap className="h-4 w-4 text-neon" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-primary/15 bg-indigo-50">
+              <Zap className="h-4 w-4 text-primary" />
             </div>
             <span className="font-mono text-sm font-medium tracking-tight text-text">AutoMint</span>
           </div>
@@ -92,7 +92,7 @@ export default function Home() {
               <Link
                 href="/dashboard"
                 className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-background transition-transform"
-                style={{ background: 'var(--color-primary)', boxShadow: '0 0 24px rgba(0,255,136,0.30)' }}
+                style={{ background: 'var(--color-primary)', boxShadow: '0 0 24px rgba(79,70,229,0.15)' }}
               >
                 Launch Terminal
               </Link>
@@ -108,21 +108,21 @@ export default function Home() {
           <div
             className="absolute inset-0 opacity-60"
             style={{
-              backgroundImage: 'linear-gradient(rgba(0,255,136,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(0,255,136,0.035) 1px, transparent 1px)',
+              backgroundImage: 'linear-gradient(rgba(79,70,229,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(79,70,229,0.02) 1px, transparent 1px)',
               backgroundSize: '64px 64px',
               maskImage: 'radial-gradient(ellipse 60% 50% at 50% 20%, black 0%, transparent 75%)',
             }}
           />
           <FloatingOrb className="left-[8%] top-[8%]" size={420} duration={16} />
-          <FloatingOrb className="right-[6%] top-[28%]" size={360} duration={20} range={30} color="rgba(0,255,136,0.10)" />
+          <FloatingOrb className="right-[6%] top-[28%]" size={360} duration={20} range={30} color="rgba(79,70,229,0.05)" />
         </div>
         <Spotlight className="-z-10" size={800} />
 
         <div className="w-full max-w-6xl space-y-10 text-center">
           <FadeIn className="space-y-8">
-            <div className="inline-flex items-center gap-2.5 rounded-full border border-neon/20 bg-neon/5 px-5 py-2 backdrop-blur-sm">
+            <div className="inline-flex items-center gap-2.5 rounded-full border border-primary/20 bg-indigo-50 px-5 py-2 backdrop-blur-sm">
               <span className="live-dot" />
-              <span className="text-xs font-semibold uppercase tracking-widest text-neon">Live NFT Minting Intelligence</span>
+              <span className="text-xs font-semibold uppercase tracking-widest text-primary">Live NFT Minting Intelligence</span>
             </div>
 
             <div>
@@ -141,8 +141,8 @@ export default function Home() {
               <Magnetic strength={0.3}>
                 <Link
                   href="/dashboard"
-                  className="inline-flex items-center gap-3 rounded-xl px-8 py-4 text-sm font-semibold text-background transition-transform hover:brightness-110"
-                  style={{ background: 'var(--color-primary)', boxShadow: '0 0 40px rgba(0,255,136,0.35), 0 0 12px rgba(0,255,136,0.40)' }}
+                  className="inline-flex items-center gap-3 rounded-xl px-8 py-4 text-sm font-semibold text-background transition-transform hover:brightness-105"
+                  style={{ background: 'var(--color-primary)', boxShadow: '0 0 40px rgba(79,70,229,0.20), 0 0 12px rgba(79,70,229,0.25)' }}
                 >
                   <Sparkles className="h-4 w-4" />
                   Launch Terminal
@@ -151,9 +151,9 @@ export default function Home() {
               <Magnetic strength={0.3}>
                 <Link
                   href="/analyzer"
-                  className="inline-flex items-center gap-3 rounded-xl border border-border-strong px-8 py-4 text-sm font-semibold text-text transition-colors hover:border-neon/40 hover:bg-neon/5"
+                  className="inline-flex items-center gap-3 rounded-xl border border-border-strong px-8 py-4 text-sm font-semibold text-text transition-colors hover:border-primary/30 hover:bg-indigo-50"
                 >
-                  <BarChart3 className="h-4 w-4 text-neon" />
+                  <BarChart3 className="h-4 w-4 text-primary" />
                   Analyze a Mint
                 </Link>
               </Magnetic>
@@ -164,26 +164,26 @@ export default function Home() {
           <Reveal amount={0.1} className="mx-auto w-full max-w-4xl pt-6">
             <TiltCard max={6} className="w-full">
               <div
-                className="relative overflow-hidden rounded-2xl border border-border-strong bg-surface/90 text-left shadow-2xl backdrop-blur-sm"
-                style={{ boxShadow: '0 30px 80px rgba(0,0,0,0.55), 0 0 0 1px rgba(0,255,136,0.06)' }}
+                className="relative overflow-hidden rounded-2xl border border-border-strong bg-surface/90 text-left shadow-lg backdrop-blur-sm"
+                style={{ boxShadow: '0 30px 80px rgba(0,0,0,0.08), 0 0 0 1px rgba(79,70,229,0.03)' }}
               >
                 <div className="flex items-center gap-2 border-b border-border px-5 py-3">
                   <span className="h-2.5 w-2.5 rounded-full bg-danger/70" />
                   <span className="h-2.5 w-2.5 rounded-full bg-gold/70" />
                   <span className="h-2.5 w-2.5 rounded-full bg-success/70" />
                   <span className="ml-3 font-mono text-[11px] text-muted">automint — mission-control</span>
-                  <span className="ml-auto flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-neon">
+                  <span className="ml-auto flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-primary">
                     <Radio className="h-3 w-3" /> Live
                   </span>
                 </div>
                 <div className="grid gap-px bg-border sm:grid-cols-3">
                   {[
-                    { label: 'Active Mints', value: '7', icon: Zap, tone: 'text-neon' },
+                    { label: 'Active Mints', value: '7', icon: Zap, tone: 'text-primary' },
                     { label: 'Risk Score', value: '12/100', icon: Shield, tone: 'text-success' },
                     { label: 'Gas', value: '0.4 gwei', icon: TrendingUp, tone: 'text-gold' },
                   ].map((s) => (
                     <div key={s.label} className="bg-surface p-5">
-                      <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-widest text-muted">
+                      <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted">
                         <s.icon className={`h-3 w-3 ${s.tone}`} />
                         {s.label}
                       </div>
@@ -194,7 +194,7 @@ export default function Home() {
                 <div className="space-y-2 p-5 font-mono text-[12px] leading-relaxed text-secondary">
                   <p><span className="text-muted">$</span> analyze --contract 0x71C7...976F</p>
                   <p className="text-success">✓ Honeypot check passed · 0 red flags</p>
-                  <p className="text-neon">→ Queued mint · whitelist phase · gas ceiling 0.6 gwei</p>
+                  <p className="text-primary">→ Queued mint · whitelist phase · gas ceiling 0.6 gwei</p>
                   <p><span className="text-muted">$</span> <span className="animate-pulse">▍</span></p>
                 </div>
               </div>
@@ -229,7 +229,7 @@ export default function Home() {
                     decimals={s.decimals}
                     className="stat-value text-3xl font-medium tracking-tight text-text"
                   />
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">{s.label}</p>
+                  <p className="text-xs font-semibold uppercase tracking-widest text-muted">{s.label}</p>
                 </div>
               </TiltCard>
             </StaggerItem>
@@ -239,7 +239,7 @@ export default function Home() {
         {/* ── Feature grid ── */}
         <div id="features" className="space-y-10">
           <Reveal className="mx-auto max-w-2xl space-y-3 text-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-neon">Capabilities</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-primary">Capabilities</p>
             <h2 className="text-3xl font-medium tracking-tight text-text sm:text-4xl">Everything you need to mint, minus the guesswork.</h2>
           </Reveal>
 
@@ -262,7 +262,7 @@ export default function Home() {
                     <div className="space-y-4">
                       <div className="flex items-center gap-4">
                         <div
-                          className={`flex h-12 w-12 items-center justify-center rounded-xl border ${f.border} ${f.bg} transition-transform duration-300 group-hover:scale-110`}
+                          className={`flex h-12 w-12 items-center justify-center rounded-xl border ${f.border} ${f.bg} transition-transform duration-300 group-hover:scale-105`}
                           style={{ boxShadow: f.glow }}
                         >
                           <f.icon className={`h-6 w-6 ${f.accent}`} />
@@ -285,7 +285,7 @@ export default function Home() {
         {/* ── How it works ── */}
         <div id="how-it-works" className="space-y-10">
           <Reveal className="mx-auto max-w-2xl space-y-3 text-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-neon">Workflow</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-primary">Workflow</p>
             <h2 className="text-3xl font-medium tracking-tight text-text sm:text-4xl">From wallet to confirmed mint in four steps.</h2>
           </Reveal>
 
@@ -293,8 +293,8 @@ export default function Home() {
             <div className="absolute left-0 right-0 top-6 hidden h-px bg-border lg:block" aria-hidden="true" />
             {steps.map((s) => (
               <StaggerItem key={s.n}>
-                <div className="relative space-y-3 rounded-2xl border border-border bg-surface/50 p-6">
-                  <span className="stat-value text-xs font-semibold text-neon">{s.n}</span>
+                <div className="relative space-y-3 rounded-2xl border border-border bg-surface p-6">
+                  <span className="stat-value text-xs font-semibold text-primary">{s.n}</span>
                   <h3 className="text-base font-medium text-text">{s.title}</h3>
                   <p className="text-sm leading-relaxed text-secondary">{s.description}</p>
                 </div>
@@ -307,9 +307,9 @@ export default function Home() {
         <Reveal>
           <div className="relative overflow-hidden rounded-3xl border border-border-strong p-10 text-center sm:p-16">
             <div className="absolute inset-0 -z-10 bg-surface/60" />
-            <FloatingOrb className="left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" size={520} color="rgba(0,255,136,0.14)" />
+            <FloatingOrb className="left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" size={520} color="rgba(79,70,229,0.06)" />
             <div className="relative space-y-6">
-              <div className="mx-auto flex w-fit items-center gap-2 rounded-full border border-neon/20 bg-neon/5 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-neon">
+              <div className="mx-auto flex w-fit items-center gap-2 rounded-full border border-primary/20 bg-indigo-50 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-primary">
                 <CheckCircle2 className="h-3.5 w-3.5" /> No custody, no black box
               </div>
               <h2 className="text-3xl font-medium tracking-tight text-text sm:text-5xl">Ready to mint smarter?</h2>
@@ -320,8 +320,8 @@ export default function Home() {
                 <Magnetic strength={0.3}>
                   <Link
                     href="/dashboard"
-                    className="inline-flex items-center gap-3 rounded-xl px-8 py-4 text-sm font-semibold text-background transition-transform hover:brightness-110"
-                    style={{ background: 'var(--color-primary)', boxShadow: '0 0 40px rgba(0,255,136,0.35)' }}
+                    className="inline-flex items-center gap-3 rounded-xl px-8 py-4 text-sm font-semibold text-background transition-transform hover:brightness-105"
+                    style={{ background: 'var(--color-primary)', boxShadow: '0 0 40px rgba(79,70,229,0.20)' }}
                   >
                     Get Started <ChevronRight className="h-4 w-4" />
                   </Link>
@@ -336,10 +336,10 @@ export default function Home() {
       <footer className="border-t border-border/60 px-4 py-10 sm:px-8">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 sm:flex-row">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-6 w-6 items-center justify-center rounded-md border border-neon/25 bg-neon/10">
-              <Zap className="h-3 w-3 text-neon" />
+            <div className="flex h-6 w-6 items-center justify-center rounded-md border border-primary/15 bg-indigo-50">
+              <Zap className="h-3 w-3 text-primary" />
             </div>
-            <span className="font-mono text-xs text-muted">AutoMint · NFT Mint Intelligence</span>
+            <span className="text-xs text-muted">AutoMint · NFT Mint Intelligence</span>
           </div>
           <div className="flex items-center gap-6 text-xs text-muted">
             <span className="flex items-center gap-1.5"><Activity className="h-3 w-3 text-success" /> Systems operational</span>

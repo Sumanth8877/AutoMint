@@ -6,7 +6,7 @@ export default function NotFound() {
   return (
     <main className="automint-shell flex min-h-screen items-center justify-center p-4">
       <Card tone="elevated" className="w-full max-w-lg p-8 text-center">
-        <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-lg border border-accent/20 bg-accent/10 text-accent">
+        <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-lg border border-primary/15 bg-indigo-50 text-primary">
           <SearchX className="h-7 w-7" aria-hidden="true" />
         </div>
         <p className="mb-2 font-mono text-sm text-muted">404</p>

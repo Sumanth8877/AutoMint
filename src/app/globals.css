@@ -1,90 +1,78 @@
 @import "tailwindcss";
 
-/* ══════════════════════════════════════════════════════════════════════
-   AutoMint NFT — Production Design System v3
-   "Achilles" direction: flat matte-black, one neon-green accent, terminal
-   monospace headlines, sharp minimal geometry. Monochrome first — accent
-   color is used sparingly and with a single, consistent meaning.
-   ══════════════════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════════════════════
+   AutoMint — Production Design System v4
+   "Auto Lab" direction: clean, modern SaaS aesthetic inspired by UXPilot.
+   Light background, professional indigo accent, subtle shadows, clean
+   sans-serif typography, polished card system. Professional and trustworthy.
+   ════════════════════════════════════════════════════════════════════════════ */
 @theme inline {
-  /* ── Surfaces ── flat matte-black elevation, no color tint */
-  --color-background:      #0A0A0A;
-  --color-surface:         #111111;
-  --color-surface-hover:   #161616;
-  --color-elevated:        #1A1A1A;
-  --color-overlay:         #202020;
+  /* ── Surfaces ── clean light elevation */
+  --color-background:      #F8FAFC;
+  --color-surface:         #FFFFFF;
+  --color-surface-hover:   #F1F5F9;
+  --color-elevated:        #FFFFFF;
+  --color-overlay:         #F1F5F9;
 
-  /* ── Borders ── neutral hairlines, no blue tint */
-  --color-border:          rgba(255,255,255,0.08);
-  --color-border-strong:   rgba(255,255,255,0.14);
-  --color-border-glow:     rgba(0,255,136,0.35);
+  /* ── Borders ── subtle, professional */
+  --color-border:          #E2E8F0;
+  --color-border-strong:   #CBD5E1;
+  --color-border-glow:     rgba(79,70,229,0.25);
 
-  /* ── Brand ── single accent: neon green. Every former secondary
-     accent (violet/pink/cyan) now resolves to this same green so the UI
-     reads as one coherent brand color, not a cyberpunk rainbow. ── */
-  --color-primary:         #00FF88;
-  --color-primary-hover:   #00E67A;
-  --color-primary-soft:    rgba(0,255,136,0.12);
-  --color-primary-glow:    rgba(0,255,136,0.40);
+  /* ── Brand ── indigo accent, professional SaaS */
+  --color-primary:         #4F46E5;
+  --color-primary-hover:   #4338CA;
+  --color-primary-soft:    rgba(79,70,229,0.08);
+  --color-primary-glow:    rgba(79,70,229,0.20);
 
-  --color-neon:            #00FF88;
-  --color-neon-soft:       rgba(0,255,136,0.10);
-  --color-neon-glow:       rgba(0,255,136,0.35);
+  --color-neon:            #4F46E5;
+  --color-neon-soft:       rgba(79,70,229,0.08);
+  --color-neon-glow:       rgba(79,70,229,0.20);
 
-  --color-gold:            #F0A93B;
-  --color-gold-soft:       rgba(240,169,59,0.10);
+  --color-gold:            #F59E0B;
+  --color-gold-soft:       rgba(245,158,11,0.08);
 
-  --color-accent:          #00FF88;
-  --color-accent-soft:     rgba(0,255,136,0.10);
-
-  /* ── Accent usage discipline ──
-       --color-neon / --color-primary / --color-accent are all the SAME
-       green on purpose (single-accent system). Use them interchangeably
-       for: live/real-time state, primary brand actions, nav active-state,
-       CTAs, and success. Reserve --color-gold for warnings/risk only and
-       --color-danger for failure only — those are the sole colors allowed
-       to diverge from the monochrome + green base.
-  ── */
+  --color-accent:          #4F46E5;
+  --color-accent-soft:     rgba(79,70,229,0.08);
 
   /* ── Semantic ── */
-  --color-success:         #00FF88;
-  --color-warning:         #F0A93B;
-  --color-danger:          #FF4D4D;
-  --color-info:            #9CA3AF;
+  --color-success:         #10B981;
+  --color-warning:         #F59E0B;
+  --color-danger:          #EF4444;
+  --color-info:            #6366F1;
 
-  /* ── Text ── neutral, no blue tint */
-  --color-text:            #F0F0F0;
-  --color-secondary:       #A3A3A3;
-  --color-muted:           #8A8A8A;
+  /* ── Text ── dark on light, professional */
+  --color-text:            #0F172A;
+  --color-secondary:       #475569;
+  --color-muted:           #94A3B8;
 
-  /* ── Typography ──
-     Headlines: monospace (terminal feel). Body: sans. Numbers/code: mono. */
+  /* ── Typography ── clean sans-serif, no monospace */
   --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
 
-  /* ── Radius ── sharper, flatter geometry than the old cyberpunk-round set */
-  --radius-sm:   0.25rem;
-  --radius-lg:   0.375rem;
-  --radius-xl:   0.5rem;
-  --radius-2xl:  0.75rem;
+  /* ── Radius ── softer, more approachable */
+  --radius-sm:   0.375rem;
+  --radius-lg:   0.5rem;
+  --radius-xl:   0.75rem;
+  --radius-2xl:  1rem;
 
-  /* ── Shadows / Glow ── */
-  --shadow-sm:   0 1px 3px rgba(0,0,0,0.50);
-  --shadow-md:   0 4px 20px rgba(0,0,0,0.55);
-  --shadow-lg:   0 12px 48px rgba(0,0,0,0.70);
-  --glow-neon:   0 0 24px rgba(0,255,136,0.28), 0 0 6px rgba(0,255,136,0.55);
-  --glow-purple: 0 0 24px rgba(0,255,136,0.28), 0 0 6px rgba(0,255,136,0.55);
-  --glow-gold:   0 0 20px rgba(240,169,59,0.28), 0 0 6px rgba(240,169,59,0.50);
+  /* ── Shadows ── subtle, layered, professional */
+  --shadow-sm:   0 1px 2px rgba(0,0,0,0.04), 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md:   0 2px 8px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
+  --shadow-lg:   0 8px 24px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04);
+  --glow-neon:   0 0 0 1px rgba(79,70,229,0.10), 0 2px 8px rgba(79,70,229,0.08);
+  --glow-purple: 0 0 0 1px rgba(79,70,229,0.10), 0 2px 8px rgba(79,70,229,0.08);
+  --glow-gold:   0 0 0 1px rgba(245,158,11,0.10), 0 2px 8px rgba(245,158,11,0.08);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
 
-html { background: #0A0A0A; scroll-behavior: smooth; }
+html { background: #F8FAFC; scroll-behavior: smooth; }
 
 body {
   overflow-x: hidden;
-  background: #0A0A0A;
-  color: #F0F0F0;
+  background: #F8FAFC;
+  color: #0F172A;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -94,25 +82,21 @@ body {
 
 a { color: inherit; text-decoration: none; }
 
-/* ── Terminal-style headings ──
-   Monospace, tight negative tracking, medium weight — matches the
-   "developer tool" register instead of a generic display sans. Applies
-   globally so every page's <h1>/<h2>/<h3> picks it up without per-file
-   edits; component-level classes still control size/color/spacing. */
+/* ── Headings ── clean sans-serif, no monospace */
 h1, h2, h3 {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   letter-spacing: -0.02em;
 }
 
-/* ── Scrollbar ── */
+/* ── Scrollbar ── subtle, professional */
 ::-webkit-scrollbar          { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track    { background: transparent; }
-::-webkit-scrollbar-thumb    { background: rgba(0,255,136,0.25); border-radius: 6px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(0,255,136,0.45); }
+::-webkit-scrollbar-thumb    { background: #CBD5E1; border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
 
 /* ── Focus ── */
 *:focus-visible {
-  outline: 2px solid var(--color-neon);
+  outline: 2px solid var(--color-primary);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -127,39 +111,36 @@ h1, h2, h3 {
   }
 }
 
-/* ── Motion: reusable live-state + hover utilities ──
-   Use .live-dot anywhere data is real-time (nav status, hero pill, console
-   header) instead of hand-rolling animate-pulse + boxShadow per component. */
+/* ── Live status dot ── */
 .live-dot {
   position: relative;
   display: inline-block;
   height: 0.5rem;
   width: 0.5rem;
   border-radius: 9999px;
-  background: var(--color-neon);
-  box-shadow: 0 0 8px rgba(0,255,136,0.9);
+  background: var(--color-success);
+  box-shadow: 0 0 6px rgba(16,185,129,0.5);
   animation: live-pulse 2s ease-in-out infinite;
 }
 @keyframes live-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
-  50%      { opacity: 0.55; transform: scale(0.82); }
+  50%      { opacity: 0.6; transform: scale(0.85); }
 }
 
 .hover-lift {
-  transition: transform 0.25s cubic-bezier(0.4,0,0.2,1), box-shadow 0.25s cubic-bezier(0.4,0,0.2,1);
+  transition: transform 0.2s cubic-bezier(0.4,0,0.2,1), box-shadow 0.2s cubic-bezier(0.4,0,0.2,1);
 }
 .hover-lift:hover {
-  transform: translateY(-3px);
+  transform: translateY(-2px);
 }
 
-/* ── Typography: monospace tabular treatment for stat/metric numbers ── */
+/* ── Stat/metric numbers ── tabular for alignment */
 .stat-value {
-  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.02em;
 }
 
-/* ── Terminal scanline overlay (TaskConsole) ── */
+/* ── Terminal scanline (kept for TaskConsole but toned down) ── */
 .terminal-scanline {
   position: relative;
 }
@@ -170,68 +151,49 @@ h1, h2, h3 {
   pointer-events: none;
   background: repeating-linear-gradient(
     to bottom,
-    rgba(0,255,136,0.02) 0px,
-    rgba(0,255,136,0.02) 1px,
+    rgba(79,70,229,0.015) 0px,
+    rgba(79,70,229,0.015) 1px,
     transparent 1px,
     transparent 3px
   );
 }
 
-/* ─────────────────────────────── APP SHELL ATMOSPHERE ─────────────────────────────── */
-/* Flat matte-black base with one faint green glow, not a multi-hue nebula. */
+/* ════════════════════════════════════════════════════════════════════════════
+   APP SHELL — Clean, light, professional
+   ════════════════════════════════════════════════════════════════════════════ */
 .automint-shell {
-  background:
-    radial-gradient(60rem 40rem at 85% -10%, rgba(0,255,136,0.05) 0%, transparent 55%),
-    radial-gradient(50rem 34rem at -5% 10%, rgba(0,255,136,0.03) 0%, transparent 50%),
-    #0A0A0A;
+  background: #F8FAFC;
 }
 
-/* Subtle scanline noise */
-.automint-shell::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
-  background-repeat: repeat;
-  background-size: 200px 200px;
-  opacity: 0.18;
-}
+/* Remove old noise/scanline overlays — clean background only */
 
-/* Effect intensity is opt-out via a root class so users sensitive to motion/texture
-   (or on low-power GPUs) can calm the always-on atmosphere without losing the theme. */
-:root.reduce-effects .automint-shell::before { opacity: 0.07; }
-:root.reduce-effects .surface-grid { opacity: 0.4; }
-@media (prefers-reduced-motion: reduce) {
-  .automint-shell::before { opacity: 0.08; }
-}
-
-/* Grid overlay */
+/* Grid overlay (very subtle) */
 .surface-grid {
   background-image:
-    linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+    linear-gradient(rgba(0,0,0,0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,0,0,0.015) 1px, transparent 1px);
   background-size: 64px 64px;
 }
 
-/* ─────────────────────────────── CARD SYSTEM ─────────────────────────────── */
+/* ════════════════════════════════════════════════════════════════════════════
+   CARD SYSTEM — Clean, subtle shadows, professional
+   ════════════════════════════════════════════════════════════════════════════ */
 .card-base {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.02);
+  box-shadow: var(--shadow-sm);
 }
 
 .card-elevated {
   background: var(--color-elevated);
-  border: 1px solid var(--color-border-strong);
-  box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255,255,255,0.03);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
 }
 
 .card-neon {
-  background: linear-gradient(135deg, rgba(0,255,136,0.04) 0%, rgba(0,255,136,0.02) 100%);
-  border: 1px solid var(--color-border-strong);
-  box-shadow: var(--shadow-md), 0 0 0 1px rgba(0,255,136,0.05), inset 0 1px 0 rgba(0,255,136,0.06);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md), 0 0 0 1px rgba(79,70,229,0.06);
   position: relative;
   overflow: hidden;
 }
@@ -240,14 +202,14 @@ h1, h2, h3 {
   content: "";
   position: absolute;
   top: 0; left: 0; right: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(0,255,136,0.55), transparent);
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(79,70,229,0.4), transparent);
 }
 
 .card-gold {
-  background: linear-gradient(135deg, rgba(240,169,59,0.05) 0%, rgba(240,169,59,0.02) 100%);
-  border: 1px solid rgba(240,169,59,0.20);
-  box-shadow: var(--shadow-md), 0 0 0 1px rgba(240,169,59,0.05), inset 0 1px 0 rgba(240,169,59,0.08);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md), 0 0 0 1px rgba(245,158,11,0.06);
   position: relative;
   overflow: hidden;
 }
@@ -255,21 +217,25 @@ h1, h2, h3 {
   content: "";
   position: absolute;
   top: 0; left: 0; right: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(240,169,59,0.70), transparent);
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(245,158,11,0.5), transparent);
 }
 
-/* ─────────────────────────────── NAV ITEM ─────────────────────────────── */
+/* ════════════════════════════════════════════════════════════════════════════
+   NAV ITEM — Clean active state
+   ════════════════════════════════════════════════════════════════════════════ */
 .nav-item-active {
-  background: rgba(0,255,136,0.10);
-  border: 1px solid rgba(0,255,136,0.25);
-  color: #F0F0F0;
+  background: rgba(79,70,229,0.06);
+  border: 1px solid rgba(79,70,229,0.15);
+  color: #0F172A;
 }
 
-/* ─────────────────────────────── GLOW PULSES ─────────────────────────────── */
+/* ════════════════════════════════════════════════════════════════════════════
+   GLOW / ANIMATIONS — Toned down, professional
+   ════════════════════════════════════════════════════════════════════════════ */
 @keyframes pulse-neon {
   0%, 100% { opacity: 0.8; }
-  50%       { opacity: 0.4; }
+  50%       { opacity: 0.5; }
 }
 @keyframes glow-rotate {
   from { transform: rotate(0deg); }
@@ -277,7 +243,7 @@ h1, h2, h3 {
 }
 @keyframes float {
   0%, 100% { transform: translateY(0px); }
-  50%       { transform: translateY(-4px); }
+  50%       { transform: translateY(-3px); }
 }
 @keyframes shimmer {
   0%   { background-position: -200% 0; }
@@ -287,31 +253,36 @@ h1, h2, h3 {
 .pulse-neon   { animation: pulse-neon 2.4s ease-in-out infinite; }
 .float-anim   { animation: float 3s ease-in-out infinite; }
 
-/* ─────────────────────────────── STATUS DOTS ─────────────────────────────── */
-.status-live    { background: var(--color-success); box-shadow: 0 0 8px var(--color-success); }
-.status-pending { background: var(--color-warning); box-shadow: 0 0 8px var(--color-warning); }
-.status-failed  { background: var(--color-danger);  box-shadow: 0 0 8px var(--color-danger); }
+/* ════════════════════════════════════════════════════════════════════════════
+   STATUS DOTS — Semantic colors, no harsh glow
+   ════════════════════════════════════════════════════════════════════════════ */
+.status-live    { background: var(--color-success); box-shadow: 0 0 6px rgba(16,185,129,0.4); }
+.status-pending { background: var(--color-warning); box-shadow: 0 0 6px rgba(245,158,11,0.4); }
+.status-failed  { background: var(--color-danger);  box-shadow: 0 0 6px rgba(239,68,68,0.4); }
 .status-idle    { background: var(--color-muted); }
 
-/* ─────────────────────────────── SKELETON ─────────────────────────────── */
+/* ════════════════════════════════════════════════════════════════════════════
+   SKELETON — Subtle shimmer on light bg
+   ════════════════════════════════════════════════════════════════════════════ */
 .skeleton {
-  background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%);
+  background: linear-gradient(90deg, #F1F5F9 25%, #E2E8F0 50%, #F1F5F9 75%);
   background-size: 200% 100%;
   animation: shimmer 1.6s infinite;
 }
 
-/* ─────────────────────────────── MINT PROGRESS ─────────────────────────────── */
+/* ════════════════════════════════════════════════════════════════════════════
+   MINT PROGRESS — Clean indigo bar
+   ════════════════════════════════════════════════════════════════════════════ */
 .mint-progress-bar {
   background: var(--color-primary);
-  box-shadow: 0 0 12px rgba(0,255,136,0.50);
+  box-shadow: 0 0 6px rgba(79,70,229,0.25);
   border-radius: 99px;
   transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ─────────────────────────────── HERO TEXT ─────────────────────────────── */
-/* No more multi-hue gradient text — a single flat accent color reads more
-   like the reference template's restrained, monochrome-plus-one-accent
-   typographic treatment. */
+/* ════════════════════════════════════════════════════════════════════════════
+   HERO TEXT — Flat accent color, no gradients
+   ════════════════════════════════════════════════════════════════════════════ */
 .gradient-text-neon {
   color: var(--color-primary);
 }

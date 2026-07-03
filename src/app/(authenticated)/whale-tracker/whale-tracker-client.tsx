@@ -425,7 +425,7 @@ export default function WhaleTrackerClient() {
       </Stagger>
 
       {error ? (
-        <div className="mt-6 rounded-lg border border-danger/20 bg-danger/10 p-3 text-sm text-danger" role="alert">
+        <div className="mt-6 rounded-lg border border-danger/20 bg-red-50 p-3 text-sm text-danger" role="alert">
           {error}
         </div>
       ) : null}
@@ -442,7 +442,7 @@ export default function WhaleTrackerClient() {
         <Card className="overflow-hidden">
           {walletsLoading ? (
             <div className="space-y-3 p-5">
-              {[0, 1, 2].map((item) => <Skeleton key={item} className="h-16 w-full bg-white/5" />)}
+              {[0, 1, 2].map((item) => <Skeleton key={item} className="h-16 w-full bg-surface-hover" />)}
             </div>
           ) : trackedWallets.length > 0 ? (
             <Stagger className="divide-y divide-border" stagger={0.05}>
@@ -475,16 +475,16 @@ export default function WhaleTrackerClient() {
                     <p className="mt-1 text-sm text-text">{formatRelativeTime(wallet.lastActivityAt)}</p>
                   </div>
                   <div className="flex flex-wrap gap-1 xl:justify-end">
-                    <button type="button" onClick={() => openEditWallet(wallet)} className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-white/5 hover:text-text" aria-label="Edit tracked wallet">
+                    <button type="button" onClick={() => openEditWallet(wallet)} className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-surface-hover hover:text-text" aria-label="Edit tracked wallet">
                       <Pencil className="h-4 w-4" aria-hidden="true" />
                     </button>
-                    <button type="button" onClick={() => setTracking(wallet, !wallet.active)} disabled={busyId === wallet.id} className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-white/5 hover:text-text disabled:opacity-50" aria-label={wallet.active ? 'Pause tracking' : 'Resume tracking'}>
+                    <button type="button" onClick={() => setTracking(wallet, !wallet.active)} disabled={busyId === wallet.id} className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-surface-hover hover:text-text disabled:opacity-50" aria-label={wallet.active ? 'Pause tracking' : 'Resume tracking'}>
                       {wallet.active ? <Pause className="h-4 w-4" aria-hidden="true" /> : <Play className="h-4 w-4" aria-hidden="true" />}
                     </button>
-                    <button type="button" onClick={() => openAddRule(wallet.walletAddress)} className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-white/5 hover:text-accent" aria-label="Create copy mint rule">
+                    <button type="button" onClick={() => openAddRule(wallet.walletAddress)} className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-surface-hover hover:text-primary" aria-label="Create copy mint rule">
                       <Zap className="h-4 w-4" aria-hidden="true" />
                     </button>
-                    <button type="button" onClick={() => deleteWallet(wallet)} disabled={busyId === wallet.id} className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-white/5 hover:text-danger disabled:opacity-50" aria-label="Delete tracked wallet">
+                    <button type="button" onClick={() => deleteWallet(wallet)} disabled={busyId === wallet.id} className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-surface-hover hover:text-danger disabled:opacity-50" aria-label="Delete tracked wallet">
                       <Trash2 className="h-4 w-4" aria-hidden="true" />
                     </button>
                   </div>
@@ -516,7 +516,7 @@ export default function WhaleTrackerClient() {
           </div>
           <div className="mt-4 space-y-3">
             {walletsLoading ? (
-              [0, 1].map((item) => <Skeleton key={item} className="h-24 w-full bg-white/5" />)
+              [0, 1].map((item) => <Skeleton key={item} className="h-24 w-full bg-surface-hover" />)
             ) : copyRules.length > 0 ? (
               <Stagger stagger={0.06}>
               {copyRules.map((rule) => {
@@ -525,11 +525,11 @@ export default function WhaleTrackerClient() {
 
                 return (
                   <StaggerItem key={rule.id}>
-                  <div className="rounded-lg border border-border bg-white/[0.03] p-4 mb-3 last:mb-0">
+                  <div className="rounded-lg border border-border bg-surface-hover p-4 mb-3 last:mb-0">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="font-semibold text-text">{wallet ? walletLabel(wallet) : shortAddress(rule.walletAddress)}</p>
-                        <p className="mt-1 break-all font-mono text-xs text-muted">{rule.walletAddress}</p>
+                        <p className="mt-1 break-all text-xs text-muted">{rule.walletAddress}</p>
                       </div>
                       <Badge variant={rule.enabled ? 'success' : 'warning'}>{rule.enabled ? 'Enabled' : 'Disabled'}</Badge>
                     </div>
@@ -560,14 +560,14 @@ export default function WhaleTrackerClient() {
           <h2 className="text-lg font-semibold text-text">Reputation</h2>
           <div className="mt-4 space-y-3">
             {walletsLoading ? (
-              [0, 1, 2].map((item) => <Skeleton key={item} className="h-20 w-full bg-white/5" />)
+              [0, 1, 2].map((item) => <Skeleton key={item} className="h-20 w-full bg-surface-hover" />)
             ) : reputations.length > 0 ? (
               <Stagger stagger={0.06}>
               {reputations.map((reputation) => (
                 <StaggerItem key={reputation.id}>
-                <div className="rounded-lg border border-border bg-white/[0.03] p-4 mb-3 last:mb-0">
+                <div className="rounded-lg border border-border bg-surface-hover p-4 mb-3 last:mb-0">
                   <div className="flex items-start gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-success/20 bg-success/10 text-success">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-success/20 bg-emerald-50 text-success">
                       <ShieldCheck className="h-4 w-4" aria-hidden="true" />
                     </div>
                     <div className="min-w-0 flex-1">
@@ -596,15 +596,15 @@ export default function WhaleTrackerClient() {
           <h2 className="text-lg font-semibold text-text">Detected Mint Activity</h2>
           <div className="mt-4 space-y-3">
             {walletsLoading ? (
-              [0, 1, 2].map((item) => <Skeleton key={item} className="h-20 w-full bg-white/5" />)
+              [0, 1, 2].map((item) => <Skeleton key={item} className="h-20 w-full bg-surface-hover" />)
             ) : activities.length > 0 ? (
               <Stagger stagger={0.05}>
               {activities.map((activityItem) => (
                 <StaggerItem key={`${activityItem.id}-${activityItem.time}`}>
-                <div className="grid gap-3 rounded-lg border border-border bg-white/[0.03] p-4 mb-3 last:mb-0 md:grid-cols-[minmax(0,1fr)_minmax(140px,.45fr)_minmax(100px,.35fr)_minmax(100px,.35fr)_minmax(120px,.45fr)] md:items-center">
+                <div className="grid gap-3 rounded-lg border border-border bg-surface-hover p-4 mb-3 last:mb-0 md:grid-cols-[minmax(0,1fr)_minmax(140px,.45fr)_minmax(100px,.35fr)_minmax(100px,.35fr)_minmax(120px,.45fr)] md:items-center">
                   <div className="min-w-0">
                     <p className="break-all font-semibold text-text">{activityItem.collectionName}</p>
-                    <p className="mt-1 break-all font-mono text-xs text-muted">{activityItem.trackedWallet}</p>
+                    <p className="mt-1 break-all text-xs text-muted">{activityItem.trackedWallet}</p>
                   </div>
                   <div><p className="text-xs uppercase text-muted">Time</p><p className="text-sm text-text">{formatRelativeTime(activityItem.time)}</p></div>
                   <div><p className="text-xs uppercase text-muted">Risk Score</p><p className="text-sm text-text">{activityItem.riskScore === null ? 'Not scored' : `Risk ${activityItem.riskScore}`}</p></div>
@@ -631,12 +631,12 @@ export default function WhaleTrackerClient() {
               value={walletForm.networkType}
               onChange={(event) => setWalletForm((current) => ({ ...current, networkType: event.target.value as NetworkType }))}
               disabled={walletModal === 'edit'}
-              className="mt-2 h-11 w-full rounded-lg border border-border bg-background/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
+              className="mt-2 h-11 w-full rounded-lg border border-border bg-surface/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
             >
               {networkOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </label>
-          {formError ? <div className="rounded-lg border border-danger/20 bg-danger/10 p-3 text-sm text-danger" role="alert">{formError}</div> : null}
+          {formError ? <div className="rounded-lg border border-danger/20 bg-red-50 p-3 text-sm text-danger" role="alert">{formError}</div> : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setWalletModal(null)}>Cancel</Button>
             <Button type="submit" loading={saving}>{walletModal === 'edit' ? 'Save Wallet' : 'Add Wallet'}</Button>
@@ -653,7 +653,7 @@ export default function WhaleTrackerClient() {
               onChange={(event) => setRuleForm((current) => ({ ...current, walletAddress: event.target.value }))}
               disabled={ruleModal === 'edit'}
               required
-              className="mt-2 h-11 w-full rounded-lg border border-border bg-background/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
+              className="mt-2 h-11 w-full rounded-lg border border-border bg-surface/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
             >
               <option value="">Select tracked wallet</option>
               {trackedWallets.filter((wallet) => wallet.networkType === 'EVM').map((wallet) => (
@@ -670,7 +670,7 @@ export default function WhaleTrackerClient() {
               <select
                 value={ruleForm.destinationWalletId}
                 onChange={(event) => setRuleForm((current) => ({ ...current, destinationWalletId: event.target.value }))}
-                className="mt-2 h-11 w-full rounded-lg border border-border bg-background/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                className="mt-2 h-11 w-full rounded-lg border border-border bg-surface/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               >
                 <option value="">Default execution wallet</option>
                 {destinationWallets.map((wallet) => <option key={wallet.id} value={wallet.id}>{destinationLabel(wallet)}</option>)}
@@ -679,15 +679,15 @@ export default function WhaleTrackerClient() {
           </div>
           <div className="flex flex-wrap gap-4">
             <label className="flex items-center gap-2 text-sm text-text">
-              <input type="checkbox" checked={ruleForm.autoMint} onChange={(event) => setRuleForm((current) => ({ ...current, autoMint: event.target.checked }))} className="h-4 w-4 rounded border-border bg-background" />
+              <input type="checkbox" checked={ruleForm.autoMint} onChange={(event) => setRuleForm((current) => ({ ...current, autoMint: event.target.checked }))} className="h-4 w-4 rounded border-border bg-surface" />
               Auto Copy Enabled
             </label>
             <label className="flex items-center gap-2 text-sm text-text">
-              <input type="checkbox" checked={ruleForm.enabled} onChange={(event) => setRuleForm((current) => ({ ...current, enabled: event.target.checked }))} className="h-4 w-4 rounded border-border bg-background" />
+              <input type="checkbox" checked={ruleForm.enabled} onChange={(event) => setRuleForm((current) => ({ ...current, enabled: event.target.checked }))} className="h-4 w-4 rounded border-border bg-surface" />
               Rule Enabled
             </label>
           </div>
-          {formError ? <div className="rounded-lg border border-danger/20 bg-danger/10 p-3 text-sm text-danger" role="alert">{formError}</div> : null}
+          {formError ? <div className="rounded-lg border border-danger/20 bg-red-50 p-3 text-sm text-danger" role="alert">{formError}</div> : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setRuleModal(null)}>Cancel</Button>
             <Button type="submit" loading={saving}>{ruleModal === 'edit' ? 'Save Rule' : 'Create Rule'}</Button>

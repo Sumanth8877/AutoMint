@@ -10,17 +10,11 @@ export type MintActivityPoint = {
 
 /**
  * Dependency-free 7-day mint activity chart.
- *
- * Deliberately hand-rolled instead of pulling in a charting library: it keeps the
- * custom neon aesthetic, adds zero bundle weight, and still provides the data-viz
- * features that were missing before — a y-axis reference scale, gridlines, and
- * hover/focus tooltips. Assistive tech reads the visually-hidden <table> instead
- * of the bars (which are aria-hidden), and every bar is keyboard-focusable.
+ * Clean, light SaaS aesthetic — indigo bars for success, red for failed.
  */
 export function MintActivityChart({ data }: { data: MintActivityPoint[] }) {
   const [active, setActive] = useState<number | null>(null);
   const maxBar = Math.max(...data.map(c => c.completed + c.failed), 1);
-  // Round the axis ceiling up to a "nice" number so the reference labels read cleanly.
   const axisMax = maxBar <= 4 ? Math.max(maxBar, 1) : Math.ceil(maxBar / 5) * 5;
 
   const summary = data
@@ -41,9 +35,9 @@ export function MintActivityChart({ data }: { data: MintActivityPoint[] }) {
         <div className="relative flex-1">
           {/* Horizontal gridlines */}
           <div className="pointer-events-none absolute inset-0 flex flex-col justify-between" aria-hidden="true">
+            <span className="h-px w-full bg-border" />
             <span className="h-px w-full bg-border/60" />
-            <span className="h-px w-full bg-border/40" />
-            <span className="h-px w-full bg-border/60" />
+            <span className="h-px w-full bg-border" />
           </div>
 
           <div
@@ -66,10 +60,10 @@ export function MintActivityChart({ data }: { data: MintActivityPoint[] }) {
                 >
                   {/* Tooltip */}
                   {isActive && (
-                    <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 w-max -translate-x-1/2 rounded-lg border border-border-strong bg-elevated px-2.5 py-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.6)]">
+                    <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 w-max -translate-x-1/2 rounded-lg border border-border bg-surface px-2.5 py-1.5 shadow-md">
                       <p className="mb-0.5 text-[10px] font-bold text-text">{c.day}</p>
                       <p className="flex items-center gap-1.5 text-[10px] text-secondary">
-                        <span className="h-1.5 w-1.5 rounded-sm bg-success/70" />
+                        <span className="h-1.5 w-1.5 rounded-sm bg-primary/70" />
                         {c.completed} completed
                       </p>
                       <p className="flex items-center gap-1.5 text-[10px] text-secondary">
@@ -80,12 +74,12 @@ export function MintActivityChart({ data }: { data: MintActivityPoint[] }) {
                   )}
 
                   <div
-                    className={`flex w-full flex-col justify-end overflow-hidden rounded-t transition-all duration-200 ${isActive ? 'brightness-125' : ''}`}
+                    className={`flex w-full flex-col justify-end overflow-hidden rounded-t transition-all duration-200 ${isActive ? 'brightness-110' : ''}`}
                     style={{ height: `${heightPct}%` }}
                   >
                     <div className="w-full overflow-hidden rounded">
-                      <div className="w-full" style={{ height: `${successPct}%`, background: 'rgba(0,255,136,0.70)', minHeight: total > 0 ? 2 : 0 }} />
-                      <div className="w-full" style={{ height: `${100 - successPct}%`, background: 'rgba(255,77,77,0.50)', minHeight: 0 }} />
+                      <div className="w-full" style={{ height: `${successPct}%`, background: 'rgba(79,70,229,0.70)', minHeight: total > 0 ? 2 : 0 }} />
+                      <div className="w-full" style={{ height: `${100 - successPct}%`, background: 'rgba(239,68,68,0.45)', minHeight: 0 }} />
                     </div>
                   </div>
                 </div>
@@ -104,7 +98,7 @@ export function MintActivityChart({ data }: { data: MintActivityPoint[] }) {
         </div>
       </div>
 
-      {/* Screen-reader accessible data table backing the visual chart above */}
+      {/* Screen-reader accessible data table */}
       <table className="sr-only">
         <caption>7-Day Mint Activity</caption>
         <thead>
@@ -123,7 +117,7 @@ export function MintActivityChart({ data }: { data: MintActivityPoint[] }) {
 
       {/* Legend */}
       <div className="mt-3 flex items-center gap-4">
-        <span className="flex items-center gap-1.5 text-[10px] text-muted"><span className="h-2 w-2 rounded-sm bg-success/70" />Success</span>
+        <span className="flex items-center gap-1.5 text-[10px] text-muted"><span className="h-2 w-2 rounded-sm bg-primary/70" />Success</span>
         <span className="flex items-center gap-1.5 text-[10px] text-muted"><span className="h-2 w-2 rounded-sm bg-danger/50" />Failed</span>
       </div>
     </div>

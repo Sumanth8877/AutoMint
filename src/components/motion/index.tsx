@@ -360,7 +360,7 @@ export function TiltCard({
             style={{
               background: useTransform(
                 [sheenX, sheenY],
-                ([x, y]) => `radial-gradient(circle at ${x}% ${y}%, rgba(0,255,136,0.14), transparent 55%)`,
+                ([x, y]) => `radial-gradient(circle at ${x}% ${y}%, rgba(79,70,229,0.06), transparent 55%)`,
               ),
               opacity: hovering ? 1 : 0,
               transition: 'opacity 0.3s ease',
@@ -426,7 +426,7 @@ export function Magnetic({
  */
 export function Spotlight({
   className,
-  color = 'rgba(0,255,136,0.10)',
+  color = 'rgba(79,70,229,0.05)',
   size = 700,
 }: {
   className?: string;
@@ -463,7 +463,7 @@ export function Spotlight({
 export function FloatingOrb({
   className,
   size = 480,
-  color = 'rgba(0,255,136,0.16)',
+  color = 'rgba(79,70,229,0.08)',
   duration = 14,
   range = 40,
 }: {

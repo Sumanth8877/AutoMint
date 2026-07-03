@@ -55,16 +55,16 @@ export default function IntegrationsClient({ configured }: { configured: boolean
           <div>
             <h3 className="text-sm font-semibold text-text">Programmatic Access</h3>
             <p className="mt-0.5 text-xs text-muted">
-              <code className="rounded bg-white/5 px-1 py-0.5 font-mono">AUTOMINT_API_KEY</code> enables external clients.
+              <code className="rounded bg-surface-hover px-1 py-0.5 font-mono">AUTOMINT_API_KEY</code> enables external clients.
             </p>
           </div>
           {configured ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-success">
               <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
               Configured
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-danger/10 px-2.5 py-1 text-xs font-medium text-danger">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-danger">
               <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
               Not configured
             </span>
@@ -86,15 +86,15 @@ export default function IntegrationsClient({ configured }: { configured: boolean
         {loading && services.length === 0 ? (
           <div className="space-y-2">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="h-10 rounded-lg bg-white/5 animate-pulse" />
+              <div key={i} className="h-10 rounded-lg bg-surface-hover animate-pulse" />
             ))}
           </div>
         ) : (
-          <div className="-mx-2 divide-y divide-border/60">
+          <div className="-mx-2 divide-y divide-border">
             {services.map((svc) => (
               <div
                 key={svc.name}
-                className="flex items-center justify-between rounded-lg px-2 py-2.5 transition-colors hover:bg-white/[0.03]"
+                className="flex items-center justify-between rounded-lg px-2 py-2.5 transition-colors hover:bg-surface-hover"
               >
                 <span className="flex items-center gap-2.5 text-sm text-text">
                   <span

@@ -235,7 +235,7 @@ function DetailGrid({ rows }: { rows: Array<[string, string]> }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       {rows.map(([label, value]) => (
-        <div key={label} className="rounded-lg border border-border bg-white/5 p-3">
+        <div key={label} className="rounded-lg border border-border bg-surface-hover p-3">
           <p className="text-xs uppercase text-muted">{label}</p>
           <p className="mt-1 break-words text-sm font-medium text-text">{value}</p>
         </div>
@@ -409,7 +409,7 @@ export default function HistoryClient() {
                       setAnalyzerFilter('');
                       setPage(1);
                     }}
-                    className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors ${selectedTab ? 'border-primary/40 bg-primary/15 text-text' : 'border-border bg-white/5 text-muted hover:text-text'}`}
+                    className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors ${selectedTab ? 'border-primary/20 bg-indigo-50 text-text' : 'border-border bg-surface-hover text-muted hover:text-text'}`}
                   >
                     <Icon className="h-4 w-4" aria-hidden="true" />
                     {tab.label}
@@ -424,7 +424,7 @@ export default function HistoryClient() {
                 if (activeTab === 'analyzer') setAnalyzerFilter(event.target.value);
                 else setStatus(event.target.value);
               }}
-              className="h-11 rounded-lg border border-border bg-background/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              className="h-11 rounded-lg border border-border bg-surface/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
             >
               {filterOptions.map((option) => (
                 <option key={option} value={optionValue(option)}>{option}</option>
@@ -434,7 +434,7 @@ export default function HistoryClient() {
         </div>
 
         {error ? (
-          <div className="m-5 rounded-lg border border-danger/20 bg-danger/10 p-3 text-sm text-danger" role="alert">{error}</div>
+          <div className="m-5 rounded-lg border border-danger/20 bg-red-50 p-3 text-sm text-danger" role="alert">{error}</div>
         ) : null}
 
         {loading ? (
@@ -500,7 +500,7 @@ function MintHistoryTable({ rows, onSelect }: { rows: MintHistoryRow[]; onSelect
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: Math.min(i, 12) * 0.03, duration: 0.25 }}
-                className="cursor-pointer hover:bg-white/5"
+                className="cursor-pointer hover:bg-surface-hover"
                 onClick={() => onSelect(row)}
               >
                 <td className="px-5 py-4 font-medium text-text">{collectionLabel(row)}</td>
@@ -511,7 +511,7 @@ function MintHistoryTable({ rows, onSelect }: { rows: MintHistoryRow[]; onSelect
                 <td className="px-5 py-4"><Badge variant={status.variant}>{status.label}</Badge></td>
                 <td className="px-5 py-4 font-mono text-sm text-muted">
                   {row.status === 'running' || row.status === 'pending' || row.status === 'ready'
-                    ? <span className="text-neon/70 animate-pulse">In progress…</span>
+                    ? <span className="text-primary/70 animate-pulse">In progress…</span>
                     : formatDuration(row.executionStartedAt, row.executionCompletedAt ?? row.updatedAt)}
                 </td>
               </motion.tr>
@@ -560,7 +560,7 @@ function ScheduledTaskTable({
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: Math.min(i, 12) * 0.03, duration: 0.25 }}
-                className="hover:bg-white/5"
+                className="hover:bg-surface-hover"
               >
                 <td className="px-5 py-4 font-medium text-text">{collectionLabel(row)}</td>
                 <td className="px-5 py-4">
@@ -629,7 +629,7 @@ function AnalyzerHistoryTable({
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: Math.min(i, 12) * 0.03, duration: 0.25 }}
-                className="hover:bg-white/5"
+                className="hover:bg-surface-hover"
               >
                 <td className="px-5 py-4 font-medium text-text">{collectionLabel(row)}</td>
                 <td className="px-5 py-4 font-mono text-sm text-muted">{shortAddress(row.contractAddress)}</td>
@@ -670,7 +670,7 @@ function IconButton({ label, icon: Icon, onClick, disabled }: { label: string; i
       onClick={onClick}
       disabled={disabled}
       title={label}
-      className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-white/5 hover:text-text disabled:opacity-50"
+      className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-surface-hover hover:text-text disabled:opacity-50"
       aria-label={label}
     >
       <Icon className="h-4 w-4" aria-hidden="true" />

@@ -94,16 +94,16 @@ function MintRow({
     <div className="group relative flex flex-col gap-3 rounded-xl border border-border bg-surface p-4 transition-all duration-200 hover:border-border-strong hover:bg-surface-hover sm:flex-row sm:items-center">
       {/* Status indicator strip */}
       <div className={`absolute left-0 top-4 bottom-4 w-0.5 rounded-full ${
-        task.status === 'completed' || task.status === 'confirmed' ? 'bg-success shadow-[0_0_8px_rgba(0,255,136,0.8)]' :
-        task.status === 'monitoring' || task.status === 'ready' ? 'bg-neon shadow-[0_0_8px_rgba(0,255,136,0.8)]' :
-        task.status === 'pending' ? 'bg-warning shadow-[0_0_8px_rgba(240,169,59,0.8)]' :
-        task.status === 'failed' ? 'bg-danger shadow-[0_0_8px_rgba(255,77,77,0.8)]' :
+        task.status === 'completed' || task.status === 'confirmed' ? 'bg-success shadow-[0_0_8px_rgba(79,70,229,0.5)]' :
+        task.status === 'monitoring' || task.status === 'ready' ? 'bg-primary shadow-[0_0_8px_rgba(79,70,229,0.5)]' :
+        task.status === 'pending' ? 'bg-warning shadow-[0_0_8px_rgba(245,158,11,0.5)]' :
+        task.status === 'failed' ? 'bg-danger shadow-[0_0_8px_rgba(239,68,68,0.5)]' :
         'bg-muted'
       }`} />
 
       {/* Contract icon */}
-      <div className="ml-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border bg-background">
-        <Zap className="h-4 w-4 text-neon" />
+      <div className="ml-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border bg-surface">
+        <Zap className="h-4 w-4 text-primary" />
       </div>
 
       {/* Main info */}
@@ -130,14 +130,14 @@ function MintRow({
           <span className="text-muted/60">{new Date(task.createdAt).toLocaleDateString()}</span>
         </div>
         {task.failureReason && (
-          <p className="mt-1.5 text-xs text-danger bg-danger/5 rounded px-2 py-1 border border-danger/15">
+          <p className="mt-1.5 text-xs text-danger bg-red-50 rounded px-2 py-1 border border-danger/15">
             ⚠ {task.failureReason}
           </p>
         )}
         {task.riskReasons && task.riskReasons.length > 0 && (
           <div className="mt-1.5 flex flex-wrap gap-1">
             {task.riskReasons.map(r => (
-              <span key={r} className="text-[10px] rounded px-1.5 py-0.5 bg-warning/8 text-warning border border-warning/15">{r}</span>
+              <span key={r} className="text-xs rounded px-1.5 py-0.5 bg-amber-50 text-warning border border-warning/15">{r}</span>
             ))}
           </div>
         )}
@@ -193,7 +193,7 @@ function MintRow({
             href={`https://etherscan.io/address/${task.contractAddress}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:text-text hover:bg-white/5 transition-colors"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:text-text hover:bg-surface-hover transition-colors"
           >
             <ExternalLink className="h-3.5 w-3.5" />
           </a>
@@ -291,13 +291,13 @@ export default function MintsClient() {
 
       {/* Status banner */}
       {state.success && (
-        <div className="flex items-center gap-3 rounded-xl border border-success/25 bg-success/8 px-4 py-3">
+        <div className="flex items-center gap-3 rounded-xl border border-success/20 bg-emerald-50 px-4 py-3">
           <CheckCircle2 className="h-4 w-4 text-success shrink-0" />
           <p className="text-sm text-success">{state.success}</p>
         </div>
       )}
       {state.error && (
-        <div className="flex items-center gap-3 rounded-xl border border-danger/25 bg-danger/8 px-4 py-3">
+        <div className="flex items-center gap-3 rounded-xl border border-danger/20 bg-red-50 px-4 py-3">
           <AlertCircle className="h-4 w-4 text-danger shrink-0" />
           <p className="text-sm text-danger">{state.error}</p>
         </div>
@@ -318,8 +318,8 @@ export default function MintsClient() {
             onClick={() => setFilterStatus(s)}
             className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-all duration-150 ${
               filterStatus === s
-                ? 'bg-neon/10 text-neon border border-neon/30'
-                : 'text-muted hover:text-secondary hover:bg-white/5'
+                ? 'bg-indigo-50 text-primary border border-primary/20'
+                : 'text-muted hover:text-secondary hover:bg-surface-hover'
             }`}
           >
             {s === 'all' ? `All (${tasks.length})` : `${s} (${tasks.filter(t => t.status === s).length})`}
@@ -382,13 +382,13 @@ export default function MintsClient() {
             <button
               type="button"
               onClick={() => dispatch({ type: 'PATCH_FORM', patch: { wlMode: !state.form.wlMode } })}
-              className={`relative h-6 w-11 rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon ${
-                state.form.wlMode ? 'bg-neon/30 border border-neon/50' : 'bg-white/10 border border-border'
+              className={`relative h-6 w-11 rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                state.form.wlMode ? 'bg-primary/30 border border-primary/50' : 'bg-surface-hover border border-border'
               }`}
             >
               <span
                 className={`absolute top-0.5 h-5 w-5 rounded-full transition-transform duration-200 ${
-                  state.form.wlMode ? 'translate-x-5 bg-neon shadow-[0_0_8px_rgba(0,255,136,0.8)]' : 'translate-x-0.5 bg-muted'
+                  state.form.wlMode ? 'translate-x-5 bg-primary shadow-[0_0_8px_rgba(79,70,229,0.5)]' : 'translate-x-0.5 bg-muted'
                 }`}
               />
             </button>

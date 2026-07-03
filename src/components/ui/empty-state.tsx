@@ -12,12 +12,12 @@ export function EmptyState({ icon: Icon, title, description, action }: EmptyStat
   return (
     <div className="flex flex-col items-center justify-center gap-5 py-20 text-center">
       {Icon && (
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-border-strong bg-surface" style={{ boxShadow: '0 0 20px rgba(0,255,136,0.08)' }}>
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-surface shadow-sm">
           <Icon className="h-7 w-7 text-muted" aria-hidden="true" />
         </div>
       )}
       <div>
-        <p className="text-base font-bold text-text">{title}</p>
+        <p className="text-base font-semibold text-text">{title}</p>
         {description && <p className="mt-1.5 text-sm text-muted max-w-xs mx-auto">{description}</p>}
       </div>
       {action && <div className="mt-2">{action}</div>}

@@ -149,8 +149,8 @@ export default function ProfileClient() {
         <div
           className={`mb-6 rounded-lg border px-4 py-3 text-sm ${
             notice.type === 'success'
-              ? 'border-success/25 bg-success/10 text-success'
-              : 'border-danger/25 bg-danger/10 text-danger'
+              ? 'border-success/20 bg-emerald-50 text-success'
+              : 'border-danger/20 bg-red-50 text-danger'
           }`}
           role={notice.type === 'success' ? 'status' : 'alert'}
         >
@@ -162,7 +162,7 @@ export default function ProfileClient() {
         {/* Account Details */}
         <Card className="p-5">
           <div className="flex items-start gap-3 border-b border-border pb-5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-accent/20 bg-accent/10 text-accent">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-primary/15 bg-indigo-50 text-primary">
               <User className="h-5 w-5" aria-hidden="true" />
             </div>
             <div>
@@ -177,7 +177,7 @@ export default function ProfileClient() {
                 type="text"
                 value={displayNameValue}
                 onChange={(event) => setDisplayName(event.target.value)}
-                className="h-10 rounded-lg border border-border bg-white/5 px-3 text-sm text-text outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                className="h-10 rounded-lg border border-border bg-surface-hover px-3 text-sm text-text outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                 autoComplete="name"
               />
             </label>
@@ -187,7 +187,7 @@ export default function ProfileClient() {
                 type="email"
                 value={email}
                 readOnly
-                className="h-10 cursor-not-allowed rounded-lg border border-border bg-white/[0.03] px-3 text-sm text-muted outline-none"
+                className="h-10 cursor-not-allowed rounded-lg border border-border bg-surface-hover px-3 text-sm text-muted outline-none"
               />
             </label>
             <div className="lg:col-span-2">
@@ -202,7 +202,7 @@ export default function ProfileClient() {
         {/* Password */}
         <Card className="p-5">
           <div className="flex items-start gap-3 border-b border-border pb-5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-warning/20 bg-warning/10 text-warning">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-warning/20 bg-amber-50 text-warning">
               <KeyRound className="h-5 w-5" aria-hidden="true" />
             </div>
             <div>
@@ -214,19 +214,19 @@ export default function ProfileClient() {
             <label className="grid gap-2 text-sm">
               <span className="font-medium text-text">Current Password</span>
               <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)}
-                className="h-10 rounded-lg border border-border bg-white/5 px-3 text-sm text-text outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                className="h-10 rounded-lg border border-border bg-surface-hover px-3 text-sm text-text outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                 autoComplete="current-password" />
             </label>
             <label className="grid gap-2 text-sm">
               <span className="font-medium text-text">New Password</span>
               <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
-                className="h-10 rounded-lg border border-border bg-white/5 px-3 text-sm text-text outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                className="h-10 rounded-lg border border-border bg-surface-hover px-3 text-sm text-text outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                 autoComplete="new-password" />
             </label>
             <label className="grid gap-2 text-sm">
               <span className="font-medium text-text">Confirm New Password</span>
               <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
-                className="h-10 rounded-lg border border-border bg-white/5 px-3 text-sm text-text outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                className="h-10 rounded-lg border border-border bg-surface-hover px-3 text-sm text-text outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                 autoComplete="new-password" />
             </label>
             <div className="lg:col-span-3">
@@ -239,9 +239,9 @@ export default function ProfileClient() {
         </Card>
 
         {/* Danger Zone */}
-        <Card className="border-danger/25 p-5">
+        <Card className="border-danger/20 p-5">
           <div className="flex items-start gap-3 border-b border-border pb-5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-danger/20 bg-danger/10 text-danger">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-danger/20 bg-red-50 text-danger">
               <Trash2 className="h-5 w-5" aria-hidden="true" />
             </div>
             <div>
@@ -251,7 +251,7 @@ export default function ProfileClient() {
           </div>
           <div className="mt-4 space-y-3">
             {/* Reset Data */}
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-lg border border-border bg-white/[0.02] p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-lg border border-border bg-surface-hover p-4">
               <div>
                 <p className="text-sm font-medium text-text">Reset All Data</p>
                 <p className="text-xs text-muted mt-0.5">
@@ -264,7 +264,7 @@ export default function ProfileClient() {
               </Button>
             </div>
             {/* Delete Account */}
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-lg border border-danger/20 bg-danger/5 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-lg border border-danger/20 bg-red-50 p-4">
               <div>
                 <p className="text-sm font-medium text-text">Delete Account</p>
                 <p className="text-xs text-muted mt-0.5">
@@ -285,11 +285,11 @@ export default function ProfileClient() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="delete-account-title">
           <button
             type="button"
-            className="absolute inset-0 bg-black/70"
+            className="absolute inset-0 bg-slate-900/40"
             onClick={() => { if (!deletingAccount) setDeleteOpen(false); }}
             aria-label="Close delete account confirmation"
           />
-          <Card className="relative z-10 w-full max-w-lg p-5 shadow-2xl">
+          <Card className="relative z-10 w-full max-w-lg p-5 shadow-lg">
             <h2 id="delete-account-title" className="text-lg font-semibold text-text">Delete Account</h2>
             <p className="mt-2 text-sm leading-6 text-muted">
               This permanently deletes your account. Type DELETE to confirm.
@@ -298,7 +298,7 @@ export default function ProfileClient() {
               type="text"
               value={deleteConfirmation}
               onChange={(event) => setDeleteConfirmation(event.target.value)}
-              className="mt-4 h-10 w-full rounded-lg border border-border bg-white/5 px-3 text-sm text-text outline-none transition focus:border-danger focus:ring-2 focus:ring-danger/20"
+              className="mt-4 h-10 w-full rounded-lg border border-border bg-surface-hover px-3 text-sm text-text outline-none transition focus:border-danger focus:ring-2 focus:ring-danger/20"
               autoComplete="off"
             />
             <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">

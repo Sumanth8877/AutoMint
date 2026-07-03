@@ -20,15 +20,15 @@ interface MetricCardProps {
   tone?: 'primary' | 'neon' | 'gold' | 'success' | 'warning' | 'danger' | 'muted' | 'accent';
 }
 
-const toneMap: Record<string, { text: string; bg: string; border: string; glow: string }> = {
-  primary: { text: 'text-primary', bg: 'bg-primary/10', border: 'border-primary/25', glow: '0 0 20px rgba(0,255,136,0.25)' },
-  neon:    { text: 'text-neon',    bg: 'bg-neon/10',    border: 'border-neon/20',    glow: '0 0 20px rgba(0,255,136,0.25)' },
-  gold:    { text: 'text-gold',    bg: 'bg-gold/10',    border: 'border-gold/20',    glow: '0 0 20px rgba(240,169,59,0.25)' },
-  success: { text: 'text-success', bg: 'bg-success/10', border: 'border-success/20', glow: '0 0 20px rgba(0,255,136,0.20)' },
-  warning: { text: 'text-warning', bg: 'bg-warning/10', border: 'border-warning/20', glow: '0 0 20px rgba(240,169,59,0.20)' },
-  danger:  { text: 'text-danger',  bg: 'bg-danger/10',  border: 'border-danger/20',  glow: '0 0 20px rgba(255,77,77,0.20)' },
-  muted:   { text: 'text-muted',   bg: 'bg-white/5',    border: 'border-border',      glow: 'none' },
-  accent:  { text: 'text-neon',    bg: 'bg-neon/10',    border: 'border-neon/20',    glow: '0 0 20px rgba(0,255,136,0.25)' },
+const toneMap: Record<string, { text: string; bg: string; border: string }> = {
+  primary: { text: 'text-primary', bg: 'bg-indigo-50', border: 'border-primary/15' },
+  neon:    { text: 'text-primary', bg: 'bg-indigo-50', border: 'border-primary/15' },
+  gold:    { text: 'text-gold',    bg: 'bg-amber-50',  border: 'border-gold/15' },
+  success: { text: 'text-success', bg: 'bg-emerald-50',border: 'border-success/15' },
+  warning: { text: 'text-warning', bg: 'bg-amber-50',  border: 'border-warning/15' },
+  danger:  { text: 'text-danger',  bg: 'bg-red-50',    border: 'border-danger/15' },
+  muted:   { text: 'text-muted',   bg: 'bg-slate-100', border: 'border-border' },
+  accent:  { text: 'text-primary', bg: 'bg-indigo-50', border: 'border-primary/15' },
 };
 
 export function MetricCard({ label, value, detail, change, changeDir = 'neutral', icon: Icon, tone = 'primary' }: MetricCardProps) {
@@ -38,11 +38,11 @@ export function MetricCard({ label, value, detail, change, changeDir = 'neutral'
 
   return (
     <HoverLift className="h-full">
-      <Card tone="neon" className="group h-full p-5">
+      <Card tone="default" className="group h-full p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted mb-2">{label}</p>
-            <p className="stat-value text-3xl font-black tracking-tight text-text">{value}</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-2">{label}</p>
+            <p className="stat-value text-2xl font-bold tracking-tight text-text">{value}</p>
             <div className="mt-1.5 flex items-center gap-2">
               {detail && <p className="text-xs text-muted truncate">{detail}</p>}
               {change && (
@@ -52,8 +52,7 @@ export function MetricCard({ label, value, detail, change, changeDir = 'neutral'
           </div>
           {Icon && (
             <div
-              className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border ${t.bg} ${t.border} ${t.text} transition-transform duration-300 group-hover:scale-110`}
-              style={{ boxShadow: t.glow }}
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border ${t.bg} ${t.border} ${t.text} transition-transform duration-200 group-hover:scale-105`}
             >
               <Icon className="h-5 w-5" aria-hidden="true" />
             </div>

@@ -16,7 +16,7 @@ export default function Input({ label, error, hint, leftIcon, icon, rightIcon, c
   return (
     <div className="flex flex-col gap-1.5">
       {label && (
-        <label htmlFor={inputId} className="text-xs font-semibold uppercase tracking-widest text-secondary">
+        <label htmlFor={inputId} className="text-xs font-semibold uppercase tracking-wider text-secondary">
           {label}
         </label>
       )}
@@ -26,7 +26,7 @@ export default function Input({ label, error, hint, leftIcon, icon, rightIcon, c
         )}
         <input
           id={inputId}
-          className={`h-10 w-full rounded-lg border bg-background/80 text-text placeholder:text-muted/50             transition-all duration-150 text-sm             focus:outline-none focus:border-neon/60 focus:ring-2 focus:ring-neon/15 focus:bg-background             disabled:cursor-not-allowed disabled:opacity-50             ${error ? 'border-danger/60 ring-2 ring-danger/15' : 'border-border hover:border-border-strong'}             ${leftIcon ? 'pl-9' : 'pl-3'}             ${rightIcon ? 'pr-9' : 'pr-3'}             ${className}`}
+          className={`h-10 w-full rounded-lg border bg-surface text-text placeholder:text-muted/60             transition-all duration-150 text-sm             focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10             disabled:cursor-not-allowed disabled:opacity-50             ${error ? 'border-danger/60 ring-2 ring-danger/10' : 'border-border hover:border-border-strong'}             ${leftIcon ? 'pl-9' : 'pl-3'}             ${rightIcon ? 'pr-9' : 'pr-3'}             ${className}`}
           {...props}
         />
         {rightIcon && (

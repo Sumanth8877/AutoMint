@@ -64,14 +64,14 @@ export function MigrationBanner({
   if (state === 'checking' || state === 'up-to-date') return null;
 
   if (state === 'done') return (
-    <div className="flex items-center gap-3 rounded-xl border border-success/25 bg-success/8 px-4 py-3 text-sm text-success">
+    <div className="flex items-center gap-3 rounded-xl border border-success/20 bg-emerald-50 px-4 py-3 text-sm text-success">
       <CheckCircle2 className="h-4 w-4 shrink-0" />
       {message}
     </div>
   );
 
   return (
-    <div className="flex items-start justify-between gap-4 rounded-xl border border-warning/25 bg-warning/8 px-4 py-3">
+    <div className="flex items-start justify-between gap-4 rounded-xl border border-warning/20 bg-amber-50 px-4 py-3">
       <div className="flex items-start gap-3">
         <AlertTriangle className="h-4 w-4 shrink-0 text-warning mt-0.5" />
         <div>
@@ -87,7 +87,7 @@ export function MigrationBanner({
         type="button"
         onClick={() => { void applyMigration(); }}
         disabled={state === 'applying'}
-        className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-1.5 text-xs font-bold text-warning hover:bg-warning/20 disabled:opacity-50 transition-all"
+        className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-warning/30 bg-amber-50 px-3 py-1.5 text-xs font-bold text-warning hover:bg-amber-50 disabled:opacity-50 transition-all"
       >
         <RefreshCw className={`h-3.5 w-3.5 ${state === 'applying' ? 'animate-spin' : ''}`} />
         {state === 'applying' ? 'Applying…' : 'Apply Migration'}
