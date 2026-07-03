@@ -70,16 +70,14 @@ export default function Button({
     xl: "h-13 px-7 text-base gap-3",
   };
 
-  // 小黑 sits on every normal button by default. Dense/icon-only buttons
-  // (xs, sm — typically repeated table row actions) stay clean unless a
-  // mascot is explicitly requested via the `mascot` prop.
-  const defaultMascotEnabled: Record<string, boolean> = {
-    xs: false,
-    sm: false,
-    md: true,
-    lg: true,
-    xl: true,
-  };
+  // 小黑 sits only on the app's main/primary call-to-action buttons by
+  // default (variant="primary" at md/lg/xl sizes). Secondary, ghost,
+  // danger, success, neon, gold buttons and small icon-only actions stay
+  // clean unless a mascot is explicitly requested via the `mascot` prop.
+  const defaultMascotEnabled: Record<string, boolean> =
+    variant === "primary"
+      ? { xs: false, sm: false, md: true, lg: true, xl: true }
+      : { xs: false, sm: false, md: false, lg: false, xl: false };
   const mascotScaleBySize: Record<string, number> = {
     xs: 0.6,
     sm: 0.7,
