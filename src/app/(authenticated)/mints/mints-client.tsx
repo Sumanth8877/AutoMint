@@ -257,10 +257,11 @@ export default function MintsClient() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const trimmedUrl = state.form.mintUrl.trim();
     if (!trimmedUrl) { dispatch({ type: 'SET_FORM_ERROR', message: 'Mint URL or contract address is required.' }); return; }
     if (!isValidMintInput(trimmedUrl)) { dispatch({ type: 'SET_FORM_ERROR', message: 'Enter a valid URL or 0x contract address.' }); return; }
     dispatch({ type: 'START_SAVING' });
-    createMint.mutate({ mintUrl: state.form.mintUrl, wlMode: state.form.wlMode, scheduleTime: state.form.scheduleTime || null });
+    createMint.mutate({ mintUrl: trimmedUrl, wlMode: state.form.wlMode, scheduleTime: state.form.scheduleTime || null });
   }
 
   const filtered = useMemo(() => {
