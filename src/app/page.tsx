@@ -172,18 +172,18 @@ export default function Home() {
                   <span className="h-2.5 w-2.5 rounded-full bg-gold/70" />
                   <span className="h-2.5 w-2.5 rounded-full bg-success/70" />
                   <span className="ml-3 font-mono text-[11px] text-muted">automint — mission-control</span>
-                  <span className="ml-auto flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-primary">
-                    <Radio className="h-3 w-3" /> Live
+                  <span className="ml-auto flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted">
+                    Sample preview
                   </span>
                 </div>
                 <div className="grid gap-px bg-border sm:grid-cols-3">
                   {[
-                    { label: 'Active Mints', value: '7', icon: Zap, tone: 'text-primary' },
-                    { label: 'Risk Score', value: '12/100', icon: Shield, tone: 'text-success' },
-                    { label: 'Gas', value: '0.4 gwei', icon: TrendingUp, tone: 'text-gold' },
+                    { label: 'Active Mints', value: '—', icon: Zap, tone: 'text-primary' },
+                    { label: 'Risk Score', value: '—', icon: Shield, tone: 'text-success' },
+                    { label: 'Gas', value: '—', icon: TrendingUp, tone: 'text-gold' },
                   ].map((s) => (
                     <div key={s.label} className="bg-surface p-5">
-                      <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted">
+                      <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted">
                         <s.icon className={`h-3 w-3 ${s.tone}`} />
                         {s.label}
                       </div>
@@ -192,9 +192,8 @@ export default function Home() {
                   ))}
                 </div>
                 <div className="space-y-2 p-5 font-mono text-[12px] leading-relaxed text-secondary">
-                  <p><span className="text-muted">$</span> analyze --contract 0x71C7...976F</p>
-                  <p className="text-success">✓ Honeypot check passed · 0 red flags</p>
-                  <p className="text-primary">→ Queued mint · whitelist phase · gas ceiling 0.6 gwei</p>
+                  <p><span className="text-muted">$</span> analyze --contract 0x...</p>
+                  <p className="text-muted">Run a real analysis from your dashboard to see live results here.</p>
                   <p><span className="text-muted">$</span> <span className="animate-pulse">▍</span></p>
                 </div>
               </div>
@@ -249,14 +248,10 @@ export default function Home() {
                 <TiltCard max={4} className="h-full">
                   <Link
                     href={f.href}
-                    className="group relative block h-full overflow-hidden rounded-2xl border p-7 transition-colors"
-                    style={{
-                      background: `radial-gradient(ellipse at 20% 20%, ${f.glow.replace('0.', '0.08')} 0%, transparent 60%), rgba(17,17,17,0.85)`,
-                      borderColor: f.border.replace('border-', ''),
-                    }}
+                    className="group relative block h-full overflow-hidden rounded-2xl border border-border bg-surface p-7 shadow-sm transition-all duration-200 hover:border-border-strong hover:shadow-md"
                   >
                     <div
-                      className="absolute top-0 left-0 right-0 h-px"
+                      className="absolute top-0 left-0 right-0 h-[2px]"
                       style={{ background: `linear-gradient(90deg, transparent, ${f.glow}, transparent)` }}
                     />
                     <div className="space-y-4">
@@ -270,7 +265,7 @@ export default function Home() {
                         <h3 className="text-xl font-medium tracking-tight text-text">{f.title}</h3>
                       </div>
                       <p className="text-sm leading-relaxed text-secondary">{f.description}</p>
-                      <div className={`flex items-center gap-2 text-xs font-semibold uppercase tracking-widest ${f.accent}`}>
+                      <div className={`flex items-center gap-2 text-xs font-semibold uppercase tracking-wider ${f.accent}`}>
                         <span>Enter Module</span>
                         <ArrowRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-1" />
                       </div>

@@ -165,14 +165,14 @@ function LiveDebugConsole({ logs }: { logs: AnalyzerDebugLog[] }) {
   }, [logs]);
 
   const levelClass: Record<AnalyzerDebugLog['level'], string> = {
-    info: 'text-sky-200',
-    success: 'text-success',
-    warning: 'text-warning',
-    error: 'text-danger',
+    info: 'text-sky-300',
+    success: 'text-emerald-400',
+    warning: 'text-amber-400',
+    error: 'text-red-400',
   };
 
   return (
-    <Card className="overflow-hidden border-primary/15 bg-slate-900/40">
+    <Card className="overflow-hidden border-border bg-surface">
       <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
         <span className="flex items-center gap-3">
           <TerminalSquare className="h-5 w-5 text-primary" aria-hidden="true" />
@@ -184,18 +184,18 @@ function LiveDebugConsole({ logs }: { logs: AnalyzerDebugLog[] }) {
       </div>
       <div
         ref={scrollRef}
-        className="max-h-80 overflow-y-auto bg-[#05070d] p-4 font-mono text-xs leading-6 text-muted"
+        className="max-h-80 overflow-y-auto bg-slate-950 p-4 font-mono text-xs leading-6 text-slate-400"
         aria-live="polite"
       >
         {logs.length > 0 ? (
           logs.map((log, index) => (
             <div key={`${log.timestamp}-${index}`} className="whitespace-pre-wrap break-words">
-              <span className="text-muted/80">[{formatLogTime(log.timestamp)}]</span>{' '}
+              <span className="text-slate-500">[{formatLogTime(log.timestamp)}]</span>{' '}
               <span className={levelClass[log.level]}>{log.message}</span>
             </div>
           ))
         ) : (
-          <div className="text-muted">Logs stream here during analysis.</div>
+          <div className="text-slate-500">Logs stream here during analysis.</div>
         )}
       </div>
     </Card>
