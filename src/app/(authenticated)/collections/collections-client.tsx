@@ -258,9 +258,9 @@ export default function CollectionsClient() {
               }
             : {
                 image: '/illustrations/empty-collections.jpeg',
-                imageAlt: 'A character holding an empty picture frame beside an empty filing drawer.',
-                title: 'No collections yet',
-                description: 'Analyzed mints get saved here. Add your first NFT collection to start tracking floor prices, risk, and mint activity.',
+                imageAlt: 'A character beside a gallery wall of empty frames, waiting for the first minted NFT to hang up.',
+                title: 'No minted NFTs yet',
+                description: 'Your minted NFTs land here after a successful mint. Queue a mint on the Mints page to get your first one hanging on the wall.',
                 action: <Button variant="primary" onClick={() => setAddOpen(true)}><Plus className="h-3.5 w-3.5" />Add Collection</Button>,
               })}
         />
