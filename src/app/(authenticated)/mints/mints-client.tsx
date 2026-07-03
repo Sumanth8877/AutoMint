@@ -436,14 +436,16 @@ export default function MintsClient() {
             </div>
             <button
               type="button"
+              role="switch"
+              aria-checked={state.form.wlMode}
               onClick={() => dispatch({ type: 'PATCH_FORM', patch: { wlMode: !state.form.wlMode } })}
-              className={`relative h-6 w-11 rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                 state.form.wlMode ? 'bg-primary/30 border border-primary/50' : 'bg-surface-hover border border-border'
               }`}
             >
               <span
-                className={`absolute top-0.5 h-5 w-5 rounded-full transition-transform duration-200 ${
-                  state.form.wlMode ? 'translate-x-5 bg-primary shadow-[0_0_8px_rgba(79,70,229,0.5)]' : 'translate-x-0.5 bg-muted'
+                className={`inline-block h-4 w-4 transform rounded-full transition-transform duration-200 ${
+                  state.form.wlMode ? 'translate-x-6 bg-primary shadow-[0_0_8px_rgba(79,70,229,0.5)]' : 'translate-x-1 bg-muted'
                 }`}
               />
             </button>
