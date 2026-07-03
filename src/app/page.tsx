@@ -2,8 +2,8 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { auth } from '@clerk/nextjs/server';
 import {
-  Activity, ArrowRight, BarChart3, ChevronRight, Eye, Shield,
-  Sparkles, TrendingUp, Wallet, Zap, CheckCircle2, FileCode2,
+  ArrowRight, BarChart3, ChevronRight, Eye, Shield,
+  Sparkles, TrendingUp, Zap, CheckCircle2,
 } from 'lucide-react';
 import {
   FadeIn, Stagger, StaggerItem, Reveal, TiltCard, Magnetic,
@@ -122,7 +122,7 @@ export default async function Home() {
             <Magnetic strength={0.25}>
               <Link
                 href="/dashboard"
-                className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-background transition-transform"
+                className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white transition-transform"
                 style={{ background: 'var(--color-primary)', boxShadow: '0 0 24px rgba(79,70,229,0.15)' }}
               >
                 {isSignedIn ? 'Go to Dashboard' : 'Launch Terminal'}
@@ -172,7 +172,7 @@ export default async function Home() {
               <Magnetic strength={0.3}>
                 <Link
                   href="/dashboard"
-                  className="inline-flex items-center gap-3 rounded-xl px-8 py-4 text-sm font-semibold text-background transition-transform hover:brightness-105"
+                  className="inline-flex items-center gap-3 rounded-xl px-8 py-4 text-sm font-semibold text-white transition-transform hover:brightness-105"
                   style={{ background: 'var(--color-primary)', boxShadow: '0 0 40px rgba(79,70,229,0.20), 0 0 12px rgba(79,70,229,0.25)' }}
                 >
                   <Sparkles className="h-4 w-4" />
@@ -379,7 +379,7 @@ export default async function Home() {
                 <Magnetic strength={0.3}>
                   <Link
                     href="/dashboard"
-                    className="inline-flex items-center gap-3 rounded-xl px-8 py-4 text-sm font-semibold text-background transition-transform hover:brightness-105"
+                    className="inline-flex items-center gap-3 rounded-xl px-8 py-4 text-sm font-semibold text-white transition-transform hover:brightness-105"
                     style={{ background: 'var(--color-primary)', boxShadow: '0 0 40px rgba(79,70,229,0.20)' }}
                   >
                     {isSignedIn ? 'Go to Dashboard' : 'Get Started'} <ChevronRight className="h-4 w-4" />
@@ -399,13 +399,6 @@ export default async function Home() {
               <Zap className="h-3 w-3 text-primary" />
             </div>
             <span className="text-xs text-muted">AutoMint · NFT Mint Intelligence</span>
-          </div>
-          <div className="flex items-center gap-6 text-xs text-muted">
-            <span className="flex items-center gap-1.5"><Activity className="h-3 w-3 text-success" /> Systems operational</span>
-            <a href="https://github.com" target="_blank" rel="noreferrer" className="flex items-center gap-1.5 transition-colors hover:text-text">
-              <FileCode2 className="h-3 w-3" /> GitHub
-            </a>
-            <span className="flex items-center gap-1.5"><Wallet className="h-3 w-3" /> Non-custodial</span>
           </div>
         </div>
       </footer>
