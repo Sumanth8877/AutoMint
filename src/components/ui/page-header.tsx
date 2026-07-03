@@ -14,11 +14,11 @@ interface PageHeaderProps {
 }
 
 const iconToneMap: Record<string, { bg: string; text: string; border: string; glow: string }> = {
-  neon:    { bg: 'bg-neon/10',    text: 'text-neon',    border: 'border-neon/25',    glow: '0 0 20px rgba(0,245,255,0.30)' },
-  gold:    { bg: 'bg-gold/10',    text: 'text-gold',    border: 'border-gold/25',    glow: '0 0 20px rgba(245,158,11,0.30)' },
-  purple:  { bg: 'bg-primary/10', text: 'text-primary', border: 'border-primary/25', glow: '0 0 20px rgba(124,58,237,0.30)' },
-  danger:  { bg: 'bg-danger/10',  text: 'text-danger',  border: 'border-danger/25',  glow: '0 0 20px rgba(239,68,68,0.30)' },
-  success: { bg: 'bg-success/10', text: 'text-success', border: 'border-success/25', glow: '0 0 20px rgba(16,185,129,0.30)' },
+  neon:    { bg: 'bg-neon/10',    text: 'text-neon',    border: 'border-neon/25',    glow: '0 0 20px rgba(0,255,136,0.30)' },
+  gold:    { bg: 'bg-gold/10',    text: 'text-gold',    border: 'border-gold/25',    glow: '0 0 20px rgba(240,169,59,0.30)' },
+  purple:  { bg: 'bg-primary/10', text: 'text-primary', border: 'border-primary/25', glow: '0 0 20px rgba(0,255,136,0.30)' },
+  danger:  { bg: 'bg-danger/10',  text: 'text-danger',  border: 'border-danger/25',  glow: '0 0 20px rgba(255,77,77,0.30)' },
+  success: { bg: 'bg-success/10', text: 'text-success', border: 'border-success/25', glow: '0 0 20px rgba(0,255,136,0.30)' },
 };
 
 // NOTE: this is a Server Component on purpose. It's rendered from every

@@ -59,7 +59,7 @@ export function Modal({ open, onClose, title, subtitle, children, size = 'md', t
           {/* Panel */}
           <motion.div
             className={`relative z-10 w-full ${sizes[size]} rounded-2xl border ${toneMap[tone]} bg-elevated shadow-[0_24px_80px_rgba(0,0,0,0.70)] overflow-hidden`}
-            style={tone === 'neon' ? { boxShadow: '0 24px 80px rgba(0,0,0,0.70), 0 0 40px rgba(0,245,255,0.08)' } : undefined}
+            style={tone === 'neon' ? { boxShadow: '0 24px 80px rgba(0,0,0,0.70), 0 0 40px rgba(0,255,136,0.08)' } : undefined}
             initial={panelInitial}
             animate={panelShow}
             exit={panelInitial}

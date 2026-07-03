@@ -53,7 +53,7 @@ export function ResetDataModal({ onClose }: { onClose: () => void }) {
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
         <div className="relative z-10 w-full max-w-md rounded-2xl border border-success/30 bg-elevated overflow-hidden"
-          style={{ boxShadow: '0 24px 80px rgba(0,0,0,0.70), 0 0 40px rgba(16,185,129,0.08)' }}
+          style={{ boxShadow: '0 24px 80px rgba(0,0,0,0.70), 0 0 40px rgba(0,255,136,0.08)' }}
         >
           <div className="h-px bg-gradient-to-r from-transparent via-success/60 to-transparent" />
           <div className="p-6 space-y-5 text-center">
@@ -88,7 +88,7 @@ export function ResetDataModal({ onClose }: { onClose: () => void }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={phase === 'confirm' ? onClose : undefined} />
       <div className="relative z-10 w-full max-w-md rounded-2xl border border-danger/30 bg-elevated overflow-hidden"
-        style={{ boxShadow: '0 24px 80px rgba(0,0,0,0.70), 0 0 40px rgba(239,68,68,0.06)' }}
+        style={{ boxShadow: '0 24px 80px rgba(0,0,0,0.70), 0 0 40px rgba(255,77,77,0.06)' }}
       >
         <div className="h-px bg-gradient-to-r from-transparent via-danger/60 to-transparent" />
 
@@ -166,7 +166,7 @@ export function ResetDataModal({ onClose }: { onClose: () => void }) {
               onClick={() => { void handleReset(); }}
               disabled={!canReset || phase === 'running'}
               className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border border-danger/30 bg-danger/10 py-2.5 text-sm font-bold text-danger hover:bg-danger/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-              style={canReset ? { boxShadow: '0 0 20px rgba(239,68,68,0.20)' } : undefined}
+              style={canReset ? { boxShadow: '0 0 20px rgba(255,77,77,0.20)' } : undefined}
             >
               {phase === 'running'
                 ? <><RefreshCw className="h-4 w-4 animate-spin" /> Clearing…</>

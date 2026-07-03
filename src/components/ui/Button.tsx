@@ -47,10 +47,10 @@ export default function Button({
       'bg-gradient-to-r from-success to-emerald-500 text-white shadow-md shadow-success/25 hover:brightness-110',
     neon:
       'bg-neon-soft text-neon border border-neon/30 hover:bg-neon/20 hover:border-neon/60 ' +
-      'shadow-[0_0_20px_rgba(0,245,255,0.15)] hover:shadow-[0_0_30px_rgba(0,245,255,0.30)]',
+      'shadow-[0_0_20px_rgba(0,255,136,0.15)] hover:shadow-[0_0_30px_rgba(0,255,136,0.30)]',
     gold:
       'bg-gold-soft text-gold border border-gold/30 hover:bg-gold/15 hover:border-gold/60 ' +
-      'shadow-[0_0_20px_rgba(245,158,11,0.15)] hover:shadow-[0_0_30px_rgba(245,158,11,0.30)]',
+      'shadow-[0_0_20px_rgba(240,169,59,0.15)] hover:shadow-[0_0_30px_rgba(240,169,59,0.30)]',
   };
 
   const sizes: Record<string, string> = {
@@ -62,9 +62,9 @@ export default function Button({
   };
 
   const glowStyle = glow && variant === 'neon'
-    ? { boxShadow: '0 0 30px rgba(0,245,255,0.40), 0 0 8px rgba(0,245,255,0.60)' }
+    ? { boxShadow: '0 0 30px rgba(0,255,136,0.40), 0 0 8px rgba(0,255,136,0.60)' }
     : glow && variant === 'primary'
-    ? { boxShadow: '0 0 30px rgba(124,58,237,0.50), 0 0 8px rgba(124,58,237,0.70)' }
+    ? { boxShadow: '0 0 30px rgba(0,255,136,0.50), 0 0 8px rgba(0,255,136,0.70)' }
     : undefined;
 
   const isDisabled = disabled || loading;

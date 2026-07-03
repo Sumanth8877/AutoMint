@@ -21,14 +21,14 @@ interface MetricCardProps {
 }
 
 const toneMap: Record<string, { text: string; bg: string; border: string; glow: string }> = {
-  primary: { text: 'text-primary', bg: 'bg-primary/10', border: 'border-primary/25', glow: '0 0 20px rgba(124,58,237,0.25)' },
-  neon:    { text: 'text-neon',    bg: 'bg-neon/10',    border: 'border-neon/20',    glow: '0 0 20px rgba(0,245,255,0.25)' },
-  gold:    { text: 'text-gold',    bg: 'bg-gold/10',    border: 'border-gold/20',    glow: '0 0 20px rgba(245,158,11,0.25)' },
-  success: { text: 'text-success', bg: 'bg-success/10', border: 'border-success/20', glow: '0 0 20px rgba(16,185,129,0.20)' },
-  warning: { text: 'text-warning', bg: 'bg-warning/10', border: 'border-warning/20', glow: '0 0 20px rgba(245,158,11,0.20)' },
-  danger:  { text: 'text-danger',  bg: 'bg-danger/10',  border: 'border-danger/20',  glow: '0 0 20px rgba(239,68,68,0.20)' },
+  primary: { text: 'text-primary', bg: 'bg-primary/10', border: 'border-primary/25', glow: '0 0 20px rgba(0,255,136,0.25)' },
+  neon:    { text: 'text-neon',    bg: 'bg-neon/10',    border: 'border-neon/20',    glow: '0 0 20px rgba(0,255,136,0.25)' },
+  gold:    { text: 'text-gold',    bg: 'bg-gold/10',    border: 'border-gold/20',    glow: '0 0 20px rgba(240,169,59,0.25)' },
+  success: { text: 'text-success', bg: 'bg-success/10', border: 'border-success/20', glow: '0 0 20px rgba(0,255,136,0.20)' },
+  warning: { text: 'text-warning', bg: 'bg-warning/10', border: 'border-warning/20', glow: '0 0 20px rgba(240,169,59,0.20)' },
+  danger:  { text: 'text-danger',  bg: 'bg-danger/10',  border: 'border-danger/20',  glow: '0 0 20px rgba(255,77,77,0.20)' },
   muted:   { text: 'text-muted',   bg: 'bg-white/5',    border: 'border-border',      glow: 'none' },
-  accent:  { text: 'text-neon',    bg: 'bg-neon/10',    border: 'border-neon/20',    glow: '0 0 20px rgba(0,245,255,0.25)' },
+  accent:  { text: 'text-neon',    bg: 'bg-neon/10',    border: 'border-neon/20',    glow: '0 0 20px rgba(0,255,136,0.25)' },
 };
 
 export function MetricCard({ label, value, detail, change, changeDir = 'neutral', icon: Icon, tone = 'primary' }: MetricCardProps) {

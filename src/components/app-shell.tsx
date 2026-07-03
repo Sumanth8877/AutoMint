@@ -17,29 +17,29 @@ const navGroups = [
   {
     label: 'Overview',
     items: [
-      { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, glow: 'rgba(0,245,255,0.15)' },
-      { href: '/analytics', label: 'Analytics', icon: BarChart3, glow: 'rgba(0,245,255,0.12)' },
+      { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, glow: 'rgba(0,255,136,0.15)' },
+      { href: '/analytics', label: 'Analytics', icon: BarChart3, glow: 'rgba(0,255,136,0.12)' },
     ],
   },
   {
     label: 'Mint Ops',
     items: [
-      { href: '/analyzer', label: 'Analyzer', icon: Gauge, glow: 'rgba(124,58,237,0.15)' },
-      { href: '/mints', label: 'Mints', icon: Zap, glow: 'rgba(245,158,11,0.15)' },
-      { href: '/collections', label: 'Collections', icon: FolderKanban, glow: 'rgba(236,72,153,0.15)' },
+      { href: '/analyzer', label: 'Analyzer', icon: Gauge, glow: 'rgba(0,255,136,0.15)' },
+      { href: '/mints', label: 'Mints', icon: Zap, glow: 'rgba(240,169,59,0.15)' },
+      { href: '/collections', label: 'Collections', icon: FolderKanban, glow: 'rgba(0,255,136,0.15)' },
     ],
   },
   {
     label: 'Intelligence',
     items: [
-      { href: '/whale-tracker', label: 'Whale Tracker', icon: Telescope, glow: 'rgba(59,130,246,0.15)' },
-      { href: '/history', label: 'History', icon: History, glow: 'rgba(124,58,237,0.12)' },
+      { href: '/whale-tracker', label: 'Whale Tracker', icon: Telescope, glow: 'rgba(156,163,175,0.15)' },
+      { href: '/history', label: 'History', icon: History, glow: 'rgba(0,255,136,0.12)' },
     ],
   },
   {
     label: 'Account',
     items: [
-      { href: '/wallets', label: 'Wallets', icon: Wallet, glow: 'rgba(16,185,129,0.15)' },
+      { href: '/wallets', label: 'Wallets', icon: Wallet, glow: 'rgba(0,255,136,0.15)' },
       { href: '/settings', label: 'Settings', icon: Settings, glow: 'rgba(100,100,100,0.10)' },
     ],
   },
@@ -60,7 +60,7 @@ function Logo() {
     <Link href="/" className="flex items-center gap-3 group" aria-label="AutoMint home">
       <div
         className="relative h-10 w-10 shrink-0 overflow-hidden rounded-xl transition-transform duration-300 group-hover:scale-105"
-        style={{ boxShadow: '0 0 20px rgba(0,245,255,0.15)' }}
+        style={{ boxShadow: '0 0 20px rgba(0,255,136,0.15)' }}
       >
         <Image src="/icon-192.png" alt="" fill sizes="40px" className="object-contain" priority />
       </div>
@@ -102,7 +102,7 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
                 {active && (
                   <span
                     className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full"
-                    style={{ background: 'linear-gradient(to bottom, #00F5FF, #7C3AED)', boxShadow: '0 0 8px rgba(0,245,255,0.8)' }}
+                    style={{ background: 'linear-gradient(to bottom, #00FF88, #00FF88)', boxShadow: '0 0 8px rgba(0,255,136,0.8)' }}
                     aria-hidden="true"
                   />
                 )}
@@ -135,7 +135,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       <div className="space-y-2">
         <AutoMintUserButton />
         <div className="flex items-center justify-center gap-1.5">
-          <span className="live-dot" style={{ background: 'var(--color-success)', boxShadow: '0 0 6px rgba(16,185,129,0.9)' }} />
+          <span className="live-dot" style={{ background: 'var(--color-success)', boxShadow: '0 0 6px rgba(0,255,136,0.9)' }} />
           <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-muted/70">System Live</span>
         </div>
       </div>

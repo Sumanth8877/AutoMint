@@ -1,88 +1,90 @@
 @import "tailwindcss";
 
-/* ═══════════════════════════════════════════════════════════════
-   AutoMint NFT — Production Design System v2
-   Cyberpunk-dark: deep voids, neon accents, premium glow system
-   ═══════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════════════
+   AutoMint NFT — Production Design System v3
+   "Achilles" direction: flat matte-black, one neon-green accent, terminal
+   monospace headlines, sharp minimal geometry. Monochrome first — accent
+   color is used sparingly and with a single, consistent meaning.
+   ══════════════════════════════════════════════════════════════════════ */
 @theme inline {
-  /* ── Surfaces ── layered void elevation */
-  --color-background:      #03040A;
-  --color-surface:         #080C14;
-  --color-surface-hover:   #0C1220;
-  --color-elevated:        #101828;
-  --color-overlay:         #131D2E;
+  /* ── Surfaces ── flat matte-black elevation, no color tint */
+  --color-background:      #0A0A0A;
+  --color-surface:         #111111;
+  --color-surface-hover:   #161616;
+  --color-elevated:        #1A1A1A;
+  --color-overlay:         #202020;
 
-  /* ── Borders ── */
-  --color-border:          rgba(99,179,237,0.13);
-  --color-border-strong:   rgba(99,179,237,0.18);
-  --color-border-glow:     rgba(139,92,246,0.35);
+  /* ── Borders ── neutral hairlines, no blue tint */
+  --color-border:          rgba(255,255,255,0.08);
+  --color-border-strong:   rgba(255,255,255,0.14);
+  --color-border-glow:     rgba(0,255,136,0.35);
 
-  /* ── Brand / Neon palette ── */
-  --color-primary:         #7C3AED;
-  --color-primary-hover:   #6D28D9;
-  --color-primary-soft:    rgba(124,58,237,0.14);
-  --color-primary-glow:    rgba(124,58,237,0.40);
+  /* ── Brand ── single accent: neon green. Every former secondary
+     accent (violet/pink/cyan) now resolves to this same green so the UI
+     reads as one coherent brand color, not a cyberpunk rainbow. ── */
+  --color-primary:         #00FF88;
+  --color-primary-hover:   #00E67A;
+  --color-primary-soft:    rgba(0,255,136,0.12);
+  --color-primary-glow:    rgba(0,255,136,0.40);
 
-  --color-neon:            #00F5FF;
-  --color-neon-soft:       rgba(0,245,255,0.10);
-  --color-neon-glow:       rgba(0,245,255,0.35);
+  --color-neon:            #00FF88;
+  --color-neon-soft:       rgba(0,255,136,0.10);
+  --color-neon-glow:       rgba(0,255,136,0.35);
 
-  --color-gold:            #F59E0B;
-  --color-gold-soft:       rgba(245,158,11,0.10);
+  --color-gold:            #F0A93B;
+  --color-gold-soft:       rgba(240,169,59,0.10);
 
-  --color-accent:          #EC4899;
-  --color-accent-soft:     rgba(236,72,153,0.10);
+  --color-accent:          #00FF88;
+  --color-accent-soft:     rgba(0,255,136,0.10);
 
-  /* ── Accent usage discipline (design system rule, not enforced by types) ──
-     Keep exactly ONE semantic meaning per accent so the UI stays scannable
-     instead of every color firing at once on the same view:
-       --color-neon    (cyan)   -> live / real-time / "happening now" states only
-       --color-primary (violet) -> primary brand actions, nav active-state, CTAs
-       --color-gold              -> risk, alerts, warnings only
-       --color-success (green)   -> success / completed states only
-       --color-accent  (pink)    -> rare single-use highlight; never pair with
-                                     more than one other accent in the same view
+  /* ── Accent usage discipline ──
+       --color-neon / --color-primary / --color-accent are all the SAME
+       green on purpose (single-accent system). Use them interchangeably
+       for: live/real-time state, primary brand actions, nav active-state,
+       CTAs, and success. Reserve --color-gold for warnings/risk only and
+       --color-danger for failure only — those are the sole colors allowed
+       to diverge from the monochrome + green base.
   ── */
 
   /* ── Semantic ── */
-  --color-success:         #10B981;
-  --color-warning:         #F59E0B;
-  --color-danger:          #EF4444;
-  --color-info:            #3B82F6;
+  --color-success:         #00FF88;
+  --color-warning:         #F0A93B;
+  --color-danger:          #FF4D4D;
+  --color-info:            #9CA3AF;
 
-  /* ── Text ── */
-  --color-text:            #E8F4FD;
-  --color-secondary:       #94A3B8;
-  /* Raised from #4A5568 (2.7:1 — failed WCAG AA) to meet ~4.6:1 on --color-background */
-  --color-muted:           #7E8CA0;
+  /* ── Text ── neutral, no blue tint */
+  --color-text:            #F0F0F0;
+  --color-secondary:       #A3A3A3;
+  --color-muted:           #8A8A8A;
 
-  /* ── Typography ── */
+  /* ── Typography ──
+     Headlines: monospace (terminal feel). Body: sans. Numbers/code: mono. */
   --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
 
-  /* ── Radius ── */
-  --radius-sm:   0.375rem;
-  --radius-lg:   0.625rem;
-  --radius-xl:   0.875rem;
-  --radius-2xl:  1.25rem;
+  /* ── Radius ── sharper, flatter geometry than the old cyberpunk-round set */
+  --radius-sm:   0.25rem;
+  --radius-lg:   0.375rem;
+  --radius-xl:   0.5rem;
+  --radius-2xl:  0.75rem;
 
   /* ── Shadows / Glow ── */
-  --shadow-sm:   0 1px 3px rgba(0,0,0,0.40);
-  --shadow-md:   0 4px 20px rgba(0,0,0,0.50);
-  --shadow-lg:   0 12px 48px rgba(0,0,0,0.65);
-  --glow-neon:   0 0 24px rgba(0,245,255,0.30), 0 0 6px rgba(0,245,255,0.60);
-  --glow-purple: 0 0 24px rgba(124,58,237,0.35), 0 0 6px rgba(124,58,237,0.55);
-  --glow-gold:   0 0 20px rgba(245,158,11,0.30), 0 0 6px rgba(245,158,11,0.50);
+  --shadow-sm:   0 1px 3px rgba(0,0,0,0.50);
+  --shadow-md:   0 4px 20px rgba(0,0,0,0.55);
+  --shadow-lg:   0 12px 48px rgba(0,0,0,0.70);
+  --glow-neon:   0 0 24px rgba(0,255,136,0.28), 0 0 6px rgba(0,255,136,0.55);
+  --glow-purple: 0 0 24px rgba(0,255,136,0.28), 0 0 6px rgba(0,255,136,0.55);
+  --glow-gold:   0 0 20px rgba(240,169,59,0.28), 0 0 6px rgba(240,169,59,0.50);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
 
-html { background: #03040A; scroll-behavior: smooth; }
+html { background: #0A0A0A; scroll-behavior: smooth; }
 
 body {
   overflow-x: hidden;
-  background: #03040A;
-  color: #E8F4FD;
+  background: #0A0A0A;
+  color: #F0F0F0;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -92,17 +94,27 @@ body {
 
 a { color: inherit; text-decoration: none; }
 
+/* ── Terminal-style headings ──
+   Monospace, tight negative tracking, medium weight — matches the
+   "developer tool" register instead of a generic display sans. Applies
+   globally so every page's <h1>/<h2>/<h3> picks it up without per-file
+   edits; component-level classes still control size/color/spacing. */
+h1, h2, h3 {
+  font-family: var(--font-mono);
+  letter-spacing: -0.02em;
+}
+
 /* ── Scrollbar ── */
 ::-webkit-scrollbar          { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track    { background: transparent; }
-::-webkit-scrollbar-thumb    { background: rgba(124,58,237,0.30); border-radius: 6px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(0,245,255,0.40); }
+::-webkit-scrollbar-thumb    { background: rgba(0,255,136,0.25); border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0,255,136,0.45); }
 
 /* ── Focus ── */
 *:focus-visible {
   outline: 2px solid var(--color-neon);
   outline-offset: 2px;
-  border-radius: 6px;
+  border-radius: 4px;
 }
 
 /* ── Accessibility: respect reduced-motion preference ── */
@@ -125,7 +137,7 @@ a { color: inherit; text-decoration: none; }
   width: 0.5rem;
   border-radius: 9999px;
   background: var(--color-neon);
-  box-shadow: 0 0 8px rgba(0,245,255,0.9);
+  box-shadow: 0 0 8px rgba(0,255,136,0.9);
   animation: live-pulse 2s ease-in-out infinite;
 }
 @keyframes live-pulse {
@@ -158,20 +170,20 @@ a { color: inherit; text-decoration: none; }
   pointer-events: none;
   background: repeating-linear-gradient(
     to bottom,
-    rgba(0,245,255,0.02) 0px,
-    rgba(0,245,255,0.02) 1px,
+    rgba(0,255,136,0.02) 0px,
+    rgba(0,255,136,0.02) 1px,
     transparent 1px,
     transparent 3px
   );
 }
 
-/* ─────────────────────────── APP SHELL ATMOSPHERE ─────────── */
+/* ─────────────────────────────── APP SHELL ATMOSPHERE ─────────────────────────────── */
+/* Flat matte-black base with one faint green glow, not a multi-hue nebula. */
 .automint-shell {
   background:
-    radial-gradient(80rem 50rem at 85% -10%, rgba(124,58,237,0.10) 0%, transparent 55%),
-    radial-gradient(60rem 40rem at -5% 10%, rgba(0,245,255,0.06) 0%, transparent 50%),
-    radial-gradient(40rem 30rem at 50% 100%, rgba(236,72,153,0.04) 0%, transparent 60%),
-    #03040A;
+    radial-gradient(60rem 40rem at 85% -10%, rgba(0,255,136,0.05) 0%, transparent 55%),
+    radial-gradient(50rem 34rem at -5% 10%, rgba(0,255,136,0.03) 0%, transparent 50%),
+    #0A0A0A;
 }
 
 /* Subtle scanline noise */
@@ -184,43 +196,42 @@ a { color: inherit; text-decoration: none; }
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
   background-repeat: repeat;
   background-size: 200px 200px;
-  /* Reduced from 0.5 — full-strength noise on every view caused eye fatigue in long sessions */
-  opacity: 0.22;
+  opacity: 0.18;
 }
 
 /* Effect intensity is opt-out via a root class so users sensitive to motion/texture
    (or on low-power GPUs) can calm the always-on atmosphere without losing the theme. */
-:root.reduce-effects .automint-shell::before { opacity: 0.08; }
+:root.reduce-effects .automint-shell::before { opacity: 0.07; }
 :root.reduce-effects .surface-grid { opacity: 0.4; }
 @media (prefers-reduced-motion: reduce) {
-  .automint-shell::before { opacity: 0.1; }
+  .automint-shell::before { opacity: 0.08; }
 }
 
 /* Grid overlay */
 .surface-grid {
   background-image:
-    linear-gradient(rgba(0,245,255,0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0,245,255,0.025) 1px, transparent 1px);
+    linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
   background-size: 64px 64px;
 }
 
-/* ─────────────────────────── CARD SYSTEM ───────────────────── */
+/* ─────────────────────────────── CARD SYSTEM ─────────────────────────────── */
 .card-base {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.03);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.02);
 }
 
 .card-elevated {
   background: var(--color-elevated);
   border: 1px solid var(--color-border-strong);
-  box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255,255,255,0.04);
+  box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255,255,255,0.03);
 }
 
 .card-neon {
-  background: linear-gradient(135deg, rgba(0,245,255,0.05) 0%, rgba(124,58,237,0.05) 100%);
+  background: linear-gradient(135deg, rgba(0,255,136,0.04) 0%, rgba(0,255,136,0.02) 100%);
   border: 1px solid var(--color-border-strong);
-  box-shadow: var(--shadow-md), 0 0 0 1px rgba(0,245,255,0.06), inset 0 1px 0 rgba(0,245,255,0.08);
+  box-shadow: var(--shadow-md), 0 0 0 1px rgba(0,255,136,0.05), inset 0 1px 0 rgba(0,255,136,0.06);
   position: relative;
   overflow: hidden;
 }
@@ -230,13 +241,13 @@ a { color: inherit; text-decoration: none; }
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(0,245,255,0.60), transparent);
+  background: linear-gradient(90deg, transparent, rgba(0,255,136,0.55), transparent);
 }
 
 .card-gold {
-  background: linear-gradient(135deg, rgba(245,158,11,0.06) 0%, rgba(124,58,237,0.04) 100%);
-  border: 1px solid rgba(245,158,11,0.20);
-  box-shadow: var(--shadow-md), 0 0 0 1px rgba(245,158,11,0.06), inset 0 1px 0 rgba(245,158,11,0.10);
+  background: linear-gradient(135deg, rgba(240,169,59,0.05) 0%, rgba(240,169,59,0.02) 100%);
+  border: 1px solid rgba(240,169,59,0.20);
+  box-shadow: var(--shadow-md), 0 0 0 1px rgba(240,169,59,0.05), inset 0 1px 0 rgba(240,169,59,0.08);
   position: relative;
   overflow: hidden;
 }
@@ -245,17 +256,17 @@ a { color: inherit; text-decoration: none; }
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(245,158,11,0.80), transparent);
+  background: linear-gradient(90deg, transparent, rgba(240,169,59,0.70), transparent);
 }
 
-/* ─────────────────────────── NAV ITEM ──────────────────────── */
+/* ─────────────────────────────── NAV ITEM ─────────────────────────────── */
 .nav-item-active {
-  background: linear-gradient(135deg, rgba(124,58,237,0.18) 0%, rgba(0,245,255,0.06) 100%);
-  border: 1px solid rgba(124,58,237,0.25);
-  color: #E8F4FD;
+  background: rgba(0,255,136,0.10);
+  border: 1px solid rgba(0,255,136,0.25);
+  color: #F0F0F0;
 }
 
-/* ─────────────────────────── GLOW PULSES ───────────────────── */
+/* ─────────────────────────────── GLOW PULSES ─────────────────────────────── */
 @keyframes pulse-neon {
   0%, 100% { opacity: 0.8; }
   50%       { opacity: 0.4; }
@@ -276,37 +287,34 @@ a { color: inherit; text-decoration: none; }
 .pulse-neon   { animation: pulse-neon 2.4s ease-in-out infinite; }
 .float-anim   { animation: float 3s ease-in-out infinite; }
 
-/* ─────────────────────────── STATUS DOTS ───────────────────── */
+/* ─────────────────────────────── STATUS DOTS ─────────────────────────────── */
 .status-live    { background: var(--color-success); box-shadow: 0 0 8px var(--color-success); }
 .status-pending { background: var(--color-warning); box-shadow: 0 0 8px var(--color-warning); }
 .status-failed  { background: var(--color-danger);  box-shadow: 0 0 8px var(--color-danger); }
 .status-idle    { background: var(--color-muted); }
 
-/* ─────────────────────────── SKELETON ──────────────────────── */
+/* ─────────────────────────────── SKELETON ─────────────────────────────── */
 .skeleton {
   background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.6s infinite;
 }
 
-/* ─────────────────────────── MINT PROGRESS ─────────────────── */
+/* ─────────────────────────────── MINT PROGRESS ─────────────────────────────── */
 .mint-progress-bar {
-  background: linear-gradient(90deg, var(--color-primary), var(--color-neon));
-  box-shadow: 0 0 12px rgba(0,245,255,0.50);
+  background: var(--color-primary);
+  box-shadow: 0 0 12px rgba(0,255,136,0.50);
   border-radius: 99px;
   transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ─────────────────────────── HERO GRADIENT TEXT ────────────── */
+/* ─────────────────────────────── HERO TEXT ─────────────────────────────── */
+/* No more multi-hue gradient text — a single flat accent color reads more
+   like the reference template's restrained, monochrome-plus-one-accent
+   typographic treatment. */
 .gradient-text-neon {
-  background: linear-gradient(135deg, #00F5FF 0%, #7C3AED 50%, #EC4899 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--color-primary);
 }
 .gradient-text-gold {
-  background: linear-gradient(135deg, #F59E0B 0%, #EF4444 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--color-gold);
 }

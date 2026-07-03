@@ -51,8 +51,8 @@ function ArcGauge({ score, label }: { score: number; label: string }) {
   const radius = (size - strokeWidth) / 2;
   const circumference = Math.PI * radius; // semicircle
   const filled = (score / 100) * circumference;
-  const color = score >= 80 ? '#10B981' : score >= 60 ? '#F59E0B' : '#EF4444';
-  const glowColor = score >= 80 ? 'rgba(16,185,129,0.40)' : score >= 60 ? 'rgba(245,158,11,0.40)' : 'rgba(239,68,68,0.40)';
+  const color = score >= 80 ? '#00FF88' : score >= 60 ? '#F0A93B' : '#FF4D4D';
+  const glowColor = score >= 80 ? 'rgba(0,255,136,0.40)' : score >= 60 ? 'rgba(240,169,59,0.40)' : 'rgba(255,77,77,0.40)';
   const bgClass = score >= 80
     ? 'border-success/20 bg-success/5'
     : score >= 60
@@ -147,7 +147,7 @@ function ClassBadge({ classification }: { classification: UpdateClassification }
 
 function SeverityBadge({ severity }: { severity: SecuritySeverity }) {
   const map: Record<SecuritySeverity, string> = {
-    CRITICAL: 'border-danger/40 bg-danger/20 text-danger shadow-[0_0_8px_rgba(239,68,68,0.30)]',
+    CRITICAL: 'border-danger/40 bg-danger/20 text-danger shadow-[0_0_8px_rgba(255,77,77,0.30)]',
     HIGH:     'border-warning/40 bg-warning/20 text-warning',
     MEDIUM:   'border-warning/25 bg-warning/10 text-warning/80',
     LOW:      'border-border bg-white/5 text-muted',
@@ -166,7 +166,7 @@ function SeverityBadge({ severity }: { severity: SecuritySeverity }) {
 function MintCriticalBadge() {
   return (
     <span className="inline-flex items-center gap-1 rounded-full border border-neon/30 bg-neon/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-neon"
-      style={{ boxShadow: '0 0 8px rgba(0,245,255,0.15)' }}
+      style={{ boxShadow: '0 0 8px rgba(0,255,136,0.15)' }}
     >
       <Flame className="h-2.5 w-2.5" /> Mint
     </span>
@@ -187,7 +187,7 @@ function NeonCheckbox({ checked, onChange, label }: { checked: boolean; onChange
       onClick={onChange}
       className={`flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded border transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon/40 ${
         checked
-          ? 'border-neon bg-neon/20 shadow-[0_0_8px_rgba(0,245,255,0.35)]'
+          ? 'border-neon bg-neon/20 shadow-[0_0_8px_rgba(0,255,136,0.35)]'
           : 'border-border bg-white/5 hover:border-border-strong'
       }`}
     >
@@ -420,7 +420,7 @@ function Toast({ message, type, onClose }: { message: string; type: 'success' | 
     error:   'border-danger/40 text-text',
     info:    'border-neon/40 text-text',
   }[type];
-  const dot = { success: 'bg-success shadow-[0_0_6px_rgba(16,185,129,0.8)]', error: 'bg-danger shadow-[0_0_6px_rgba(239,68,68,0.8)]', info: 'bg-neon shadow-[0_0_6px_rgba(0,245,255,0.8)]' }[type];
+  const dot = { success: 'bg-success shadow-[0_0_6px_rgba(0,255,136,0.8)]', error: 'bg-danger shadow-[0_0_6px_rgba(255,77,77,0.8)]', info: 'bg-neon shadow-[0_0_6px_rgba(0,255,136,0.8)]' }[type];
   return (
     <div className={`fixed bottom-6 right-6 z-50 max-w-sm rounded-xl border bg-elevated px-4 py-3 shadow-[0_12px_48px_rgba(0,0,0,0.65)] ${styles}`}>
       <div className="flex items-center gap-3">
@@ -449,7 +449,7 @@ function AutoUpdateCard({ enabled, onToggle }: { enabled: boolean; onToggle: () 
   return (
     <div className={`rounded-xl border p-4 transition-all duration-200 ${
       enabled
-        ? 'border-neon/25 bg-neon/[0.04] shadow-[0_0_20px_rgba(0,245,255,0.08)]'
+        ? 'border-neon/25 bg-neon/[0.04] shadow-[0_0_20px_rgba(0,255,136,0.08)]'
         : 'border-border bg-surface'
     }`}>
       <div className="flex items-center justify-between gap-4">
@@ -476,14 +476,14 @@ function AutoUpdateCard({ enabled, onToggle }: { enabled: boolean; onToggle: () 
           onClick={onToggle}
           className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon/40 ${
             enabled
-              ? 'border-neon/50 bg-neon/20 shadow-[0_0_12px_rgba(0,245,255,0.25)]'
+              ? 'border-neon/50 bg-neon/20 shadow-[0_0_12px_rgba(0,255,136,0.25)]'
               : 'border-border bg-white/5'
           }`}
         >
           <span
             className={`inline-block h-4 w-4 transform rounded-full transition-all duration-200 ${
               enabled
-                ? 'translate-x-6 bg-neon shadow-[0_0_8px_rgba(0,245,255,0.80)]'
+                ? 'translate-x-6 bg-neon shadow-[0_0_8px_rgba(0,255,136,0.80)]'
                 : 'translate-x-1 bg-muted'
             }`}
           />
@@ -696,7 +696,7 @@ export function DependencyUpdateCenter() {
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-neon/25 bg-neon/10"
-              style={{ boxShadow: '0 0 16px rgba(0,245,255,0.12)' }}
+              style={{ boxShadow: '0 0 16px rgba(0,255,136,0.12)' }}
             >
               <Package className="h-4 w-4 text-neon" />
             </div>
@@ -717,7 +717,7 @@ export function DependencyUpdateCenter() {
           onClick={() => { void handleCheck(); }}
           disabled={isScanning}
           className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-neon/30 bg-neon/10 px-5 py-2.5 text-sm font-bold text-neon hover:bg-neon/20 hover:border-neon/50 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-neon/40 transition-all"
-          style={{ boxShadow: '0 0 20px rgba(0,245,255,0.10)' }}
+          style={{ boxShadow: '0 0 20px rgba(0,255,136,0.10)' }}
         >
           <RefreshCw className={`h-4 w-4 ${isScanning ? 'animate-spin' : ''}`} />
           {isScanning ? 'Scanning…' : 'Check for Updates'}
@@ -739,7 +739,7 @@ export function DependencyUpdateCenter() {
       {!report && !isScanning && (
         <div className="rounded-2xl border-2 border-dashed border-border py-20 text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-neon/20 bg-neon/5 mb-4"
-            style={{ boxShadow: '0 0 24px rgba(0,245,255,0.08)' }}
+            style={{ boxShadow: '0 0 24px rgba(0,255,136,0.08)' }}
           >
             <Package className="h-8 w-8 text-neon" />
           </div>
@@ -777,8 +777,8 @@ export function DependencyUpdateCenter() {
                   className="h-full rounded-full transition-all duration-300"
                   style={{
                     width: `${Math.round((scanProgress.processed / scanProgress.total) * 100)}%`,
-                    background: 'linear-gradient(90deg, #7C3AED, #00F5FF)',
-                    boxShadow: '0 0 8px rgba(0,245,255,0.40)',
+                    background: 'linear-gradient(90deg, #00FF88, #00FF88)',
+                    boxShadow: '0 0 8px rgba(0,255,136,0.40)',
                   }}
                 />
               </div>

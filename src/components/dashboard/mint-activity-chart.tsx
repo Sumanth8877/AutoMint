@@ -84,8 +84,8 @@ export function MintActivityChart({ data }: { data: MintActivityPoint[] }) {
                     style={{ height: `${heightPct}%` }}
                   >
                     <div className="w-full overflow-hidden rounded">
-                      <div className="w-full" style={{ height: `${successPct}%`, background: 'rgba(16,185,129,0.70)', minHeight: total > 0 ? 2 : 0 }} />
-                      <div className="w-full" style={{ height: `${100 - successPct}%`, background: 'rgba(239,68,68,0.50)', minHeight: 0 }} />
+                      <div className="w-full" style={{ height: `${successPct}%`, background: 'rgba(0,255,136,0.70)', minHeight: total > 0 ? 2 : 0 }} />
+                      <div className="w-full" style={{ height: `${100 - successPct}%`, background: 'rgba(255,77,77,0.50)', minHeight: 0 }} />
                     </div>
                   </div>
                 </div>

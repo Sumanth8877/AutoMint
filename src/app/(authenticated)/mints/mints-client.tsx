@@ -93,10 +93,10 @@ function MintRow({
     <div className="group relative flex flex-col gap-3 rounded-xl border border-border bg-surface p-4 transition-all duration-200 hover:border-border-strong hover:bg-surface-hover sm:flex-row sm:items-center">
       {/* Status indicator strip */}
       <div className={`absolute left-0 top-4 bottom-4 w-0.5 rounded-full ${
-        task.status === 'completed' || task.status === 'confirmed' ? 'bg-success shadow-[0_0_8px_rgba(16,185,129,0.8)]' :
-        task.status === 'monitoring' || task.status === 'ready' ? 'bg-neon shadow-[0_0_8px_rgba(0,245,255,0.8)]' :
-        task.status === 'pending' ? 'bg-warning shadow-[0_0_8px_rgba(245,158,11,0.8)]' :
-        task.status === 'failed' ? 'bg-danger shadow-[0_0_8px_rgba(239,68,68,0.8)]' :
+        task.status === 'completed' || task.status === 'confirmed' ? 'bg-success shadow-[0_0_8px_rgba(0,255,136,0.8)]' :
+        task.status === 'monitoring' || task.status === 'ready' ? 'bg-neon shadow-[0_0_8px_rgba(0,255,136,0.8)]' :
+        task.status === 'pending' ? 'bg-warning shadow-[0_0_8px_rgba(240,169,59,0.8)]' :
+        task.status === 'failed' ? 'bg-danger shadow-[0_0_8px_rgba(255,77,77,0.8)]' :
         'bg-muted'
       }`} />
 
@@ -384,7 +384,7 @@ export default function MintsClient() {
             >
               <span
                 className={`absolute top-0.5 h-5 w-5 rounded-full transition-transform duration-200 ${
-                  state.form.wlMode ? 'translate-x-5 bg-neon shadow-[0_0_8px_rgba(0,245,255,0.8)]' : 'translate-x-0.5 bg-muted'
+                  state.form.wlMode ? 'translate-x-5 bg-neon shadow-[0_0_8px_rgba(0,255,136,0.8)]' : 'translate-x-0.5 bg-muted'
                 }`}
               />
             </button>

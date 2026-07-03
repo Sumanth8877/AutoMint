@@ -23,10 +23,10 @@ type WalletRecord = {
 };
 
 const chainGlow: Record<string, string> = {
-  ethereum: '0 0 20px rgba(0,245,255,0.20)',
-  base:     '0 0 20px rgba(124,58,237,0.20)',
-  polygon:  '0 0 20px rgba(236,72,153,0.20)',
-  arbitrum: '0 0 20px rgba(59,130,246,0.20)',
+  ethereum: '0 0 20px rgba(0,255,136,0.20)',
+  base:     '0 0 20px rgba(0,255,136,0.20)',
+  polygon:  '0 0 20px rgba(0,255,136,0.20)',
+  arbitrum: '0 0 20px rgba(156,163,175,0.20)',
 };
 const chainAccent: Record<string, string> = {
   ethereum: 'text-neon border-neon/25 bg-neon/8',
@@ -65,7 +65,7 @@ function WalletCard({
         <div className="flex items-center gap-3">
           <div
             className="flex h-11 w-11 items-center justify-center rounded-xl border bg-background text-neon"
-            style={{ borderColor: wallet.isDefault ? 'rgba(0,245,255,0.30)' : undefined, boxShadow: wallet.isDefault ? '0 0 12px rgba(0,245,255,0.20)' : undefined }}
+            style={{ borderColor: wallet.isDefault ? 'rgba(0,255,136,0.30)' : undefined, boxShadow: wallet.isDefault ? '0 0 12px rgba(0,255,136,0.20)' : undefined }}
           >
             <Wallet className="h-5 w-5" />
           </div>

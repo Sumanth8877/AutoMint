@@ -109,7 +109,7 @@ export default async function DashboardPage() {
           <Link
             href="/mints"
             className="inline-flex items-center gap-2 rounded-xl border border-neon/30 bg-neon/5 px-4 py-2 text-sm font-bold tracking-tight text-neon hover:bg-neon/10 hover:border-neon/50 transition-all duration-200"
-            style={{ boxShadow: '0 0 20px rgba(0,245,255,0.15)' }}
+            style={{ boxShadow: '0 0 20px rgba(0,255,136,0.15)' }}
           >
             <Zap className="h-3.5 w-3.5" />
             New Mint
@@ -216,10 +216,10 @@ export default async function DashboardPage() {
       {/* Quick actions */}
       <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" inView>
         {[
-          { href: '/analyzer',      icon: Gauge,     label: 'Analyze Mint',    desc: 'AI contract scan',      tone: 'text-neon',    glow: 'rgba(0,245,255,0.20)',    border: 'border-neon/20' },
-          { href: '/collections',   icon: Target,    label: 'Collections',     desc: 'Manage watchlist',    tone: 'text-primary', glow: 'rgba(124,58,237,0.20)', border: 'border-primary/20' },
-          { href: '/wallets',       icon: Wallet,    label: 'Wallets',          desc: 'Fund & configure',    tone: 'text-success', glow: 'rgba(16,185,129,0.20)', border: 'border-success/20' },
-          { href: '/whale-tracker', icon: Eye,       label: 'Whale Tracker',   desc: 'Follow smart money',  tone: 'text-gold',    glow: 'rgba(245,158,11,0.20)',  border: 'border-gold/20' },
+          { href: '/analyzer',      icon: Gauge,     label: 'Analyze Mint',    desc: 'AI contract scan',      tone: 'text-neon',    glow: 'rgba(0,255,136,0.20)',    border: 'border-neon/20' },
+          { href: '/collections',   icon: Target,    label: 'Collections',     desc: 'Manage watchlist',    tone: 'text-primary', glow: 'rgba(0,255,136,0.20)', border: 'border-primary/20' },
+          { href: '/wallets',       icon: Wallet,    label: 'Wallets',          desc: 'Fund & configure',    tone: 'text-success', glow: 'rgba(0,255,136,0.20)', border: 'border-success/20' },
+          { href: '/whale-tracker', icon: Eye,       label: 'Whale Tracker',   desc: 'Follow smart money',  tone: 'text-gold',    glow: 'rgba(240,169,59,0.20)',  border: 'border-gold/20' },
         ].map(a => (
           <StaggerItem key={a.href}>
           <Link

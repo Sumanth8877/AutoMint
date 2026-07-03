@@ -8,7 +8,7 @@ const features = [
     title: 'Auto-Mint Engine',
     description: 'Fire mints in milliseconds with gas-optimised transactions across all major chains. Whitelist, allowlist, and public phase targeting.',
     href: '/mints',
-    glow: 'rgba(245,158,11,0.30)',
+    glow: 'rgba(240,169,59,0.30)',
     accent: 'text-gold',
     border: 'border-gold/25',
     bg: 'bg-gold/8',
@@ -18,7 +18,7 @@ const features = [
     title: 'Mint Analyzer',
     description: 'AI-powered contract analysis with risk scoring, gas estimation, and market intelligence — before you pull the trigger.',
     href: '/analyzer',
-    glow: 'rgba(0,245,255,0.25)',
+    glow: 'rgba(0,255,136,0.25)',
     accent: 'text-neon',
     border: 'border-neon/25',
     bg: 'bg-neon/8',
@@ -28,7 +28,7 @@ const features = [
     title: 'Whale Tracker',
     description: 'Monitor elite wallets in real-time. Follow the smart money and mirror mint strategies of top collectors.',
     href: '/whale-tracker',
-    glow: 'rgba(124,58,237,0.25)',
+    glow: 'rgba(0,255,136,0.25)',
     accent: 'text-primary',
     border: 'border-primary/25',
     bg: 'bg-primary/8',
@@ -38,7 +38,7 @@ const features = [
     title: 'Risk Intelligence',
     description: 'Honeypot detection, rug-pull analysis, and contract security scoring powered by GoPlus and on-chain data.',
     href: '/analyzer',
-    glow: 'rgba(16,185,129,0.25)',
+    glow: 'rgba(0,255,136,0.25)',
     accent: 'text-success',
     border: 'border-success/25',
     bg: 'bg-success/8',
@@ -57,13 +57,13 @@ export default function Home() {
     <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden p-4 sm:p-8">
       {/* Atmospheric background */}
       <div className="absolute inset-0 -z-10">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(124,58,237,0.12),transparent_55%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_70%_80%,rgba(0,245,255,0.08),transparent_55%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(0,255,136,0.12),transparent_55%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_70%_80%,rgba(0,255,136,0.08),transparent_55%)]" />
         {/* Grid */}
         <div
           className="absolute inset-0 opacity-40"
           style={{
-            backgroundImage: 'linear-gradient(rgba(0,245,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,245,255,0.04) 1px, transparent 1px)',
+            backgroundImage: 'linear-gradient(rgba(0,255,136,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,255,136,0.04) 1px, transparent 1px)',
             backgroundSize: '64px 64px',
           }}
         />
@@ -100,8 +100,8 @@ export default function Home() {
               href="/dashboard"
               className="inline-flex items-center gap-3 rounded-xl px-8 py-4 text-sm font-black tracking-tight text-background transition-all duration-300 hover:scale-[1.03] hover:brightness-110"
               style={{
-                background: 'linear-gradient(135deg, #00F5FF 0%, #7C3AED 100%)',
-                boxShadow: '0 0 40px rgba(0,245,255,0.35), 0 0 12px rgba(124,58,237,0.40)',
+                background: 'linear-gradient(135deg, #00FF88 0%, #00FF88 100%)',
+                boxShadow: '0 0 40px rgba(0,255,136,0.35), 0 0 12px rgba(0,255,136,0.40)',
               }}
             >
               <Sparkles className="h-4 w-4" />

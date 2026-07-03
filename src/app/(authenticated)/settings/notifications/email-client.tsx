@@ -47,14 +47,14 @@ function Toggle({ checked, onChange, disabled = false }: { checked: boolean; onC
       disabled={disabled}
       className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon/50 disabled:cursor-not-allowed disabled:opacity-50 ${
         checked
-          ? 'border-neon/50 bg-neon/20 shadow-[0_0_12px_rgba(0,245,255,0.25)]'
+          ? 'border-neon/50 bg-neon/20 shadow-[0_0_12px_rgba(0,255,136,0.25)]'
           : 'border-border bg-white/5'
       }`}
     >
       <span
         className={`inline-block h-4 w-4 transform rounded-full shadow-sm transition-all duration-200 ${
           checked
-            ? 'translate-x-6 bg-neon shadow-[0_0_8px_rgba(0,245,255,0.80)]'
+            ? 'translate-x-6 bg-neon shadow-[0_0_8px_rgba(0,255,136,0.80)]'
             : 'translate-x-1 bg-muted'
         }`}
       />
@@ -73,7 +73,7 @@ function Checkbox({ checked, onChange, disabled = false }: { checked: boolean; o
       disabled={disabled}
       className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon/50 disabled:cursor-not-allowed disabled:opacity-50 ${
         checked
-          ? 'border-neon bg-neon/20 shadow-[0_0_8px_rgba(0,245,255,0.40)]'
+          ? 'border-neon bg-neon/20 shadow-[0_0_8px_rgba(0,255,136,0.40)]'
           : 'border-border bg-white/5 hover:border-border-strong'
       }`}
     >
