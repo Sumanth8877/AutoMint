@@ -188,6 +188,34 @@ export function HoverLift({
   );
 }
 
+/**
+ * Pop-in entrance (fade + scale + slight rotation settle). Good for icon
+ * badges. Only ever receives already-rendered `children` and serializable
+ * style props, so it's safe to use from Server Component parents (e.g.
+ * PageHeader, MetricCard) — never pass a raw component reference (like a
+ * Lucide icon) as a prop into a Client Component; render it to an element
+ * first and pass it as `children` instead.
+ */
+export function PopIn({
+  children,
+  className,
+  rotate = 0,
+  ...props
+}: { children: ReactNode; rotate?: number } & HTMLMotionProps<'div'>) {
+  const reduce = useReducedMotion();
+  return (
+    <motion.div
+      className={className}
+      initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.6, rotate: -rotate }}
+      animate={{ opacity: 1, scale: 1, rotate: 0 }}
+      transition={springs.gentle}
+      {...props}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
 /** Page/route transition wrapper (used by RouteTransition). */
 export function PageTransition({ children }: { children: ReactNode }) {
   const variants = useSafe({

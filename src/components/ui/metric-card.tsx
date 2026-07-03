@@ -1,8 +1,14 @@
-'use client';
-
 import type { LucideIcon } from 'lucide-react';
 import Card from './Card';
 import { HoverLift } from '@/components/motion';
+
+// NOTE: this must stay a Server Component. It's rendered from page.tsx
+// files (Server Components) with `icon={SomeLucideIcon}` — a raw component
+// reference — and React cannot pass a function/component reference as a
+// prop into a Client Component ("Functions cannot be passed directly to
+// Client Components..."). <HoverLift> (from @/components/motion) is a
+// Client Component, but it's only ever given already-rendered `children`
+// and a plain string `className` here, which is safe.
 
 interface MetricCardProps {
   label: string;

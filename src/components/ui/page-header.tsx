@@ -1,9 +1,6 @@
-'use client';
-
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
-import { EASE_OUT, springs } from '@/components/motion';
+import { FadeIn, PopIn } from '@/components/motion';
 
 interface PageHeaderProps {
   title: string;
@@ -24,28 +21,30 @@ const iconToneMap: Record<string, { bg: string; text: string; border: string; gl
   success: { bg: 'bg-success/10', text: 'text-success', border: 'border-success/25', glow: '0 0 20px rgba(16,185,129,0.30)' },
 };
 
+// NOTE: this is a Server Component on purpose. It's rendered from every
+// page.tsx (all Server Components) with `icon={SomeLucideIcon}` — a raw
+// component reference. React Server Components cannot pass function/
+// component-reference props into a Client Component ("Functions cannot be
+// passed directly to Client Components..."), so this component itself must
+// stay server-rendered. The icon is rendered here (server-side) into a real
+// element and handed to <PopIn> as `children`, which IS allowed — only the
+// small, purely-visual PopIn/FadeIn wrappers (from @/components/motion) are
+// Client Components, and they only ever receive already-rendered children
+// and plain serializable props (strings/numbers/style objects).
 export function PageHeader({ title, subtitle, eyebrow, description, icon: Icon, iconTone = 'neon', actions, badge }: PageHeaderProps) {
   const t = iconToneMap[iconTone];
-  const reduce = useReducedMotion();
 
   return (
-    <motion.div
-      className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
-      initial={reduce ? { opacity: 0 } : { opacity: 0, y: -10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: EASE_OUT }}
-    >
+    <FadeIn className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-4">
         {Icon && (
-          <motion.div
+          <PopIn
             className={`flex h-12 w-12 items-center justify-center rounded-2xl border ${t.bg} ${t.text} ${t.border}`}
             style={{ boxShadow: t.glow }}
-            initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.6, rotate: -12 }}
-            animate={{ opacity: 1, scale: 1, rotate: 0 }}
-            transition={springs.gentle}
+            rotate={12}
           >
             <Icon className="h-5 w-5" aria-hidden="true" />
-          </motion.div>
+          </PopIn>
         )}
         <div>
           {eyebrow && <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{eyebrow}</p>}
@@ -58,6 +57,6 @@ export function PageHeader({ title, subtitle, eyebrow, description, icon: Icon, 
         </div>
       </div>
       {actions && <div className="flex items-center gap-2">{actions}</div>}
-    </motion.div>
+    </FadeIn>
   );
 }
