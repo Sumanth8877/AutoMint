@@ -96,7 +96,7 @@ export default function EmailNotificationsClient() {
   const saveMutation = useMutation({
     mutationFn: async (preferences: EmailPreferences) =>
       apiRequest<EmailSettingsResponse>('/api/settings/email-notifications', {
-        method: 'POST',
+        method: 'PATCH',
         body: JSON.stringify(preferences),
       }),
     onSuccess: (data) => {
