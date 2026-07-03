@@ -27,6 +27,7 @@
     "@upstash/qstash": "^2.7.18",
     "@upstash/redis": "^1.38.0",
     "drizzle-orm": "^0.45.2",
+    "framer-motion": "^12.23.12",
     "lucide-react": "^1.21.0",
     "next": "^16.2.9",
     "react": "^19.2.7",

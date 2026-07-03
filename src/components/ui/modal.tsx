@@ -2,6 +2,8 @@
 
 import { useEffect, type ReactNode } from 'react';
 import { X } from 'lucide-react';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { springs } from '@/components/motion';
 
 interface ModalProps {
   open: boolean;
@@ -28,6 +30,8 @@ const toneMap: Record<string, string> = {
 };
 
 export function Modal({ open, onClose, title, subtitle, children, size = 'md', tone = 'default' }: ModalProps) {
+  const reduce = useReducedMotion();
+
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -35,45 +39,58 @@ export function Modal({ open, onClose, title, subtitle, children, size = 'md', t
     return () => document.removeEventListener('keydown', handler);
   }, [open, onClose]);
 
-  if (!open) return null;
+  const panelInitial = reduce ? { opacity: 0 } : { opacity: 0, scale: 0.94, y: 16 };
+  const panelShow = reduce ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      {/* Panel */}
-      <div
-        className={`relative z-10 w-full ${sizes[size]} rounded-2xl border ${toneMap[tone]} bg-elevated shadow-[0_24px_80px_rgba(0,0,0,0.70)] overflow-hidden`}
-        style={tone === 'neon' ? { boxShadow: '0 24px 80px rgba(0,0,0,0.70), 0 0 40px rgba(0,245,255,0.08)' } : undefined}
-      >
-        {/* Top accent line */}
-        <div className={`h-px w-full ${
-          tone === 'neon' ? 'bg-gradient-to-r from-transparent via-neon/60 to-transparent' :
-          tone === 'gold' ? 'bg-gradient-to-r from-transparent via-gold/60 to-transparent' :
-          tone === 'danger' ? 'bg-gradient-to-r from-transparent via-danger/60 to-transparent' :
-          'bg-gradient-to-r from-transparent via-border-strong to-transparent'
-        }`} />
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-4">
-          <div>
-            <h2 className="text-base font-black tracking-tight text-text">{title}</h2>
-            {subtitle && <p className="mt-0.5 text-xs text-muted">{subtitle}</p>}
-          </div>
-          <button
+    <AnimatePresence>
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+          {/* Backdrop */}
+          <motion.div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
             onClick={onClose}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:text-text hover:bg-white/5 transition-colors -mt-0.5 -mr-1"
-            aria-label="Close modal"
+            aria-hidden="true"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          />
+          {/* Panel */}
+          <motion.div
+            className={`relative z-10 w-full ${sizes[size]} rounded-2xl border ${toneMap[tone]} bg-elevated shadow-[0_24px_80px_rgba(0,0,0,0.70)] overflow-hidden`}
+            style={tone === 'neon' ? { boxShadow: '0 24px 80px rgba(0,0,0,0.70), 0 0 40px rgba(0,245,255,0.08)' } : undefined}
+            initial={panelInitial}
+            animate={panelShow}
+            exit={panelInitial}
+            transition={springs.soft}
           >
-            <X className="h-4 w-4" />
-          </button>
+            {/* Top accent line */}
+            <div className={`h-px w-full ${
+              tone === 'neon' ? 'bg-gradient-to-r from-transparent via-neon/60 to-transparent' :
+              tone === 'gold' ? 'bg-gradient-to-r from-transparent via-gold/60 to-transparent' :
+              tone === 'danger' ? 'bg-gradient-to-r from-transparent via-danger/60 to-transparent' :
+              'bg-gradient-to-r from-transparent via-border-strong to-transparent'
+            }`} />
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-4">
+              <div>
+                <h2 className="text-base font-black tracking-tight text-text">{title}</h2>
+                {subtitle && <p className="mt-0.5 text-xs text-muted">{subtitle}</p>}
+              </div>
+              <button
+                onClick={onClose}
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:text-text hover:bg-white/5 transition-colors -mt-0.5 -mr-1"
+                aria-label="Close modal"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            {/* Body */}
+            <div className="px-6 pb-6">{children}</div>
+          </motion.div>
         </div>
-        {/* Body */}
-        <div className="px-6 pb-6">{children}</div>
-      </div>
-    </div>
+      )}
+    </AnimatePresence>
   );
 }

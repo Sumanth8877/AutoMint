@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Activity, BarChart3, Shield, Sparkles, TrendingUp, Wallet, Zap, Eye } from 'lucide-react';
+import { FadeIn, Stagger, StaggerItem, Reveal } from '@/components/motion';
 
 const features = [
   {
@@ -70,7 +71,7 @@ export default function Home() {
 
       <div className="w-full max-w-6xl space-y-20">
         {/* Hero */}
-        <div className="text-center space-y-8">
+        <FadeIn className="text-center space-y-8">
           {/* Status pill */}
           <div className="inline-flex items-center gap-2.5 rounded-full border border-neon/20 bg-neon/5 px-5 py-2 backdrop-blur-sm">
             <span className="live-dot" />
@@ -114,24 +115,24 @@ export default function Home() {
               Analyze a Mint
             </Link>
           </div>
-        </div>
+        </FadeIn>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <Stagger className="grid grid-cols-2 gap-4 sm:grid-cols-4" inView>
           {stats.map(s => (
-            <div
+            <StaggerItem
               key={s.label}
               className="hover-lift flex flex-col items-center gap-2 rounded-2xl border border-border bg-surface/60 backdrop-blur-sm p-5 text-center"
             >
               <s.icon className="h-5 w-5 text-neon" />
               <p className="stat-value text-3xl font-black tracking-tight text-text">{s.value}</p>
               <p className="text-[10px] font-bold uppercase tracking-widest text-muted">{s.label}</p>
-            </div>
+            </StaggerItem>
           ))}
-        </div>
+        </Stagger>
 
         {/* Trust strip */}
-        <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-[11px] font-semibold uppercase tracking-widest text-muted/70">
+        <Reveal className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-[11px] font-semibold uppercase tracking-widest text-muted/70">
           <span>Security scoring by GoPlus</span>
           <span className="h-1 w-1 rounded-full bg-muted/40" />
           <span>Ethereum</span>
@@ -143,15 +144,15 @@ export default function Home() {
           <span>Polygon</span>
           <span className="h-1 w-1 rounded-full bg-muted/40" />
           <span>+11 more chains</span>
-        </div>
+        </Reveal>
 
         {/* Feature grid */}
-        <div className="grid gap-5 md:grid-cols-2">
+        <Stagger className="grid gap-5 md:grid-cols-2" inView>
           {features.map(f => (
+            <StaggerItem key={f.title} className="h-full">
             <Link
-              key={f.title}
               href={f.href}
-              className="hover-lift group relative overflow-hidden rounded-2xl border p-7 transition-all duration-300 hover:scale-[1.02]"
+              className="hover-lift group relative block h-full overflow-hidden rounded-2xl border p-7 transition-all duration-300 hover:scale-[1.02]"
               style={{
                 background: `radial-gradient(ellipse at 20% 20%, ${f.glow.replace('0.', '0.08')} 0%, transparent 60%), rgba(8,12,20,0.80)`,
                 borderColor: f.border.replace('border-', ''),
@@ -181,8 +182,9 @@ export default function Home() {
                 </div>
               </div>
             </Link>
+            </StaggerItem>
           ))}
-        </div>
+        </Stagger>
       </div>
     </main>
   );
