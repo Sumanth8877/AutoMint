@@ -65,31 +65,31 @@ const chains = ['Ethereum', 'Base', 'Arbitrum', 'Polygon', 'Optimism', 'Blast', 
 const steps = [
   {
     n: '01',
-    title: 'Connect & Fund',
-    description: 'Link your wallets and fund them in one screen. AutoMint never takes custody — keys stay encrypted, actions stay yours.',
+    title: 'Import Your Signing Wallets',
+    description: 'Add wallets by importing private keys — AutoMint encrypts them in a vault on our side. Keys never leave, no custody, works across every supported chain.',
     image: '/illustrations/workflow-01-import-wallet.jpeg',
-    alt: 'Illustration of a small character inserting an address key into an encrypted, non-custodial vault holding multi-chain wallets.',
+    alt: 'A small character inserting a private key into an encrypted vault holding multi-chain wallets.',
   },
   {
     n: '02',
-    title: 'Analyze the Mint',
-    description: 'Paste a contract or URL. Get a risk score, gas estimate, and rug/honeypot check in seconds — before you commit.',
+    title: 'Paste. Analyze. Decide.',
+    description: 'Drop in a launchpad URL, explorer link, or 0x contract. Get a risk score, gas estimate, and rug/honeypot verdict in seconds — before you commit a single wei.',
     image: '/illustrations/workflow-02-analyze-mint.jpeg',
-    alt: 'Illustration of a small character examining a mint contract with a magnifier, checking for rugs and gas.',
+    alt: 'A small character analyzing a pasted URL and outputting risk score, gas estimate, and rug check tags marked SAFE.',
   },
   {
     n: '03',
-    title: 'Queue the Strategy',
-    description: 'Set whitelist, allowlist, or public-phase targeting with gas ceilings and retry logic tuned per wallet.',
+    title: 'Queue With Your Strategy',
+    description: 'Create a mint task with whitelist mode, scheduled time, gas ceiling, and auto-retry. Every wallet runs its own tuned playbook — you set the rules once, we execute them.',
     image: '/illustrations/workflow-03-queue-strategy.jpeg',
-    alt: 'Illustration of a small character ticking wallets in a queue with gas ceiling and retry logic annotations.',
+    alt: 'A mint task ticket showing whitelist toggle, scheduled time, and gas ceiling with auto-retry annotation.',
   },
   {
     n: '04',
-    title: 'Execute at Machine Speed',
-    description: 'AutoMint fires the transaction the instant conditions are met — then tracks confirmation and outcome in your dashboard.',
+    title: 'AutoMint Fires at T=0',
+    description: 'The moment mint conditions hit, AutoMint fires the transaction — monitoring → ready → confirmed in under 50 ms. Watch every outcome land in your dashboard.',
     image: '/illustrations/workflow-04-execute-speed.jpeg',
-    alt: 'Illustration of a small character pressing a MINT button, transaction firing to a confirmed checkmark at ms speed.',
+    alt: 'A small character auto-firing a MINT button at a scheduled time, with statuses monitoring, ready, confirmed in under 50 ms.',
   },
 ];
 
@@ -309,33 +309,42 @@ export default async function Home() {
         </div>
 
         {/* ── How it works ── */}
-        <div id="how-it-works" className="space-y-10">
+        <div id="how-it-works" className="space-y-16">
           <Reveal className="mx-auto max-w-2xl space-y-3 text-center">
             <p className="text-xs font-semibold uppercase tracking-[0.25em] text-primary">Workflow</p>
             <h2 className="text-3xl font-medium tracking-tight text-text sm:text-4xl">From wallet to confirmed mint in four steps.</h2>
+            <p className="text-sm leading-relaxed text-secondary sm:text-base">
+              Import once. Analyze anything. Queue your strategy. Let AutoMint fire the transaction the instant the mint opens.
+            </p>
           </Reveal>
 
-          <Stagger className="relative grid gap-6 sm:grid-cols-2 lg:grid-cols-4" inView stagger={0.1}>
-            {steps.map((s) => (
-              <StaggerItem key={s.n}>
-                <div className="relative flex h-full flex-col gap-4 overflow-hidden rounded-2xl border border-border bg-surface p-4 sm:p-5">
-                  <div className="relative aspect-[16/9] w-full overflow-hidden rounded-xl bg-white ring-1 ring-border/60">
-                    <Image
-                      src={s.image}
-                      alt={s.alt}
-                      fill
-                      sizes="(min-width: 1024px) 22vw, (min-width: 640px) 45vw, 90vw"
-                      className="object-contain p-2"
-                    />
+          <Stagger className="space-y-14 sm:space-y-20" inView stagger={0.12}>
+            {steps.map((s, i) => {
+              const imageFirst = i % 2 === 0;
+              return (
+                <StaggerItem key={s.n}>
+                  <div className="grid items-center gap-8 md:grid-cols-2 md:gap-14">
+                    <div className={`relative aspect-[16/9] w-full overflow-hidden rounded-2xl border border-border bg-white ${imageFirst ? 'md:order-1' : 'md:order-2'}`}>
+                      <Image
+                        src={s.image}
+                        alt={s.alt}
+                        fill
+                        sizes="(min-width: 768px) 45vw, 90vw"
+                        className="object-contain p-3 sm:p-5"
+                      />
+                    </div>
+                    <div className={`space-y-4 ${imageFirst ? 'md:order-2' : 'md:order-1'}`}>
+                      <span className="stat-value inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.25em] text-primary">
+                        <span className="inline-block h-px w-6 bg-primary/50" aria-hidden="true" />
+                        Step {s.n}
+                      </span>
+                      <h3 className="text-2xl font-medium tracking-tight text-text sm:text-3xl">{s.title}</h3>
+                      <p className="text-base leading-relaxed text-secondary">{s.description}</p>
+                    </div>
                   </div>
-                  <div className="space-y-2 px-1">
-                    <span className="stat-value text-xs font-semibold text-primary">{s.n}</span>
-                    <h3 className="text-base font-medium text-text">{s.title}</h3>
-                    <p className="text-sm leading-relaxed text-secondary">{s.description}</p>
-                  </div>
-                </div>
-              </StaggerItem>
-            ))}
+                </StaggerItem>
+              );
+            })}
           </Stagger>
         </div>
 
