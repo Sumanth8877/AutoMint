@@ -24,12 +24,16 @@ import {
   AnimatePresence,
   motion,
   useReducedMotion,
+  useMotionValue,
+  useSpring,
+  useTransform,
+  useInView,
   animate,
   type Variants,
   type Transition,
   type HTMLMotionProps,
 } from 'framer-motion';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type MouseEvent as ReactMouseEvent } from 'react';
 
 // ─── Shared easings / springs ──────────────────────────────────────────────
 // easeOutExpo — the "premium" deceleration curve used by Linear/Vercel.
@@ -229,14 +233,20 @@ export function PageTransition({ children }: { children: ReactNode }) {
   );
 }
 
-/** Count-up animated number. Falls back to the final value with reduced-motion. */
+/**
+ * Count-up animated number. Falls back to the final value with
+ * reduced-motion. Pass `startOnView` (default true) to only start counting
+ * once the element scrolls into the viewport — the pattern big marketing
+ * sites use for stat sections, instead of counting up invisibly on mount.
+ */
 export function AnimatedNumber({
   value,
-  duration = 1.1,
+  duration = 1.4,
   decimals = 0,
   prefix = '',
   suffix = '',
   className,
+  startOnView = true,
 }: {
   value: number;
   duration?: number;
@@ -244,14 +254,18 @@ export function AnimatedNumber({
   prefix?: string;
   suffix?: string;
   className?: string;
+  startOnView?: boolean;
 }) {
   const reduce = useReducedMotion();
   const [display, setDisplay] = useState(reduce ? value : 0);
   const ref = useRef(value);
+  const elRef = useRef<HTMLSpanElement>(null);
+  const inView = useInView(elRef, { once: true, amount: 0.6 });
+  const shouldStart = !startOnView || inView;
 
   useEffect(() => {
-    if (reduce) {
-      setDisplay(value);
+    if (reduce || !shouldStart) {
+      if (reduce) setDisplay(value);
       return;
     }
     const controls = animate(ref.current, value, {
@@ -261,14 +275,246 @@ export function AnimatedNumber({
     });
     ref.current = value;
     return () => controls.stop();
-  }, [value, duration, reduce]);
+  }, [value, duration, reduce, shouldStart]);
 
   const formatted = `${prefix}${display.toLocaleString(undefined, {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   })}${suffix}`;
 
-  return <span className={className}>{formatted}</span>;
+  return <span ref={elRef} className={className}>{formatted}</span>;
 }
 
-export { AnimatePresence, motion, useReducedMotion };
+// ─── 3D pointer-tilt card ─────────────────────────────────────────────────
+/**
+ * Wraps children in a card that tilts in 3D toward the cursor (rotateX/
+ * rotateY driven by pointer position, spring-smoothed) with an optional
+ * moving "sheen" highlight — the tactile depth effect used on Linear/
+ * Stripe/Framer marketing sites. Only ever receives already-rendered
+ * `children`, so it's safe to call from Server Component parents.
+ */
+export function TiltCard({
+  children,
+  className,
+  max = 10,
+  sheen = true,
+  scaleOnHover = 1.01,
+}: {
+  children: ReactNode;
+  className?: string;
+  /** Max rotation in degrees. */
+  max?: number;
+  sheen?: boolean;
+  scaleOnHover?: number;
+}) {
+  const reduce = useReducedMotion();
+  const ref = useRef<HTMLDivElement>(null);
+  const rotateX = useSpring(0, { stiffness: 220, damping: 22, mass: 0.6 });
+  const rotateY = useSpring(0, { stiffness: 220, damping: 22, mass: 0.6 });
+  const sheenX = useMotionValue(50);
+  const sheenY = useMotionValue(50);
+  const [hovering, setHovering] = useState(false);
+
+  function handleMove(e: ReactMouseEvent<HTMLDivElement>) {
+    if (reduce || !ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    const px = (e.clientX - rect.left) / rect.width;
+    const py = (e.clientY - rect.top) / rect.height;
+    rotateY.set((px - 0.5) * max * 2);
+    rotateX.set(-(py - 0.5) * max * 2);
+    sheenX.set(px * 100);
+    sheenY.set(py * 100);
+  }
+
+  function handleLeave() {
+    rotateX.set(0);
+    rotateY.set(0);
+    setHovering(false);
+  }
+
+  return (
+    <motion.div
+      ref={ref}
+      className={className}
+      style={{ perspective: 1000 }}
+      onMouseMove={handleMove}
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={handleLeave}
+    >
+      <motion.div
+        style={{
+          rotateX: reduce ? 0 : rotateX,
+          rotateY: reduce ? 0 : rotateY,
+          transformStyle: 'preserve-3d',
+          position: 'relative',
+        }}
+        animate={{ scale: hovering && !reduce ? scaleOnHover : 1 }}
+        transition={springs.gentle}
+        className="h-full"
+      >
+        {children}
+        {sheen && !reduce && (
+          <motion.div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 rounded-[inherit]"
+            style={{
+              background: useTransform(
+                [sheenX, sheenY],
+                ([x, y]) => `radial-gradient(circle at ${x}% ${y}%, rgba(0,255,136,0.14), transparent 55%)`,
+              ),
+              opacity: hovering ? 1 : 0,
+              transition: 'opacity 0.3s ease',
+            }}
+          />
+        )}
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// ─── Magnetic button ────────────────────────────────────────────────────
+/**
+ * Wraps a button/link so it subtly follows the cursor within a small
+ * radius, then springs back on leave — the "magnetic CTA" micro-
+ * interaction common on premium product sites. `children` should be the
+ * already-rendered button/link element.
+ */
+export function Magnetic({
+  children,
+  className,
+  strength = 0.35,
+}: {
+  children: ReactNode;
+  className?: string;
+  strength?: number;
+}) {
+  const reduce = useReducedMotion();
+  const ref = useRef<HTMLDivElement>(null);
+  const x = useSpring(0, { stiffness: 300, damping: 20, mass: 0.5 });
+  const y = useSpring(0, { stiffness: 300, damping: 20, mass: 0.5 });
+
+  function handleMove(e: ReactMouseEvent<HTMLDivElement>) {
+    if (reduce || !ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    x.set((e.clientX - rect.left - rect.width / 2) * strength);
+    y.set((e.clientY - rect.top - rect.height / 2) * strength);
+  }
+
+  function handleLeave() {
+    x.set(0);
+    y.set(0);
+  }
+
+  return (
+    <motion.div
+      ref={ref}
+      className={className}
+      style={{ x: reduce ? 0 : x, y: reduce ? 0 : y, display: 'inline-block' }}
+      onMouseMove={handleMove}
+      onMouseLeave={handleLeave}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+// ─── Cursor spotlight ────────────────────────────────────────────────────
+/**
+ * Full-bleed radial-gradient glow that tracks the pointer within its
+ * parent — drop into a `relative` hero/section as an absolutely
+ * positioned background layer. Purely decorative (pointer-events-none).
+ */
+export function Spotlight({
+  className,
+  color = 'rgba(0,255,136,0.10)',
+  size = 700,
+}: {
+  className?: string;
+  color?: string;
+  size?: number;
+}) {
+  const reduce = useReducedMotion();
+  const x = useMotionValue(0.5);
+  const y = useMotionValue(0.5);
+  const bg = useTransform(
+    [x, y],
+    ([px, py]) => `radial-gradient(${size}px circle at ${(px as number) * 100}% ${(py as number) * 100}%, ${color}, transparent 70%)`,
+  );
+
+  function handleMove(e: ReactMouseEvent<HTMLDivElement>) {
+    if (reduce) return;
+    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+    x.set((e.clientX - rect.left) / rect.width);
+    y.set((e.clientY - rect.top) / rect.height);
+  }
+
+  return (
+    <motion.div
+      aria-hidden="true"
+      onMouseMove={handleMove}
+      className={`pointer-events-none absolute inset-0 ${className ?? ''}`}
+      style={{ background: reduce ? undefined : bg }}
+    />
+  );
+}
+
+// ─── Drifting gradient orb ───────────────────────────────────────────────
+/** Slow, looping blurred-orb drift — ambient depth for hero backgrounds. */
+export function FloatingOrb({
+  className,
+  size = 480,
+  color = 'rgba(0,255,136,0.16)',
+  duration = 14,
+  range = 40,
+}: {
+  className?: string;
+  size?: number;
+  color?: string;
+  duration?: number;
+  range?: number;
+}) {
+  const reduce = useReducedMotion();
+  return (
+    <motion.div
+      aria-hidden="true"
+      className={`pointer-events-none absolute rounded-full blur-3xl ${className ?? ''}`}
+      style={{ width: size, height: size, background: color }}
+      animate={
+        reduce
+          ? undefined
+          : { x: [0, range, -range * 0.6, 0], y: [0, -range * 0.8, range * 0.5, 0] }
+      }
+      transition={{ duration, repeat: Infinity, ease: 'easeInOut' }}
+    />
+  );
+}
+
+// ─── Infinite marquee ────────────────────────────────────────────────────
+/** Seamless infinite horizontal scroll — duplicate `children` once for the loop. */
+export function Marquee({
+  children,
+  className,
+  duration = 28,
+  reverse = false,
+}: {
+  children: ReactNode;
+  className?: string;
+  duration?: number;
+  reverse?: boolean;
+}) {
+  const reduce = useReducedMotion();
+  return (
+    <div className={`flex overflow-hidden ${className ?? ''}`}>
+      <motion.div
+        className="flex shrink-0 items-center gap-12 pr-12"
+        animate={reduce ? undefined : { x: reverse ? ['-100%', '0%'] : ['0%', '-100%'] }}
+        transition={reduce ? undefined : { duration, repeat: Infinity, ease: 'linear' }}
+      >
+        {children}
+        {children}
+      </motion.div>
+    </div>
+  );
+}
+
+export { AnimatePresence, motion, useReducedMotion, useMotionValue, useSpring, useTransform };
