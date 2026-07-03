@@ -70,6 +70,24 @@ export default function Button({
     xl: "h-13 px-7 text-base gap-3",
   };
 
+  // 小黑 sits on every normal button by default. Dense/icon-only buttons
+  // (xs, sm — typically repeated table row actions) stay clean unless a
+  // mascot is explicitly requested via the `mascot` prop.
+  const defaultMascotEnabled: Record<string, boolean> = {
+    xs: false,
+    sm: false,
+    md: true,
+    lg: true,
+    xl: true,
+  };
+  const mascotScaleBySize: Record<string, number> = {
+    xs: 0.6,
+    sm: 0.7,
+    md: 0.85,
+    lg: 1,
+    xl: 1.15,
+  };
+
   const glowStyle = glow && variant === "neon"
     ? { boxShadow: "0 0 0 1px rgba(79,70,229,0.15), 0 2px 12px rgba(79,70,229,0.15)" }
     : glow && variant === "primary"
@@ -77,7 +95,16 @@ export default function Button({
     : undefined;
 
   const isDisabled = disabled || loading;
-  const mascotPose: MascotPose | null = mascot === true ? "sitting" : mascot || null;
+  const mascotPose: MascotPose | null =
+    mascot === false
+      ? null
+      : mascot === true
+      ? "sitting"
+      : typeof mascot === "string"
+      ? mascot
+      : defaultMascotEnabled[size]
+      ? "sitting"
+      : null;
   const showMascot = mascotPose && !isDisabled;
 
   const button = (
@@ -115,6 +142,7 @@ export default function Button({
         position={mascotPosition}
         hovered={hovered}
         pressed={pressed}
+        scale={mascotScaleBySize[size]}
       />
       {button}
     </div>

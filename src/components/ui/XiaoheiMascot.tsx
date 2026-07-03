@@ -424,11 +424,14 @@ export default function XiaoheiMascot({
   position = "top-right",
   hovered = false,
   pressed = false,
+  scale = 1,
 }: {
   pose?: MascotPose;
   position?: MascotPosition;
   hovered?: boolean;
   pressed?: boolean;
+  /** Uniform size multiplier, so the mascot scales with the button it sits on. */
+  scale?: number;
 }) {
   const reduce = useReducedMotion();
   const svgRef = useRef<SVGSVGElement>(null);
@@ -455,9 +458,23 @@ export default function XiaoheiMascot({
     carrying: CarryingPose,
   }[pose];
 
+  const originMap: Record<MascotPosition, string> = {
+    "top-right": "bottom right",
+    "top-left": "bottom left",
+    "top-center": "bottom center",
+    left: "center right",
+    right: "center left",
+  };
+
   return (
     <motion.div
-      style={{ ...positionStyles[position], pointerEvents: "none", zIndex: 10 }}
+      style={{
+        ...positionStyles[position],
+        pointerEvents: "none",
+        zIndex: 10,
+        scale,
+        transformOrigin: originMap[position],
+      }}
       aria-hidden="true"
       animate={
         reduce ? undefined
