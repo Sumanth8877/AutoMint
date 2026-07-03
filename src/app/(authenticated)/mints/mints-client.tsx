@@ -30,7 +30,7 @@ type MintTask = {
 };
 
 type WalletRecord = { id: string; address: string; nickname: string | null; chain: string; walletType: WalletType; isDefault: boolean; };
-type MintsForm = { mintUrl: string; wlMode: boolean; scheduleTime: string };
+type MintsForm = { mintUrl: string; wlMode: boolean };
 type MintsState = {
   saving: boolean; updatingId: string | null; deletingId: string | null;
   queueOpen: boolean; error: string | null; success: string | null;
@@ -47,7 +47,7 @@ type MintsAction =
 const initialState: MintsState = {
   saving: false, updatingId: null, deletingId: null, queueOpen: false,
   error: null, success: null, formError: null,
-  form: { mintUrl: '', wlMode: false, scheduleTime: '' },
+  form: { mintUrl: '', wlMode: false },
 };
 
 function reducer(state: MintsState, action: MintsAction): MintsState {
@@ -261,7 +261,7 @@ export default function MintsClient() {
     if (!trimmedUrl) { dispatch({ type: 'SET_FORM_ERROR', message: 'Mint URL or contract address is required.' }); return; }
     if (!isValidMintInput(trimmedUrl)) { dispatch({ type: 'SET_FORM_ERROR', message: 'Enter a valid URL or 0x contract address.' }); return; }
     dispatch({ type: 'START_SAVING' });
-    createMint.mutate({ mintUrl: trimmedUrl, wlMode: state.form.wlMode, scheduleTime: state.form.scheduleTime || null });
+    createMint.mutate({ mintUrl: trimmedUrl, wlMode: state.form.wlMode });
   }
 
   const filtered = useMemo(() => {
@@ -408,14 +408,13 @@ export default function MintsClient() {
             </p>
           )}
 
-          <Input
-            label="Schedule Time (optional)"
-            type="datetime-local"
-            value={state.form.scheduleTime}
-            onChange={e => dispatch({ type: 'PATCH_FORM', patch: { scheduleTime: e.target.value } })}
-            leftIcon={<CalendarClock className="h-3.5 w-3.5" />}
-            hint="Leave blank to queue immediately"
-          />
+          <p className="flex items-start gap-1.5 rounded-lg border border-border/60 bg-surface-hover px-3 py-2 text-[11px] leading-relaxed text-muted">
+            <CalendarClock className="mt-0.5 h-3 w-3 shrink-0 text-primary" />
+            <span>
+              Mint time is auto-detected from the URL. No manual scheduling needed &mdash; AutoMint reads the
+              collection, extracts the phase timing, and fires the moment it opens.
+            </span>
+          </p>
 
           <div className="flex gap-3 pt-2">
             <Button type="button" variant="secondary" onClick={() => dispatch({ type: 'CLOSE_QUEUE' })} className="flex-1">
@@ -423,7 +422,7 @@ export default function MintsClient() {
             </Button>
             <Button type="submit" variant="neon" loading={state.saving} className="flex-1" glow>
               <Zap className="h-3.5 w-3.5" />
-              {state.form.scheduleTime ? 'Schedule' : 'Queue Now'}
+              {state.saving ? 'Queueing...' : 'Queue Now'}
             </Button>
           </div>
         </form>
