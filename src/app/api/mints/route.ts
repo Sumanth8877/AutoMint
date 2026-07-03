@@ -111,8 +111,11 @@ export async function POST(req: Request) {
     let collectionId = body.collectionId;
     const mintUrl = body.mintUrl?.trim();
 
-    if (!walletId || (!collectionId && !mintUrl)) {
-      return NextResponse.json({ error: 'Wallet ID and Collection ID or Mint URL are required' }, { status: 400 });
+    if (!walletId) {
+      return NextResponse.json({ error: 'No wallet found. Add a wallet in Settings before queuing a mint.' }, { status: 400 });
+    }
+    if (!collectionId && !mintUrl) {
+      return NextResponse.json({ error: 'Mint URL or contract address is required.' }, { status: 400 });
     }
 
     // ── Resolve URL → contract address ───────────────────────────────────────

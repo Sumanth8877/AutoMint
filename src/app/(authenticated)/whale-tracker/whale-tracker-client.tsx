@@ -538,7 +538,6 @@ export default function WhaleTrackerClient() {
                 imageAlt="A small character stands on a crate peering through a long periscope, watching for whales that haven't shown up yet."
                 title="No tracked wallets."
                 description="Add a wallet to start monitoring mint activity and configuring copy-mint rules."
-                action={<Button type="button" onClick={openAddWallet}><Plus className="h-4 w-4" aria-hidden="true" />Add Wallet</Button>}
               />
             </div>
           )}

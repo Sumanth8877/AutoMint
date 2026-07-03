@@ -452,8 +452,18 @@ export default function HistoryClient() {
                     description: 'Your first confirmed mint lands here.',
                   }
                 : activeTab === 'scheduled'
-                  ? { icon: CalendarClock, title: 'No scheduled tasks', description: 'No matching operational records were found.' }
-                  : { icon: Gauge, title: 'No analyzer history', description: 'No matching operational records were found.' })}
+                  ? {
+                      image: '/illustrations/mint-scheduled.jpeg',
+                      imageAlt: 'A small character turning a giant kitchen-timer dial, setting it to T equals zero — queued and waiting.',
+                      title: 'No scheduled tasks',
+                      description: 'No matching operational records were found.',
+                    }
+                  : {
+                      image: '/illustrations/empty-analyzer.jpeg',
+                      imageAlt: 'A small character studying a magnifying glass over a glowing contract document.',
+                      title: 'No analyzer history',
+                      description: 'No matching operational records were found.',
+                    })}
             />
           </div>
         ) : activeTab === 'mints' ? (

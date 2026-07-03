@@ -190,7 +190,6 @@ export default function WalletsClient() {
           imageAlt="An empty encrypted vault waiting for its first key."
           title="No wallets yet"
           description="Import a signing wallet to start auto-minting NFTs across every supported chain. Keys stay encrypted, custody stays yours."
-          action={<Button variant="success" onClick={() => setAddOpen(true)}><Plus className="h-3.5 w-3.5" />Add Wallet</Button>}
         />
       ) : (
         <Stagger className="grid gap-4 sm:grid-cols-2" inView stagger={0.06}>

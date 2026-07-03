@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowRight, CheckCircle2, Gauge, Save, ShieldAlert, ShieldCheck, Sparkles, TerminalSquare } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Gauge, Save, ShieldAlert, ShieldCheck, Sparkles, TerminalSquare, Zap } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -319,15 +319,10 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
         eyebrow="Scam Detection"
         title="Analyzer"
         description="Paste a URL or contract address to check whether an NFT project is a scam or legitimate — on-chain security, contract analysis, and risk scoring."
-        actions={
-          <Button onClick={analyze} loading={analyzing}>
-            Analyze
-            <ArrowRight className="h-4 w-4" aria-hidden="true" />
-          </Button>
-        }
       />
 
-      <div className="space-y-6">
+      <div className="grid gap-6 lg:grid-cols-[1fr_360px] lg:items-start">
+      <div className="space-y-6 min-w-0">
         <Card tone="elevated" className="p-5">
           <form
             className="space-y-4"
@@ -343,14 +338,14 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
               placeholder="https://opensea.io/collection/..."
               aria-invalid={Boolean(error)}
             />
-            <div className="grid grid-cols-2 gap-2">
-              <Button variant="secondary" type="button" onClick={openMints}>
-                <Sparkles className="h-4 w-4" aria-hidden="true" />
-                Mint
-              </Button>
-              <Button type="submit" loading={analyzing}>
+            <div className="space-y-2">
+              <Button type="submit" className="w-full" loading={analyzing}>
                 <Gauge className="h-4 w-4" aria-hidden="true" />
                 Analyze
+              </Button>
+              <Button variant="ghost" size="sm" type="button" className="w-full" onClick={openMints}>
+                <Zap className="h-3.5 w-3.5" aria-hidden="true" />
+                Skip to Queue Mint
               </Button>
             </div>
             {error ? (
@@ -475,8 +470,11 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
             description="Paste a mint URL, explorer URL, OpenSea collection URL, or direct contract address. AutoMint checks the contract, gas, and rug/honeypot signals in seconds."
           />
         )}
+      </div>
 
+      <div className="lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto">
         <LiveDebugConsole logs={logs} />
+      </div>
       </div>
     </div>
   );
