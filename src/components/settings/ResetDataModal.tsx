@@ -165,7 +165,7 @@ export function ResetDataModal({ onClose }: { onClose: () => void }) {
             <button
               onClick={() => { void handleReset(); }}
               disabled={!canReset || phase === 'running'}
-              className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border border-danger/30 bg-red-50 py-2.5 text-sm font-bold text-danger hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border border-danger/30 bg-red-50 py-2.5 text-sm font-bold text-danger hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               style={canReset ? { boxShadow: '0 0 20px rgba(239,68,68,0.10)' } : undefined}
             >
               {phase === 'running'

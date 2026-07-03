@@ -51,7 +51,7 @@ function ArcGauge({ score, label }: { score: number; label: string }) {
   const radius = (size - strokeWidth) / 2;
   const circumference = Math.PI * radius; // semicircle
   const filled = (score / 100) * circumference;
-  const color = score >= 80 ? '#4F46E5' : score >= 60 ? '#F59E0B' : '#FF4D4D';
+  const color = score >= 80 ? '#4F46E5' : score >= 60 ? '#F59E0B' : '#EF4444';
   const glowColor = score >= 80 ? 'rgba(79,70,229,0.25)' : score >= 60 ? 'rgba(245,158,11,0.25)' : 'rgba(239,68,68,0.25)';
   const bgClass = score >= 80
     ? 'border-success/20 bg-emerald-50'
@@ -66,7 +66,7 @@ function ArcGauge({ score, label }: { score: number; label: string }) {
         <path
           d={`M ${strokeWidth / 2} ${size / 2} A ${radius} ${radius} 0 0 1 ${size - strokeWidth / 2} ${size / 2}`}
           fill="none"
-          stroke="rgba(255,255,255,0.06)"
+          stroke="#E2E8F0"
           strokeWidth={strokeWidth}
           strokeLinecap="round"
         />
@@ -841,7 +841,7 @@ export function DependencyUpdateCenter() {
                 type="button"
                 disabled={installState === 'loading' || (safeCount === 0 && selectedPackages.size === 0)}
                 onClick={() => { void handleInstall(); }}
-                className="inline-flex items-center gap-2 rounded-xl border border-success/30 bg-emerald-50 px-4 py-2.5 text-sm font-bold text-success hover:bg-emerald-50 hover:border-success/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                className="inline-flex items-center gap-2 rounded-xl border border-success/30 bg-emerald-50 px-4 py-2.5 text-sm font-bold text-success hover:bg-emerald-100 hover:border-success/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               >
                 {installState === 'loading'
                   ? <><RefreshCw className="h-4 w-4 animate-spin" /> Installing…</>

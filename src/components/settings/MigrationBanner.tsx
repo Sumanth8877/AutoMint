@@ -87,7 +87,7 @@ export function MigrationBanner({
         type="button"
         onClick={() => { void applyMigration(); }}
         disabled={state === 'applying'}
-        className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-warning/30 bg-amber-50 px-3 py-1.5 text-xs font-bold text-warning hover:bg-amber-50 disabled:opacity-50 transition-all"
+        className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-warning/30 bg-amber-50 px-3 py-1.5 text-xs font-bold text-warning hover:bg-amber-100 disabled:opacity-50 transition-all"
       >
         <RefreshCw className={`h-3.5 w-3.5 ${state === 'applying' ? 'animate-spin' : ''}`} />
         {state === 'applying' ? 'Applying…' : 'Apply Migration'}

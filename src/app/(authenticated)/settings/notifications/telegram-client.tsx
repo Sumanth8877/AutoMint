@@ -133,7 +133,7 @@ export default function TelegramClient() {
                 <span className="text-sm text-muted">2. Send this command:</span>
               </div>
               <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-                <code className="min-w-0 rounded bg-slate-900/20 px-3 py-2 font-mono text-sm leading-6 text-text break-all">
+                <code className="min-w-0 rounded border border-border bg-surface-hover px-3 py-2 font-mono text-sm leading-6 text-text break-all">
                   /start {data.token}
                 </code>
                 <Button
