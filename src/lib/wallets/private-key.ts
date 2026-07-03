@@ -2,6 +2,9 @@ import 'server-only';
 
 import { createHash, createPrivateKey, createPublicKey, createECDH } from 'node:crypto';
 import { privateKeyToAccount } from 'viem/accounts';
+import { HDKey } from '@scure/bip32';
+import { mnemonicToSeedSync, validateMnemonic } from '@scure/bip39';
+import { wordlist as englishWordlist } from '@scure/bip39/wordlists/english';
 import { decodeBase58OrThrow, encodeBase58 } from './base58';
 
 export type ImportWalletType = 'EVM' | 'SOLANA' | 'BITCOIN';
@@ -14,6 +17,29 @@ type DerivedWallet = {
 
 const BECH32_ALPHABET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
 const ED25519_PKCS8_PREFIX = Buffer.from('302e020100300506032b657004220420', 'hex');
+
+// A BIP-39 seed phrase is 12/15/18/21/24 space-separated words. We treat any
+// input matching that shape as a seed phrase rather than a raw private key,
+// so the same "Private Key" field can accept either.
+const MNEMONIC_WORD_COUNTS = [12, 15, 18, 21, 24];
+
+function looksLikeMnemonic(value: string): boolean {
+  const words = value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  return MNEMONIC_WORD_COUNTS.includes(words.length);
+}
+
+// Standard EVM derivation path (same one MetaMask/most wallets use for the
+// first account): m/44'/60'/0'/0/0.
+function evmPrivateKeyFromMnemonic(mnemonic: string): `0x${string}` {
+  const normalized = mnemonic.trim().toLowerCase().replace(/\s+/g, ' ');
+  if (!validateMnemonic(normalized, englishWordlist)) {
+    throw new Error('Invalid seed phrase (expected 12/15/18/21/24 valid BIP-39 words)');
+  }
+  const seed = mnemonicToSeedSync(normalized);
+  const hdKey = HDKey.fromMasterSeed(seed).derive("m/44'/60'/0'/0/0");
+  if (!hdKey.privateKey) throw new Error('Failed to derive private key from seed phrase');
+  return `0x${Buffer.from(hdKey.privateKey).toString('hex')}` as `0x${string}`;
+}
 
 function normalizeHexPrivateKey(value: string) {
   const trimmed = value.trim();
@@ -180,21 +206,32 @@ function deriveBitcoinWallet(privateKey: string): DerivedWallet {
 
 function deriveEvmWallet(privateKey: string): DerivedWallet {
   try {
-    const normalized = normalizeHexPrivateKey(privateKey);
+    const normalized = looksLikeMnemonic(privateKey)
+      ? evmPrivateKeyFromMnemonic(privateKey)
+      : normalizeHexPrivateKey(privateKey);
     const account = privateKeyToAccount(normalized);
     return {
       address: account.address.toLowerCase(),
       privateKey: normalized,
       walletType: 'EVM',
     };
-  } catch {
-    throw new Error('Invalid EVM private key');
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('seed phrase')) throw error;
+    throw new Error('Invalid EVM private key or seed phrase');
   }
 }
 
 export function deriveWalletFromPrivateKey(walletType: ImportWalletType, privateKey: string): DerivedWallet {
-  if (!privateKey.trim()) throw new Error('Private key is required');
+  if (!privateKey.trim()) throw new Error('Private key or seed phrase is required');
   if (walletType === 'EVM') return deriveEvmWallet(privateKey);
-  if (walletType === 'SOLANA') return deriveSolanaWallet(privateKey);
+  if (walletType === 'SOLANA') {
+    if (looksLikeMnemonic(privateKey)) {
+      throw new Error('Seed phrase import is only supported for EVM wallets right now — paste a Solana private key instead');
+    }
+    return deriveSolanaWallet(privateKey);
+  }
+  if (looksLikeMnemonic(privateKey)) {
+    throw new Error('Seed phrase import is only supported for EVM wallets right now — paste a Bitcoin private key instead');
+  }
   return deriveBitcoinWallet(privateKey);
 }

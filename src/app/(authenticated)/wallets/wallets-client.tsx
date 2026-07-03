@@ -124,7 +124,7 @@ function WalletCard({
 
 export default function WalletsClient() {
   const [addOpen, setAddOpen] = useState(false);
-  const [form, setForm] = useState({ walletType: 'EVM' as 'EVM' | 'SOLANA' | 'BITCOIN', privateKey: '', nickname: '', chain: 'ethereum' });
+  const [form, setForm] = useState({ walletType: 'EVM' as 'EVM' | 'SOLANA' | 'BITCOIN', privateKey: '', nickname: '' });
   const [formError, setFormError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [settingDefaultId, setSettingDefaultId] = useState<string | null>(null);
@@ -138,7 +138,7 @@ export default function WalletsClient() {
 
   const addMutation = useMutation({
     mutationFn: (body: object) => apiRequest<{ wallet: WalletRecord }>('/api/wallets', { method: 'POST', body: JSON.stringify(body) }).then(r => r.wallet),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['wallets'] }); setAddOpen(false); setForm({ walletType: 'EVM' as 'EVM' | 'SOLANA' | 'BITCOIN', privateKey: '', nickname: '', chain: 'ethereum' }); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['wallets'] }); setAddOpen(false); setForm({ walletType: 'EVM' as 'EVM' | 'SOLANA' | 'BITCOIN', privateKey: '', nickname: '' }); },
     onError: (e: Error) => setFormError(e.message),
   });
 
@@ -211,13 +211,6 @@ export default function WalletsClient() {
 
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add Wallet" subtitle="Securely add a signing wallet" tone="neon">
         <form onSubmit={e => { e.preventDefault(); setFormError(null); addMutation.mutate(form); }} className="space-y-4">
-          <div className="relative mx-auto aspect-[16/9] w-full max-w-sm overflow-hidden rounded-xl border border-border bg-white">
-            <img
-              src="/illustrations/wallet-import-vault.jpeg"
-              alt="A small character guides a wallet into an open encrypted vault labeled keys never leave."
-              className="h-full w-full object-contain p-2"
-            />
-          </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-bold uppercase tracking-widest text-secondary">Wallet Type</label>
             <select
@@ -230,19 +223,25 @@ export default function WalletsClient() {
               <option value="BITCOIN">Bitcoin</option>
             </select>
           </div>
-          <Input label="Private Key" type="password" placeholder="Enter private key (stored encrypted)" value={form.privateKey} onChange={e => setForm(p => ({ ...p, privateKey: e.target.value }))} required error={formError ?? undefined} />
-          <Input label="Nickname (optional)" placeholder="Hot wallet 1" value={form.nickname} onChange={e => setForm(p => ({ ...p, nickname: e.target.value }))} />
-          {form.walletType === 'EVM' && <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold uppercase tracking-widest text-secondary">Chain</label>
-            <select value={form.chain} onChange={e => setForm(p => ({ ...p, chain: e.target.value }))}
-              className="h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm text-text focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/15"
-            >
-              {['ethereum','base','polygon','arbitrum'].map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
-            </select>
-          </div>}
+          <Input
+            label="Private Key or Seed Phrase"
+            type="password"
+            placeholder="0x... private key, or a 12/24-word seed phrase"
+            value={form.privateKey}
+            onChange={e => setForm(p => ({ ...p, privateKey: e.target.value }))}
+            required
+            error={formError ?? undefined}
+          />
+          <Input
+            label="Wallet Name"
+            placeholder="Hot wallet 1"
+            value={form.nickname}
+            onChange={e => setForm(p => ({ ...p, nickname: e.target.value }))}
+            required
+          />
           <div className="flex items-start gap-2 rounded-xl border border-warning/20 bg-amber-50 p-3">
             <Shield className="h-4 w-4 text-warning shrink-0 mt-0.5" />
-            <p className="text-xs text-warning">Private keys are AES-256 encrypted at rest and never logged.</p>
+            <p className="text-xs text-warning">Private keys and seed phrases are AES-256 encrypted at rest and never logged.</p>
           </div>
           <div className="flex gap-3 pt-2">
             <Button type="button" variant="secondary" onClick={() => setAddOpen(false)} className="flex-1">Cancel</Button>

@@ -11,6 +11,9 @@ export const revalidate = 0;
 // Hex private key format: optional 0x prefix, then exactly 64 hex characters.
 // Validated here before the key ever reaches importWallet or the DB layer.
 const EVM_PRIVATE_KEY_RE = /^(?:0x)?[a-fA-F0-9]{64}$/;
+// BIP-39 seed phrase: 12/15/18/21/24 space-separated words. Accepted as an
+// alternative to a raw hex private key for EVM wallets.
+const MNEMONIC_RE = /^([a-z]+\s+){11,23}[a-z]+$/i;
 
 // GET /api/wallets
 export async function GET() {
@@ -40,12 +43,16 @@ export async function POST(req: Request) {
     }
 
     if (!privateKey) {
-      return NextResponse.json({ error: 'Private key is required' }, { status: 400 });
+      return NextResponse.json({ error: 'Private key or seed phrase is required' }, { status: 400 });
     }
 
-    // Validate EVM private key format before hitting importWallet
-    if (walletType === 'EVM' && !EVM_PRIVATE_KEY_RE.test(privateKey)) {
-      return NextResponse.json({ error: 'Invalid EVM private key format (expected 32-byte hex)' }, { status: 400 });
+    if (!nickname || !nickname.trim()) {
+      return NextResponse.json({ error: 'Wallet name is required' }, { status: 400 });
+    }
+
+    // Validate EVM key/seed-phrase format before hitting importWallet
+    if (walletType === 'EVM' && !EVM_PRIVATE_KEY_RE.test(privateKey) && !MNEMONIC_RE.test(privateKey.trim())) {
+      return NextResponse.json({ error: 'Invalid EVM private key (expected 32-byte hex) or seed phrase (12/15/18/21/24 words)' }, { status: 400 });
     }
 
     const wallet = await importWallet(authResult.userId, { walletType, privateKey, nickname });

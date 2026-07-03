@@ -6,7 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import {
   CalendarClock, LinkIcon, Play, Plus, RotateCcw,
-  Trash2, XCircle, Zap, CheckCircle2, AlertCircle, Cpu, ExternalLink,
+  Trash2, XCircle, Zap, CheckCircle2, AlertCircle, Cpu, ExternalLink, Terminal,
 } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
@@ -35,19 +35,20 @@ type MintsForm = { mintUrl: string; wlMode: boolean };
 type MintsState = {
   saving: boolean; updatingId: string | null; deletingId: string | null;
   queueOpen: boolean; error: string | null; success: string | null;
-  formError: string | null; form: MintsForm;
+  formError: string | null; form: MintsForm; consoleTaskId: string | null;
 };
 type MintsAction =
   | { type: 'START_SAVING' } | { type: 'STOP_SAVING' }
   | { type: 'SET_UPDATING_ID'; id: string | null } | { type: 'SET_DELETING_ID'; id: string | null }
   | { type: 'OPEN_QUEUE' } | { type: 'CLOSE_QUEUE' }
+  | { type: 'OPEN_CONSOLE'; id: string } | { type: 'CLOSE_CONSOLE' }
   | { type: 'SET_ERROR'; message: string | null } | { type: 'SET_SUCCESS'; message: string | null }
   | { type: 'SET_FORM_ERROR'; message: string | null }
   | { type: 'PATCH_FORM'; patch: Partial<MintsForm> } | { type: 'RESET_FORM' };
 
 const initialState: MintsState = {
   saving: false, updatingId: null, deletingId: null, queueOpen: false,
-  error: null, success: null, formError: null,
+  error: null, success: null, formError: null, consoleTaskId: null,
   form: { mintUrl: '', wlMode: false },
 };
 
@@ -59,6 +60,8 @@ function reducer(state: MintsState, action: MintsAction): MintsState {
     case 'SET_DELETING_ID': return { ...state, deletingId: action.id };
     case 'OPEN_QUEUE':  return { ...state, queueOpen: true, formError: null };
     case 'CLOSE_QUEUE': return { ...state, queueOpen: false, formError: null };
+    case 'OPEN_CONSOLE': return { ...state, consoleTaskId: action.id };
+    case 'CLOSE_CONSOLE': return { ...state, consoleTaskId: null };
     case 'SET_ERROR':   return { ...state, error: action.message };
     case 'SET_SUCCESS': return { ...state, success: action.message };
     case 'SET_FORM_ERROR': return { ...state, formError: action.message };
@@ -82,10 +85,11 @@ function statusBadge(status: string) {
 }
 
 function MintRow({
-  task, wallets, onStart, onCancel, onDelete, updatingId, deletingId,
+  task, wallets, onStart, onCancel, onDelete, onOpenConsole, updatingId, deletingId,
 }: {
   task: MintTask; wallets: WalletRecord[];
   onStart: (id: string) => void; onCancel: (id: string) => void; onDelete: (id: string) => void;
+  onOpenConsole: (id: string) => void;
   updatingId: string | null; deletingId: string | null;
 }) {
   const wallet = wallets.find(w => w.id === task.walletId);
@@ -93,7 +97,13 @@ function MintRow({
   const canCancel = ['pending', 'monitoring', 'ready'].includes(task.status);
 
   return (
-    <div className="group relative flex flex-col gap-3 rounded-xl border border-border bg-surface p-4 transition-all duration-200 hover:border-border-strong hover:bg-surface-hover sm:flex-row sm:items-center">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpenConsole(task.id)}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') onOpenConsole(task.id); }}
+      className="group relative flex cursor-pointer flex-col gap-3 rounded-xl border border-border bg-surface p-4 transition-all duration-200 hover:border-border-strong hover:bg-surface-hover sm:flex-row sm:items-center"
+    >
       {/* Status indicator strip */}
       <div className={`absolute left-0 top-4 bottom-4 w-0.5 rounded-full ${
         task.status === 'completed' || task.status === 'confirmed' ? 'bg-success shadow-[0_0_8px_rgba(79,70,229,0.5)]' :
@@ -136,16 +146,6 @@ function MintRow({
             ⚠ {task.failureReason}
           </p>
         )}
-        {task.failureReason && /sold.out|ended|supply|max.supply/i.test(task.failureReason) && (
-          <div className="relative mt-2 h-16 w-24 overflow-hidden rounded-lg">
-            <Image src="/illustrations/sold-out.jpeg" alt="Sold out sign" fill sizes="96px" className="object-contain" />
-          </div>
-        )}
-        {task.failureReason && /gas|insufficient|balance|funds/i.test(task.failureReason) && (
-          <div className="relative mt-2 h-16 w-24 overflow-hidden rounded-lg">
-            <Image src="/illustrations/out-of-gas.jpeg" alt="Out of gas" fill sizes="96px" className="object-contain" />
-          </div>
-        )}
         {task.riskReasons && task.riskReasons.length > 0 && (
           <div className="mt-1.5 flex flex-wrap gap-1">
             {task.riskReasons.map(r => (
@@ -156,7 +156,7 @@ function MintRow({
       </div>
 
       {/* Actions */}
-      <div className="ml-3 flex items-center gap-2 shrink-0">
+      <div className="ml-3 flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
         {canPlay && (
           <Button
             variant="neon"
@@ -200,6 +200,14 @@ function MintRow({
         >
           <Trash2 className="h-3 w-3" />
         </Button>
+        <button
+          type="button"
+          onClick={() => onOpenConsole(task.id)}
+          title="View live task console"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:text-primary hover:bg-surface-hover transition-colors"
+        >
+          <Terminal className="h-3.5 w-3.5" />
+        </button>
         {task.contractAddress && (
           <a
             href={`https://etherscan.io/address/${task.contractAddress}`}
@@ -212,6 +220,80 @@ function MintRow({
         )}
       </div>
     </div>
+  );
+}
+
+type TaskLogEntry = { id: string; event: string; status: string; message: string | null; createdAt: string };
+
+function logLineTone(status: string) {
+  switch (status) {
+    case 'error':   return 'text-red-400';
+    case 'warning': return 'text-amber-400';
+    case 'success': return 'text-emerald-400';
+    default:        return 'text-slate-300';
+  }
+}
+
+function TaskConsole({ taskId, task, onClose, onStart, updatingId }: {
+  taskId: string;
+  task: MintTask | undefined;
+  onClose: () => void;
+  onStart: (id: string) => void;
+  updatingId: string | null;
+}) {
+  const { data: logs = [], isFetching } = useQuery<TaskLogEntry[]>({
+    queryKey: ['mint-logs', taskId],
+    queryFn: () => apiRequest<{ logs: TaskLogEntry[] }>(`/api/mints/${taskId}/logs`).then(r => r.logs ?? []),
+    // Live tail: poll every 2s while the console is open so the user can watch
+    // a mint execute in real time (risk check -> broadcast -> confirmation).
+    refetchInterval: 2000,
+  });
+
+  const isActive = task ? ['pending', 'monitoring', 'ready', 'running', 'unconfirmed'].includes(task.status) : false;
+  const canRetry = task?.status === 'failed';
+
+  return (
+    <Modal
+      open={!!taskId}
+      onClose={onClose}
+      title="Task Console"
+      subtitle={task?.contractAddress ? `${task.contractAddress.slice(0, 10)}…${task.contractAddress.slice(-6)}` : 'Live execution log'}
+      tone="neon"
+      size="xl"
+    >
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {task && statusBadge(task.status)}
+            {isActive && (
+              <span className="flex items-center gap-1.5 text-xs text-muted">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
+                Live{isFetching ? '…' : ''}
+              </span>
+            )}
+          </div>
+          {canRetry && (
+            <Button variant="ghost" size="sm" onClick={() => onStart(taskId)} loading={updatingId === taskId}>
+              <RotateCcw className="h-3 w-3" />
+              Retry
+            </Button>
+          )}
+        </div>
+        <div className="h-96 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 p-4 font-mono text-xs leading-relaxed">
+          {logs.length === 0 ? (
+            <p className="text-slate-500">Waiting for task activity…</p>
+          ) : (
+            logs.map(log => (
+              <div key={log.id} className="flex gap-2 py-0.5">
+                <span className="shrink-0 text-slate-600">{new Date(log.createdAt).toLocaleTimeString()}</span>
+                <span className={`shrink-0 uppercase ${logLineTone(log.status)}`}>[{log.event}]</span>
+                <span className="text-slate-200">{log.message ?? ''}</span>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -400,6 +482,7 @@ export default function MintsClient() {
                   onStart={id => { dispatch({ type: 'SET_UPDATING_ID', id }); updateTask.mutate({ id, action: 'start' }); }}
                   onCancel={id => { dispatch({ type: 'SET_UPDATING_ID', id }); updateTask.mutate({ id, action: 'cancel' }); }}
                   onDelete={id => { dispatch({ type: 'SET_DELETING_ID', id }); deleteTask.mutate(id); }}
+                  onOpenConsole={id => dispatch({ type: 'OPEN_CONSOLE', id })}
                   updatingId={state.updatingId}
                   deletingId={state.deletingId}
                 />
@@ -475,6 +558,16 @@ export default function MintsClient() {
           </div>
         </form>
       </Modal>
+
+      {state.consoleTaskId && (
+        <TaskConsole
+          taskId={state.consoleTaskId}
+          task={tasks.find(t => t.id === state.consoleTaskId)}
+          onClose={() => dispatch({ type: 'CLOSE_CONSOLE' })}
+          onStart={id => { dispatch({ type: 'SET_UPDATING_ID', id }); updateTask.mutate({ id, action: 'start' }); }}
+          updatingId={state.updatingId}
+        />
+      )}
     </div>
   );
 }
