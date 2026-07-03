@@ -255,7 +255,7 @@ export default function ProfileClient() {
               <div>
                 <p className="text-sm font-medium text-text">Reset All Data</p>
                 <p className="text-xs text-muted mt-0.5">
-                  Deletes analyzer history, mint tasks, and transaction history. Wallets and settings are kept.
+                  Deletes analyzer history, mint tasks, transaction history, and collections. Wallets and settings are kept.
                 </p>
               </div>
               <Button type="button" variant="secondary" onClick={() => setResetOpen(true)}>

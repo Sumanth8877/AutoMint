@@ -1,6 +1,6 @@
 import { getDb } from '@/lib/db';
-import { collections } from '@/drizzle/schema';
-import { eq, and } from 'drizzle-orm';
+import { collections, mintHistory } from '@/drizzle/schema';
+import { eq, and, inArray } from 'drizzle-orm';
 import { getCollectionMetadata } from '@/lib/blockchain/collections';
 import { logActivity } from '@/lib/monitoring';
 import { captureException } from '@/lib/observability/sentry';
@@ -17,7 +17,27 @@ const SUPPORTED_CHAINS = CHAIN_KEYS;
 type SupportedChain = ChainKey;
 
 export async function getUserCollections(userId: string) {
-  const result = await getDb().select().from(collections).where(eq(collections.userId, userId)).orderBy(collections.createdAt);
+  // Only return collections that have at least one confirmed mint via AutoMint.
+  // Collections are auto-created by ensureCollectionForMint() on successful mint,
+  // but we still verify against mintHistory to exclude manually-added or
+  // failed-mint collections.
+  const mintedCollectionIds = await getDb()
+    .selectDistinct({ collectionId: mintHistory.collectionId })
+    .from(mintHistory)
+    .where(and(eq(mintHistory.userId, userId), eq(mintHistory.status, 'confirmed')));
+
+  const ids = mintedCollectionIds
+    .map((r) => r.collectionId)
+    .filter((id): id is string => id !== null);
+
+  if (ids.length === 0) return [];
+
+  const result = await getDb()
+    .select()
+    .from(collections)
+    .where(and(eq(collections.userId, userId), inArray(collections.id, ids)))
+    .orderBy(collections.createdAt);
+
   return result;
 }
 

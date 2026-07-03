@@ -1,21 +1,18 @@
 'use client';
 
 import { useState } from 'react';
-import type { FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ExternalLink, FolderKanban, Plus, RefreshCw, Search, Trash2, TrendingDown, TrendingUp, Zap, Shield } from 'lucide-react';
+import { ExternalLink, FolderKanban, RefreshCw, Search, Trash2, TrendingDown, TrendingUp, Zap, Shield } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import Input from '@/components/ui/Input';
 import { EmptyState } from '@/components/ui/empty-state';
 import { MetricCard } from '@/components/ui/metric-card';
-import { Modal } from '@/components/ui/modal';
 import { PageHeader } from '@/components/ui/page-header';
 import { SkeletonCard } from '@/components/ui/skeleton';
 import { Stagger, StaggerItem, TiltCard } from '@/components/motion';
 import { apiRequest } from '@/lib/api/client';
-import { isValidEvmAddress, sanitizeText } from '@/lib/validation';
 
 type Collection = {
   id: string; name: string | null; contractAddress: string; chain: string;
@@ -158,11 +155,8 @@ function CollectionCard({
 }
 
 export default function CollectionsClient() {
-  const [addOpen, setAddOpen] = useState(false);
   const [searchQ, setSearchQ] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: '', contractAddress: '', chain: 'ethereum' });
-  const [formError, setFormError] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const { data: collections = [], isLoading } = useQuery<Collection[]>({
@@ -170,27 +164,11 @@ export default function CollectionsClient() {
     queryFn: () => apiRequest<{ collections: Collection[] }>('/api/collections').then(r => r.collections ?? []),
   });
 
-  const addMutation = useMutation({
-    mutationFn: (body: object) => apiRequest<{ collection: Collection }>('/api/collections', { method: 'POST', body: JSON.stringify(body) }).then(r => r.collection),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['collections'] }); setAddOpen(false); setForm({ name: '', contractAddress: '', chain: 'ethereum' }); setFormError(null); },
+  
     onError: (e: Error) => setFormError(e.message),
   });
 
-  function handleAddSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const name = sanitizeText(form.name);
-    const contractAddress = form.contractAddress.trim();
-    if (!contractAddress) {
-      setFormError('Contract address is required.');
-      return;
-    }
-    if (!isValidEvmAddress(contractAddress)) {
-      setFormError('Enter a valid contract address (0x followed by 40 hex characters).');
-      return;
-    }
-    setFormError(null);
-    addMutation.mutate({ ...form, name, contractAddress });
-  }
+  
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => apiRequest(`/api/collections/${id}`, { method: 'DELETE' }),
@@ -217,20 +195,16 @@ export default function CollectionsClient() {
   return (
     <div className="space-y-8">
       <PageHeader
-        title="Collections"
-        subtitle={`${collections.length} tracked contracts`}
+        title="My Minted NFTs"
+        subtitle={`${collections.length} successfully minted`}
         icon={FolderKanban}
         iconTone="purple"
-        actions={
-          <Button variant="primary" onClick={() => setAddOpen(true)}>
-            <Plus className="h-3.5 w-3.5" />Add Collection
-          </Button>
-        }
+        actions={null}
       />
 
       {/* Stats */}
       <Stagger className="grid gap-4 sm:grid-cols-3" inView>
-        <StaggerItem><MetricCard label="Total Tracked" value={collections.length} icon={FolderKanban} tone="primary" /></StaggerItem>
+        <StaggerItem><MetricCard label="Total Minted" value={collections.length} icon={FolderKanban} tone="primary" /></StaggerItem>
         <StaggerItem><MetricCard label="Live Mints" value={collections.filter(c => c.isPublic).length} icon={Zap} tone="neon" /></StaggerItem>
         <StaggerItem><MetricCard label="Safe Contracts" value={collections.filter(c => c.riskScore !== null && c.riskScore < 50).length} icon={Shield} tone="success" /></StaggerItem>
       </Stagger>
@@ -260,8 +234,8 @@ export default function CollectionsClient() {
                 image: '/illustrations/empty-collections.jpeg',
                 imageAlt: 'A character beside a gallery wall of empty frames, waiting for the first minted NFT to hang up.',
                 title: 'No minted NFTs yet',
-                description: 'Your minted NFTs land here after a successful mint. Queue a mint on the Mints page to get your first one hanging on the wall.',
-                action: <Button variant="primary" onClick={() => setAddOpen(true)}><Plus className="h-3.5 w-3.5" />Add Collection</Button>,
+                description: 'Collections appear here automatically after a successful mint through AutoMint. Head to the Mints page to queue your first mint.',
+                action: <Button variant="primary" onClick={() => window.location.href = '/mints'}><Zap className="h-3.5 w-3.5" />Queue a Mint</Button>,
               })}
         />
       ) : (
@@ -280,30 +254,7 @@ export default function CollectionsClient() {
         </Stagger>
       )}
 
-      {/* Add modal */}
-      <Modal open={addOpen} onClose={() => { setAddOpen(false); setFormError(null); }} title="Add Collection" subtitle="Track a new NFT contract" tone="neon">
-        <form
-          onSubmit={handleAddSubmit}
-          className="space-y-4"
-        >
-          <Input label="Collection Name" placeholder="Bored Apes…" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
-          <Input label="Contract Address" placeholder="0x…" value={form.contractAddress} onChange={e => setForm(p => ({ ...p, contractAddress: e.target.value }))} required error={formError ?? undefined} hint={!formError ? 'Must be a valid 0x contract address.' : undefined} />
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold uppercase tracking-widest text-secondary">Chain</label>
-            <select
-              value={form.chain}
-              onChange={e => setForm(p => ({ ...p, chain: e.target.value }))}
-              className="h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm text-text focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/15"
-            >
-              {['ethereum', 'base', 'polygon', 'arbitrum', 'optimism'].map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
-            </select>
-          </div>
-          <div className="flex gap-3 pt-2">
-            <Button type="button" variant="secondary" onClick={() => { setAddOpen(false); setFormError(null); }} className="flex-1">Cancel</Button>
-            <Button type="submit" variant="neon" loading={addMutation.isPending} className="flex-1"><Plus className="h-3.5 w-3.5" />Add</Button>
-          </div>
-        </form>
-      </Modal>
+      
     </div>
   );
 }

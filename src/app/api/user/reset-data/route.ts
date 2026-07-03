@@ -3,6 +3,7 @@ import { requireApiUser } from '@/lib/auth/require-auth';
 import { getDb } from '@/lib/db';
 import { eq } from 'drizzle-orm';
 import {
+  collections,
   mintHistory,
   analyzerHistory,
 } from '@/drizzle/schema';
@@ -40,6 +41,10 @@ export async function POST() {
     const mh = await db.delete(mintHistory).where(eq(mintHistory.userId, userId)).returning({ id: mintHistory.id });
     results.mintHistory = mh.length;
 
+    // 3. Collections (minted NFTs)
+    const cl = await db.delete(collections).where(eq(collections.userId, userId)).returning({ id: collections.id });
+    results.collections = cl.length;
+
     // Invalidate all Redis caches for this user
     await Promise.allSettled([
       invalidateCache(`dep-report:all`),
@@ -52,7 +57,7 @@ export async function POST() {
       ok: true,
       total,
       results,
-      message: `${total} record(s) cleared. Your account, wallets, and settings are intact.`,
+      message: `${total} record(s) cleared. Your account, wallets, and settings are intact. Collections cleared.`,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Reset failed';

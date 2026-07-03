@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getDb } from '@/lib/db';
-import { analyzerHistory, mintHistory, mintTasks } from '@/drizzle/schema';
+import { analyzerHistory, collections, mintHistory, mintTasks } from '@/drizzle/schema';
 import { eq } from 'drizzle-orm';
 import { captureException } from '@/lib/observability/sentry';
 
@@ -20,10 +20,11 @@ export async function DELETE() {
     await db.delete(mintHistory).where(eq(mintHistory.userId, userId));
     await db.delete(mintTasks).where(eq(mintTasks.userId, userId));
     await db.delete(analyzerHistory).where(eq(analyzerHistory.userId, userId));
+    await db.delete(collections).where(eq(collections.userId, userId));
 
     return NextResponse.json({
       success: true,
-      message: 'All activity data deleted. Wallets, collections, and settings are intact.',
+      message: 'All activity data and collections deleted. Wallets and settings are intact.',
     });
   } catch (error) {
     await captureException(error, {
