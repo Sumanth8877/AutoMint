@@ -15,6 +15,7 @@ import { MetricCard } from '@/components/ui/metric-card';
 import { Modal } from '@/components/ui/modal';
 import { PageHeader } from '@/components/ui/page-header';
 import { SkeletonCard } from '@/components/ui/skeleton';
+import { Stagger, StaggerItem, TiltCard } from '@/components/motion';
 import { apiRequest } from '@/lib/api/client';
 
 type WalletRecord = {
@@ -59,7 +60,8 @@ function WalletCard({
   }
 
   return (
-    <Card tone={wallet.isDefault ? 'neon' : 'elevated'} className="p-5 transition-all duration-300" style={glowStyle}>
+    <TiltCard max={4} className="h-full">
+    <Card tone={wallet.isDefault ? 'neon' : 'elevated'} className="p-5 h-full" style={glowStyle}>
       {/* Header row */}
       <div className="flex items-start justify-between gap-3 mb-4">
         <div className="flex items-center gap-3">
@@ -116,6 +118,7 @@ function WalletCard({
         <Button variant="ghost" size="xs" onClick={() => onDelete(wallet.id)} loading={deleting} className="ml-auto hover:text-danger"><Trash2 className="h-3 w-3" /></Button>
       </div>
     </Card>
+    </TiltCard>
   );
 }
 
@@ -171,11 +174,11 @@ export default function WalletsClient() {
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <MetricCard label="Total Wallets" value={wallets.length} icon={Wallet} tone="primary" />
-        <MetricCard label="Funded" value={funded} icon={TrendingUp} tone="success" />
-        <MetricCard label="Portfolio" value={`${totalEth.toFixed(4)} ETH`} icon={Activity} tone="gold" />
-      </div>
+      <Stagger className="grid gap-4 sm:grid-cols-3" inView>
+        <StaggerItem><MetricCard label="Total Wallets" value={wallets.length} icon={Wallet} tone="primary" /></StaggerItem>
+        <StaggerItem><MetricCard label="Funded" value={funded} icon={TrendingUp} tone="success" /></StaggerItem>
+        <StaggerItem><MetricCard label="Portfolio" value={`${totalEth.toFixed(4)} ETH`} icon={Activity} tone="gold" /></StaggerItem>
+      </Stagger>
 
       {isLoading ? (
         <div className="grid gap-4 sm:grid-cols-2">
@@ -189,20 +192,21 @@ export default function WalletsClient() {
           action={<Button variant="success" onClick={() => setAddOpen(true)}><Plus className="h-3.5 w-3.5" />Add Wallet</Button>}
         />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <Stagger className="grid gap-4 sm:grid-cols-2" inView stagger={0.06}>
           {wallets.map(w => (
-            <WalletCard
-              key={w.id}
-              wallet={w}
-              onDelete={id => { setDeletingId(id); deleteMutation.mutate(id); }}
-              onSetDefault={id => { setSettingDefaultId(id); defaultMutation.mutate(id); }}
-              onRefresh={id => { setRefreshingId(id); refreshMutation.mutate(id); }}
-              deleting={deletingId === w.id}
-              settingDefault={settingDefaultId === w.id}
-              refreshing={refreshingId === w.id}
-            />
+            <StaggerItem key={w.id}>
+              <WalletCard
+                wallet={w}
+                onDelete={id => { setDeletingId(id); deleteMutation.mutate(id); }}
+                onSetDefault={id => { setSettingDefaultId(id); defaultMutation.mutate(id); }}
+                onRefresh={id => { setRefreshingId(id); refreshMutation.mutate(id); }}
+                deleting={deletingId === w.id}
+                settingDefault={settingDefaultId === w.id}
+                refreshing={refreshingId === w.id}
+              />
+            </StaggerItem>
           ))}
-        </div>
+        </Stagger>
       )}
 
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add Wallet" subtitle="Securely add a signing wallet" tone="neon">

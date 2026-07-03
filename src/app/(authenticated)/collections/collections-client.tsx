@@ -12,6 +12,7 @@ import { MetricCard } from '@/components/ui/metric-card';
 import { Modal } from '@/components/ui/modal';
 import { PageHeader } from '@/components/ui/page-header';
 import { SkeletonCard } from '@/components/ui/skeleton';
+import { Stagger, StaggerItem, TiltCard } from '@/components/motion';
 import { apiRequest } from '@/lib/api/client';
 
 type Collection = {
@@ -61,7 +62,8 @@ function CollectionCard({
   const chainStyle = chainColors[col.chain] ?? 'text-muted border-border bg-surface';
 
   return (
-    <Card tone="neon" className="p-5 group hover:scale-[1.01] transition-transform duration-200">
+    <TiltCard max={4} className="h-full">
+    <Card tone="neon" className="p-5 group h-full">
       {/* Header */}
       <div className="flex items-start justify-between gap-3 mb-4">
         <div className="flex items-center gap-3">
@@ -149,6 +151,7 @@ function CollectionCard({
         </div>
       </div>
     </Card>
+    </TiltCard>
   );
 }
 
@@ -208,11 +211,11 @@ export default function CollectionsClient() {
       />
 
       {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <MetricCard label="Total Tracked" value={collections.length} icon={FolderKanban} tone="primary" />
-        <MetricCard label="Live Mints" value={collections.filter(c => c.isPublic).length} icon={Zap} tone="neon" />
-        <MetricCard label="Safe Contracts" value={collections.filter(c => c.riskScore !== null && c.riskScore < 50).length} icon={Shield} tone="success" />
-      </div>
+      <Stagger className="grid gap-4 sm:grid-cols-3" inView>
+        <StaggerItem><MetricCard label="Total Tracked" value={collections.length} icon={FolderKanban} tone="primary" /></StaggerItem>
+        <StaggerItem><MetricCard label="Live Mints" value={collections.filter(c => c.isPublic).length} icon={Zap} tone="neon" /></StaggerItem>
+        <StaggerItem><MetricCard label="Safe Contracts" value={collections.filter(c => c.riskScore !== null && c.riskScore < 50).length} icon={Shield} tone="success" /></StaggerItem>
+      </Stagger>
 
       {/* Search */}
       <Input
@@ -235,18 +238,19 @@ export default function CollectionsClient() {
           action={!searchQ ? <Button variant="primary" onClick={() => setAddOpen(true)}><Plus className="h-3.5 w-3.5" />Add Collection</Button> : undefined}
         />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" inView stagger={0.06}>
           {filtered.map(col => (
-            <CollectionCard
-              key={col.id}
-              col={col}
-              onDelete={id => { setDeletingId(id); deleteMutation.mutate(id); }}
-              deleting={deletingId === col.id}
-              onRefreshFloor={handleRefreshFloor}
-              refreshingFloor={refreshingFloorId === col.id}
-            />
+            <StaggerItem key={col.id}>
+              <CollectionCard
+                col={col}
+                onDelete={id => { setDeletingId(id); deleteMutation.mutate(id); }}
+                deleting={deletingId === col.id}
+                onRefreshFloor={handleRefreshFloor}
+                refreshingFloor={refreshingFloorId === col.id}
+              />
+            </StaggerItem>
           ))}
-        </div>
+        </Stagger>
       )}
 
       {/* Add modal */}

@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Modal } from '@/components/ui/modal';
 import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
+import { motion, Reveal } from '@/components/motion';
 import { apiRequest } from '@/lib/api/client';
 
 type TabKey = 'mints' | 'scheduled' | 'analyzer';
@@ -390,6 +391,7 @@ export default function HistoryClient() {
         description="Mint executions, scheduled tasks, and analyzer results from your AutoMint records."
       />
 
+      <Reveal>
       <Card tone="elevated" className="overflow-hidden">
         <div className="border-b border-border p-4">
           <div className="grid gap-3 lg:grid-cols-[auto_1fr_auto] lg:items-center">
@@ -457,6 +459,7 @@ export default function HistoryClient() {
 
         {!loading && activeItems.length > 0 ? <Pagination page={page} totalPages={totalPages} onPage={setPage} /> : null}
       </Card>
+      </Reveal>
 
       <DetailsModal selected={selected} onClose={() => setSelected(null)} />
       <Modal open={Boolean(editing)} title="Edit Scheduled Task" onClose={() => setEditing(null)}>
@@ -489,10 +492,17 @@ function MintHistoryTable({ rows, onSelect }: { rows: MintHistoryRow[]; onSelect
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
-          {rows.map((row) => {
+          {rows.map((row, i) => {
             const status = mintStatus(row.status);
             return (
-              <tr key={row.id} className="cursor-pointer hover:bg-white/5" onClick={() => onSelect(row)}>
+              <motion.tr
+                key={row.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: Math.min(i, 12) * 0.03, duration: 0.25 }}
+                className="cursor-pointer hover:bg-white/5"
+                onClick={() => onSelect(row)}
+              >
                 <td className="px-5 py-4 font-medium text-text">{collectionLabel(row)}</td>
                 <td className="px-5 py-4 text-sm text-muted">{formatDate(row.executionStartedAt)}</td>
                 <td className="px-5 py-4 text-sm text-muted">{walletLabel(row)}</td>
@@ -504,7 +514,7 @@ function MintHistoryTable({ rows, onSelect }: { rows: MintHistoryRow[]; onSelect
                     ? <span className="text-neon/70 animate-pulse">In progress…</span>
                     : formatDuration(row.executionStartedAt, row.executionCompletedAt ?? row.updatedAt)}
                 </td>
-              </tr>
+              </motion.tr>
             );
           })}
         </tbody>
@@ -542,10 +552,16 @@ function ScheduledTaskTable({
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
-          {rows.map((row) => {
+          {rows.map((row, i) => {
             const status = scheduledStatus(row.status);
             return (
-              <tr key={row.id} className="hover:bg-white/5">
+              <motion.tr
+                key={row.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: Math.min(i, 12) * 0.03, duration: 0.25 }}
+                className="hover:bg-white/5"
+              >
                 <td className="px-5 py-4 font-medium text-text">{collectionLabel(row)}</td>
                 <td className="px-5 py-4">
                   <p className="text-sm text-text">{formatDate(row.scheduledTime)}</p>
@@ -562,7 +578,7 @@ function ScheduledTaskTable({
                     <IconButton label="Duplicate" icon={Copy} onClick={() => onDuplicate(row)} disabled={updatingId === row.id} />
                   </div>
                 </td>
-              </tr>
+              </motion.tr>
             );
           })}
         </tbody>
@@ -606,9 +622,15 @@ function AnalyzerHistoryTable({
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
-          {rows.map((row) => {
+          {rows.map((row, i) => {
             return (
-              <tr key={row.id} className="hover:bg-white/5">
+              <motion.tr
+                key={row.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: Math.min(i, 12) * 0.03, duration: 0.25 }}
+                className="hover:bg-white/5"
+              >
                 <td className="px-5 py-4 font-medium text-text">{collectionLabel(row)}</td>
                 <td className="px-5 py-4 font-mono text-sm text-muted">{shortAddress(row.contractAddress)}</td>
                 <td className="px-5 py-4 text-sm capitalize text-muted">{row.chain}</td>
@@ -632,7 +654,7 @@ function AnalyzerHistoryTable({
                     <IconButton label="Reanalyze" icon={RefreshCcw} onClick={() => onReanalyze(row)} disabled={updatingId === row.id || !row.contractAddress} />
                   </div>
                 </td>
-              </tr>
+              </motion.tr>
             );
           })}
         </tbody>

@@ -10,6 +10,7 @@ import Input from '@/components/ui/Input';
 import { MetricCard } from '@/components/ui/metric-card';
 import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
+import { motion, Reveal, Stagger, StaggerItem } from '@/components/motion';
 
 type AnalyzerDebugLog = {
   timestamp: string;
@@ -360,11 +361,11 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
           </form>
         </Card>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          <MetricCard label="Opportunity Score" value={result ? String(scores.opportunity) : '--'} detail={result ? 'Collection opportunity' : 'Awaiting analysis'} icon={Sparkles} tone="accent" />
-          <MetricCard label="Risk Score" value={result ? String(scores.risk) : '--'} detail={result ? riskLabel(result.riskAnalysis.riskLevel) : 'Awaiting analysis'} icon={AlertTriangle} tone="warning" />
-          <MetricCard label="Readiness" value={result ? `${scores.readiness}%` : '--'} detail={result ? result.mintFunction.functionName : 'Execution plan pending'} icon={CheckCircle2} tone="success" />
-        </div>
+        <Stagger className="grid gap-4 md:grid-cols-3" inView>
+          <StaggerItem><MetricCard label="Opportunity Score" value={result ? String(scores.opportunity) : '--'} detail={result ? 'Collection opportunity' : 'Awaiting analysis'} icon={Sparkles} tone="accent" /></StaggerItem>
+          <StaggerItem><MetricCard label="Risk Score" value={result ? String(scores.risk) : '--'} detail={result ? riskLabel(result.riskAnalysis.riskLevel) : 'Awaiting analysis'} icon={AlertTriangle} tone="warning" /></StaggerItem>
+          <StaggerItem><MetricCard label="Readiness" value={result ? `${scores.readiness}%` : '--'} detail={result ? result.mintFunction.functionName : 'Execution plan pending'} icon={CheckCircle2} tone="success" /></StaggerItem>
+        </Stagger>
 
         {analyzing && !result ? (
           <Card className="p-5">
@@ -377,6 +378,7 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
           </Card>
         ) : result ? (
           <div className="space-y-6">
+            <Reveal>
             <Card tone="elevated" className="p-5">
               <div className="mb-4 flex items-center gap-3">
                 <Sparkles className="h-5 w-5 text-accent" aria-hidden="true" />
@@ -394,7 +396,9 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
                 <p className="mt-4 text-sm leading-6 text-muted">{result.collectionIntelligence.description}</p>
               ) : null}
             </Card>
+            </Reveal>
 
+            <Reveal>
             <Card tone="elevated" className="p-5">
               <div className="mb-4 flex items-center gap-3">
                 <verdict.icon className={`h-5 w-5 ${verdict.iconClass}`} aria-hidden="true" />
@@ -422,13 +426,16 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
                   </p>
                   <ul className="space-y-2">
                     {result.riskAnalysis.riskFactors.map((factor, index) => (
-                      <li
+                      <motion.li
                         key={`${factor}-${index}`}
+                        initial={{ opacity: 0, x: -8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: Math.min(index, 10) * 0.04, duration: 0.25 }}
                         className="flex items-start gap-2 rounded-lg border border-border bg-white/5 px-3 py-2 text-sm text-text"
                       >
                         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
                         <span>{factor}</span>
-                      </li>
+                      </motion.li>
                     ))}
                   </ul>
                 </div>
@@ -439,7 +446,9 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
                 </div>
               )}
             </Card>
+            </Reveal>
 
+            <Reveal>
             <Card tone="elevated" className="p-5">
               <div className="mb-4 flex items-center gap-3">
                 <Save className="h-5 w-5 text-accent" aria-hidden="true" />
@@ -456,6 +465,7 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
                 </Button>
               </div>
             </Card>
+            </Reveal>
           </div>
         ) : (
           <EmptyState

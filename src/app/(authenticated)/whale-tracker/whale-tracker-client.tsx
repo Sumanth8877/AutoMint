@@ -12,6 +12,7 @@ import { MetricCard } from '@/components/ui/metric-card';
 import { Modal } from '@/components/ui/modal';
 import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Stagger, StaggerItem } from '@/components/motion';
 import { apiRequest } from '@/lib/api/client';
 
 type NetworkType = 'EVM' | 'SOLANA' | 'BITCOIN';
@@ -416,12 +417,12 @@ export default function WhaleTrackerClient() {
         }
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Tracked Wallets" value={trackedWallets.length} detail={`${trackedWallets.filter((wallet) => wallet.active).length} active`} icon={Eye} tone="accent" />
-        <MetricCard label="Active Copy Rules" value={activeCopyRules} detail={`${copyRules.length} configured`} icon={Zap} tone="success" />
-        <MetricCard label="Detected Mints (24h)" value={detectedMints24h} detail="From wallet activity" icon={Radar} tone="primary" />
-        <MetricCard label="Copied Mints (24h)" value={copiedMints24h} detail="Copy actions recorded" icon={Activity} tone="warning" />
-      </div>
+      <Stagger className="grid gap-4 md:grid-cols-2 xl:grid-cols-4" inView>
+        <StaggerItem><MetricCard label="Tracked Wallets" value={trackedWallets.length} detail={`${trackedWallets.filter((wallet) => wallet.active).length} active`} icon={Eye} tone="accent" /></StaggerItem>
+        <StaggerItem><MetricCard label="Active Copy Rules" value={activeCopyRules} detail={`${copyRules.length} configured`} icon={Zap} tone="success" /></StaggerItem>
+        <StaggerItem><MetricCard label="Detected Mints (24h)" value={detectedMints24h} detail="From wallet activity" icon={Radar} tone="primary" /></StaggerItem>
+        <StaggerItem><MetricCard label="Copied Mints (24h)" value={copiedMints24h} detail="Copy actions recorded" icon={Activity} tone="warning" /></StaggerItem>
+      </Stagger>
 
       {error ? (
         <div className="mt-6 rounded-lg border border-danger/20 bg-danger/10 p-3 text-sm text-danger" role="alert">
@@ -444,9 +445,10 @@ export default function WhaleTrackerClient() {
               {[0, 1, 2].map((item) => <Skeleton key={item} className="h-16 w-full bg-white/5" />)}
             </div>
           ) : trackedWallets.length > 0 ? (
-            <div className="divide-y divide-border">
+            <Stagger className="divide-y divide-border" stagger={0.05}>
               {trackedWallets.map((wallet) => (
-                <div key={wallet.id} className="grid gap-4 p-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(120px,.45fr)_minmax(120px,.45fr)_minmax(120px,.45fr)_minmax(120px,.45fr)_auto] xl:items-center">
+                <StaggerItem key={wallet.id}>
+                <div className="grid gap-4 p-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(120px,.45fr)_minmax(120px,.45fr)_minmax(120px,.45fr)_minmax(120px,.45fr)_auto] xl:items-center">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="font-semibold text-text">{walletLabel(wallet)}</h3>
@@ -487,8 +489,9 @@ export default function WhaleTrackerClient() {
                     </button>
                   </div>
                 </div>
+                </StaggerItem>
               ))}
-            </div>
+            </Stagger>
           ) : (
             <div className="p-5">
               <EmptyState
@@ -515,12 +518,14 @@ export default function WhaleTrackerClient() {
             {walletsLoading ? (
               [0, 1].map((item) => <Skeleton key={item} className="h-24 w-full bg-white/5" />)
             ) : copyRules.length > 0 ? (
-              copyRules.map((rule) => {
+              <Stagger stagger={0.06}>
+              {copyRules.map((rule) => {
                 const wallet = trackedWallets.find((item) => item.walletAddress === rule.walletAddress);
                 const destination = destinationWallets.find((item) => item.id === rule.destinationWalletId);
 
                 return (
-                  <div key={rule.id} className="rounded-lg border border-border bg-white/[0.03] p-4">
+                  <StaggerItem key={rule.id}>
+                  <div className="rounded-lg border border-border bg-white/[0.03] p-4 mb-3 last:mb-0">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="font-semibold text-text">{wallet ? walletLabel(wallet) : shortAddress(rule.walletAddress)}</p>
@@ -541,8 +546,10 @@ export default function WhaleTrackerClient() {
                       <Button type="button" variant="danger" size="sm" loading={busyId === rule.id} onClick={() => deleteRule(rule)}>Delete</Button>
                     </div>
                   </div>
+                  </StaggerItem>
                 );
-              })
+              })}
+              </Stagger>
             ) : (
               <EmptyState icon={Zap} title="No copy mint rules." description="Create a rule from a tracked wallet to record or execute copy-mint actions." action={<Button type="button" onClick={() => openAddRule()}><Plus className="h-4 w-4" aria-hidden="true" />Create Rule</Button>} />
             )}
@@ -555,8 +562,10 @@ export default function WhaleTrackerClient() {
             {walletsLoading ? (
               [0, 1, 2].map((item) => <Skeleton key={item} className="h-20 w-full bg-white/5" />)
             ) : reputations.length > 0 ? (
-              reputations.map((reputation) => (
-                <div key={reputation.id} className="rounded-lg border border-border bg-white/[0.03] p-4">
+              <Stagger stagger={0.06}>
+              {reputations.map((reputation) => (
+                <StaggerItem key={reputation.id}>
+                <div className="rounded-lg border border-border bg-white/[0.03] p-4 mb-3 last:mb-0">
                   <div className="flex items-start gap-3">
                     <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-success/20 bg-success/10 text-success">
                       <ShieldCheck className="h-4 w-4" aria-hidden="true" />
@@ -572,7 +581,9 @@ export default function WhaleTrackerClient() {
                     </div>
                   </div>
                 </div>
-              ))
+                </StaggerItem>
+              ))}
+              </Stagger>
             ) : (
               <EmptyState icon={ShieldCheck} title="No reputation records." description="Reputation appears after tracked wallets produce copy-mint outcomes." />
             )}
@@ -587,8 +598,10 @@ export default function WhaleTrackerClient() {
             {walletsLoading ? (
               [0, 1, 2].map((item) => <Skeleton key={item} className="h-20 w-full bg-white/5" />)
             ) : activities.length > 0 ? (
-              activities.map((activityItem) => (
-                <div key={`${activityItem.id}-${activityItem.time}`} className="grid gap-3 rounded-lg border border-border bg-white/[0.03] p-4 md:grid-cols-[minmax(0,1fr)_minmax(140px,.45fr)_minmax(100px,.35fr)_minmax(100px,.35fr)_minmax(120px,.45fr)] md:items-center">
+              <Stagger stagger={0.05}>
+              {activities.map((activityItem) => (
+                <StaggerItem key={`${activityItem.id}-${activityItem.time}`}>
+                <div className="grid gap-3 rounded-lg border border-border bg-white/[0.03] p-4 mb-3 last:mb-0 md:grid-cols-[minmax(0,1fr)_minmax(140px,.45fr)_minmax(100px,.35fr)_minmax(100px,.35fr)_minmax(120px,.45fr)] md:items-center">
                   <div className="min-w-0">
                     <p className="break-all font-semibold text-text">{activityItem.collectionName}</p>
                     <p className="mt-1 break-all font-mono text-xs text-muted">{activityItem.trackedWallet}</p>
@@ -598,7 +611,9 @@ export default function WhaleTrackerClient() {
                   <div><p className="text-xs uppercase text-muted">Copied</p><p className="text-sm text-text">{activityItem.copied ? 'YES' : 'NO'}</p></div>
                   <div><p className="text-xs uppercase text-muted">Copy Status</p><p className="text-sm text-text">{activityItem.copyStatus}</p></div>
                 </div>
-              ))
+                </StaggerItem>
+              ))}
+              </Stagger>
             ) : (
               <EmptyState icon={Activity} title="No detected mint activity." description="Detected mints appear after tracked wallet webhook activity is recorded." />
             )}

@@ -15,6 +15,7 @@ import { MetricCard } from '@/components/ui/metric-card';
 import { Modal } from '@/components/ui/modal';
 import { PageHeader } from '@/components/ui/page-header';
 import { SkeletonCard } from '@/components/ui/skeleton';
+import { Stagger, StaggerItem } from '@/components/motion';
 import { apiRequest } from '@/lib/api/client';
 import type { WalletType } from '@/lib/wallets/detection';
 
@@ -303,11 +304,11 @@ export default function MintsClient() {
       )}
 
       {/* Metrics */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <MetricCard label="Active" value={stats.active} icon={Cpu} tone="neon" />
-        <MetricCard label="Completed" value={stats.completed} icon={CheckCircle2} tone="success" />
-        <MetricCard label="Failed" value={stats.failed} icon={AlertCircle} tone="danger" />
-      </div>
+      <Stagger className="grid gap-4 sm:grid-cols-3" inView>
+        <StaggerItem><MetricCard label="Active" value={stats.active} icon={Cpu} tone="neon" /></StaggerItem>
+        <StaggerItem><MetricCard label="Completed" value={stats.completed} icon={CheckCircle2} tone="success" /></StaggerItem>
+        <StaggerItem><MetricCard label="Failed" value={stats.failed} icon={AlertCircle} tone="danger" /></StaggerItem>
+      </Stagger>
 
       {/* Filter tabs */}
       <div className="flex items-center gap-2 flex-wrap">
@@ -342,18 +343,21 @@ export default function MintsClient() {
             }
           />
         ) : (
-          filtered.map(task => (
-            <MintRow
-                key={task.id}
-                task={task}
-                wallets={wallets}
-                onStart={id => { dispatch({ type: 'SET_UPDATING_ID', id }); updateTask.mutate({ id, action: 'start' }); }}
-                onCancel={id => { dispatch({ type: 'SET_UPDATING_ID', id }); updateTask.mutate({ id, action: 'cancel' }); }}
-                onDelete={id => { dispatch({ type: 'SET_DELETING_ID', id }); deleteTask.mutate(id); }}
-                updatingId={state.updatingId}
-                deletingId={state.deletingId}
-              />
-          ))
+          <Stagger className="space-y-3" stagger={0.05}>
+            {filtered.map(task => (
+              <StaggerItem key={task.id}>
+                <MintRow
+                  task={task}
+                  wallets={wallets}
+                  onStart={id => { dispatch({ type: 'SET_UPDATING_ID', id }); updateTask.mutate({ id, action: 'start' }); }}
+                  onCancel={id => { dispatch({ type: 'SET_UPDATING_ID', id }); updateTask.mutate({ id, action: 'cancel' }); }}
+                  onDelete={id => { dispatch({ type: 'SET_DELETING_ID', id }); deleteTask.mutate(id); }}
+                  updatingId={state.updatingId}
+                  deletingId={state.deletingId}
+                />
+              </StaggerItem>
+            ))}
+          </Stagger>
         )}
       </div>
 
