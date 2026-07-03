@@ -17,6 +17,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { SkeletonCard } from '@/components/ui/skeleton';
 import { Stagger, StaggerItem } from '@/components/motion';
 import { apiRequest } from '@/lib/api/client';
+import { isValidMintInput } from '@/lib/validation';
 import type { WalletType } from '@/lib/wallets/detection';
 
 type MintTask = {
@@ -256,7 +257,8 @@ export default function MintsClient() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!state.form.mintUrl.trim()) { dispatch({ type: 'SET_FORM_ERROR', message: 'Mint URL is required' }); return; }
+    if (!trimmedUrl) { dispatch({ type: 'SET_FORM_ERROR', message: 'Mint URL or contract address is required.' }); return; }
+    if (!isValidMintInput(trimmedUrl)) { dispatch({ type: 'SET_FORM_ERROR', message: 'Enter a valid URL or 0x contract address.' }); return; }
     dispatch({ type: 'START_SAVING' });
     createMint.mutate({ mintUrl: state.form.mintUrl, wlMode: state.form.wlMode, scheduleTime: state.form.scheduleTime || null });
   }
