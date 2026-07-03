@@ -61,8 +61,6 @@ function buildTransport(chainName: string) {
 
 // ── Client cache (singleton per chain) ──────────────────────────────────────
 
-// Fix #10: cap public client cache (one per chain — typically 4 entries max)
-const MAX_PUBLIC_CLIENTS = 10;
 const publicClients = new Map<string, PublicClient>();
 
 // _userId is accepted for backward compatibility (callers pass it for RPC routing context)

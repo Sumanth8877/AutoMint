@@ -265,7 +265,11 @@ export function AnimatedNumber({
 
   useEffect(() => {
     if (reduce || !shouldStart) {
-      if (reduce) setDisplay(value);
+      if (reduce) {
+        // Defer to avoid synchronous setState in effect body
+        const frame = requestAnimationFrame(() => setDisplay(value));
+        return () => cancelAnimationFrame(frame);
+      }
       return;
     }
     const controls = animate(ref.current, value, {
@@ -313,6 +317,10 @@ export function TiltCard({
   const rotateY = useSpring(0, { stiffness: 220, damping: 22, mass: 0.6 });
   const sheenX = useMotionValue(50);
   const sheenY = useMotionValue(50);
+  const sheenBackground = useTransform(
+    [sheenX, sheenY],
+    ([x, y]) => `radial-gradient(circle at ${x}% ${y}%, rgba(79,70,229,0.06), transparent 55%)`,
+  );
   const [hovering, setHovering] = useState(false);
 
   function handleMove(e: ReactMouseEvent<HTMLDivElement>) {
@@ -358,10 +366,7 @@ export function TiltCard({
             aria-hidden="true"
             className="pointer-events-none absolute inset-0 rounded-[inherit]"
             style={{
-              background: useTransform(
-                [sheenX, sheenY],
-                ([x, y]) => `radial-gradient(circle at ${x}% ${y}%, rgba(79,70,229,0.06), transparent 55%)`,
-              ),
+              background: sheenBackground,
               opacity: hovering ? 1 : 0,
               transition: 'opacity 0.3s ease',
             }}

@@ -26,7 +26,6 @@ export async function GET() {
     if ('error' in authResult) return authResult.error;
 
     const rows = await getUserWatchedWallets(authResult.userId);
-    const addresses = Array.from(new Set(rows.map((wallet) => wallet.walletAddress)));
     const [rules, recentActivities] = await Promise.all([
       getDb().select().from(copyMintRules).where(eq(copyMintRules.userId, authResult.userId)),
       getDb().select().from(activities)

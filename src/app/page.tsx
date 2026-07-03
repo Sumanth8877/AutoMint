@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { auth } from '@clerk/nextjs/server';
 import {
   Activity, ArrowRight, BarChart3, ChevronRight, Eye, Shield,
-  Sparkles, TrendingUp, Wallet, Zap, Radio, CheckCircle2, FileCode2,
+  Sparkles, TrendingUp, Wallet, Zap, CheckCircle2, FileCode2,
 } from 'lucide-react';
 import {
   FadeIn, Stagger, StaggerItem, Reveal, TiltCard, Magnetic,

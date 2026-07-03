@@ -5,10 +5,10 @@
  * continue to compile without changes across the codebase.
  */
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+ 
 type SentryLevel = 'fatal' | 'error' | 'warning' | 'info' | 'debug';
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+ 
 type CaptureOptions = {
   level?: SentryLevel;
   area?: string;

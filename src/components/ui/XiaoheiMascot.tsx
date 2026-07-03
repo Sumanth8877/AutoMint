@@ -22,14 +22,11 @@ import {
   useEffect,
   useRef,
   useState,
-  useCallback,
   type CSSProperties,
 } from "react";
 import {
   motion,
   useReducedMotion,
-  useMotionValue,
-  useSpring,
   AnimatePresence,
 } from "framer-motion";
 import { springs } from "@/components/motion";
@@ -95,22 +92,37 @@ function useBlink(reduce: boolean | null) {
 }
 
 /* ━━━ Particle burst ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+/** Simple deterministic hash so particle layout looks varied without Math.random(). */
+function seededRand(seed: number): number {
+  const x = Math.sin(seed * 9301 + 49297) * 233280;
+  return x - Math.floor(x);
+}
+
+const PARTICLE_CHARS = ["✦", "★", "·", "✧", "⚡"];
+const PARTICLE_COLORS = ["#4F46E5", "#F59E0B", "#10B981", "#EF4444", "#6366F1"];
+
+/** Pre-computed deterministic particles — pure, no randomness at runtime. */
+const PARTICLES = Array.from({ length: 8 }, (_, i) => {
+  const r1 = seededRand(i * 3 + 1);
+  const r2 = seededRand(i * 3 + 2);
+  const r3 = seededRand(i * 3 + 3);
+  const r4 = seededRand(i * 3 + 4);
+  const angle = (i / 8) * Math.PI * 2 + (r1 - 0.5) * 0.5;
+  const dist = 16 + r2 * 12;
+  return {
+    id: i,
+    x: Math.cos(angle) * dist,
+    y: Math.sin(angle) * dist,
+    char: PARTICLE_CHARS[Math.floor(r3 * 5)],
+    color: PARTICLE_COLORS[Math.floor(r4 * 5)],
+  };
+});
+
 function ParticleBurst({ active }: { active: boolean }) {
   if (!active) return null;
-  const particles = Array.from({ length: 8 }, (_, i) => {
-    const angle = (i / 8) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
-    const dist = 16 + Math.random() * 12;
-    return {
-      id: i,
-      x: Math.cos(angle) * dist,
-      y: Math.sin(angle) * dist,
-      char: ["✦", "★", "·", "✧", "⚡"][Math.floor(Math.random() * 5)],
-      color: ["#4F46E5", "#F59E0B", "#10B981", "#EF4444", "#6366F1"][Math.floor(Math.random() * 5)],
-    };
-  });
   return (
     <g>
-      {particles.map((p) => (
+      {PARTICLES.map((p) => (
         <motion.text
           key={p.id}
           x="20"
@@ -426,9 +438,10 @@ export default function XiaoheiMascot({
 
   useEffect(() => {
     if (pressed) {
-      setShowParticles(true);
+      // Defer setState to avoid synchronous state update in effect body
+      const frame = requestAnimationFrame(() => setShowParticles(true));
       const t = setTimeout(() => setShowParticles(false), 500);
-      return () => clearTimeout(t);
+      return () => { cancelAnimationFrame(frame); clearTimeout(t); };
     }
   }, [pressed]);
 
