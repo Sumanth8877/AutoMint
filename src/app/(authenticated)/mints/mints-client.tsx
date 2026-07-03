@@ -332,15 +332,15 @@ export default function MintsClient() {
 
   const updateTask = useMutation({
     mutationFn: ({ id, action }: { id: string; action: string }) =>
-      apiRequest(`/api/mints/${id}`, { method: 'PATCH', body: JSON.stringify({ action }) }),
+      apiRequest('/api/mints', { method: 'PATCH', body: JSON.stringify({ id, action }) }),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['mints'] }); dispatch({ type: 'SET_UPDATING_ID', id: null }); },
-    onError: () => { dispatch({ type: 'SET_UPDATING_ID', id: null }); },
+    onError: (e: Error) => { dispatch({ type: 'SET_UPDATING_ID', id: null }); dispatch({ type: 'SET_ERROR', message: e.message }); },
   });
 
   const deleteTask = useMutation({
-    mutationFn: (id: string) => apiRequest(`/api/mints/${id}`, { method: 'DELETE' }),
+    mutationFn: (id: string) => apiRequest('/api/mints', { method: 'DELETE', body: JSON.stringify({ id }) }),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['mints'] }); dispatch({ type: 'SET_DELETING_ID', id: null }); },
-    onError: () => { dispatch({ type: 'SET_DELETING_ID', id: null }); },
+    onError: (e: Error) => { dispatch({ type: 'SET_DELETING_ID', id: null }); dispatch({ type: 'SET_ERROR', message: e.message }); },
   });
 
   useEffect(() => {
