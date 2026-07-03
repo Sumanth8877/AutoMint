@@ -87,8 +87,12 @@ export async function requireApiSession(): Promise<ApiAuthResult<ApiAuthSuccess>
 
 export async function requireApiUser(): Promise<ApiAuthResult<ApiUserSuccess>> {
   // Try Bearer token (env-var API key) first
-  const apiKeyAuth = await authenticateBearer();
-  if (apiKeyAuth) return apiKeyAuth;
+  try {
+    const apiKeyAuth = await authenticateBearer();
+    if (apiKeyAuth) return apiKeyAuth;
+  } catch {
+    // Bearer auth failed (e.g. DB error) — fall through to Clerk session
+  }
 
   // Fall back to Clerk session
   const session = await auth();
@@ -97,15 +101,23 @@ export async function requireApiUser(): Promise<ApiAuthResult<ApiUserSuccess>> {
     return { error: jsonError('Unauthorized', 401) };
   }
 
-  const dbUser = await syncUser(session.userId);
+  // FIX: wrap syncUser in try/catch so DB errors (e.g. missing columns
+  // from unapplied migrations) return a structured error instead of
+  // throwing an unhandled exception that crashes the calling page.
+  try {
+    const dbUser = await syncUser(session.userId);
 
-  if (!dbUser) {
-    return { error: jsonError('User not found', 401) };
+    if (!dbUser) {
+      return { error: jsonError('User not found', 401) };
+    }
+
+    return {
+      clerkId: session.userId,
+      sessionClaims: session.sessionClaims as SessionClaims,
+      userId: dbUser.id,
+    };
+  } catch (e) {
+    console.error('[requireApiUser] syncUser failed:', e instanceof Error ? e.message : e);
+    return { error: jsonError('Authentication failed — please try again', 500) };
   }
-
-  return {
-    clerkId: session.userId,
-    sessionClaims: session.sessionClaims as SessionClaims,
-    userId: dbUser.id,
-  };
 }

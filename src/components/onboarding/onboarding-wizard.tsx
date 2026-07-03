@@ -132,7 +132,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
             </Button>
 
             {isLast ? (
-              <Button variant="neon" onClick={handleComplete} loading={completing} glow>
+              <Button variant="neon" onClick={handleComplete} mascot="waving" mascotPosition="top-center" loading={completing} glow>
                 <Rocket className="h-3.5 w-3.5" />
                 {completing ? 'Starting...' : 'Get Started'}
               </Button>
