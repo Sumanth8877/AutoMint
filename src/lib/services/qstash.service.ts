@@ -522,6 +522,47 @@ export async function executeScheduledMint(taskId: string) {
       return { success: false, error: 'Scheduled mint missing wallet or contract' };
     }
 
+    // Speed fix: pre-warm the wallet key decryption cache as early as possible
+    // (fire-and-forget) so it's hot well before executeMintTask needs it for
+    // signing. Previously this fired right before executeMintTask — moving it
+    // here gives it the full duration of the risk/state/price/balance checks
+    // below to complete in the background.
+    void prewarmWalletKey(task.walletId, task.userId).catch(() => undefined);
+
+    // Speed fix: for a freshly-created, already-confirmed-LIVE task (status
+    // 'ready', created <30s ago), the mint state and price were JUST resolved
+    // at task-creation time (resolveMintIntent's own getMintState + discovery
+    // call). Re-checking them again here on the hot "instant mint" path adds
+    // ~300-500ms of pure redundancy for state that cannot realistically change
+    // in under 30 seconds. Skip straight to the balance check — the
+    // pre-broadcast eth_call simulation inside executeMint() remains the final
+    // safety gate for mint-state eligibility AND price correctness on every
+    // path. Tasks reaching this function after a real wait (monitoring/pending)
+    // or with an explicit risk override always run the full check.
+    const taskAgeMs = Date.now() - new Date(task.createdAt).getTime();
+    const skipPreChecks = !task.overrideRiskFlag && task.status === 'ready' && taskAgeMs < 30_000;
+
+    // Kick off the live price re-fetch CONCURRENTLY with the mint-state check
+    // below (when not skipped) — both are independent RPC calls that previously
+    // ran one after another, adding ~200ms of avoidable sequential latency.
+    const priceRefetchPromise: Promise<string | null> = skipPreChecks
+      ? Promise.resolve(null)
+      : (async () => {
+          try {
+            const { fetchMintRequirements } = await import('@/lib/services/mint-requirements.service');
+            const liveReqs = await fetchMintRequirements(task.contractAddress!, wallet.chain);
+            return liveReqs.mintPrice;
+          } catch {
+            addBreadcrumb({
+              category: 'qstash',
+              message: 'Live price re-fetch failed — using stored price as fallback',
+              level: 'warning',
+              data: { taskId, storedPrice: task.mintPrice },
+            });
+            return null;
+          }
+        })();
+
     if (!task.overrideRiskFlag) {
       // Speed fix: requireRiskApproval() issues a fresh DB SELECT on mintTasks,
       // but we already have the task from loadTaskWithWallet() above.
@@ -551,11 +592,14 @@ export async function executeScheduledMint(taskId: string) {
             error: `Risk approval required: ${riskGate.risk?.riskScore ?? 0}/100`,
           };
         }
-        await addTaskLog(taskId, 'risk_check_passed', 'success', 'Risk check passed');
+        void addTaskLog(taskId, 'risk_check_passed', 'success', 'Risk check passed').catch(() => {});
       }
 
+      if (skipPreChecks) {
+        void addTaskLog(taskId, 'mint_state_check', 'info', 'Mint state: LIVE (skipped re-check — task created <30s ago, already confirmed live)').catch(() => {});
+      } else {
       const mintState = await getMintState(task.contractAddress, wallet.chain);
-      await addTaskLog(taskId, 'mint_state_check', 'info', `Mint state: ${mintState.status}`);
+      void addTaskLog(taskId, 'mint_state_check', 'info', `Mint state: ${mintState.status}`).catch(() => {});
       // H2: only NOT_STARTED and ENDED enter the watch/reschedule branch.
       // UNKNOWN (contract exposes no readable state getters — common for custom
       // or proxy mints, and on Base/Polygon where there's no OpenSea fallback)
@@ -563,18 +607,6 @@ export async function executeScheduledMint(taskId: string) {
       // the gate: it will cleanly classify wrong_phase / sold_out / paused if the
       // mint truly isn't open, instead of the task failing forever as "not live".
       if (mintState.status === 'NOT_STARTED' || mintState.status === 'ENDED') {
-        // ── Speed fix: parallelize pre-execution checks ──
-        // getMintState, fetchMintRequirements, getWalletBalance, and checkHoneypot
-        // are all independent RPC calls. Running them sequentially adds ~1-2s of
-        // unnecessary latency. We already ran getMintState above (needed for the
-        // NOT_STARTED/ENDED gate). Now parallelize the remaining pre-checks:
-        // price re-fetch + balance check + honeypot simulation all run concurrently.
-        // This cuts pre-execution time from ~1.5s sequential to ~400ms parallel.
-        //
-        // NOTE: the code below (after the NOT_STARTED/ENDED block) already
-        // parallelizes where possible. The main remaining latency is the
-        // 6s receipt wait in executeMint() — reduced to 2s (receipt recheck
-        // job handles the rest).
         // H-5 fix: cap reschedule attempts to prevent infinite QStash billing.
         // We repurpose maxRetries as a unified attempt counter — each reschedule
         // for a NOT_STARTED mint decrements it by 1.  When it reaches 0 we mark
@@ -673,23 +705,21 @@ export async function executeScheduledMint(taskId: string) {
         }
       } else if (mintState.status === 'UNKNOWN') {
         // H2: state unreadable on-chain — proceed to execution; simulation gates it.
-        await addTaskLog(taskId, 'mint_state_unknown' as TaskLogEvent, 'info', 'Mint state UNKNOWN — attempting mint; pre-broadcast simulation will gate eligibility');
+        void addTaskLog(taskId, 'mint_state_unknown' as TaskLogEvent, 'info', 'Mint state UNKNOWN — attempting mint; pre-broadcast simulation will gate eligibility').catch(() => {});
+      }
       }
     }
 
-    // ── Speed fix: parallelize pre-execution checks ──
-    // Live price re-fetch, wallet balance check, and honeypot simulation are
-    // all independent RPC calls. Running them sequentially adds ~1-2s of
-    // unnecessary latency. Run balance + honeypot concurrently after price resolve.
+    // ── Resolve effective mint price ──
+    // Uses the price re-fetch kicked off above (ran concurrently with the
+    // mint-state check, or was skipped entirely on the fast immediate-mint path).
     let effectiveMintPrice: string | null = task.mintPrice;
-    try {
-      const { fetchMintRequirements } = await import('@/lib/services/mint-requirements.service');
-      const liveReqs = await fetchMintRequirements(task.contractAddress!, wallet.chain);
-      const livePrice = liveReqs.mintPrice;
-      await addTaskLog(taskId, 'price_refetch', 'info', 'Re-fetching live mint price from on-chain');
+    if (!skipPreChecks) {
+      const livePrice = await priceRefetchPromise;
+      void addTaskLog(taskId, 'price_refetch', 'info', 'Re-fetching live mint price from on-chain').catch(() => {});
 
       if (livePrice != null && livePrice !== task.mintPrice) {
-        await addTaskLog(taskId, 'price_changed', 'warning', `Mint price changed: ${task.mintPrice} → ${livePrice}`);
+        void addTaskLog(taskId, 'price_changed', 'warning', `Mint price changed: ${task.mintPrice} → ${livePrice}`).catch(() => {});
         addBreadcrumb({
           category: 'qstash',
           message: 'Mint price changed since task creation — updating task',
@@ -711,13 +741,6 @@ export async function executeScheduledMint(taskId: string) {
 
         effectiveMintPrice = livePrice;
       }
-    } catch {
-      addBreadcrumb({
-        category: 'qstash',
-        message: 'Live price re-fetch failed — using stored price as fallback',
-        level: 'warning',
-        data: { taskId, storedPrice: task.mintPrice },
-      });
     }
 
     if (effectiveMintPrice == null) {
@@ -748,26 +771,16 @@ export async function executeScheduledMint(taskId: string) {
       mintPrice: effectiveMintPrice || undefined,
     }).catch(() => {});
 
-    // ── Parallel balance check + honeypot check ──
-    // These are independent RPC calls that previously ran sequentially,
-    // adding ~400-800ms of unnecessary latency.
-    const [balance, honeypotResult] = await Promise.all([
-      getWalletBalance(wallet.address, wallet.chain),
-      (async () => {
-        if (!task.contractAddress || !wallet) return null;
-        const { checkHoneypot } = await import('@/lib/services/honeypot.service');
-        return checkHoneypot({
-          contractAddress: task.contractAddress,
-          chain:           wallet.chain,
-          mintFunction:    task.mintFunction ?? 'mint',
-          mintPrice:       effectiveMintPrice,
-          quantity:        task.quantity,
-          walletAddress:   wallet.address,
-        });
-      })(),
-    ]);
-
     // ── Balance check ──
+    // Speed fix: the standalone honeypot eth_call simulation that used to run
+    // here in parallel has been REMOVED. It duplicated the exact same
+    // simulateContract dry-run that executeMint() already performs internally
+    // (in parallel with nonce allocation + gas estimation, at zero net latency
+    // per the comments in blockchain/mint.ts). Running it twice cost an extra
+    // ~200-400ms eth_call round-trip for no additional safety — the internal
+    // simulation is now the single source of truth (skipSimulation is no
+    // longer forced true below).
+    const balance = await getWalletBalance(wallet.address, wallet.chain);
     if (!hasEnoughBalance(balance.balance, effectiveMintPrice, task.quantity)) {
       const usdPrice = await getNativeTokenUsdPrice(wallet.chain).catch(() => 0);
       const mintCostEth = Number(effectiveMintPrice) * task.quantity;
@@ -803,30 +816,7 @@ export async function executeScheduledMint(taskId: string) {
       });
       return { success: false, error: 'Wallet balance is too low' };
     }
-    await addTaskLog(taskId, 'balance_check_passed', 'success', `Balance check passed: ${balance.balance} ${balance.symbol}`);
-
-    // ── Honeypot check (result from parallel execution above) ──
-    if (honeypotResult && !honeypotResult.isSafe && !honeypotResult.skipped) {
-      await addTaskLog(taskId, 'honeypot_check_failed', 'error', `Honeypot detected: ${honeypotResult.reason}`);
-      await getDb()
-        .update(mintTasks)
-        .set({ status: 'failed', updatedAt: new Date() })
-        .where(eq(mintTasks.id, taskId));
-      await sendScheduledMintNotification(task.userId, 'mint_failed', {
-        taskId,
-        contractAddress: task.contractAddress,
-        error: honeypotResult.reason ?? 'Honeypot detected — mint simulation reverted',
-      });
-      await sendMintFailedEmail(task.userId, {
-        taskId,
-        contractAddress: task.contractAddress,
-        error: honeypotResult.reason ?? 'Honeypot detected — mint simulation reverted',
-      });
-      return { success: false, error: honeypotResult.reason ?? 'Honeypot detected' };
-    }
-    if (honeypotResult) {
-      await addTaskLog(taskId, 'honeypot_check_passed', 'success', 'Honeypot simulation passed — contract is safe');
-    }
+    void addTaskLog(taskId, 'balance_check_passed', 'success', `Balance check passed: ${balance.balance} ${balance.symbol}`).catch(() => {});
 
     const [claimed] = await getDb()
       .update(mintTasks)
@@ -841,24 +831,24 @@ export async function executeScheduledMint(taskId: string) {
       return { success: false, skipped: true, error: 'Mint task was already claimed' };
     }
 
-    await logActivity(task.userId, 'mint_status_changed', 'Scheduled mint triggered', { taskId });
-    const { trackAnalyticsEvent } = await import('@/lib/services/analytics.service');
-    await trackAnalyticsEvent({
-      userId: task.userId,
-      eventType: 'qstash',
-      status: 'executed',
-      provider: 'execute',
-      metadata: { taskId },
-    });
+    void logActivity(task.userId, 'mint_status_changed', 'Scheduled mint triggered', { taskId }).catch(() => {});
+    void (async () => {
+      const { trackAnalyticsEvent } = await import('@/lib/services/analytics.service');
+      await trackAnalyticsEvent({
+        userId: task.userId,
+        eventType: 'qstash',
+        status: 'executed',
+        provider: 'execute',
+        metadata: { taskId },
+      });
+    })().catch(() => {});
+    // H1 fix: hand the lock token off to executeMintTask so it does NOT re-acquire
+    // the lock we already hold (the previous empty-options call re-acquired and
+    // failed). executeMintTask now owns the release; lockReleased=true stops this
+    // function's finally from double-releasing.
     lockReleased = true;
 
-    // Speed fix: fire-and-forget wallet key pre-warm so the decryption cache is
-    // hot by the time executeMintTask reaches getDecryptedPrivateKey().
-    // This runs concurrently with executeMintTask's internal DB status claims.
-    if (task.walletId) {
-      void prewarmWalletKey(task.walletId, task.userId).catch(() => undefined);
-    }
-    await addTaskLog(taskId, 'tx_submitting', 'info', 'Submitting mint transaction to blockchain');
+    void addTaskLog(taskId, 'tx_submitting', 'info', 'Submitting mint transaction to blockchain').catch(() => {});
     const mintResult = await executeMintTask(taskId, task.userId, {
       existingLockToken: lockToken,
       // The "⚡ Mint Executing" message was already sent above (before the
@@ -867,9 +857,11 @@ export async function executeScheduledMint(taskId: string) {
       // Pass the resolved collection name so success/failure messages from
       // executeMintTask also show it instead of the raw contract address.
       collectionName,
-      // Fix #5: honeypot check above already ran an eth_call simulation.
-      // Skip the duplicate simulation inside executeMint to halve RPC calls.
-      skipSimulation: true,
+      // Speed fix: the standalone honeypot check above was removed. Let
+      // executeMint() run its own pre-broadcast simulation (runs in parallel
+      // with nonce allocation + gas estimation — zero added latency) as the
+      // single safety gate instead of duplicating it.
+      skipSimulation: false,
     });
     await addTaskLog(taskId, mintResult.txHash ? 'tx_submitted' : 'task_completed', mintResult.success ? 'success' : 'error', mintResult.txHash ? `Transaction submitted: ${mintResult.txHash}` : mintResult.error ?? 'Unknown error');
 
