@@ -205,9 +205,16 @@ export async function watchWallet(userId: string, data: { walletAddress: string;
     .returning();
 
   if (networkType === 'EVM') {
-    const registration = await updateAlchemyWebhookAddresses({ chain, add: [walletAddress] });
-    if (!registration.synced) {
-      addBreadcrumb({ category: 'wallet-tracker', message: `Alchemy webhook registration failed for ${walletAddress} on ${chain}: ${registration.reason}`, level: 'warning' });
+    // Non-blocking: a failed Alchemy sync (e.g. stale/misconfigured webhook ID)
+    // must not stop the wallet from being tracked — it just means real-time
+    // detection falls back to polling instead of the instant webhook.
+    try {
+      const registration = await updateAlchemyWebhookAddresses({ chain, add: [walletAddress] });
+      if (!registration.synced) {
+        addBreadcrumb({ category: 'wallet-tracker', message: `Alchemy webhook registration skipped for ${walletAddress} on ${chain}: ${registration.reason}`, level: 'warning' });
+      }
+    } catch (error) {
+      addBreadcrumb({ category: 'wallet-tracker', message: `Alchemy webhook registration failed for ${walletAddress} on ${chain}`, level: 'warning', data: { error: error instanceof Error ? error.message : String(error) } });
     }
   }
   await logActivity(userId, 'wallet_added', 'Wallet tracker enabled', { walletAddress, chain });
@@ -242,7 +249,13 @@ export async function unwatchWallet(userId: string, data: { walletAddress: strin
     .limit(1);
 
   if (!stillWatched && wallet.networkType === 'EVM') {
-    await updateAlchemyWebhookAddresses({ chain, remove: [walletAddress] });
+    // Same non-blocking treatment as watchWallet — don't let a stale/misconfigured
+    // Alchemy webhook prevent the user from un-tracking a wallet.
+    try {
+      await updateAlchemyWebhookAddresses({ chain, remove: [walletAddress] });
+    } catch (error) {
+      addBreadcrumb({ category: 'wallet-tracker', message: `Alchemy webhook removal failed for ${walletAddress} on ${chain}`, level: 'warning', data: { error: error instanceof Error ? error.message : String(error) } });
+    }
   }
 
   await logActivity(userId, 'wallet_removed', 'Wallet tracker disabled', { walletAddress, chain });
