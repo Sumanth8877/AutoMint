@@ -7,6 +7,7 @@ import { watchedWallets } from '@/drizzle/schema';
 import { getDb } from '@/lib/db';
 import { logActivity } from '@/lib/monitoring';
 import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
+import { ConflictError } from '@/lib/api/errors';
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
@@ -182,6 +183,24 @@ export async function watchWallet(userId: string, data: { walletAddress: string;
   if (!validateAddress(walletAddress, networkType)) throw new Error('Invalid wallet address');
 
   const chain = normalizeChain(data.chain);
+
+  // Block duplicates with a clear error instead of silently reactivating an
+  // existing row. Users should use the pause/resume or edit controls to
+  // manage a wallet they're already tracking, not "add" it again.
+  const [existing] = await getDb()
+    .select({ id: watchedWallets.id })
+    .from(watchedWallets)
+    .where(and(
+      eq(watchedWallets.userId, userId),
+      eq(watchedWallets.walletAddress, walletAddress),
+      eq(watchedWallets.chain, chain),
+    ))
+    .limit(1);
+
+  if (existing) {
+    throw new ConflictError('This wallet is already tracked. Use the pause/resume or edit controls instead of adding it again.');
+  }
+
   const [wallet] = await getDb()
     .insert(watchedWallets)
     .values({
@@ -193,16 +212,15 @@ export async function watchWallet(userId: string, data: { walletAddress: string;
       active: true,
       updatedAt: new Date(),
     })
-    .onConflictDoUpdate({
+    .onConflictDoNothing({
       target: [watchedWallets.userId, watchedWallets.walletAddress, watchedWallets.chain],
-      set: {
-        walletName: data.walletName?.trim() || null,
-        networkType,
-        active: true,
-        updatedAt: new Date(),
-      },
     })
     .returning();
+
+  if (!wallet) {
+    // Race: another request inserted the same wallet between our check and this insert.
+    throw new ConflictError('This wallet is already tracked. Use the pause/resume or edit controls instead of adding it again.');
+  }
 
   if (networkType === 'EVM') {
     // Non-blocking: a failed Alchemy sync (e.g. stale/misconfigured webhook ID)
@@ -310,7 +328,14 @@ export async function deleteWatchedWallet(userId: string, id: string) {
       .limit(1);
 
     if (!stillWatched) {
-      await updateAlchemyWebhookAddresses({ chain: wallet.chain, remove: [wallet.walletAddress] });
+      // Non-blocking, same as watchWallet/unwatchWallet — a failed Alchemy
+      // sync must not stop the wallet from being deleted; it just means the
+      // stale address lingers on the webhook until the next successful sync.
+      try {
+        await updateAlchemyWebhookAddresses({ chain: wallet.chain, remove: [wallet.walletAddress] });
+      } catch (error) {
+        addBreadcrumb({ category: 'wallet-tracker', message: `Alchemy webhook removal failed for ${wallet.walletAddress} on ${wallet.chain}`, level: 'warning', data: { error: error instanceof Error ? error.message : String(error) } });
+      }
     }
   }
 
