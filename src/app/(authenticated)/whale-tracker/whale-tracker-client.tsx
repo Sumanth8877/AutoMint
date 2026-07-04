@@ -404,16 +404,10 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
         title="Whale Tracker"
         description="Track high-signal wallets, control copy-mint rules, and review detected mint activity."
         actions={
-          <>
-            <Button type="button" variant="secondary" onClick={() => openAddRule()}>
-              <Zap className="h-4 w-4" aria-hidden="true" />
-              Add Rule
-            </Button>
-            <Button type="button" onClick={openAddWallet}>
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              Add Wallet
-            </Button>
-          </>
+          <Button type="button" onClick={openAddWallet}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Add Wallet
+          </Button>
         }
       />
 
@@ -433,10 +427,16 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
       <section className="mt-6">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-text">Tracked Wallets</h2>
-          <Button type="button" variant="secondary" size="sm" onClick={openAddWallet}>
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Add Wallet
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="secondary" size="sm" onClick={() => openAddRule()}>
+              <Zap className="h-4 w-4" aria-hidden="true" />
+              Add Rule
+            </Button>
+            <Button type="button" variant="secondary" size="sm" onClick={openAddWallet}>
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Add Wallet
+            </Button>
+          </div>
         </div>
 
         <Card className="overflow-hidden">
