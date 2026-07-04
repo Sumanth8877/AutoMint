@@ -29,6 +29,7 @@ type MintTask = {
   phase: 'whitelist' | 'allowlist' | 'public' | null;
   riskReasons: string[] | null; failureReason: string | null;
   qstashMessageId: string | null; createdAt: string; confirmedAt: string | null;
+  updatedAt: string | null;
 };
 
 type WalletRecord = { id: string; address: string; nickname: string | null; chain: string; walletType: WalletType; isDefault: boolean; };
@@ -98,31 +99,45 @@ function formatDuration(ms: number) {
   return `${Math.floor(ms / 3600000)}h ${Math.floor((ms % 3600000) / 60000)}m`;
 }
 
-/** Compute elapsed time from task creation to completion/failure, or until now if still active. */
+/** Compute elapsed time from task creation to completion/failure, or until now if still active.
+ *  Uses `updatedAt` (set by DB when status last changed) as the end timestamp for
+ *  terminal tasks — this is a STABLE value that doesn't change between renders,
+ *  so the outside MintRow and the inside TaskConsole always show the same timing.
+ */
 function taskDuration(task: MintTask): { label: string; value: string } | null {
   const startedAt = new Date(task.createdAt).getTime();
   if (isNaN(startedAt)) return null;
 
   const isActive = ['pending', 'monitoring', 'ready', 'running', 'unconfirmed'].includes(task.status);
+
+  if (isActive) {
+    // Active tasks: elapsed keeps ticking — both MintRow and TaskConsole use
+    // Date.now() so they stay in sync while the task is running.
+    return { label: 'Elapsed', value: formatDuration(Date.now() - startedAt) };
+  }
+
+  // Terminal tasks (completed, confirmed, failed, cancelled): use a STABLE
+  // end timestamp. Prefer confirmedAt, fall back to updatedAt (set when the
+  // status changed to its terminal value). Never use Date.now() here — that
+  // would make the duration drift on every re-render.
   const endedAt = task.confirmedAt
     ? new Date(task.confirmedAt).getTime()
-    : !isActive
-      ? Date.now() // fallback for failed/cancelled without confirmedAt
-      : Date.now();
+    : task.updatedAt
+      ? new Date(task.updatedAt).getTime()
+      : startedAt; // last-resort fallback
 
-  if (isActive && !task.confirmedAt) {
-    return { label: 'Elapsed', value: formatDuration(endedAt - startedAt) };
-  }
-  if (task.confirmedAt) {
-    return { label: 'Completed in', value: formatDuration(endedAt - startedAt) };
+  const ms = endedAt - startedAt;
+
+  if (task.confirmedAt || task.status === 'completed') {
+    return { label: 'Completed in', value: formatDuration(ms) };
   }
   if (task.status === 'failed') {
-    return { label: 'Failed in', value: formatDuration(endedAt - startedAt) };
+    return { label: 'Failed in', value: formatDuration(ms) };
   }
   if (task.status === 'cancelled') {
-    return { label: 'Cancelled in', value: formatDuration(endedAt - startedAt) };
+    return { label: 'Cancelled in', value: formatDuration(ms) };
   }
-  return null;
+  return { label: 'Completed in', value: formatDuration(ms) };
 }
 
 function MintRow({
@@ -299,11 +314,9 @@ function TaskConsole({ taskId, task, onClose, onStart, updatingId }: {
   const isActive = task ? ['pending', 'monitoring', 'ready', 'running', 'unconfirmed'].includes(task.status) : false;
   const canRetry = task?.status === 'failed';
 
-  // Real, measured "queued -> confirmed" timing — no estimates. task.createdAt
-  // is the moment the task was created (right after URL/contract resolution).
-  // task.confirmedAt is set by executeMintTask() the instant the receipt comes
-  // back on-chain. While still active we tick against the latest log entry
-  // (or now) so you can watch the live elapsed time count up in real time.
+  // Use the SAME taskDuration() as MintRow so the timing always matches.
+  // For active tasks it ticks live (Date.now()), for terminal tasks it uses
+  // a stable end timestamp (confirmedAt or updatedAt).
   const [nowTick, setNowTick] = useState(() => Date.now());
   useEffect(() => {
     if (!isActive) return;
@@ -311,11 +324,17 @@ function TaskConsole({ taskId, task, onClose, onStart, updatingId }: {
     return () => clearInterval(interval);
   }, [isActive]);
 
-  const startedAt = task ? new Date(task.createdAt).getTime() : null;
-  const lastLogAt = logs.length > 0 ? new Date(logs[logs.length - 1].createdAt).getTime() : null;
-  const endedAt = task?.confirmedAt ? new Date(task.confirmedAt).getTime() : (!isActive ? lastLogAt : null);
-  const elapsedMs = startedAt != null ? (endedAt ?? nowTick) - startedAt : null;
-  const elapsedLabel = task?.confirmedAt ? 'Confirmed in' : isActive ? 'Elapsed' : 'Time to failure';
+  // Compute duration identically to MintRow's taskDuration()
+  const duration = task ? taskDuration(task) : null;
+  // For active tasks, override the value with the live-ticking nowTick so
+  // the console counts up in real time (same formula as taskDuration).
+  const elapsedMs = task
+    ? isActive
+      ? nowTick - new Date(task.createdAt).getTime()
+      : null
+    : null;
+  const elapsedLabel = duration?.label ?? '';
+  const elapsedValue = isActive && elapsedMs != null ? formatDuration(elapsedMs) : duration?.value ?? '';
 
   return (
     <Modal
@@ -336,9 +355,9 @@ function TaskConsole({ taskId, task, onClose, onStart, updatingId }: {
                 Live{isFetching ? '…' : ''}
               </span>
             )}
-            {elapsedMs != null && (
+            {duration && (
               <span className="rounded-full border border-primary/20 bg-indigo-50 px-2 py-0.5 font-mono text-xs font-bold text-primary">
-                {elapsedLabel}: {formatDuration(elapsedMs)}
+                {elapsedLabel}: {elapsedValue}
               </span>
             )}
           </div>
