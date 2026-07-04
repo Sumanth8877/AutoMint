@@ -27,38 +27,64 @@ export async function getUserMintTasks(userId: string) {
 
   const result = rows.map((r) => ({ ...r.task, collectionName: r.collectionName }));
 
-  // Attach the REAL execution failure reason and failure timestamp from task logs.
-  // mintTasks.riskReasons holds risk-analysis notes (e.g. "wallet has no
-  // confirmed mint history") — NOT the execution error. Showing those as the
-  // failure reason is misleading (a balance failure displayed as a risk note).
-  // We pull the most recent error-level task log per failed task instead.
-  // We also capture the error log's createdAt as the precise failure time —
-  // this is more accurate than updatedAt which may reflect an intermediate
-  // status change (e.g. running→failed) rather than the actual failure moment.
-  const failedIds = result.filter((t) => t.status === 'failed').map((t) => t.id);
-  if (failedIds.length === 0) {
-    return result.map((t) => ({ ...t, failureReason: null as string | null, failedAt: null as string | null }));
+  // Attach the REAL execution failure reason and the last activity timestamp
+  // from task logs. mintTasks.riskReasons holds risk-analysis notes — NOT the
+  // execution error. We pull the most recent error-level task log per failed
+  // task for the failure reason.
+  //
+  // For timing: we fetch the LAST log entry (any status) for ALL terminal
+  // tasks (failed, cancelled, completed, confirmed). This gives us the exact
+  // moment the task reached its final state — matching what the user sees
+  // in the TaskConsole log timeline. This is more accurate than updatedAt
+  // (which may reflect an intermediate status change) or confirmedAt (which
+  // is only set for successful mints).
+  const terminalStatuses = ['failed', 'cancelled', 'completed', 'confirmed'];
+  const terminalIds = result.filter((t) => terminalStatuses.includes(t.status)).map((t) => t.id);
+
+  if (terminalIds.length === 0) {
+    return result.map((t) => ({ ...t, failureReason: null as string | null, failedAt: null as string | null, lastLogAt: null as string | null }));
   }
 
-  const errorLogs = await getDb()
-    .select({ taskId: taskLogs.taskId, message: taskLogs.message, createdAt: taskLogs.createdAt })
-    .from(taskLogs)
-    .where(and(inArray(taskLogs.taskId, failedIds), eq(taskLogs.status, 'error')))
-    .orderBy(desc(taskLogs.createdAt));
-
+  // Fetch error logs for failed tasks (failure reason + failure time)
+  const failedIds = result.filter((t) => t.status === 'failed').map((t) => t.id);
   const reasonByTask = new Map<string, string>();
   const failedAtByTask = new Map<string, string>();
-  for (const log of errorLogs) {
-    if (!reasonByTask.has(log.taskId)) {
-      if (log.message) reasonByTask.set(log.taskId, log.message);
-      if (log.createdAt) failedAtByTask.set(log.taskId, log.createdAt.toISOString());
+
+  if (failedIds.length > 0) {
+    const errorLogs = await getDb()
+      .select({ taskId: taskLogs.taskId, message: taskLogs.message, createdAt: taskLogs.createdAt })
+      .from(taskLogs)
+      .where(and(inArray(taskLogs.taskId, failedIds), eq(taskLogs.status, 'error')))
+      .orderBy(desc(taskLogs.createdAt));
+
+    for (const log of errorLogs) {
+      if (!reasonByTask.has(log.taskId)) {
+        if (log.message) reasonByTask.set(log.taskId, log.message);
+        if (log.createdAt) failedAtByTask.set(log.taskId, log.createdAt.toISOString());
+      }
+    }
+  }
+
+  // Fetch the LAST log entry (any status) for ALL terminal tasks
+  // This gives us the precise end timestamp for duration calculation
+  const lastLogs = await getDb()
+    .select({ taskId: taskLogs.taskId, createdAt: taskLogs.createdAt })
+    .from(taskLogs)
+    .where(inArray(taskLogs.taskId, terminalIds))
+    .orderBy(desc(taskLogs.createdAt));
+
+  const lastLogAtByTask = new Map<string, string>();
+  for (const log of lastLogs) {
+    if (!lastLogAtByTask.has(log.taskId) && log.createdAt) {
+      lastLogAtByTask.set(log.taskId, log.createdAt.toISOString());
     }
   }
 
   return result.map((t) => ({
     ...t,
     failureReason: reasonByTask.get(t.id) ?? null,
-    failedAt: failedAtByTask.get(t.id) ?? null,
+    failedAt: failedAtByTask.get(t.id) ?? lastLogAtByTask.get(t.id) ?? null,
+    lastLogAt: lastLogAtByTask.get(t.id) ?? null,
   }));
 }
 
