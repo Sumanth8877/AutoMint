@@ -9,6 +9,7 @@ import {
   FadeIn, Stagger, StaggerItem, Reveal, TiltCard, Magnetic,
   Spotlight, FloatingOrb, Marquee, AnimatedNumber,
 } from '@/components/motion';
+import { MintMachineIllustration } from '@/components/ui/MintMachineIllustration';
 
 const features = [
   {
@@ -208,14 +209,7 @@ export default async function Home() {
                   </span>
                 </div>
                 <div className="relative aspect-[16/9] w-full">
-                  <Image
-                    src="/illustrations/hero-mint-machine.jpeg"
-                    alt="A small character energetically cranking a hand-drawn mint machine while a stream of minted NFTs flies out the chute."
-                    fill
-                    sizes="(min-width: 1024px) 56rem, 90vw"
-                    priority
-                    className="object-contain p-4"
-                  />
+                  <MintMachineIllustration className="h-full w-full p-4" />
                 </div>
                 <div className="grid gap-px border-t border-border bg-border sm:grid-cols-3">
                   {[
