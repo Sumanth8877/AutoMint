@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Activity, Eye, Pause, Pencil, Play, Plus, Radar, ShieldCheck, Trash2, Zap } from 'lucide-react';
+import { Activity, Eye, Pause, Pencil, Play, Plus, Radar, Trash2, Zap } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -27,7 +27,6 @@ type TrackedWallet = {
   networkType: NetworkType;
   chain: Chain;
   active: boolean;
-  reputationScore: number;
   copyMintStatus: 'enabled' | 'disabled' | 'none';
   lastActivityAt: string | null;
   createdAt: string;
@@ -58,16 +57,6 @@ type TrackerActivity = {
   riskScore: number | null;
   copied: boolean;
   copyStatus: string;
-};
-
-type Reputation = {
-  id: string;
-  walletAddress: string;
-  reputationScore: number;
-  totalMints: number;
-  successfulProjects: number;
-  failedProjects: number;
-  rugProjects: number;
 };
 
 type WalletForm = {
@@ -117,11 +106,6 @@ function destinationLabel(wallet: DestinationWallet) {
   return wallet.nickname || shortAddress(wallet.address);
 }
 
-function accuracy(reputation: Reputation) {
-  if (reputation.totalMints === 0) return '0%';
-  return `${Math.round((reputation.successfulProjects / reputation.totalMints) * 100)}%`;
-}
-
 const emptyRuleForm: RuleForm = {
   walletAddress: '',
   autoMint: false,
@@ -168,11 +152,6 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
     queryFn: () => apiRequest<{ activities: TrackerActivity[]; metrics: { detectedMints24h: number; copiedMints24h: number } }>('/api/whale-tracker/activity'),
   });
 
-  const { data: reputationData } = useQuery({
-    queryKey: ['wallet-reputation'],
-    queryFn: () => apiRequest<{ reputations: Reputation[] }>('/api/wallet-reputation'),
-  });
-
   const { data: destinationData } = useQuery({
     queryKey: ['wallets'],
     queryFn: () => apiRequest<{ wallets: DestinationWallet[] }>('/api/wallets'),
@@ -181,7 +160,6 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
   const trackedWallets = walletData?.wallets || [];
   const copyRules = useMemo(() => ruleData?.rules ?? [], [ruleData?.rules]);
   const activities = activityData?.activities || [];
-  const reputations = reputationData?.reputations || [];
   const destinationWallets = destinationData?.wallets || [];
   const detectedMints24h = activityData?.metrics.detectedMints24h || 0;
   const copiedMints24h = activityData?.metrics.copiedMints24h || 0;
@@ -494,7 +472,7 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
             <Stagger className="divide-y divide-border" stagger={0.05}>
               {trackedWallets.map((wallet) => (
                 <StaggerItem key={wallet.id}>
-                <div className="grid gap-4 p-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(120px,.45fr)_minmax(120px,.45fr)_minmax(120px,.45fr)_minmax(120px,.45fr)_auto] xl:items-center">
+                <div className="grid gap-4 p-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(120px,.45fr)_minmax(120px,.45fr)_minmax(120px,.45fr)_auto] xl:items-center">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="font-semibold text-text">{walletLabel(wallet)}</h3>
@@ -505,10 +483,6 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
                   <div>
                     <p className="text-xs font-medium uppercase text-muted">Network</p>
                     <p className="mt-1 text-sm text-text">{wallet.networkType}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium uppercase text-muted">Reputation Score</p>
-                    <p className="mt-1 font-mono text-sm text-text">{wallet.reputationScore}</p>
                   </div>
                   <div>
                     <p className="text-xs font-medium uppercase text-muted">Copy Mint Status</p>
@@ -603,45 +577,6 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
                 title="No copy mint rules."
                 description="Create a rule from a tracked wallet to record or execute copy-mint actions."
                 action={<Button type="button" onClick={() => openAddRule()}><Plus className="h-4 w-4" aria-hidden="true" />Create Rule</Button>}
-              />
-            )}
-          </div>
-        </Card>
-
-        <Card className="p-5">
-          <h2 className="text-lg font-semibold text-text">Reputation</h2>
-          <div className="mt-4 space-y-3">
-            {walletsLoading ? (
-              [0, 1, 2].map((item) => <Skeleton key={item} className="h-20 w-full bg-surface-hover" />)
-            ) : reputations.length > 0 ? (
-              <Stagger stagger={0.06}>
-              {reputations.map((reputation) => (
-                <StaggerItem key={reputation.id}>
-                <div className="rounded-lg border border-border bg-surface-hover p-4 mb-3 last:mb-0">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-success/20 bg-emerald-50 text-success">
-                      <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="break-all font-mono text-sm text-text">{reputation.walletAddress}</p>
-                      <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                        <div><p className="text-xs uppercase text-muted">Reputation Score</p><p className="font-mono text-text">{reputation.reputationScore}</p></div>
-                        <div><p className="text-xs uppercase text-muted">Successful Calls</p><p className="font-mono text-text">{reputation.successfulProjects}</p></div>
-                        <div><p className="text-xs uppercase text-muted">Failed Calls</p><p className="font-mono text-text">{reputation.failedProjects + reputation.rugProjects}</p></div>
-                        <div><p className="text-xs uppercase text-muted">Accuracy</p><p className="font-mono text-text">{accuracy(reputation)}</p></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                </StaggerItem>
-              ))}
-              </Stagger>
-            ) : (
-              <EmptyState
-                image="/illustrations/empty-reputation.jpeg"
-                imageAlt="A small character stands in front of a tall blank scoreboard holding a piece of chalk, unsure what to write yet."
-                title="No reputation records."
-                description="Reputation appears after tracked wallets produce copy-mint outcomes."
               />
             )}
           </div>

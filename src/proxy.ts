@@ -18,7 +18,7 @@ const isProtectedRoute = createRouteMatcher([
   '/api/history(.*)', '/api/monitoring(.*)', '/api/search(.*)',
   '/api/settings(.*)', '/api/whale-tracker(.*)', '/api/watched-wallets(.*)',
   '/api/collections(.*)', '/api/activities(.*)', '/api/blockchain(.*)',
-  '/api/telegram/link-token(.*)', '/api/wallet-reputation(.*)',
+  '/api/telegram/link-token(.*)',
 ]);
 
 // ─── Bearer token detection ───────────────────────────────────────────

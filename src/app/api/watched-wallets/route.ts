@@ -41,7 +41,6 @@ export async function GET() {
       const lastActivity = recentActivities.find((activity) => metadataWallet(activity.metadata) === wallet.walletAddress.toLowerCase());
       return {
         ...wallet,
-        reputationScore: 50,
         copyMintStatus: rule ? (rule.enabled ? 'enabled' : 'disabled') : 'none',
         lastActivityAt: lastActivity?.createdAt ?? null,
       };
