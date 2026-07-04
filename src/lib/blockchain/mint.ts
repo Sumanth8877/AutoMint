@@ -40,7 +40,7 @@ import {
 // blocks), then return the txHash as 'unconfirmed'. The receipt-recheck QStash
 // job (runs every 30s with its own budget) finalizes confirmation. The txHash is
 // already persisted via onBroadcast (C1), so this never re-broadcasts.
-const RECEIPT_WAIT_TIMEOUT_MS = 6_000;
+const RECEIPT_WAIT_TIMEOUT_MS = 2_000;
 
 // H1 + M1: gas limit + cost ceilings.
 const MAX_GAS_LIMIT = 3_000_000n;      // hard ceiling on gas units — mint txs rarely exceed ~500k
