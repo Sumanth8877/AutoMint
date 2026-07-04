@@ -17,7 +17,7 @@ export async function PATCH(req: Request, context: RouteContext) {
     const body = await parseJsonBody<{
       maxPrice?: string | number | null;
       quantity?: string | number | null;
-      riskThreshold?: string | number | null;
+      minMintCount?: string | number | null;
       destinationWalletId?: string | null;
       autoMint?: boolean;
       enabled?: boolean;

@@ -38,7 +38,7 @@ type CopyRule = {
   walletAddress: string;
   maxPrice: string | null;
   quantity: number;
-  riskThreshold: number;
+  minMintCount: number;
   destinationWalletId: string | null;
   autoMint: boolean;
   enabled: boolean;
@@ -81,7 +81,7 @@ type RuleForm = {
   autoMint: boolean;
   quantity: string;
   maxPrice: string;
-  riskThreshold: string;
+  minMintCount: string;
   destinationWalletId: string;
   enabled: boolean;
 };
@@ -125,14 +125,21 @@ function accuracy(reputation: Reputation) {
 const emptyRuleForm: RuleForm = {
   walletAddress: '',
   autoMint: false,
-  quantity: '1',
+  quantity: '2',
   maxPrice: '',
-  riskThreshold: '75',
+  minMintCount: '5',
   destinationWalletId: '',
   enabled: true,
 };
 
-export default function WhaleTrackerClient() {
+/** ~USD value of an ETH amount, e.g. "≈ $12.50". Empty string if not computable. */
+function ethToUsdHint(ethAmount: string, ethUsdPrice: number): string {
+  const value = Number(ethAmount);
+  if (!ethAmount.trim() || !Number.isFinite(value) || value < 0 || !ethUsdPrice) return '';
+  return `≈ $${(value * ethUsdPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: number }) {
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -294,7 +301,7 @@ export default function WhaleTrackerClient() {
       autoMint: rule.autoMint,
       quantity: String(rule.quantity),
       maxPrice: rule.maxPrice ?? '',
-      riskThreshold: String(rule.riskThreshold),
+      minMintCount: String(rule.minMintCount),
       destinationWalletId: rule.destinationWalletId ?? '',
       enabled: rule.enabled,
     });
@@ -382,9 +389,9 @@ export default function WhaleTrackerClient() {
         return;
       }
     }
-    const riskThreshold = clampNumeric(ruleForm.riskThreshold, 0, 100);
-    if (riskThreshold === null) {
-      setFormError('Risk threshold must be a number between 0 and 100.');
+    const minMintCount = clampNumeric(ruleForm.minMintCount, 1, 1000);
+    if (minMintCount === null || !Number.isInteger(minMintCount)) {
+      setFormError('Whale mint count must be a whole number of at least 1.');
       return;
     }
 
@@ -395,7 +402,7 @@ export default function WhaleTrackerClient() {
       autoMint: ruleForm.autoMint,
       quantity: String(quantity),
       maxPrice: ruleForm.maxPrice.trim() || null,
-      riskThreshold: String(riskThreshold),
+      minMintCount: String(minMintCount),
       destinationWalletId: ruleForm.destinationWalletId || null,
       enabled: ruleForm.enabled,
     };
@@ -575,8 +582,8 @@ export default function WhaleTrackerClient() {
                     <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       <div><p className="text-xs uppercase text-muted">Auto Copy Enabled</p><p className="mt-1 text-sm text-text">{rule.autoMint ? 'Yes' : 'No'}</p></div>
                       <div><p className="text-xs uppercase text-muted">Max Quantity</p><p className="mt-1 text-sm text-text">{rule.quantity}</p></div>
-                      <div><p className="text-xs uppercase text-muted">Max Spend</p><p className="mt-1 text-sm text-text">{rule.maxPrice ?? 'No limit'}</p></div>
-                      <div><p className="text-xs uppercase text-muted">Risk Threshold</p><p className="mt-1 text-sm text-text">{rule.riskThreshold}</p></div>
+                      <div><p className="text-xs uppercase text-muted">Spending Limit</p><p className="mt-1 text-sm text-text">{rule.maxPrice ? `${rule.maxPrice} ETH${ethToUsdHint(rule.maxPrice, ethUsdPrice) ? ` (${ethToUsdHint(rule.maxPrice, ethUsdPrice)})` : ''}` : 'No limit'}</p></div>
+                      <div><p className="text-xs uppercase text-muted">Copy After Whale Mints</p><p className="mt-1 text-sm text-text">{rule.minMintCount}+ NFTs</p></div>
                       <div className="sm:col-span-2"><p className="text-xs uppercase text-muted">Destination Wallet</p><p className="mt-1 break-all text-sm text-text">{destination ? destinationLabel(destination) : 'Default execution wallet'}</p></div>
                     </div>
                     <div className="mt-4 flex flex-wrap gap-2">
@@ -701,7 +708,9 @@ export default function WhaleTrackerClient() {
 
       <Modal open={ruleModal !== null} title={ruleModal === 'edit' ? 'Edit This Copy Rule' : "Copy a Whale's Mints"} onClose={() => { setRuleModal(null); setFormError(null); }}>
         <form onSubmit={submitRule} className="space-y-4">
-          <p className="text-sm text-muted -mt-1">Automatically mint when this wallet does.</p>
+          <p className="text-sm text-muted -mt-1">
+            Example: if the whale mints {ruleForm.minMintCount || '5'}+ NFTs{ruleForm.maxPrice.trim() ? ` under ${ruleForm.maxPrice} ETH${ethToUsdHint(ruleForm.maxPrice, ethUsdPrice) ? ` (${ethToUsdHint(ruleForm.maxPrice, ethUsdPrice)})` : ''} each` : ''}, automatically mint {ruleForm.quantity || '2'} using your account.
+          </p>
           <label className="block text-sm font-medium text-muted">
             Which Wallet to Follow
             <select
@@ -718,9 +727,18 @@ export default function WhaleTrackerClient() {
             </select>
           </label>
           <div className="grid gap-4 sm:grid-cols-2">
+            <Input label="Copy After Whale Mints" hint="e.g. 5 = wait until whale mints 5+ NFTs" type="number" min={1} value={ruleForm.minMintCount} onChange={(event) => setRuleForm((current) => ({ ...current, minMintCount: event.target.value }))} required />
             <Input label="How Many to Mint" hint="Stop after this many NFTs" type="number" min={1} value={ruleForm.quantity} onChange={(event) => setRuleForm((current) => ({ ...current, quantity: event.target.value }))} required />
-            <Input label="Spending Limit (ETH)" hint="Leave blank for no limit" type="number" min={0} step="0.0001" value={ruleForm.maxPrice} onChange={(event) => setRuleForm((current) => ({ ...current, maxPrice: event.target.value }))} placeholder="No limit" />
-            <Input label="Only Copy Safe Mints" hint="0 = safest, 100 = riskiest" type="number" min={0} max={100} value={ruleForm.riskThreshold} onChange={(event) => setRuleForm((current) => ({ ...current, riskThreshold: event.target.value }))} required />
+            <Input
+              label="Spending Limit (ETH / $)"
+              hint={ethToUsdHint(ruleForm.maxPrice, ethUsdPrice) || 'Leave blank for no limit'}
+              type="number"
+              min={0}
+              step="0.0001"
+              value={ruleForm.maxPrice}
+              onChange={(event) => setRuleForm((current) => ({ ...current, maxPrice: event.target.value }))}
+              placeholder="No limit"
+            />
             <label className="block text-sm font-medium text-muted">
               Send Minted NFTs To
               <select

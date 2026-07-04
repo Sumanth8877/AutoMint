@@ -199,7 +199,7 @@ export async function updateCopyMintRule(userId: string, id: string, data: Parti
 
   if (data.maxPrice !== undefined) values.maxPrice = normalizeMaxPrice(data.maxPrice);
   if (data.quantity !== undefined) values.quantity = normalizeQuantity(data.quantity);
-  if (data.riskThreshold !== undefined) values.riskThreshold = normalizeRiskThreshold(data.riskThreshold);
+  if (data.minMintCount !== undefined) values.minMintCount = normalizeMinMintCount(data.minMintCount);
   if (data.destinationWalletId !== undefined) values.destinationWalletId = await normalizeDestinationWalletId(userId, data.destinationWalletId);
   if (data.autoMint !== undefined) values.autoMint = data.autoMint;
   if (data.enabled !== undefined) values.enabled = data.enabled;

@@ -24,7 +24,7 @@ export async function POST(req: Request) {
       walletAddress?: string;
       maxPrice?: string | number | null;
       quantity?: string | number | null;
-      riskThreshold?: string | number | null;
+      minMintCount?: string | number | null;
       destinationWalletId?: string | null;
       autoMint?: boolean;
       enabled?: boolean;
@@ -38,7 +38,7 @@ export async function POST(req: Request) {
       walletAddress: body.walletAddress,
       maxPrice: body.maxPrice,
       quantity: body.quantity,
-      riskThreshold: body.riskThreshold,
+      minMintCount: body.minMintCount,
       destinationWalletId: body.destinationWalletId,
       autoMint: body.autoMint,
       enabled: body.enabled,
