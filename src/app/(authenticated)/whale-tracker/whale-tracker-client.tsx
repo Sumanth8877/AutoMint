@@ -6,7 +6,6 @@ import { Activity, Eye, Pause, Play, Plus, Radar, Trash2, Zap } from 'lucide-rea
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
-import Checkbox from '@/components/ui/Checkbox';
 import Input from '@/components/ui/Input';
 import { EmptyState } from '@/components/ui/empty-state';
 import { MetricCard } from '@/components/ui/metric-card';
@@ -67,12 +66,10 @@ type WalletForm = {
 
 type RuleForm = {
   walletAddress: string;
-  autoMint: boolean;
   quantity: string;
   maxPrice: string;
   minMintCount: string;
   destinationWalletId: string;
-  enabled: boolean;
 };
 
 const networkOptions: Array<{ value: NetworkType; label: string }> = [
@@ -108,12 +105,10 @@ function destinationLabel(wallet: DestinationWallet) {
 
 const emptyRuleForm: RuleForm = {
   walletAddress: '',
-  autoMint: false,
   quantity: '2',
   maxPrice: '',
   minMintCount: '5',
   destinationWalletId: '',
-  enabled: true,
 };
 
 /** ~USD value of an ETH amount, e.g. "≈ $12.50". Empty string if not computable. */
@@ -263,12 +258,10 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
   function openEditRule(rule: CopyRule) {
     setRuleForm({
       walletAddress: rule.walletAddress,
-      autoMint: rule.autoMint,
       quantity: String(rule.quantity),
       maxPrice: rule.maxPrice ?? '',
       minMintCount: String(rule.minMintCount),
       destinationWalletId: rule.destinationWalletId ?? '',
-      enabled: rule.enabled,
     });
     setEditingRule(rule);
     setFormError(null);
@@ -363,12 +356,15 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
 
     const body = {
       walletAddress: ruleForm.walletAddress.trim(),
-      autoMint: ruleForm.autoMint,
+      // A rule only exists to auto-copy — always active and always auto-minting.
+      // No point asking the user to flip two switches for something implied
+      // by the act of creating the rule; use Delete to turn it off entirely.
+      autoMint: true,
+      enabled: true,
       quantity: String(quantity),
       maxPrice: ruleForm.maxPrice.trim() || null,
       minMintCount: String(minMintCount),
       destinationWalletId: ruleForm.destinationWalletId || null,
-      enabled: ruleForm.enabled,
     };
 
     try {
@@ -592,25 +588,8 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
                 onChange={(event) => setRuleForm((current) => ({ ...current, destinationWalletId: event.target.value }))}
                 className="mt-2 h-11 w-full rounded-lg border border-border bg-surface/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               >
-                <option value="">My main wallet</option>
                 {destinationWallets.map((wallet) => <option key={wallet.id} value={wallet.id}>{destinationLabel(wallet)}</option>)}
               </select>
-            </label>
-          </div>
-          <div className="flex flex-wrap gap-4">
-            <label className="flex items-center gap-2 text-sm text-text cursor-pointer">
-              <Checkbox
-                checked={ruleForm.autoMint}
-                onChange={() => setRuleForm((current) => ({ ...current, autoMint: !current.autoMint }))}
-              />
-              Copy automatically (no approval needed)
-            </label>
-            <label className="flex items-center gap-2 text-sm text-text cursor-pointer">
-              <Checkbox
-                checked={ruleForm.enabled}
-                onChange={() => setRuleForm((current) => ({ ...current, enabled: !current.enabled }))}
-              />
-              Turn this rule on
             </label>
           </div>
           {formError ? <div className="rounded-lg border border-danger/20 bg-red-50 p-3 text-sm text-danger" role="alert">{formError}</div> : null}
