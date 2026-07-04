@@ -95,8 +95,10 @@ function shortAddress(addr: string | null) {
 
 function formatDuration(ms: number) {
   if (ms < 0) return '0s';
-  if (ms < 1000) return `${Math.round(ms)}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  // Always show a proper time unit — never raw milliseconds. Sub-second
+  // durations show 2 decimal places (e.g. "0.08s") so fast mints/failures
+  // still read as a real timing instead of a raw ms count.
+  if (ms < 60000) return `${(ms / 1000).toFixed(2)}s`;
   if (ms < 3600000) return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
   return `${Math.floor(ms / 3600000)}h ${Math.floor((ms % 3600000) / 60000)}m`;
 }
