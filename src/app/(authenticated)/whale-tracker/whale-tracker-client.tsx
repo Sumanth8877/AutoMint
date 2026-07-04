@@ -309,15 +309,6 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
     }
   }
 
-  async function submitWalletAndSetRule() {
-    const wallet = await saveWallet();
-    if (wallet) {
-      setWalletModal(null);
-      setWalletForm({ walletName: '', walletAddress: '', networkType: 'EVM' });
-      openAddRule(wallet.walletAddress);
-    }
-  }
-
   async function setTracking(wallet: TrackedWallet, active: boolean) {
     setBusyId(wallet.id);
     setError(null);
@@ -554,10 +545,6 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
         <form onSubmit={submitWallet} className="space-y-4">
           <Input label="Wallet Name" value={walletForm.walletName} onChange={(event) => setWalletForm((current) => ({ ...current, walletName: event.target.value }))} placeholder="Main Whale" />
           <Input label="Wallet Address" value={walletForm.walletAddress} onChange={(event) => setWalletForm((current) => ({ ...current, walletAddress: event.target.value }))} placeholder="0x, Solana, or Bitcoin address" required hint={walletAddressHint(walletForm.networkType)} />
-          <Button type="button" variant="secondary" size="sm" loading={saving} onClick={submitWalletAndSetRule}>
-            <Zap className="h-4 w-4" aria-hidden="true" />
-            Set Mint Rule
-          </Button>
           <label className="block text-sm font-medium text-muted">
             Network
             <select
