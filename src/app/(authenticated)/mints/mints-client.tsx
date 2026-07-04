@@ -417,13 +417,35 @@ export default function MintsClient() {
   });
 
   const createMint = useMutation({
-    mutationFn: (body: object) => apiRequest('/api/mints', { method: 'POST', body: JSON.stringify(body) }),
-    onSuccess: () => {
+    mutationFn: (body: object) =>
+      apiRequest<{
+        mintStatus?: 'completed' | 'failed' | 'upcoming';
+        success?: boolean;
+        txHash?: string;
+        error?: string;
+        scheduledTime?: string | null;
+      }>('/api/mints', { method: 'POST', body: JSON.stringify(body) }),
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['mints'] });
       dispatch({ type: 'STOP_SAVING' });
       dispatch({ type: 'CLOSE_QUEUE' });
       dispatch({ type: 'RESET_FORM' });
-      dispatch({ type: 'SET_SUCCESS', message: 'Mint queued successfully' });
+
+      // Speed fix: LIVE mints now execute inline and return the REAL outcome
+      // in this same response — show the actual result instead of a generic
+      // "queued" message the user would otherwise have to wait and refresh for.
+      if (result.mintStatus === 'completed') {
+        dispatch({ type: 'SET_SUCCESS', message: `Mint successful! ${result.txHash ? `Tx: ${result.txHash.slice(0, 10)}…` : ''}` });
+      } else if (result.mintStatus === 'failed') {
+        dispatch({ type: 'SET_ERROR', message: `Mint failed: ${result.error ?? 'Unknown error'}` });
+        setTimeout(() => dispatch({ type: 'SET_ERROR', message: null }), 6000);
+        return;
+      } else if (result.mintStatus === 'upcoming') {
+        const when = result.scheduledTime ? new Date(result.scheduledTime).toLocaleString() : 'the correct time';
+        dispatch({ type: 'SET_SUCCESS', message: `Mint scheduled for ${when}` });
+      } else {
+        dispatch({ type: 'SET_SUCCESS', message: 'Mint queued successfully' });
+      }
       setTimeout(() => dispatch({ type: 'SET_SUCCESS', message: null }), 4000);
     },
     onError: (e: Error) => {

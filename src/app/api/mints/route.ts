@@ -3,7 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getErrorMessage, parseJsonBody, handleRouteError } from '@/lib/api/errors';
 import { addMintTask, getMintTaskById, getUserMintTasks, removeMintTask } from '@/lib/services/mint.service';
-import { cancelScheduledMint, scheduleMint } from '@/lib/services/qstash.service';
+import { cancelScheduledMint, scheduleMint, executeScheduledMint } from '@/lib/services/qstash.service';
 import { registerContractForMonitoring, unregisterContract } from '@/lib/services/alchemy-webhook.service';
 import { getMintState } from '@/lib/services/mint-state.service';
 import { fetchMintRequirements } from '@/lib/services/mint-requirements.service';
@@ -62,6 +62,33 @@ async function upsertCollectionFromMintIntent(userId: string, intent: MintIntent
     .returning();
 
   return created;
+}
+
+/**
+ * Execute a LIVE mint INLINE within this request, instead of round-tripping
+ * through QStash (publish → Upstash queue → webhook delivery). That round
+ * trip alone typically added ~300ms-1.5s of pure network/queue latency —
+ * unnecessary when the mint is confirmed LIVE right now and we're already
+ * inside a serverless invocation with time budget to spare (this route has
+ * maxDuration: 10s; the full execution pipeline now completes in ~0.5-1.5s
+ * per the optimizations in qstash.service.ts / blockchain/mint.ts).
+ *
+ * QStash remains the correct mechanism for genuinely FUTURE mints (NOT_STARTED
+ * scheduling) — this helper is ONLY for the "mint is live right now" path.
+ */
+async function executeMintInline(taskId: string, userId: string) {
+  // Mark the task 'ready' before executing — mirrors what scheduleMint() used
+  // to set as the DB status for the QStash path, and lets executeScheduledMint's
+  // "fresh task" fast-path skip the redundant mint-state/price re-check (it was
+  // just verified moments ago in this same request).
+  await getDb()
+    .update(mintTasks)
+    .set({ status: 'ready', qstashMessageId: null, updatedAt: new Date() })
+    .where(eq(mintTasks.id, taskId));
+
+  const mintResult = await executeScheduledMint(taskId);
+  const finalTask = await getMintTaskById(taskId, userId);
+  return { mintResult, finalTask: finalTask ?? null };
 }
 
 // GET /api/mints
@@ -361,14 +388,19 @@ export async function POST(req: Request) {
 
       if (wlPhaseIsLive) {
         await addTaskLog(task.id, 'mint_state_live', 'success', 'WL mint is LIVE — executing immediately');
-        const scheduledWlLiveTask = await scheduleMint({
-          taskId: task.id,
-          userId: authResult.userId,
-          scheduledTime: new Date(),
-          initialStatus: 'ready',
-        });
+        // Speed fix: execute inline instead of round-tripping through QStash.
+        const { mintResult, finalTask } = await executeMintInline(task.id, authResult.userId);
         return NextResponse.json(
-          { task: scheduledWlLiveTask, collection, mintStatus: 'live', autoTriggered: true, wlPhase: wlPhase.type },
+          {
+            task: finalTask ?? { id: task.id },
+            collection,
+            mintStatus: mintResult.success ? 'completed' : 'failed',
+            autoTriggered: true,
+            wlPhase: wlPhase.type,
+            success: mintResult.success,
+            txHash: mintResult.txHash,
+            error: mintResult.success ? undefined : mintResult.error,
+          },
           { status: 201 },
         );
       } else {
@@ -384,30 +416,31 @@ export async function POST(req: Request) {
       }
     }
 
-    // ── Public live mint — immediate QStash dispatch ──────────────────────────
-    // Route through QStash with zero delay. Fire-and-forget (void) does NOT work
-    // on Vercel serverless — the function is terminated when the HTTP response is
-    // sent, killing any background execution. QStash sends a separate HTTP request
-    // to /api/webhooks/qstash which runs as its own serverless invocation.
+    // ── Public live mint — execute inline (no QStash round trip) ──
+    // Speed fix: previously this dispatched through scheduleMint() → QStash
+    // publish → Upstash queue → webhook delivery, adding ~300ms-1.5s of pure
+    // network/queue latency before execution even started. Since the mint is
+    // confirmed LIVE right now and we're already inside a serverless
+    // invocation with budget to spare (maxDuration: 10s vs. our ~0.5-1.5s
+    // execution pipeline), we execute directly and return the REAL result —
+    // success with txHash, or a clear failure reason — in this same response.
     await addTaskLog(task.id, 'mint_state_live', 'success', 'Mint is LIVE on-chain — executing immediately');
     await getDb()
       .update(mintTasks)
       .set({ phase: 'public', updatedAt: new Date() })
       .where(eq(mintTasks.id, task.id));
 
-    const autoTask = await scheduleMint({
-      taskId: task.id,
-      userId: authResult.userId,
-      scheduledTime: new Date(),
-      initialStatus: 'ready',
-    });
+    const { mintResult, finalTask } = await executeMintInline(task.id, authResult.userId);
 
     return NextResponse.json(
       {
-        task: autoTask,
+        task: finalTask ?? { id: task.id },
         collection,
-        mintStatus: 'live',
+        mintStatus: mintResult.success ? 'completed' : 'failed',
         autoTriggered: true,
+        success: mintResult.success,
+        txHash: mintResult.txHash,
+        error: mintResult.success ? undefined : mintResult.error,
       },
       { status: 201 },
     );
