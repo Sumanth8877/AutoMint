@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Activity, Eye, Pause, Pencil, Play, Plus, Radar, Trash2, Zap } from 'lucide-react';
+import { Activity, Eye, Pause, Play, Plus, Radar, Trash2, Zap } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -129,8 +129,7 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
-  const [walletModal, setWalletModal] = useState<'add' | 'edit' | null>(null);
-  const [editingWallet, setEditingWallet] = useState<TrackedWallet | null>(null);
+  const [walletModal, setWalletModal] = useState<'add' | null>(null);
   const [ruleModal, setRuleModal] = useState<'add' | 'edit' | null>(null);
   const [editingRule, setEditingRule] = useState<CopyRule | null>(null);
   const [walletForm, setWalletForm] = useState<WalletForm>({ walletName: '', walletAddress: '', networkType: 'EVM' });
@@ -229,19 +228,6 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
     },
   });
 
-  // Toggle rule status mutation
-  const toggleRuleMutation = useMutation({
-    mutationFn: async ({ id, enabled }: { id: string; enabled: boolean }) => {
-      return apiRequest<{ rule: CopyRule }>(`/api/copy-mint/rules/${id}`, {
-        method: 'PATCH',
-        body: { enabled },
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['copy-mint-rules'] });
-    },
-  });
-
   // Delete rule mutation
   const deleteRuleMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -254,16 +240,17 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
 
   function openAddWallet() {
     setWalletForm({ walletName: '', walletAddress: '', networkType: 'EVM' });
-    setEditingWallet(null);
     setFormError(null);
     setWalletModal('add');
   }
 
-  function openEditWallet(wallet: TrackedWallet) {
-    setWalletForm({ walletName: wallet.walletName ?? '', walletAddress: wallet.walletAddress, networkType: wallet.networkType });
-    setEditingWallet(wallet);
-    setFormError(null);
-    setWalletModal('edit');
+  function openWalletRuleSettings(wallet: TrackedWallet) {
+    const existingRule = copyRules.find((rule) => rule.walletAddress === wallet.walletAddress);
+    if (existingRule) {
+      openEditRule(existingRule);
+    } else {
+      openAddRule(wallet.walletAddress);
+    }
   }
 
   function openAddRule(walletAddress = '') {
@@ -299,7 +286,7 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
       setFormError('Wallet address is required.');
       return;
     }
-    if (walletModal === 'add' && !isValidWalletAddress(walletAddress, walletForm.networkType)) {
+    if (!isValidWalletAddress(walletAddress, walletForm.networkType)) {
       setFormError(walletAddressHint(walletForm.networkType));
       return;
     }
@@ -310,7 +297,6 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
         walletName: walletName || null,
         walletAddress,
         networkType: walletForm.networkType,
-        id: walletModal === 'edit' ? editingWallet?.id : undefined,
       });
       setWalletModal(null);
       setWalletForm({ walletName: '', walletAddress: '', networkType: 'EVM' });
@@ -401,19 +387,6 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
     }
   }
 
-  async function toggleRule(rule: CopyRule, enabled: boolean) {
-    setBusyId(rule.id);
-    setError(null);
-
-    try {
-      await toggleRuleMutation.mutateAsync({ id: rule.id, enabled });
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Failed to update copy rule.');
-    } finally {
-      setBusyId(null);
-    }
-  }
-
   async function deleteRule(rule: CopyRule) {
     setBusyId(rule.id);
     setError(null);
@@ -495,13 +468,10 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
                     <p className="mt-1 text-sm text-text">{formatRelativeTime(wallet.lastActivityAt)}</p>
                   </div>
                   <div className="flex flex-wrap gap-1 xl:justify-end">
-                    <button type="button" onClick={() => openEditWallet(wallet)} className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-surface-hover hover:text-text" aria-label="Edit tracked wallet">
-                      <Pencil className="h-4 w-4" aria-hidden="true" />
-                    </button>
                     <button type="button" onClick={() => setTracking(wallet, !wallet.active)} disabled={busyId === wallet.id} className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-surface-hover hover:text-text disabled:opacity-50" aria-label={wallet.active ? 'Pause tracking' : 'Resume tracking'}>
                       {wallet.active ? <Pause className="h-4 w-4" aria-hidden="true" /> : <Play className="h-4 w-4" aria-hidden="true" />}
                     </button>
-                    <button type="button" onClick={() => openAddRule(wallet.walletAddress)} className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-surface-hover hover:text-primary" aria-label="Create copy mint rule">
+                    <button type="button" onClick={() => openWalletRuleSettings(wallet)} className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-surface-hover hover:text-primary" aria-label="Copy mint rule settings">
                       <Zap className="h-4 w-4" aria-hidden="true" />
                     </button>
                     <button type="button" onClick={() => deleteWallet(wallet)} disabled={busyId === wallet.id} className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-surface-hover hover:text-danger disabled:opacity-50" aria-label="Delete tracked wallet">
@@ -522,64 +492,6 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
               />
             </div>
           )}
-        </Card>
-      </section>
-
-      <section className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,.9fr)]">
-        <Card className="p-5">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold text-text">Copy Mint Rules</h2>
-            <Button type="button" variant="secondary" size="sm" onClick={() => openAddRule()}>
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              Create Rule
-            </Button>
-          </div>
-          <div className="mt-4 space-y-3">
-            {walletsLoading ? (
-              [0, 1].map((item) => <Skeleton key={item} className="h-24 w-full bg-surface-hover" />)
-            ) : copyRules.length > 0 ? (
-              <Stagger stagger={0.06}>
-              {copyRules.map((rule) => {
-                const wallet = trackedWallets.find((item) => item.walletAddress === rule.walletAddress);
-                const destination = destinationWallets.find((item) => item.id === rule.destinationWalletId);
-
-                return (
-                  <StaggerItem key={rule.id}>
-                  <div className="rounded-lg border border-border bg-surface-hover p-4 mb-3 last:mb-0">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="font-semibold text-text">{wallet ? walletLabel(wallet) : shortAddress(rule.walletAddress)}</p>
-                        <p className="mt-1 break-all text-xs text-muted">{rule.walletAddress}</p>
-                      </div>
-                      <Badge variant={rule.enabled ? 'success' : 'warning'}>{rule.enabled ? 'Enabled' : 'Disabled'}</Badge>
-                    </div>
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      <div><p className="text-xs uppercase text-muted">Auto Copy Enabled</p><p className="mt-1 text-sm text-text">{rule.autoMint ? 'Yes' : 'No'}</p></div>
-                      <div><p className="text-xs uppercase text-muted">Max Quantity</p><p className="mt-1 text-sm text-text">{rule.quantity}</p></div>
-                      <div><p className="text-xs uppercase text-muted">Spending Limit</p><p className="mt-1 text-sm text-text">{rule.maxPrice ? `${rule.maxPrice} ETH${ethToUsdHint(rule.maxPrice, ethUsdPrice) ? ` (${ethToUsdHint(rule.maxPrice, ethUsdPrice)})` : ''}` : 'No limit'}</p></div>
-                      <div><p className="text-xs uppercase text-muted">Copy After Whale Mints</p><p className="mt-1 text-sm text-text">{rule.minMintCount}+ NFTs</p></div>
-                      <div className="sm:col-span-2"><p className="text-xs uppercase text-muted">Destination Wallet</p><p className="mt-1 break-all text-sm text-text">{destination ? destinationLabel(destination) : 'Default execution wallet'}</p></div>
-                    </div>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <Button type="button" variant="secondary" size="sm" onClick={() => openEditRule(rule)}>Edit</Button>
-                      <Button type="button" variant="secondary" size="sm" loading={busyId === rule.id} onClick={() => toggleRule(rule, !rule.enabled)}>{rule.enabled ? 'Disable' : 'Enable'}</Button>
-                      <Button type="button" variant="danger" size="sm" loading={busyId === rule.id} onClick={() => deleteRule(rule)}>Delete</Button>
-                    </div>
-                  </div>
-                  </StaggerItem>
-                );
-              })}
-              </Stagger>
-            ) : (
-              <EmptyState
-                image="/illustrations/empty-copy-rules.jpeg"
-                imageAlt="A small character holds an open blank rulebook with a pen floating nearby, ready to write the first rule."
-                title="No copy mint rules."
-                description="Create a rule from a tracked wallet to record or execute copy-mint actions."
-                action={<Button type="button" onClick={() => openAddRule()}><Plus className="h-4 w-4" aria-hidden="true" />Create Rule</Button>}
-              />
-            )}
-          </div>
         </Card>
       </section>
 
@@ -618,16 +530,15 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
         </Card>
       </section>
 
-      <Modal open={walletModal !== null} title={walletModal === 'edit' ? 'Edit Tracked Wallet' : 'Add Tracked Wallet'} onClose={() => { setWalletModal(null); setFormError(null); }}>
+      <Modal open={walletModal !== null} title="Add Tracked Wallet" onClose={() => { setWalletModal(null); setFormError(null); }}>
         <form onSubmit={submitWallet} className="space-y-4">
           <Input label="Wallet Name" value={walletForm.walletName} onChange={(event) => setWalletForm((current) => ({ ...current, walletName: event.target.value }))} placeholder="Main Whale" />
-          <Input label="Wallet Address" value={walletForm.walletAddress} onChange={(event) => setWalletForm((current) => ({ ...current, walletAddress: event.target.value }))} placeholder="0x, Solana, or Bitcoin address" disabled={walletModal === 'edit'} required hint={walletModal === 'add' ? walletAddressHint(walletForm.networkType) : undefined} />
+          <Input label="Wallet Address" value={walletForm.walletAddress} onChange={(event) => setWalletForm((current) => ({ ...current, walletAddress: event.target.value }))} placeholder="0x, Solana, or Bitcoin address" required hint={walletAddressHint(walletForm.networkType)} />
           <label className="block text-sm font-medium text-muted">
             Network
             <select
               value={walletForm.networkType}
               onChange={(event) => setWalletForm((current) => ({ ...current, networkType: event.target.value as NetworkType }))}
-              disabled={walletModal === 'edit'}
               className="mt-2 h-11 w-full rounded-lg border border-border bg-surface/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
             >
               {networkOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -636,7 +547,7 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
           {formError ? <div className="rounded-lg border border-danger/20 bg-red-50 p-3 text-sm text-danger" role="alert">{formError}</div> : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => { setWalletModal(null); setFormError(null); }}>Cancel</Button>
-            <Button type="submit" loading={saving}>{walletModal === 'edit' ? 'Save Wallet' : 'Add Wallet'}</Button>
+            <Button type="submit" loading={saving}>Add Wallet</Button>
           </div>
         </form>
       </Modal>
@@ -704,6 +615,9 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
           </div>
           {formError ? <div className="rounded-lg border border-danger/20 bg-red-50 p-3 text-sm text-danger" role="alert">{formError}</div> : null}
           <div className="flex justify-end gap-2">
+            {ruleModal === 'edit' && editingRule ? (
+              <Button type="button" variant="danger" loading={busyId === editingRule.id} onClick={async () => { await deleteRule(editingRule); setRuleModal(null); }}>Delete Rule</Button>
+            ) : null}
             <Button type="button" variant="secondary" onClick={() => { setRuleModal(null); setFormError(null); }}>Cancel</Button>
             <Button type="submit" loading={saving}>{ruleModal === 'edit' ? 'Save Changes' : 'Start Copying'}</Button>
           </div>
