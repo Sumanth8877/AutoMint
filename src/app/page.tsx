@@ -9,7 +9,6 @@ import {
   FadeIn, Stagger, StaggerItem, Reveal, TiltCard, Magnetic,
   Spotlight, FloatingOrb, Marquee, AnimatedNumber,
 } from '@/components/motion';
-import { MintMachineIllustration } from '@/components/ui/MintMachineIllustration';
 import { WorkflowIllustration } from '@/components/ui/WorkflowIllustration';
 
 const features = [
@@ -209,8 +208,8 @@ export default async function Home() {
                     How it works
                   </span>
                 </div>
-                <div className="relative aspect-[16/9] w-full">
-                  <MintMachineIllustration className="h-full w-full p-4" />
+                <div className="relative aspect-[3/1] w-full">
+                  <WorkflowIllustration className="h-full w-full p-4" />
                 </div>
                 <div className="grid gap-px border-t border-border bg-border sm:grid-cols-3">
                   {[
@@ -316,12 +315,6 @@ export default async function Home() {
             <p className="text-sm leading-relaxed text-secondary sm:text-base">
               Import once. Analyze anything. Queue your strategy. Let AutoMint fire the transaction the instant the mint opens.
             </p>
-          </Reveal>
-
-          <Reveal className="mx-auto w-full max-w-3xl">
-            <div className="w-full overflow-hidden rounded-2xl border border-border bg-white">
-              <WorkflowIllustration className="h-auto w-full" />
-            </div>
           </Reveal>
 
           <Stagger className="space-y-14 sm:space-y-20" inView stagger={0.12}>

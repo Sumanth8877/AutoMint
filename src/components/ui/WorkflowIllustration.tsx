@@ -41,14 +41,14 @@ export function WorkflowIllustration({ className }: { className?: string }) {
 
   return (
     <svg
-      viewBox="0 0 480 200"
+      viewBox="0 50 480 160"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={className}
       role="img"
       aria-label="Hand-drawn diagram: a small character sends one mint through a pipe that imports the wallet, analyzes the contract, queues the strategy, and auto-fires it — confirmed in under 50 milliseconds."
     >
-      <rect x="0" y="0" width="480" height="200" fill="white" />
+      <rect x="0" y="40" width="480" height="180" fill="white" />
 
       <defs>
         {/* organic hand-drawn wobble for the line-art */}
