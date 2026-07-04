@@ -36,7 +36,7 @@ export function MintMachineIllustration({ className }: { className?: string }) {
       xmlns="http://www.w3.org/2000/svg"
       className={className}
       role="img"
-      aria-label="Illustration of a small character firing NFTs through a mint machine in under 50 milliseconds"
+      aria-label="Illustration of a small character firing NFTs through a mint machine in under 50 milliseconds after inputting a mint URL"
     >
       <rect x="0" y="0" width="400" height="225" fill="white" />
 
@@ -44,14 +44,14 @@ export function MintMachineIllustration({ className }: { className?: string }) {
       <ellipse cx="120" cy="178" rx="30" ry="5" fill={INK} opacity="0.08" />
       <ellipse cx="248" cy="172" rx="58" ry="5" fill={INK} opacity="0.07" />
 
-      {/* ── incoming NFT tile dropping into the funnel ── */}
+      {/* ── incoming mint URL dropping into the funnel ── */}
       <motion.g
         animate={reduce ? undefined : { y: [-18, 22, 22], opacity: [1, 1, 0] }}
         transition={loop({ duration: CYCLE, times: [0, 0.55, 0.62], repeatDelay: CYCLE * 0.15 })}
       >
-        <rect x="223" y="18" width="26" height="26" rx="5" fill="#EEF2FF" stroke={INK} strokeWidth="2" />
-        <text x="236" y="35" textAnchor="middle" fontSize="9" fontWeight="700" fill={INK} fontFamily="ui-monospace, monospace">
-          NFT
+        <rect x="215" y="18" width="42" height="26" rx="5" fill="#EEF2FF" stroke={INK} strokeWidth="2" />
+        <text x="236" y="35" textAnchor="middle" fontSize="8.5" fontWeight="700" fill={INK} fontFamily="ui-monospace, monospace">
+          URL
         </text>
       </motion.g>
       <path d="M236 46 L236 58" stroke={INK} strokeWidth="2" strokeLinecap="round" markerEnd="url(#arrowhead)" />
@@ -74,9 +74,6 @@ export function MintMachineIllustration({ className }: { className?: string }) {
       />
       <text x="236" y="77" textAnchor="middle" fontSize="10" fontWeight="600" fill={INK} fontFamily="ui-monospace, monospace">
         contract
-      </text>
-      <text x="308" y="55" textAnchor="middle" fontSize="10.5" fontStyle="italic" fontWeight="700" fill="#4F46E5">
-        any chain
       </text>
 
       {/* ── machine box ── */}
