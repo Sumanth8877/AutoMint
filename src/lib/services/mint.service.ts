@@ -27,14 +27,17 @@ export async function getUserMintTasks(userId: string) {
 
   const result = rows.map((r) => ({ ...r.task, collectionName: r.collectionName }));
 
-  // Attach the REAL execution failure reason from task logs.
+  // Attach the REAL execution failure reason and failure timestamp from task logs.
   // mintTasks.riskReasons holds risk-analysis notes (e.g. "wallet has no
   // confirmed mint history") — NOT the execution error. Showing those as the
   // failure reason is misleading (a balance failure displayed as a risk note).
   // We pull the most recent error-level task log per failed task instead.
+  // We also capture the error log's createdAt as the precise failure time —
+  // this is more accurate than updatedAt which may reflect an intermediate
+  // status change (e.g. running→failed) rather than the actual failure moment.
   const failedIds = result.filter((t) => t.status === 'failed').map((t) => t.id);
   if (failedIds.length === 0) {
-    return result.map((t) => ({ ...t, failureReason: null as string | null }));
+    return result.map((t) => ({ ...t, failureReason: null as string | null, failedAt: null as string | null }));
   }
 
   const errorLogs = await getDb()
@@ -44,11 +47,19 @@ export async function getUserMintTasks(userId: string) {
     .orderBy(desc(taskLogs.createdAt));
 
   const reasonByTask = new Map<string, string>();
+  const failedAtByTask = new Map<string, string>();
   for (const log of errorLogs) {
-    if (log.message && !reasonByTask.has(log.taskId)) reasonByTask.set(log.taskId, log.message);
+    if (!reasonByTask.has(log.taskId)) {
+      if (log.message) reasonByTask.set(log.taskId, log.message);
+      if (log.createdAt) failedAtByTask.set(log.taskId, log.createdAt.toISOString());
+    }
   }
 
-  return result.map((t) => ({ ...t, failureReason: reasonByTask.get(t.id) ?? null }));
+  return result.map((t) => ({
+    ...t,
+    failureReason: reasonByTask.get(t.id) ?? null,
+    failedAt: failedAtByTask.get(t.id) ?? null,
+  }));
 }
 
 export async function addMintTask(userId: string, data: {

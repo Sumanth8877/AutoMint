@@ -30,6 +30,7 @@ type MintTask = {
   riskReasons: string[] | null; failureReason: string | null;
   qstashMessageId: string | null; createdAt: string; confirmedAt: string | null;
   updatedAt: string | null;
+  failedAt: string | null;
 };
 
 type WalletRecord = { id: string; address: string; nickname: string | null; chain: string; walletType: WalletType; isDefault: boolean; };
@@ -117,14 +118,20 @@ function taskDuration(task: MintTask): { label: string; value: string } | null {
   }
 
   // Terminal tasks (completed, confirmed, failed, cancelled): use a STABLE
-  // end timestamp. Prefer confirmedAt, fall back to updatedAt (set when the
-  // status changed to its terminal value). Never use Date.now() here — that
+  // end timestamp. For failed tasks, prefer failedAt (from the error log
+  // timestamp — the most precise failure moment). For completed, prefer
+  // confirmedAt. Fall back to updatedAt. Never use Date.now() here — that
   // would make the duration drift on every re-render.
-  const endedAt = task.confirmedAt
-    ? new Date(task.confirmedAt).getTime()
-    : task.updatedAt
-      ? new Date(task.updatedAt).getTime()
-      : startedAt; // last-resort fallback
+  let endedAt: number;
+  if (task.status === 'failed' && task.failedAt) {
+    endedAt = new Date(task.failedAt).getTime();
+  } else if (task.confirmedAt) {
+    endedAt = new Date(task.confirmedAt).getTime();
+  } else if (task.updatedAt) {
+    endedAt = new Date(task.updatedAt).getTime();
+  } else {
+    endedAt = startedAt; // last-resort fallback
+  }
 
   const ms = endedAt - startedAt;
 
