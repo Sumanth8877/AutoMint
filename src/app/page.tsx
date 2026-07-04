@@ -198,9 +198,6 @@ export default async function Home() {
                 className="relative overflow-hidden rounded-2xl border border-border-strong bg-white text-left shadow-lg backdrop-blur-sm"
                 style={{ boxShadow: '0 30px 80px rgba(0,0,0,0.08), 0 0 0 1px rgba(79,70,229,0.03)' }}
               >
-                <div className="relative aspect-[3/1] w-full">
-                  <WorkflowIllustration className="h-full w-full p-4" />
-                </div>
                 <div className="grid gap-px bg-border sm:grid-cols-3">
                   {[
                     { label: 'Latency', value: '< 50 ms', icon: Zap, tone: 'text-primary' },
