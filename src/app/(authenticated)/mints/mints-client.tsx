@@ -24,6 +24,7 @@ import type { WalletType } from '@/lib/wallets/detection';
 type MintTask = {
   id: string; walletId: string | null; collectionId: string | null;
   quantity: number; status: string; contractAddress: string | null;
+  collectionName: string | null;
   mintPrice: string | null; scheduledTime: string | null;
   phase: 'whitelist' | 'allowlist' | 'public' | null;
   riskReasons: string[] | null; failureReason: string | null;
@@ -84,6 +85,46 @@ function statusBadge(status: string) {
   }
 }
 
+function shortAddress(addr: string | null) {
+  if (!addr) return 'Unknown';
+  return `${addr.slice(0, 8)}…${addr.slice(-6)}`;
+}
+
+function formatDuration(ms: number) {
+  if (ms < 0) return '0s';
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  if (ms < 3600000) return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
+  return `${Math.floor(ms / 3600000)}h ${Math.floor((ms % 3600000) / 60000)}m`;
+}
+
+/** Compute elapsed time from task creation to completion/failure, or until now if still active. */
+function taskDuration(task: MintTask): { label: string; value: string } | null {
+  const startedAt = new Date(task.createdAt).getTime();
+  if (isNaN(startedAt)) return null;
+
+  const isActive = ['pending', 'monitoring', 'ready', 'running', 'unconfirmed'].includes(task.status);
+  const endedAt = task.confirmedAt
+    ? new Date(task.confirmedAt).getTime()
+    : !isActive
+      ? Date.now() // fallback for failed/cancelled without confirmedAt
+      : Date.now();
+
+  if (isActive && !task.confirmedAt) {
+    return { label: 'Elapsed', value: formatDuration(endedAt - startedAt) };
+  }
+  if (task.confirmedAt) {
+    return { label: 'Completed in', value: formatDuration(endedAt - startedAt) };
+  }
+  if (task.status === 'failed') {
+    return { label: 'Failed in', value: formatDuration(endedAt - startedAt) };
+  }
+  if (task.status === 'cancelled') {
+    return { label: 'Cancelled in', value: formatDuration(endedAt - startedAt) };
+  }
+  return null;
+}
+
 function MintRow({
   task, wallets, onStart, onCancel, onDelete, onOpenConsole, updatingId, deletingId,
 }: {
@@ -121,10 +162,8 @@ function MintRow({
       {/* Main info */}
       <div className="ml-3 flex-1 min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-bold text-text font-mono">
-            {task.contractAddress
-              ? `${task.contractAddress.slice(0, 8)}…${task.contractAddress.slice(-6)}`
-              : 'Unknown Contract'}
+          <span className="text-sm font-bold text-text">
+            {task.collectionName || shortAddress(task.contractAddress)}
           </span>
           {statusBadge(task.status)}
           {task.phase && <Badge variant="purple">{task.phase}</Badge>}
@@ -139,6 +178,14 @@ function MintRow({
               {new Date(task.scheduledTime).toLocaleString()}
             </span>
           )}
+          {(() => {
+            const dur = taskDuration(task);
+            return dur && (
+              <span className="rounded-full border border-border bg-surface-hover px-2 py-0.5 font-mono text-xs font-semibold text-primary">
+                {dur.label}: {dur.value}
+              </span>
+            );
+          })()}
           <span className="text-muted/60">{new Date(task.createdAt).toLocaleDateString()}</span>
         </div>
         {task.failureReason && (
@@ -234,12 +281,6 @@ function logLineTone(status: string) {
   }
 }
 
-function formatDuration(ms: number) {
-  if (ms < 0) return '0.00s';
-  if (ms < 1000) return `${Math.round(ms)}ms`;
-  return `${(ms / 1000).toFixed(2)}s`;
-}
-
 function TaskConsole({ taskId, task, onClose, onStart, updatingId }: {
   taskId: string;
   task: MintTask | undefined;
@@ -281,7 +322,7 @@ function TaskConsole({ taskId, task, onClose, onStart, updatingId }: {
       open={!!taskId}
       onClose={onClose}
       title="Task Console"
-      subtitle={task?.contractAddress ? `${task.contractAddress.slice(0, 10)}…${task.contractAddress.slice(-6)}` : 'Live execution log'}
+      subtitle={task?.collectionName || (task?.contractAddress ? shortAddress(task.contractAddress) : 'Live execution log')}
       tone="neon"
       size="xl"
     >

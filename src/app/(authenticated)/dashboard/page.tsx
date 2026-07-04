@@ -32,13 +32,22 @@ async function getDashboardData(userId: string) {
     const db = getDb();
     const since7Days = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    const [tasks, recentHistory, userWallets, userCollections, activities] = await Promise.all([
+    const [tasks, recentHistoryRows, userWallets, userCollections, activities] = await Promise.all([
       getUserMintTasks(userId),
-      db.select().from(mintHistory).where(and(gte(mintHistory.createdAt, since7Days), eq(mintHistory.userId, userId))).orderBy(desc(mintHistory.createdAt)),
+      db.select({
+        history: mintHistory,
+        collectionName: collections.name,
+      })
+        .from(mintHistory)
+        .leftJoin(collections, eq(mintHistory.collectionId, collections.id))
+        .where(and(gte(mintHistory.createdAt, since7Days), eq(mintHistory.userId, userId)))
+        .orderBy(desc(mintHistory.createdAt)),
       db.select().from(wallets).where(eq(wallets.userId, userId)),
       db.select().from(collections).where(eq(collections.userId, userId)),
       getRecentActivities(userId).catch(() => []),
     ]);
+
+    const recentHistory = recentHistoryRows.map(r => ({ ...r.history, collectionName: r.collectionName }));
 
     const fundedWallets = userWallets.filter(w => w.balance && parseFloat(w.balance) > 0.001);
     const historyByDay = recentHistory.reduce((acc, h) => {
@@ -204,7 +213,7 @@ export default async function DashboardPage() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-text truncate">
-                      {'contractAddress' in h && h.contractAddress ? `${(h.contractAddress as string).slice(0, 6)}…${(h.contractAddress as string).slice(-4)}` : `Mint #${h.id.slice(-6)}`}
+                      {'collectionName' in h && h.collectionName ? h.collectionName : ('contractAddress' in h && h.contractAddress ? `${(h.contractAddress as string).slice(0, 6)}…${(h.contractAddress as string).slice(-4)}` : `Mint #${h.id.slice(-6)}`)}
                     </p>
                     <p className="text-xs text-muted">
                       {new Date(h.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}

@@ -14,7 +14,18 @@ import { unregisterIfIdle } from '@/lib/services/alchemy-webhook.service';
 import { ensureCollectionForMint } from '@/lib/services/collection.service';
 
 export async function getUserMintTasks(userId: string) {
-  const result = await getDb().select().from(mintTasks).where(eq(mintTasks.userId, userId)).orderBy(desc(mintTasks.createdAt));
+  // Join with collections to get collectionName for display instead of raw contract address.
+  const rows = await getDb()
+    .select({
+      task: mintTasks,
+      collectionName: collections.name,
+    })
+    .from(mintTasks)
+    .leftJoin(collections, eq(mintTasks.collectionId, collections.id))
+    .where(eq(mintTasks.userId, userId))
+    .orderBy(desc(mintTasks.createdAt));
+
+  const result = rows.map((r) => ({ ...r.task, collectionName: r.collectionName }));
 
   // Attach the REAL execution failure reason from task logs.
   // mintTasks.riskReasons holds risk-analysis notes (e.g. "wallet has no
