@@ -699,10 +699,11 @@ export default function WhaleTrackerClient() {
         </form>
       </Modal>
 
-      <Modal open={ruleModal !== null} title={ruleModal === 'edit' ? 'Edit Copy Mint Rule' : 'Create Copy Mint Rule'} onClose={() => { setRuleModal(null); setFormError(null); }}>
+      <Modal open={ruleModal !== null} title={ruleModal === 'edit' ? 'Edit This Copy Rule' : "Copy a Whale's Mints"} onClose={() => { setRuleModal(null); setFormError(null); }}>
         <form onSubmit={submitRule} className="space-y-4">
+          <p className="text-sm text-muted -mt-1">Automatically mint when this wallet does.</p>
           <label className="block text-sm font-medium text-muted">
-            Tracked Wallet
+            Which Wallet to Follow
             <select
               value={ruleForm.walletAddress}
               onChange={(event) => setRuleForm((current) => ({ ...current, walletAddress: event.target.value }))}
@@ -710,24 +711,24 @@ export default function WhaleTrackerClient() {
               required
               className="mt-2 h-11 w-full rounded-lg border border-border bg-surface/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
             >
-              <option value="">Select tracked wallet</option>
+              <option value="">Choose a whale wallet</option>
               {trackedWallets.filter((wallet) => wallet.networkType === 'EVM').map((wallet) => (
                 <option key={wallet.id} value={wallet.walletAddress}>{walletLabel(wallet)}</option>
               ))}
             </select>
           </label>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Input label="Max Quantity" type="number" min={1} value={ruleForm.quantity} onChange={(event) => setRuleForm((current) => ({ ...current, quantity: event.target.value }))} required />
-            <Input label="Max Spend" type="number" min={0} step="0.0001" value={ruleForm.maxPrice} onChange={(event) => setRuleForm((current) => ({ ...current, maxPrice: event.target.value }))} placeholder="No limit" />
-            <Input label="Risk Threshold" type="number" min={0} max={100} value={ruleForm.riskThreshold} onChange={(event) => setRuleForm((current) => ({ ...current, riskThreshold: event.target.value }))} required />
+            <Input label="How Many to Mint" hint="Stop after this many NFTs" type="number" min={1} value={ruleForm.quantity} onChange={(event) => setRuleForm((current) => ({ ...current, quantity: event.target.value }))} required />
+            <Input label="Spending Limit (ETH)" hint="Leave blank for no limit" type="number" min={0} step="0.0001" value={ruleForm.maxPrice} onChange={(event) => setRuleForm((current) => ({ ...current, maxPrice: event.target.value }))} placeholder="No limit" />
+            <Input label="Only Copy Safe Mints" hint="0 = safest, 100 = riskiest" type="number" min={0} max={100} value={ruleForm.riskThreshold} onChange={(event) => setRuleForm((current) => ({ ...current, riskThreshold: event.target.value }))} required />
             <label className="block text-sm font-medium text-muted">
-              Destination Wallet
+              Send Minted NFTs To
               <select
                 value={ruleForm.destinationWalletId}
                 onChange={(event) => setRuleForm((current) => ({ ...current, destinationWalletId: event.target.value }))}
                 className="mt-2 h-11 w-full rounded-lg border border-border bg-surface/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               >
-                <option value="">Default execution wallet</option>
+                <option value="">My main wallet</option>
                 {destinationWallets.map((wallet) => <option key={wallet.id} value={wallet.id}>{destinationLabel(wallet)}</option>)}
               </select>
             </label>
@@ -738,20 +739,20 @@ export default function WhaleTrackerClient() {
                 checked={ruleForm.autoMint}
                 onChange={() => setRuleForm((current) => ({ ...current, autoMint: !current.autoMint }))}
               />
-              Auto Copy Enabled
+              Copy automatically (no approval needed)
             </label>
             <label className="flex items-center gap-2 text-sm text-text cursor-pointer">
               <Checkbox
                 checked={ruleForm.enabled}
                 onChange={() => setRuleForm((current) => ({ ...current, enabled: !current.enabled }))}
               />
-              Rule Enabled
+              Turn this rule on
             </label>
           </div>
           {formError ? <div className="rounded-lg border border-danger/20 bg-red-50 p-3 text-sm text-danger" role="alert">{formError}</div> : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => { setRuleModal(null); setFormError(null); }}>Cancel</Button>
-            <Button type="submit" loading={saving}>{ruleModal === 'edit' ? 'Save Rule' : 'Create Rule'}</Button>
+            <Button type="submit" loading={saving}>{ruleModal === 'edit' ? 'Save Changes' : 'Start Copying'}</Button>
           </div>
         </form>
       </Modal>
