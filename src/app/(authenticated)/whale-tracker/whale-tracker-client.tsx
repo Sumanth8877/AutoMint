@@ -9,7 +9,6 @@ import Card from '@/components/ui/Card';
 import Input from '@/components/ui/Input';
 import { EmptyState } from '@/components/ui/empty-state';
 import { MetricCard } from '@/components/ui/metric-card';
-import { Modal } from '@/components/ui/modal';
 import { Panel } from '@/components/ui/panel';
 import { motion } from 'framer-motion';
 import { PageHeader } from '@/components/ui/page-header';
