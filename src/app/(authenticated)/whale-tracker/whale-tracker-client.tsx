@@ -10,6 +10,7 @@ import Input from '@/components/ui/Input';
 import { EmptyState } from '@/components/ui/empty-state';
 import { MetricCard } from '@/components/ui/metric-card';
 import { Modal } from '@/components/ui/modal';
+import { Drawer } from '@/components/ui/drawer';
 import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Stagger, StaggerItem } from '@/components/motion';
@@ -403,10 +404,16 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
         title="Whale Tracker"
         description="Track high-signal wallets, control copy-mint rules, and review detected mint activity."
         actions={
-          <Button type="button" onClick={openAddWallet}>
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Add Wallet
-          </Button>
+          <>
+            <Button type="button" variant="secondary" onClick={() => openAddRule()}>
+              <Zap className="h-4 w-4" aria-hidden="true" />
+              Add Rule
+            </Button>
+            <Button type="button" onClick={openAddWallet}>
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Add Wallet
+            </Button>
+          </>
         }
       />
 
@@ -548,7 +555,7 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
         </form>
       </Modal>
 
-      <Modal open={ruleModal !== null} title={ruleModal === 'edit' ? 'Edit This Copy Rule' : "Copy a Whale's Mints"} onClose={() => { setRuleModal(null); setFormError(null); }}>
+      <Drawer open={ruleModal !== null} title={ruleModal === 'edit' ? 'Edit This Copy Rule' : "Copy a Whale's Mints"} onClose={() => { setRuleModal(null); setFormError(null); }}>
         <form onSubmit={submitRule} className="space-y-4">
           <p className="text-sm text-muted -mt-1">
             Example: if the whale mints {ruleForm.minMintCount || '5'}+ NFTs{ruleForm.maxPrice.trim() ? ` under ${ruleForm.maxPrice} ETH${ethToUsdHint(ruleForm.maxPrice, ethUsdPrice) ? ` (${ethToUsdHint(ruleForm.maxPrice, ethUsdPrice)})` : ''} each` : ''}, automatically mint {ruleForm.quantity || '2'} using your account.
@@ -601,7 +608,7 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
             <Button type="submit" loading={saving}>{ruleModal === 'edit' ? 'Save Changes' : 'Start Copying'}</Button>
           </div>
         </form>
-      </Modal>
+      </Drawer>
     </div>
   );
 }
