@@ -9,7 +9,6 @@ import {
   FadeIn, Stagger, StaggerItem, Reveal, TiltCard, Magnetic,
   Spotlight, FloatingOrb, Marquee, AnimatedNumber,
 } from '@/components/motion';
-import { WorkflowIllustration } from '@/components/ui/WorkflowIllustration';
 
 const features = [
   {
@@ -202,7 +201,7 @@ export default async function Home() {
                 <div className="relative aspect-[3/1] w-full">
                   <WorkflowIllustration className="h-full w-full p-4" />
                 </div>
-                <div className="grid gap-px border-t border-border bg-border sm:grid-cols-3">
+                <div className="grid gap-px bg-border sm:grid-cols-3">
                   {[
                     { label: 'Latency', value: '< 50 ms', icon: Zap, tone: 'text-primary' },
                     { label: 'Custody', value: 'Non-custodial', icon: Shield, tone: 'text-success' },
