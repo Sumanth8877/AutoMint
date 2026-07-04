@@ -10,7 +10,8 @@ import Input from '@/components/ui/Input';
 import { EmptyState } from '@/components/ui/empty-state';
 import { MetricCard } from '@/components/ui/metric-card';
 import { Modal } from '@/components/ui/modal';
-import { Drawer } from '@/components/ui/drawer';
+import { Panel } from '@/components/ui/panel';
+import { motion } from 'framer-motion';
 import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Stagger, StaggerItem } from '@/components/motion';
@@ -124,7 +125,8 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [formError, setFormError] = useState<string | null>(null);
+  const [walletFormError, setWalletFormError] = useState<string | null>(null);
+  const [ruleFormError, setRuleFormError] = useState<string | null>(null);
   const [walletModal, setWalletModal] = useState<'add' | null>(null);
   const [ruleModal, setRuleModal] = useState<'add' | 'edit' | null>(null);
   const [editingRule, setEditingRule] = useState<CopyRule | null>(null);
@@ -236,7 +238,7 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
 
   function openAddWallet() {
     setWalletForm({ walletName: '', walletAddress: '', networkType: 'EVM' });
-    setFormError(null);
+    setWalletFormError(null);
     setWalletModal('add');
   }
 
@@ -252,7 +254,7 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
   function openAddRule(walletAddress = '') {
     setRuleForm({ ...emptyRuleForm, walletAddress });
     setEditingRule(null);
-    setFormError(null);
+    setRuleFormError(null);
     setRuleModal('add');
   }
 
@@ -265,22 +267,22 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
       destinationWalletId: rule.destinationWalletId ?? '',
     });
     setEditingRule(rule);
-    setFormError(null);
+    setRuleFormError(null);
     setRuleModal('edit');
   }
 
   async function saveWallet(): Promise<TrackedWallet | null> {
-    setFormError(null);
+    setWalletFormError(null);
 
     const walletName = sanitizeText(walletForm.walletName);
     const walletAddress = walletForm.walletAddress.trim();
 
     if (!walletAddress) {
-      setFormError('Wallet address is required.');
+      setWalletFormError('Wallet address is required.');
       return null;
     }
     if (!isValidWalletAddress(walletAddress, walletForm.networkType)) {
-      setFormError(walletAddressHint(walletForm.networkType));
+      setWalletFormError(walletAddressHint(walletForm.networkType));
       return null;
     }
 
@@ -293,7 +295,7 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
       });
       return wallet;
     } catch (requestError) {
-      setFormError(requestError instanceof Error ? requestError.message : 'Failed to save tracked wallet.');
+      setWalletFormError(requestError instanceof Error ? requestError.message : 'Failed to save tracked wallet.');
       return null;
     } finally {
       setSaving(false);
@@ -306,6 +308,14 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
     if (wallet) {
       setWalletModal(null);
       setWalletForm({ walletName: '', walletAddress: '', networkType: 'EVM' });
+    }
+  }
+
+  /** Save wallet then open the copy-rule panel to its right. */
+  async function saveWalletAndSetRule() {
+    const wallet = await saveWallet();
+    if (wallet) {
+      openAddRule(wallet.walletAddress);
     }
   }
 
@@ -337,27 +347,27 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
 
   async function submitRule(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setFormError(null);
+    setRuleFormError(null);
 
     if (!ruleForm.walletAddress.trim()) {
-      setFormError('Select a tracked wallet.');
+      setRuleFormError('Select a tracked wallet.');
       return;
     }
     const quantity = clampNumeric(ruleForm.quantity, 1, 1000);
     if (quantity === null || !Number.isInteger(quantity)) {
-      setFormError('Max quantity must be a whole number of at least 1.');
+      setRuleFormError('Max quantity must be a whole number of at least 1.');
       return;
     }
     if (ruleForm.maxPrice.trim()) {
       const maxPrice = clampNumeric(ruleForm.maxPrice, 0, Number.MAX_SAFE_INTEGER);
       if (maxPrice === null) {
-        setFormError('Max spend must be a valid non-negative number.');
+        setRuleFormError('Max spend must be a valid non-negative number.');
         return;
       }
     }
     const minMintCount = clampNumeric(ruleForm.minMintCount, 1, 1000);
     if (minMintCount === null || !Number.isInteger(minMintCount)) {
-      setFormError('Whale mint count must be a whole number of at least 1.');
+      setRuleFormError('Whale mint count must be a whole number of at least 1.');
       return;
     }
 
@@ -386,7 +396,7 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
       setRuleModal(null);
       setRuleForm(emptyRuleForm);
     } catch (requestError) {
-      setFormError(requestError instanceof Error ? requestError.message : 'Failed to save copy rule.');
+      setRuleFormError(requestError instanceof Error ? requestError.message : 'Failed to save copy rule.');
     } finally {
       setSaving(false);
     }
@@ -435,16 +445,10 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
       <section className="mt-6">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-text">Tracked Wallets</h2>
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="secondary" size="sm" onClick={() => openAddRule()}>
-              <Zap className="h-4 w-4" aria-hidden="true" />
-              Add Rule
-            </Button>
-            <Button type="button" variant="secondary" size="sm" onClick={openAddWallet}>
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              Add Wallet
-            </Button>
-          </div>
+          <Button type="button" variant="secondary" size="sm" onClick={openAddWallet}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Add Wallet
+          </Button>
         </div>
 
         <Card className="overflow-hidden">
@@ -541,82 +545,105 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
         </Card>
       </section>
 
-      <Modal open={walletModal !== null} title="Add Tracked Wallet" onClose={() => { setWalletModal(null); setFormError(null); }}>
-        <form onSubmit={submitWallet} className="space-y-4">
-          <Input label="Wallet Name" value={walletForm.walletName} onChange={(event) => setWalletForm((current) => ({ ...current, walletName: event.target.value }))} placeholder="Main Whale" />
-          <Input label="Wallet Address" value={walletForm.walletAddress} onChange={(event) => setWalletForm((current) => ({ ...current, walletAddress: event.target.value }))} placeholder="0x, Solana, or Bitcoin address" required hint={walletAddressHint(walletForm.networkType)} />
-          <label className="block text-sm font-medium text-muted">
-            Network
-            <select
-              value={walletForm.networkType}
-              onChange={(event) => setWalletForm((current) => ({ ...current, networkType: event.target.value as NetworkType }))}
-              className="mt-2 h-11 w-full rounded-lg border border-border bg-surface/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
-            >
-              {networkOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </label>
-          {formError ? <div className="rounded-lg border border-danger/20 bg-red-50 p-3 text-sm text-danger" role="alert">{formError}</div> : null}
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={() => { setWalletModal(null); setFormError(null); }}>Cancel</Button>
-            <Button type="submit" loading={saving}>Add Wallet</Button>
+      {/* Shared overlay — shows wallet panel, rule panel, or both side by side */}
+      {(walletModal !== null || ruleModal !== null) && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-[10vh]" role="dialog" aria-modal="true">
+          <motion.div
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            onClick={() => { setWalletModal(null); setRuleModal(null); setWalletFormError(null); setRuleFormError(null); }}
+            aria-hidden="true"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          />
+          <div className="relative z-10 flex items-start gap-4">
+            {walletModal !== null && (
+              <Panel title="Add Tracked Wallet" onClose={() => { setWalletModal(null); setWalletFormError(null); }}>
+                <form onSubmit={submitWallet} className="space-y-4">
+                  <Input label="Wallet Name" value={walletForm.walletName} onChange={(event) => setWalletForm((current) => ({ ...current, walletName: event.target.value }))} placeholder="Main Whale" />
+                  <Input label="Wallet Address" value={walletForm.walletAddress} onChange={(event) => setWalletForm((current) => ({ ...current, walletAddress: event.target.value }))} placeholder="0x, Solana, or Bitcoin address" required hint={walletAddressHint(walletForm.networkType)} />
+                  <label className="block text-sm font-medium text-muted">
+                    Network
+                    <select
+                      value={walletForm.networkType}
+                      onChange={(event) => setWalletForm((current) => ({ ...current, networkType: event.target.value as NetworkType }))}
+                      className="mt-2 h-11 w-full rounded-lg border border-border bg-surface/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    >
+                      {networkOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                  </label>
+                  <Button type="button" variant="secondary" loading={saving} onClick={saveWalletAndSetRule} className="w-full">
+                    <Zap className="h-4 w-4" aria-hidden="true" />
+                    Set Rule
+                  </Button>
+                  {walletFormError ? <div className="rounded-lg border border-danger/20 bg-red-50 p-3 text-sm text-danger" role="alert">{walletFormError}</div> : null}
+                  <div className="flex justify-end gap-2">
+                    <Button type="button" variant="secondary" onClick={() => { setWalletModal(null); setWalletFormError(null); }}>Cancel</Button>
+                    <Button type="submit" loading={saving}>Add Wallet</Button>
+                  </div>
+                </form>
+              </Panel>
+            )}
+            {ruleModal !== null && (
+              <Panel title={ruleModal === 'edit' ? 'Edit This Copy Rule' : "Copy a Whale's Mints"} onClose={() => { setRuleModal(null); setRuleFormError(null); }}>
+                <form onSubmit={submitRule} className="space-y-4">
+                  <p className="text-sm text-muted -mt-1">
+                    Example: if the whale mints {ruleForm.minMintCount || '5'}+ NFTs{ruleForm.maxPrice.trim() ? ` under ${ruleForm.maxPrice} ETH${ethToUsdHint(ruleForm.maxPrice, ethUsdPrice) ? ` (${ethToUsdHint(ruleForm.maxPrice, ethUsdPrice)})` : ''} each` : ''}, automatically mint {ruleForm.quantity || '2'} using your account.
+                  </p>
+                  <label className="block text-sm font-medium text-muted">
+                    Which Wallet to Follow
+                    <select
+                      value={ruleForm.walletAddress}
+                      onChange={(event) => setRuleForm((current) => ({ ...current, walletAddress: event.target.value }))}
+                      disabled={ruleModal === 'edit'}
+                      required
+                      className="mt-2 h-11 w-full rounded-lg border border-border bg-surface/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
+                    >
+                      <option value="">Choose a whale wallet</option>
+                      {trackedWallets.filter((wallet) => wallet.networkType === 'EVM').map((wallet) => (
+                        <option key={wallet.id} value={wallet.walletAddress}>{walletLabel(wallet)}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Input label="Copy After Whale Mints" hint="e.g. 5 = wait until whale mints 5+ NFTs" type="number" min={1} value={ruleForm.minMintCount} onChange={(event) => setRuleForm((current) => ({ ...current, minMintCount: event.target.value }))} required />
+                    <Input label="How Many to Mint" hint="Stop after this many NFTs" type="number" min={1} value={ruleForm.quantity} onChange={(event) => setRuleForm((current) => ({ ...current, quantity: event.target.value }))} required />
+                    <Input
+                      label="Spending Limit (ETH / $)"
+                      hint={ethToUsdHint(ruleForm.maxPrice, ethUsdPrice) || 'Leave blank for no limit'}
+                      type="number"
+                      min={0}
+                      step="0.0001"
+                      value={ruleForm.maxPrice}
+                      onChange={(event) => setRuleForm((current) => ({ ...current, maxPrice: event.target.value }))}
+                      placeholder="No limit"
+                    />
+                    <label className="block text-sm font-medium text-muted">
+                      Send Minted NFTs To
+                      <select
+                        value={ruleForm.destinationWalletId}
+                        onChange={(event) => setRuleForm((current) => ({ ...current, destinationWalletId: event.target.value }))}
+                        className="mt-2 h-11 w-full rounded-lg border border-border bg-surface/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                      >
+                        {destinationWallets.map((wallet) => <option key={wallet.id} value={wallet.id}>{destinationLabel(wallet)}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                  {ruleFormError ? <div className="rounded-lg border border-danger/20 bg-red-50 p-3 text-sm text-danger" role="alert">{ruleFormError}</div> : null}
+                  <div className="flex justify-end gap-2">
+                    {ruleModal === 'edit' && editingRule ? (
+                      <Button type="button" variant="danger" loading={busyId === editingRule.id} onClick={async () => { await deleteRule(editingRule); setRuleModal(null); }}>Delete Rule</Button>
+                    ) : null}
+                    <Button type="button" variant="secondary" onClick={() => { setRuleModal(null); setRuleFormError(null); }}>Cancel</Button>
+                    <Button type="submit" loading={saving}>{ruleModal === 'edit' ? 'Save Changes' : 'Start Copying'}</Button>
+                  </div>
+                </form>
+              </Panel>
+            )}
           </div>
-        </form>
-      </Modal>
-
-      <Drawer open={ruleModal !== null} title={ruleModal === 'edit' ? 'Edit This Copy Rule' : "Copy a Whale's Mints"} onClose={() => { setRuleModal(null); setFormError(null); }}>
-        <form onSubmit={submitRule} className="space-y-4">
-          <p className="text-sm text-muted -mt-1">
-            Example: if the whale mints {ruleForm.minMintCount || '5'}+ NFTs{ruleForm.maxPrice.trim() ? ` under ${ruleForm.maxPrice} ETH${ethToUsdHint(ruleForm.maxPrice, ethUsdPrice) ? ` (${ethToUsdHint(ruleForm.maxPrice, ethUsdPrice)})` : ''} each` : ''}, automatically mint {ruleForm.quantity || '2'} using your account.
-          </p>
-          <label className="block text-sm font-medium text-muted">
-            Which Wallet to Follow
-            <select
-              value={ruleForm.walletAddress}
-              onChange={(event) => setRuleForm((current) => ({ ...current, walletAddress: event.target.value }))}
-              disabled={ruleModal === 'edit'}
-              required
-              className="mt-2 h-11 w-full rounded-lg border border-border bg-surface/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
-            >
-              <option value="">Choose a whale wallet</option>
-              {trackedWallets.filter((wallet) => wallet.networkType === 'EVM').map((wallet) => (
-                <option key={wallet.id} value={wallet.walletAddress}>{walletLabel(wallet)}</option>
-              ))}
-            </select>
-          </label>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Input label="Copy After Whale Mints" hint="e.g. 5 = wait until whale mints 5+ NFTs" type="number" min={1} value={ruleForm.minMintCount} onChange={(event) => setRuleForm((current) => ({ ...current, minMintCount: event.target.value }))} required />
-            <Input label="How Many to Mint" hint="Stop after this many NFTs" type="number" min={1} value={ruleForm.quantity} onChange={(event) => setRuleForm((current) => ({ ...current, quantity: event.target.value }))} required />
-            <Input
-              label="Spending Limit (ETH / $)"
-              hint={ethToUsdHint(ruleForm.maxPrice, ethUsdPrice) || 'Leave blank for no limit'}
-              type="number"
-              min={0}
-              step="0.0001"
-              value={ruleForm.maxPrice}
-              onChange={(event) => setRuleForm((current) => ({ ...current, maxPrice: event.target.value }))}
-              placeholder="No limit"
-            />
-            <label className="block text-sm font-medium text-muted">
-              Send Minted NFTs To
-              <select
-                value={ruleForm.destinationWalletId}
-                onChange={(event) => setRuleForm((current) => ({ ...current, destinationWalletId: event.target.value }))}
-                className="mt-2 h-11 w-full rounded-lg border border-border bg-surface/70 px-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-              >
-                {destinationWallets.map((wallet) => <option key={wallet.id} value={wallet.id}>{destinationLabel(wallet)}</option>)}
-              </select>
-            </label>
-          </div>
-          {formError ? <div className="rounded-lg border border-danger/20 bg-red-50 p-3 text-sm text-danger" role="alert">{formError}</div> : null}
-          <div className="flex justify-end gap-2">
-            {ruleModal === 'edit' && editingRule ? (
-              <Button type="button" variant="danger" loading={busyId === editingRule.id} onClick={async () => { await deleteRule(editingRule); setRuleModal(null); }}>Delete Rule</Button>
-            ) : null}
-            <Button type="button" variant="secondary" onClick={() => { setRuleModal(null); setFormError(null); }}>Cancel</Button>
-            <Button type="submit" loading={saving}>{ruleModal === 'edit' ? 'Save Changes' : 'Start Copying'}</Button>
-          </div>
-        </form>
-      </Drawer>
+        </div>
+      )}
     </div>
   );
 }
