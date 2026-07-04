@@ -199,15 +199,6 @@ export default async function Home() {
                 className="relative overflow-hidden rounded-2xl border border-border-strong bg-white text-left shadow-lg backdrop-blur-sm"
                 style={{ boxShadow: '0 30px 80px rgba(0,0,0,0.08), 0 0 0 1px rgba(79,70,229,0.03)' }}
               >
-                <div className="flex items-center gap-2 border-b border-border bg-surface/90 px-5 py-3">
-                  <span className="h-2.5 w-2.5 rounded-full bg-danger/70" />
-                  <span className="h-2.5 w-2.5 rounded-full bg-gold/70" />
-                  <span className="h-2.5 w-2.5 rounded-full bg-success/70" />
-                  <span className="ml-3 font-mono text-[11px] text-muted">automint — mission-control</span>
-                  <span className="ml-auto flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted">
-                    How it works
-                  </span>
-                </div>
                 <div className="relative aspect-[3/1] w-full">
                   <WorkflowIllustration className="h-full w-full p-4" />
                 </div>
