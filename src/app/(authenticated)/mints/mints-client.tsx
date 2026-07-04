@@ -6,7 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import {
   CalendarClock, LinkIcon, Play, Plus, RotateCcw,
-  Trash2, XCircle, Zap, CheckCircle2, AlertCircle, Cpu, ExternalLink, Terminal,
+  Trash2, XCircle, Zap, CheckCircle2, AlertCircle, Cpu, ExternalLink, Terminal, Clock,
 } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
@@ -195,8 +195,10 @@ function MintRow({
           )}
           {(() => {
             const dur = taskDuration(task);
-            return dur && (
-              <span className="rounded-full border border-border bg-surface-hover px-2 py-0.5 font-mono text-xs font-semibold text-primary">
+            if (!dur) return null;
+            return (
+              <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-bold text-indigo-600 ring-1 ring-inset ring-indigo-200">
+                <Clock className="h-3 w-3" />
                 {dur.label}: {dur.value}
               </span>
             );
@@ -356,7 +358,8 @@ function TaskConsole({ taskId, task, onClose, onStart, updatingId }: {
               </span>
             )}
             {duration && (
-              <span className="rounded-full border border-primary/20 bg-indigo-50 px-2 py-0.5 font-mono text-xs font-bold text-primary">
+              <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-bold text-indigo-600 ring-1 ring-inset ring-indigo-200">
+                <Clock className="h-3 w-3" />
                 {elapsedLabel}: {elapsedValue}
               </span>
             )}
