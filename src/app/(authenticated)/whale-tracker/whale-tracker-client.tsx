@@ -269,8 +269,7 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
     setRuleModal('edit');
   }
 
-  async function submitWallet(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function saveWallet(): Promise<TrackedWallet | null> {
     setFormError(null);
 
     const walletName = sanitizeText(walletForm.walletName);
@@ -278,26 +277,44 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
 
     if (!walletAddress) {
       setFormError('Wallet address is required.');
-      return;
+      return null;
     }
     if (!isValidWalletAddress(walletAddress, walletForm.networkType)) {
       setFormError(walletAddressHint(walletForm.networkType));
-      return;
+      return null;
     }
 
     setSaving(true);
     try {
-      await walletMutation.mutateAsync({
+      const { wallet } = await walletMutation.mutateAsync({
         walletName: walletName || null,
         walletAddress,
         networkType: walletForm.networkType,
       });
-      setWalletModal(null);
-      setWalletForm({ walletName: '', walletAddress: '', networkType: 'EVM' });
+      return wallet;
     } catch (requestError) {
       setFormError(requestError instanceof Error ? requestError.message : 'Failed to save tracked wallet.');
+      return null;
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function submitWallet(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const wallet = await saveWallet();
+    if (wallet) {
+      setWalletModal(null);
+      setWalletForm({ walletName: '', walletAddress: '', networkType: 'EVM' });
+    }
+  }
+
+  async function submitWalletAndSetRule() {
+    const wallet = await saveWallet();
+    if (wallet) {
+      setWalletModal(null);
+      setWalletForm({ walletName: '', walletAddress: '', networkType: 'EVM' });
+      openAddRule(wallet.walletAddress);
     }
   }
 
@@ -537,6 +554,10 @@ export default function WhaleTrackerClient({ ethUsdPrice = 0 }: { ethUsdPrice?: 
         <form onSubmit={submitWallet} className="space-y-4">
           <Input label="Wallet Name" value={walletForm.walletName} onChange={(event) => setWalletForm((current) => ({ ...current, walletName: event.target.value }))} placeholder="Main Whale" />
           <Input label="Wallet Address" value={walletForm.walletAddress} onChange={(event) => setWalletForm((current) => ({ ...current, walletAddress: event.target.value }))} placeholder="0x, Solana, or Bitcoin address" required hint={walletAddressHint(walletForm.networkType)} />
+          <Button type="button" variant="secondary" size="sm" loading={saving} onClick={submitWalletAndSetRule}>
+            <Zap className="h-4 w-4" aria-hidden="true" />
+            Set Mint Rule
+          </Button>
           <label className="block text-sm font-medium text-muted">
             Network
             <select
