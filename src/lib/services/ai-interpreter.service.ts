@@ -17,45 +17,75 @@ type ProviderConfig = {
 };
 
 const GEMINI_MODELS: AIModel[] = [
-  { id: 'gemini-3.5-flash',      label: 'Gemini 3.5 Flash ⭐',     description: 'Most intelligent — frontier agentic performance' },
-  { id: 'gemini-3.1-flash',      label: 'Gemini 3.1 Flash',        description: 'Cost-efficient — optimized for high-volume tasks' },
-  { id: 'gemini-2.5-flash',      label: 'Gemini 2.5 Flash',        description: 'Fast & reliable — solid all-rounder' },
-  { id: 'gemini-2.5-pro',        label: 'Gemini 2.5 Pro',          description: 'Deep reasoning — best for complex analysis' },
+  { id: 'gemini-3.5-flash',      label: 'Gemini 3.5 Flash \u2b50',     description: 'Most intelligent \u2014 frontier agentic performance' },
+  { id: 'gemini-3.1-flash',      label: 'Gemini 3.1 Flash',        description: 'Cost-efficient \u2014 optimized for high-volume tasks' },
+  { id: 'gemini-2.5-flash',      label: 'Gemini 2.5 Flash',        description: 'Fast & reliable \u2014 solid all-rounder' },
+  { id: 'gemini-2.5-pro',        label: 'Gemini 2.5 Pro',          description: 'Deep reasoning \u2014 best for complex analysis' },
 ];
 
 const NARA_MODELS: AIModel[] = [
-  { id: 'mistral-large',      label: 'Mistral Large ⭐',      description: 'Recommended — smart, supports tools' },
-  { id: 'mistral-medium-3-5', label: 'Mistral Medium 3.5',    description: 'Balanced — good speed & quality' },
-  { id: 'tencent-hy3',        label: 'Tencent Hy3',           description: 'Alternative — fast responses' },
+  { id: 'mistral-large',      label: 'Mistral Large \u2b50',      description: 'Recommended \u2014 smart, supports tools' },
+  { id: 'mistral-medium-3-5', label: 'Mistral Medium 3.5',    description: 'Balanced \u2014 good speed & quality' },
+  { id: 'tencent-hy3',        label: 'Tencent Hy3',           description: 'Alternative \u2014 fast responses' },
 ];
 
+// ── Multi-provider support ────────────────────────────────────────────────────
+// Both Gemini AND Nara models are shown if their API keys are set.
+// If one provider fails, the other is used as automatic fallback.
+
+const GEMINI_MODEL_IDS = new Set(GEMINI_MODELS.map(m => m.id));
+const NARA_MODEL_IDS = new Set(NARA_MODELS.map(m => m.id));
+
+function getGeminiProvider(): ProviderConfig | null {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) return null;
+  return {
+    name: 'Gemini',
+    baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+    apiKey: key,
+    defaultModel: 'gemini-3.5-flash',
+    models: GEMINI_MODELS,
+  };
+}
+
+function getNaraProvider(): ProviderConfig | null {
+  const key = process.env.NARA_API_KEY;
+  if (!key) return null;
+  return {
+    name: 'NaraRouter',
+    baseURL: 'https://router.bynara.id/v1',
+    apiKey: key,
+    defaultModel: 'mistral-large',
+    models: NARA_MODELS,
+  };
+}
+
+/** Get all configured providers (can be 0, 1, or 2). */
+function getAllProviders(): ProviderConfig[] {
+  const providers: ProviderConfig[] = [];
+  const gemini = getGeminiProvider();
+  const nara = getNaraProvider();
+  if (gemini) providers.push(gemini);
+  if (nara) providers.push(nara);
+  return providers;
+}
+
+/** Resolve which provider owns a given model ID. */
+function resolveProviderForModel(modelId: string): ProviderConfig | null {
+  if (GEMINI_MODEL_IDS.has(modelId)) return getGeminiProvider();
+  if (NARA_MODEL_IDS.has(modelId)) return getNaraProvider();
+  return null;
+}
+
+/** Get the primary provider (first available \u2014 Gemini preferred). */
 function resolveProvider(): ProviderConfig | null {
-  const explicit = process.env.AI_PROVIDER?.toLowerCase();
-  const geminiKey = process.env.GEMINI_API_KEY;
-  const naraKey = process.env.NARA_API_KEY;
+  return getGeminiProvider() ?? getNaraProvider();
+}
 
-  if (explicit === 'gemini' || (!explicit && geminiKey)) {
-    if (!geminiKey) return null;
-    return {
-      name: 'Gemini',
-      baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
-      apiKey: geminiKey,
-      defaultModel: 'gemini-3.5-flash',
-      models: GEMINI_MODELS,
-    };
-  }
-
-  if (explicit === 'nara' || (!explicit && naraKey)) {
-    if (!naraKey) return null;
-    return {
-      name: 'NaraRouter',
-      baseURL: 'https://router.bynara.id/v1',
-      apiKey: naraKey,
-      defaultModel: 'mistral-large',
-      models: NARA_MODELS,
-    };
-  }
-
+/** Get a fallback provider (the OTHER provider, not the given one). */
+function getFallbackProvider(currentName: string): ProviderConfig | null {
+  if (currentName === 'Gemini') return getNaraProvider();
+  if (currentName === 'NaraRouter') return getGeminiProvider();
   return null;
 }
 
@@ -64,18 +94,19 @@ function resolveProvider(): ProviderConfig | null {
 export type AIModelId = string;
 export type AIModel = { id: string; label: string; description: string; };
 
+/** Returns ALL models from ALL configured providers (merged list). */
 export function getAvailableModels(): AIModel[] {
-  return resolveProvider()?.models ?? [];
+  return getAllProviders().flatMap(p => p.models);
 }
 
 let _modelsCache: AIModel[] | null = null;
-let _modelsCacheProvider: string | null = null;
+let _modelsCacheKey: string | null = null;
 export function getModels(): AIModel[] {
-  const provider = resolveProvider();
-  const key = provider?.name ?? '';
-  if (_modelsCache && _modelsCacheProvider === key) return _modelsCache;
-  _modelsCache = provider?.models ?? [];
-  _modelsCacheProvider = key;
+  const providers = getAllProviders();
+  const key = providers.map(p => p.name).join('+');
+  if (_modelsCache && _modelsCacheKey === key) return _modelsCache;
+  _modelsCache = providers.flatMap(p => p.models);
+  _modelsCacheKey = key;
   return _modelsCache;
 }
 
@@ -95,13 +126,13 @@ export type GeminiModel = AIModel;
 function modelKey(userId: string) { return `ai:model:${userId}`; }
 
 export async function getUserModel(userId: string): Promise<string> {
-  const provider = resolveProvider();
-  const models = provider?.models ?? [];
+  const allModels = getModels();
   try {
     const stored = await getRedisClient().get<string>(modelKey(userId));
-    if (stored && models.some(m => m.id === stored)) return stored;
+    if (stored && allModels.some(m => m.id === stored)) return stored;
   } catch { /* Redis unavailable */ }
-  return provider?.defaultModel ?? 'mistral-large';
+  // Default: first available provider's default model
+  return resolveProvider()?.defaultModel ?? 'gemini-3.5-flash';
 }
 
 export async function setUserModel(userId: string, modelId: string): Promise<void> {
@@ -823,75 +854,118 @@ export async function interpretTelegramMessage(
   message: string,
   userId: string,
 ): Promise<string> {
-  const provider = resolveProvider();
-  if (!provider) {
-    return 'AI features are not configured. Set GEMINI_API_KEY or NARA_API_KEY in your environment.\n\nUse slash commands instead:\n/mint <url> • /watch <address> • /status • /cancel • /settings';
+  const providers = getAllProviders();
+  if (providers.length === 0) {
+    return 'AI features are not configured. Set GEMINI_API_KEY or NARA_API_KEY in your environment.\n\nUse slash commands instead:\n/mint <url> \u2022 /watch <address> \u2022 /status \u2022 /cancel \u2022 /settings';
   }
 
   const selectedModel = await getUserModel(userId);
 
-  try {
-    const client = new OpenAI({
-      baseURL: provider.baseURL,
-      apiKey: provider.apiKey,
+  // Resolve which provider owns the selected model
+  const primaryProvider = resolveProviderForModel(selectedModel) ?? providers[0];
+  const fallbackProvider = getFallbackProvider(primaryProvider.name);
+
+  // Try primary provider first, then fallback if it fails
+  const providersToTry: { provider: ProviderConfig; model: string }[] = [
+    { provider: primaryProvider, model: selectedModel },
+  ];
+  if (fallbackProvider) {
+    providersToTry.push({
+      provider: fallbackProvider,
+      model: fallbackProvider.defaultModel,
     });
+  }
 
-    const messages: ChatCompletionMessageParam[] = [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: message },
-    ];
+  let lastError = '';
 
-    let response = await client.chat.completions.create({
-      model: selectedModel,
+  for (const { provider, model } of providersToTry) {
+    try {
+      logger.info('AI attempt', { area: 'ai-interpreter', provider: provider.name, model, userId });
+
+      const result = await runWithProvider(provider, model, message, userId);
+      return result;
+    } catch (_error) {
+      lastError = _error instanceof Error ? _error.message : String(_error);
+      logger.warn('AI provider failed, trying fallback', {
+        area: 'ai-interpreter',
+        failedProvider: provider.name,
+        failedModel: model,
+        error: lastError,
+        userId,
+      });
+    }
+  }
+
+  return `\u26a0\ufe0f All AI providers failed.\nLast error: ${lastError.slice(0, 150)}\n\nUse slash commands:\n/mint <url> \u2022 /watch <address> \u2022 /status \u2022 /cancel \u2022 /settings`;
+}
+
+/**
+ * Execute a single AI request with a specific provider and model.
+ * Throws on failure so the caller can retry with a fallback provider.
+ */
+async function runWithProvider(
+  provider: ProviderConfig,
+  model: string,
+  message: string,
+  userId: string,
+): Promise<string> {
+  const client = new OpenAI({
+    baseURL: provider.baseURL,
+    apiKey: provider.apiKey,
+  });
+
+  const messages: ChatCompletionMessageParam[] = [
+    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'user', content: message },
+  ];
+
+  let response = await client.chat.completions.create({
+    model,
+    messages,
+    tools: TOOLS,
+    tool_choice: 'auto',
+  });
+
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    const choice = response.choices[0];
+    if (!choice) break;
+
+    const assistantMessage = choice.message;
+    messages.push(assistantMessage);
+
+    const toolCalls = assistantMessage.tool_calls;
+    if (!toolCalls || toolCalls.length === 0) break;
+
+    for (const call of toolCalls) {
+      const toolName = call.function.name;
+      let args: Record<string, unknown> = {};
+      try { args = JSON.parse(call.function.arguments || '{}'); } catch { args = {}; }
+
+      logger.info('AI tool call', { area: 'ai-interpreter', tool: toolName, input: args, userId, provider: provider.name });
+
+      try {
+        const toolResult = await executeTool(userId, toolName, args);
+        messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(toolResult) });
+
+        // \u2500\u2500 Publish real-time event to sync the web UI \u2500\u2500
+        const eventType = TOOL_EVENT_MAP[toolName];
+        if (eventType && !('error' in toolResult)) {
+          void publishEvent(userId, eventType, { tool: toolName, ...args });
+        }
+      } catch (_error) {
+        const errMsg = _error instanceof Error ? _error.message : String(_error);
+        logger.warn('AI tool error', { area: 'ai-interpreter', tool: toolName, error: errMsg });
+        messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: errMsg }) });
+      }
+    }
+
+    response = await client.chat.completions.create({
+      model,
       messages,
       tools: TOOLS,
       tool_choice: 'auto',
     });
-
-    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const choice = response.choices[0];
-      if (!choice) break;
-
-      const assistantMessage = choice.message;
-      messages.push(assistantMessage);
-
-      const toolCalls = assistantMessage.tool_calls;
-      if (!toolCalls || toolCalls.length === 0) break;
-
-      for (const call of toolCalls) {
-        const toolName = call.function.name;
-        let args: Record<string, unknown> = {};
-        try { args = JSON.parse(call.function.arguments || '{}'); } catch { args = {}; }
-
-        logger.info('AI tool call', { area: 'ai-interpreter', tool: toolName, input: args, userId });
-
-        try {
-          const toolResult = await executeTool(userId, toolName, args);
-          messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(toolResult) });
-
-          // ── Publish real-time event to sync the web UI ──
-          const eventType = TOOL_EVENT_MAP[toolName];
-          if (eventType && !('error' in toolResult)) {
-            void publishEvent(userId, eventType, { tool: toolName, ...args });
-          }
-        } catch (_error) {
-          const errMsg = _error instanceof Error ? _error.message : String(_error);
-          logger.warn('AI tool error', { area: 'ai-interpreter', tool: toolName, error: errMsg });
-          messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: errMsg }) });
-        }
-      }
-
-      response = await client.chat.completions.create({
-        model: selectedModel,
-        messages,
-        tools: TOOLS,
-        tool_choice: 'auto',
-      });
-    }
-
-    return response.choices[0]?.message?.content || 'Done.';
-  } catch (_error) {
-    const msg = _error instanceof Error ? _error.message : String(_error);
-    return `⚠️ AI request failed: ${msg.slice(0, 180)}\n\nYou can still use slash commands:\n/mint <url> • /watch <address> • /status • /cancel • /settings`;
   }
+
+  return response.choices[0]?.message?.content || 'Done.';
 }
