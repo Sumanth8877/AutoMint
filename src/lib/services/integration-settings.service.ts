@@ -7,7 +7,7 @@ import { decrypt, encrypt, rotateEncryption } from '@/lib/security/encryption';
 import { getCache, setCache, getRedisClient } from '@/lib/redis';
 import { logger } from '@/lib/logger';
 
-export const INTEGRATION_SETTING_KEYS = ['ALCHEMY_API_KEY', 'INFURA_API_KEY', 'CHAINSTACK_API_KEY'] as const;
+export const INTEGRATION_SETTING_KEYS = ['ALCHEMY_API_KEY', 'INFURA_API_KEY', 'CHAINSTACK_API_KEY', 'GEMINI_API_KEY', 'NARA_API_KEY'] as const;
 export type IntegrationSettingKey = typeof INTEGRATION_SETTING_KEYS[number];
 
 export type IntegrationSetting = {

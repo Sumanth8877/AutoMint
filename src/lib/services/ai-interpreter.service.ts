@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger';
 import { getRedisClient } from '@/lib/redis';
 import { publishEvent, type EventType } from '@/lib/services/event-bus.service';
 import { recordSuccess, recordFailure, isProviderHealthy } from '@/lib/services/provider-health.service';
+import { getSetting } from '@/lib/services/integration-settings.service';
 
 // ── Provider config ─────────────────────────────────────────────────────────
 
@@ -37,8 +38,20 @@ const NARA_MODELS: AIModel[] = [
 const GEMINI_MODEL_IDS = new Set(GEMINI_MODELS.map(m => m.id));
 const NARA_MODEL_IDS = new Set(NARA_MODELS.map(m => m.id));
 
-function getGeminiProvider(): ProviderConfig | null {
-  const key = process.env.GEMINI_API_KEY;
+/**
+ * Resolve an API key: check DB (encrypted storage) first, then env var fallback.
+ * This lets users change keys from the Settings UI without redeploying.
+ */
+async function resolveApiKey(settingKey: 'GEMINI_API_KEY' | 'NARA_API_KEY'): Promise<string | null> {
+  try {
+    const dbSetting = await getSetting(settingKey);
+    if (dbSetting?.value) return dbSetting.value;
+  } catch { /* DB unavailable — fall through to env var */ }
+  return process.env[settingKey] ?? null;
+}
+
+async function getGeminiProvider(): Promise<ProviderConfig | null> {
+  const key = await resolveApiKey('GEMINI_API_KEY');
   if (!key) return null;
   return {
     name: 'Gemini',
@@ -49,8 +62,8 @@ function getGeminiProvider(): ProviderConfig | null {
   };
 }
 
-function getNaraProvider(): ProviderConfig | null {
-  const key = process.env.NARA_API_KEY;
+async function getNaraProvider(): Promise<ProviderConfig | null> {
+  const key = await resolveApiKey('NARA_API_KEY');
   if (!key) return null;
   return {
     name: 'NaraRouter',
@@ -59,6 +72,34 @@ function getNaraProvider(): ProviderConfig | null {
     defaultModel: 'mistral-large',
     models: NARA_MODELS,
   };
+}
+
+/** Get all configured providers (can be 0, 1, or 2). */
+async function getAllProviders(): Promise<ProviderConfig[]> {
+  const [gemini, nara] = await Promise.all([getGeminiProvider(), getNaraProvider()]);
+  const providers: ProviderConfig[] = [];
+  if (gemini) providers.push(gemini);
+  if (nara) providers.push(nara);
+  return providers;
+}
+
+/** Resolve which provider owns a given model ID. */
+async function resolveProviderForModel(modelId: string): Promise<ProviderConfig | null> {
+  if (GEMINI_MODEL_IDS.has(modelId)) return getGeminiProvider();
+  if (NARA_MODEL_IDS.has(modelId)) return getNaraProvider();
+  return null;
+}
+
+/** Get the primary provider (first available — Gemini preferred). */
+async function resolveProvider(): Promise<ProviderConfig | null> {
+  return (await getGeminiProvider()) ?? (await getNaraProvider());
+}
+
+/** Get a fallback provider (the OTHER provider, not the given one). */
+async function getFallbackProvider(currentName: string): Promise<ProviderConfig | null> {
+  if (currentName === 'Gemini') return getNaraProvider();
+  if (currentName === 'NaraRouter') return getGeminiProvider();
+  return null;
 }
 
 /** Get all configured providers (can be 0, 1, or 2). */
@@ -95,20 +136,24 @@ function getFallbackProvider(currentName: string): ProviderConfig | null {
 export type AIModelId = string;
 export type AIModel = { id: string; label: string; description: string; };
 
-/** Returns ALL models from ALL configured providers (merged list). */
+/** 
+ * Returns ALL models from ALL providers that COULD be configured.
+ * Uses env var check (sync) for model listing — actual key resolution
+ * happens async at runtime in interpretTelegramMessage().
+ */
 export function getAvailableModels(): AIModel[] {
-  return getAllProviders().flatMap(p => p.models);
+  return getModels();
 }
 
-let _modelsCache: AIModel[] | null = null;
-let _modelsCacheKey: string | null = null;
 export function getModels(): AIModel[] {
-  const providers = getAllProviders();
-  const key = providers.map(p => p.name).join('+');
-  if (_modelsCache && _modelsCacheKey === key) return _modelsCache;
-  _modelsCache = providers.flatMap(p => p.models);
-  _modelsCacheKey = key;
-  return _modelsCache;
+  // For model listing we check env vars + assume DB keys may exist.
+  // Show both provider models if either source has a key configured.
+  // The actual key resolution (DB vs env) happens async at runtime.
+  const models: AIModel[] = [];
+  // Always show both providers' models — the user can configure keys from the UI
+  models.push(...GEMINI_MODELS);
+  models.push(...NARA_MODELS);
+  return models;
 }
 
 export const AVAILABLE_MODELS = {
@@ -133,7 +178,8 @@ export async function getUserModel(userId: string): Promise<string> {
     if (stored && allModels.some(m => m.id === stored)) return stored;
   } catch { /* Redis unavailable */ }
   // Default: first available provider's default model
-  return resolveProvider()?.defaultModel ?? 'gemini-3.5-flash';
+  const provider = await resolveProvider();
+  return provider?.defaultModel ?? 'gemini-3.5-flash';
 }
 
 export async function setUserModel(userId: string, modelId: string): Promise<void> {

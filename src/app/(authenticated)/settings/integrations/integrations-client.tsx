@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, XCircle } from 'lucide-react';
 import Card from '@/components/ui/Card';
+import AIKeysManager from '@/components/settings/AIKeysManager';
 
 type ServiceStatus = {
   name: string;
@@ -48,6 +49,9 @@ export default function IntegrationsClient({ configured }: { configured: boolean
           Status of every third-party service AutoMint depends on. Keys are managed via environment variables in Vercel.
         </p>
       </div>
+
+      {/* AI Provider Keys */}
+      <AIKeysManager />
 
       {/* AutoMint API Key */}
       <Card className="mb-4 p-5">
