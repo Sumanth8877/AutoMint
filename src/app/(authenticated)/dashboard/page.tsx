@@ -11,7 +11,6 @@ import { MetricCard } from '@/components/ui/metric-card';
 import { PageHeader } from '@/components/ui/page-header';
 import { Stagger, StaggerItem, Reveal } from '@/components/motion';
 import { MintActivityChart } from '@/components/dashboard/mint-activity-chart';
-import { DashboardSystemHealthCard } from '@/components/dashboard/system-health-card';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getDb } from '@/lib/db';
 import { captureException } from '@/lib/observability/sentry';
@@ -135,10 +134,10 @@ export default async function DashboardPage() {
       </Stagger>
 
       {/* Main grid */}
-      <Reveal className="grid gap-6 lg:grid-cols-3">
+      <Reveal>
 
         {/* 7-day chart */}
-        <Card tone="default" className="p-6 lg:col-span-2">
+        <Card tone="default" className="p-6">
           <div className="mb-5 flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-muted">7-Day Mint Activity</p>
@@ -148,12 +147,6 @@ export default async function DashboardPage() {
           </div>
           <MintActivityChart data={d.chartData} />
         </Card>
-
-        {/* System Health -- fetched client-side (see DashboardSystemHealthCard)
-            so it can't compete with the SSR dashboard queries above for
-            DB/Redis connections; only surfaces services that are actually
-            down/unknown, silent otherwise. */}
-        <DashboardSystemHealthCard />
       </Reveal>
 
       {/* Recent activity */}
