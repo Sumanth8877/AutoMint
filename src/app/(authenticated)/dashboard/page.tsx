@@ -94,18 +94,9 @@ async function getDashboardData(userId: string) {
   }
 }
 
-/** Overall RPC health across every configured provider -- 'unknown' if none
- * have reported in yet, 'unhealthy' if any provider's circuit is open. */
-function aggregateRpcStatus(rpc: Record<string, ServiceStatus> | undefined): ServiceStatus['status'] {
-  if (!rpc) return 'unknown';
-  const statuses = Object.values(rpc).map((h) => h.status);
-  if (statuses.length === 0) return 'unknown';
-  if (statuses.some((s) => s === 'unhealthy')) return 'unhealthy';
-  if (statuses.every((s) => s === 'healthy')) return 'healthy';
-  return 'unknown';
-}
+type ServiceStatusValue = ServiceStatus['status'];
 
-const HEALTH_STATUS_DISPLAY: Record<ServiceStatus['status'], { label: string; icon: typeof CheckCircle2; color: string }> = {
+const HEALTH_STATUS_DISPLAY: Record<ServiceStatusValue, { label: string; icon: typeof CheckCircle2; color: string }> = {
   healthy: { label: 'Healthy', icon: CheckCircle2, color: 'text-success' },
   unhealthy: { label: 'Unhealthy', icon: AlertTriangle, color: 'text-danger' },
   unknown: { label: 'Unknown', icon: HelpCircle, color: 'text-muted' },
@@ -172,8 +163,10 @@ export default async function DashboardPage() {
           <MintActivityChart data={d.chartData} />
         </Card>
 
-        {/* System health -- real status from the same health checks used in
-            Settings > System (DB, Redis, RPC circuit breakers, recovery loop). */}
+        {/* System Health -- shows nothing when everything is fine; only
+            surfaces the specific service(s) that are actually down/unknown
+            (DB, Redis, each RPC provider, recovery loop), so the panel is
+            silent noise-wise until something needs attention. */}
         <Card tone="default" className="p-6">
           <div className="mb-4 flex items-center justify-between">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted">System Health</p>
@@ -181,25 +174,48 @@ export default async function DashboardPage() {
               Details
             </Link>
           </div>
-          <div className="space-y-3">
-            {[
-              { label: 'Database', status: d.systemStatus?.database.status ?? 'unknown' },
-              { label: 'Cache (Redis)', status: d.systemStatus?.redis.status ?? 'unknown' },
-              { label: 'RPC Providers', status: aggregateRpcStatus(d.systemStatus?.rpc) },
-              { label: 'Recovery Loop', status: d.systemStatus?.recoveryLoop.status ?? 'unknown' },
-            ].map(s => {
-              const display = HEALTH_STATUS_DISPLAY[s.status];
+          {(() => {
+            const checks: { label: string; status: ServiceStatusValue; detail?: string }[] = d.systemStatus
+              ? [
+                  { label: 'Database', status: d.systemStatus.database.status, detail: d.systemStatus.database.detail },
+                  { label: 'Cache (Redis)', status: d.systemStatus.redis.status, detail: d.systemStatus.redis.detail },
+                  ...Object.entries(d.systemStatus.rpc).map(([provider, health]) => ({
+                    label: `${provider.charAt(0).toUpperCase()}${provider.slice(1)} RPC`,
+                    status: health.status,
+                    detail: health.detail,
+                  })),
+                  { label: 'Recovery Loop', status: d.systemStatus.recoveryLoop.status },
+                ]
+              : [{ label: 'System status', status: 'unknown' as const, detail: 'Could not reach the health check service' }];
+
+            const issues = checks.filter((c) => c.status !== 'healthy');
+
+            if (issues.length === 0) {
               return (
-                <div key={s.label} className="flex items-center justify-between rounded-lg bg-surface-hover px-3 py-2.5">
-                  <span className="text-xs text-secondary">{s.label}</span>
-                  <div className="flex items-center gap-1.5">
-                    <display.icon className={`h-3 w-3 ${display.color}`} />
-                    <span className={`text-xs font-semibold ${display.color}`}>{display.label}</span>
-                  </div>
+                <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2.5">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-success" />
+                  <span className="text-xs font-semibold text-success">All systems operational</span>
                 </div>
               );
-            })}
-          </div>
+            }
+
+            return (
+              <div className="space-y-2">
+                {issues.map((c) => {
+                  const display = HEALTH_STATUS_DISPLAY[c.status];
+                  return (
+                    <div key={c.label} className="flex items-start gap-2.5 rounded-lg bg-surface-hover px-3 py-2.5">
+                      <display.icon className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${display.color}`} />
+                      <div className="min-w-0">
+                        <p className={`text-xs font-semibold ${display.color}`}>{c.label} {display.label.toLowerCase()}</p>
+                        {c.detail && <p className="mt-0.5 truncate text-xs text-muted" title={c.detail}>{c.detail}</p>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </Card>
       </Reveal>
 
