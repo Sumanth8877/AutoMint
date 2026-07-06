@@ -198,6 +198,43 @@ const TOOLS: ChatCompletionTool[] = [
 
   // ─── Search ───
   { type: 'function', function: { name: 'search_data', description: 'Search across all data: mints, collections, wallets, activities.', parameters: { type: 'object', properties: { query: { type: 'string', description: 'Search query' } }, required: ['query'] } } },
+  // ─── Activities ───
+  { type: 'function', function: { name: 'get_activities', description: 'Get recent activity feed — wallet additions, mint status changes, collection events.', parameters: { type: 'object', properties: { limit: { type: 'number', description: 'Max results (default: 20)' } } } } },
+
+  // ─── Analyzer History ───
+  { type: 'function', function: { name: 'get_analyzer_history', description: 'Get past contract analysis results with risk scores and collection data.', parameters: { type: 'object', properties: { limit: { type: 'number', description: 'Max results (default: 20)' } } } } },
+
+  // ─── Monitoring ───
+  { type: 'function', function: { name: 'get_monitoring_websites', description: 'List all monitored mint page websites.', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'add_monitoring_website', description: 'Add a mint page URL to the website monitor. Tracks changes to the page.', parameters: { type: 'object', properties: { url: { type: 'string', description: 'The mint page URL to monitor' }, name: { type: 'string', description: 'Friendly name for this monitor' } }, required: ['url'] } } },
+  { type: 'function', function: { name: 'remove_monitoring_website', description: 'Remove a monitored website by its ID.', parameters: { type: 'object', properties: { websiteId: { type: 'string', description: 'Website monitor ID to remove' } }, required: ['websiteId'] } } },
+  { type: 'function', function: { name: 'get_monitoring_events', description: 'Get recent monitoring events — page changes, status updates.', parameters: { type: 'object', properties: { limit: { type: 'number', description: 'Max results (default: 20)' } } } } },
+
+  // ─── Blockchain ───
+  { type: 'function', function: { name: 'get_gas_estimate', description: 'Get current gas price estimates for a chain.', parameters: { type: 'object', properties: { chain: { type: 'string', description: 'Chain: ethereum, base, polygon, arbitrum. Default: ethereum' } } } } },
+  { type: 'function', function: { name: 'check_mint_status_onchain', description: 'Check on-chain mint status for a contract — total supply, minted count, price, phase.', parameters: { type: 'object', properties: { contractAddress: { type: 'string', description: 'Contract address (0x...)' }, chain: { type: 'string', description: 'Chain. Default: ethereum' } }, required: ['contractAddress'] } } },
+
+  // ─── Collection Management ───
+  { type: 'function', function: { name: 'refresh_collection_floor', description: 'Refresh the floor price for a tracked collection.', parameters: { type: 'object', properties: { collectionId: { type: 'string', description: 'Collection ID to refresh' } }, required: ['collectionId'] } } },
+  { type: 'function', function: { name: 'remove_collection', description: 'Remove a tracked collection.', parameters: { type: 'object', properties: { collectionId: { type: 'string', description: 'Collection ID to remove' } }, required: ['collectionId'] } } },
+
+  // ─── Wallet Management ───
+  { type: 'function', function: { name: 'update_wallet', description: 'Update a wallet nickname.', parameters: { type: 'object', properties: { walletId: { type: 'string', description: 'Wallet ID' }, nickname: { type: 'string', description: 'New nickname for the wallet' } }, required: ['walletId'] } } },
+  { type: 'function', function: { name: 'remove_wallet', description: 'Delete a wallet from the account. This is permanent.', parameters: { type: 'object', properties: { walletId: { type: 'string', description: 'Wallet ID to delete' } }, required: ['walletId'] } } },
+  { type: 'function', function: { name: 'set_default_wallet', description: 'Set a wallet as the default for minting.', parameters: { type: 'object', properties: { walletId: { type: 'string', description: 'Wallet ID to set as default' } }, required: ['walletId'] } } },
+  { type: 'function', function: { name: 'refresh_wallet_balance', description: 'Refresh the on-chain balance for a wallet.', parameters: { type: 'object', properties: { walletId: { type: 'string', description: 'Wallet ID to refresh' } }, required: ['walletId'] } } },
+
+  // ─── Email Settings ───
+  { type: 'function', function: { name: 'get_email_settings', description: 'Get email notification preferences — which events trigger emails.', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'update_email_settings', description: 'Update email notification preferences.', parameters: { type: 'object', properties: { mintScheduled: { type: 'boolean' }, mintSuccess: { type: 'boolean' }, mintFailed: { type: 'boolean' }, systemErrors: { type: 'boolean' } } } } },
+
+  // ─── Integrations & Usage ───
+  { type: 'function', function: { name: 'get_integrations_status', description: 'Check the status of all configured integrations — Alchemy, Firecrawl, QStash, Redis, Clerk, etc.', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'get_usage', description: 'Get usage summary — configured services and their status.', parameters: { type: 'object', properties: {} } } },
+
+  // ─── Account ───
+  { type: 'function', function: { name: 'reset_all_data', description: 'DESTRUCTIVE: Delete ALL user data — wallets, mints, collections, settings. Cannot be undone. Use with extreme caution.', parameters: { type: 'object', properties: { confirm: { type: 'boolean', description: 'Must be true to proceed. Always ask the user to confirm first.' } }, required: ['confirm'] } } },
+
 ];
 
 // ── Tool Executor ────────────────────────────────────────────────────────────
@@ -563,6 +600,183 @@ async function executeTool(
       const filteredCollections = collectionResults.filter(c => c.name?.toLowerCase().includes(query) || c.contractAddress?.toLowerCase().includes(query));
       const filteredWallets = walletResults.filter(w => w.address?.toLowerCase().includes(query) || w.chain?.toLowerCase().includes(query));
       return { mints: filteredMints, collections: filteredCollections, wallets: filteredWallets, totalResults: filteredMints.length + filteredCollections.length + filteredWallets.length };
+    }
+
+
+    // ─── Activities ───
+    case 'get_activities': {
+      const { getDb } = await import('@/lib/db');
+      const { activities } = await import('@/drizzle/schema');
+      const { eq, desc } = await import('drizzle-orm');
+      const limit = Math.min(Number(input.limit ?? 20), 50);
+      const rows = await getDb().select().from(activities).where(eq(activities.userId, userId)).orderBy(desc(activities.createdAt)).limit(limit);
+      return { activities: rows, count: rows.length };
+    }
+
+    // ─── Analyzer History ───
+    case 'get_analyzer_history': {
+      const { getDb } = await import('@/lib/db');
+      const { analyzerHistory } = await import('@/drizzle/schema');
+      const { eq, desc } = await import('drizzle-orm');
+      const limit = Math.min(Number(input.limit ?? 20), 50);
+      const rows = await getDb()
+        .select({ id: analyzerHistory.id, input: analyzerHistory.input, collectionName: analyzerHistory.collectionName, contractAddress: analyzerHistory.contractAddress, chain: analyzerHistory.chain, riskScore: analyzerHistory.riskScore, riskLevel: analyzerHistory.riskLevel, createdAt: analyzerHistory.createdAt })
+        .from(analyzerHistory).where(eq(analyzerHistory.userId, userId)).orderBy(desc(analyzerHistory.createdAt)).limit(limit);
+      return { history: rows, count: rows.length };
+    }
+
+    // ─── Monitoring ───
+    case 'get_monitoring_websites': {
+      const { getDb } = await import('@/lib/db');
+      const { monitoredWebsites } = await import('@/drizzle/schema');
+      const { eq } = await import('drizzle-orm');
+      const rows = await getDb().select().from(monitoredWebsites).where(eq(monitoredWebsites.userId, userId));
+      return { websites: rows, count: rows.length };
+    }
+
+    case 'add_monitoring_website': {
+      const { getDb } = await import('@/lib/db');
+      const { monitoredWebsites } = await import('@/drizzle/schema');
+      const [created] = await getDb().insert(monitoredWebsites).values({ userId, url: String(input.url), name: input.name ? String(input.name) : String(input.url) }).returning();
+      return { success: true, website: created };
+    }
+
+    case 'remove_monitoring_website': {
+      const { getDb } = await import('@/lib/db');
+      const { monitoredWebsites } = await import('@/drizzle/schema');
+      const { eq, and } = await import('drizzle-orm');
+      const [deleted] = await getDb().delete(monitoredWebsites).where(and(eq(monitoredWebsites.id, String(input.websiteId)), eq(monitoredWebsites.userId, userId))).returning({ id: monitoredWebsites.id });
+      if (!deleted) return { error: 'Website monitor not found' };
+      return { success: true, deletedId: deleted.id };
+    }
+
+    case 'get_monitoring_events': {
+      const { getDb } = await import('@/lib/db');
+      const { websiteEvents, monitoredWebsites } = await import('@/drizzle/schema');
+      const { eq, desc, inArray } = await import('drizzle-orm');
+      const limit = Math.min(Number(input.limit ?? 20), 50);
+      // Get user's website IDs first, then their events
+      const userSites = await getDb().select({ id: monitoredWebsites.id }).from(monitoredWebsites).where(eq(monitoredWebsites.userId, userId));
+      const siteIds = userSites.map(s => s.id);
+      if (siteIds.length === 0) return { events: [], count: 0 };
+      const rows = await getDb().select().from(websiteEvents).where(inArray(websiteEvents.websiteId, siteIds)).orderBy(desc(websiteEvents.createdAt)).limit(limit);
+      return { events: rows, count: rows.length };
+    }
+
+    // ─── Blockchain ───
+    case 'get_gas_estimate': {
+      const { getClient } = await import('@/lib/blockchain/client');
+      const { formatGwei } = await import('viem');
+      const chain = String(input.chain ?? 'ethereum') as 'ethereum' | 'base' | 'polygon' | 'arbitrum';
+      const client = getClient(chain);
+      const gasPrice = await client.getGasPrice();
+      return { chain, gasPriceWei: gasPrice.toString(), gasPriceGwei: formatGwei(gasPrice) };
+    }
+
+    case 'check_mint_status_onchain': {
+      const { getMintState } = await import('@/lib/services/mint-state.service');
+      const state = await getMintState(String(input.contractAddress), String(input.chain ?? 'ethereum'), null);
+      return { contractAddress: String(input.contractAddress), chain: String(input.chain ?? 'ethereum'), ...state };
+    }
+
+    // ─── Collection Management ───
+    case 'refresh_collection_floor': {
+      const { syncCollectionFloorPrice } = await import('@/lib/services/collection.service');
+      const { getDb } = await import('@/lib/db');
+      const { collections } = await import('@/drizzle/schema');
+      const { eq, and } = await import('drizzle-orm');
+      const [col] = await getDb().select().from(collections).where(and(eq(collections.id, String(input.collectionId)), eq(collections.userId, userId))).limit(1);
+      if (!col) return { error: 'Collection not found' };
+      await syncCollectionFloorPrice(col.id, col.contractAddress, col.chain, col.name);
+      return { success: true, collectionId: col.id, name: col.name };
+    }
+
+    case 'remove_collection': {
+      const { removeCollection } = await import('@/lib/services/collection.service');
+      await removeCollection(String(input.collectionId), userId);
+      return { success: true, removedId: String(input.collectionId) };
+    }
+
+    // ─── Wallet Management ───
+    case 'update_wallet': {
+      const { updateWallet } = await import('@/lib/services/wallet.service');
+      const result = await updateWallet(String(input.walletId), userId, { nickname: input.nickname ? String(input.nickname) : null });
+      return { success: true, wallet: result };
+    }
+
+    case 'remove_wallet': {
+      const { removeWallet } = await import('@/lib/services/wallet.service');
+      await removeWallet(String(input.walletId), userId);
+      return { success: true, removedId: String(input.walletId) };
+    }
+
+    case 'set_default_wallet': {
+      const { setDefaultWallet } = await import('@/lib/services/wallet.service');
+      await setDefaultWallet(String(input.walletId), userId);
+      return { success: true, defaultWalletId: String(input.walletId) };
+    }
+
+    case 'refresh_wallet_balance': {
+      const { refreshWalletBalance } = await import('@/lib/services/wallet.service');
+      const result = await refreshWalletBalance(String(input.walletId), userId);
+      return { success: true, wallet: result };
+    }
+
+    // ─── Email Settings ───
+    case 'get_email_settings': {
+      const { getEmailNotificationPreferences } = await import('@/lib/services/email-notification.service');
+      const prefs = await getEmailNotificationPreferences(userId);
+      return { ...prefs };
+    }
+
+    case 'update_email_settings': {
+      const { updateEmailNotificationPreferences } = await import('@/lib/services/email-notification.service');
+      const updates: Record<string, boolean> = {};
+      if (input.mintScheduled !== undefined) updates.mintScheduled = Boolean(input.mintScheduled);
+      if (input.mintSuccess !== undefined) updates.mintSuccess = Boolean(input.mintSuccess);
+      if (input.mintFailed !== undefined) updates.mintFailed = Boolean(input.mintFailed);
+      if (input.systemErrors !== undefined) updates.systemErrors = Boolean(input.systemErrors);
+      const result = await updateEmailNotificationPreferences(userId, updates as Parameters<typeof updateEmailNotificationPreferences>[1]);
+      return { success: true, updated: result };
+    }
+
+    // ─── Integrations & Usage ───
+    case 'get_integrations_status': {
+      // Return which env vars are configured (without values)
+      const check = (key: string) => !!process.env[key]?.trim();
+      const services = [
+        { name: 'Alchemy', configured: check('ALCHEMY_API_KEY') },
+        { name: 'Infura', configured: check('INFURA_API_KEY') },
+        { name: 'Chainstack', configured: check('CHAINSTACK_API_KEY') },
+        { name: 'Firecrawl', configured: check('FIRECRAWL_API_KEY') },
+        { name: 'QStash', configured: check('QSTASH_TOKEN') },
+        { name: 'Database', configured: check('DATABASE_URL') },
+        { name: 'Redis', configured: check('KV_REST_API_URL') },
+        { name: 'Clerk', configured: check('CLERK_SECRET_KEY') },
+        { name: 'AI Provider', configured: check('GEMINI_API_KEY') || check('NARA_API_KEY') },
+      ];
+      return { services, configuredCount: services.filter(s => s.configured).length, totalCount: services.length };
+    }
+
+    case 'get_usage': {
+      const { getDb } = await import('@/lib/db');
+      const { mintTasks, wallets, collections, watchedWallets } = await import('@/drizzle/schema');
+      const { eq, count } = await import('drizzle-orm');
+      const [mintCount] = await getDb().select({ count: count() }).from(mintTasks).where(eq(mintTasks.userId, userId));
+      const [walletCount] = await getDb().select({ count: count() }).from(wallets).where(eq(wallets.userId, userId));
+      const [collectionCount] = await getDb().select({ count: count() }).from(collections).where(eq(collections.userId, userId));
+      const [watchedCount] = await getDb().select({ count: count() }).from(watchedWallets).where(eq(watchedWallets.userId, userId));
+      return { mints: mintCount?.count ?? 0, wallets: walletCount?.count ?? 0, collections: collectionCount?.count ?? 0, watchedWallets: watchedCount?.count ?? 0 };
+    }
+
+    // ─── Account ───
+    case 'reset_all_data': {
+      if (!input.confirm || input.confirm !== true) {
+        return { error: '⚠️ This will DELETE ALL your data permanently. Pass confirm: true to proceed.' };
+      }
+      const { deleteUserData } = await import('@/lib/services/account-deletion.service');
+      await deleteUserData(userId);
+      return { success: true, message: 'All data has been permanently deleted.' };
     }
 
     default:
