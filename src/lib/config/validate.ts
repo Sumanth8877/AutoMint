@@ -149,8 +149,8 @@ export function validateEnv(): void {
         reason: 'TELEGRAM_ENABLED=true but webhook secret missing — all webhook requests rejected',
       },
       {
-        name: 'GEMINI_API_KEY',
-        reason: 'TELEGRAM_ENABLED=true but AI API key missing — Telegram AI interpreter commands will fail',
+        name: 'NARA_API_KEY',
+        reason: 'TELEGRAM_ENABLED=true but Nara Router API key missing — Telegram AI interpreter commands will fail',
       },
     );
   }

@@ -1,61 +1,54 @@
 import 'server-only';
 
-import {
-  GoogleGenerativeAI,
-  SchemaType,
-  type FunctionDeclarationsTool,
-  type Part,
-} from '@google/generative-ai';
+import OpenAI from 'openai';
+import type { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources/chat/completions';
 import { logger } from '@/lib/logger';
 import { getRedisClient } from '@/lib/redis';
 
-// Model management
+// ── Model management ────────────────────────────────────────────────────────
 
-const DEFAULT_MODEL = 'gemini-2.5-flash';
+const DEFAULT_MODEL = 'mistral-large';
 
-export type GeminiModelId =
-  | 'gemini-2.5-flash'
-  | 'gemini-2.5-pro'
-  | 'gemini-2.5-flash-lite'
-  | 'gemini-2.0-flash'
-  | 'gemini-1.5-flash'
-  | 'gemini-1.5-flash-8b';
+export type AIModelId =
+  | 'mistral-large'
+  | 'mistral-medium-3-5'
+  | 'tencent-hy3';
 
-export type GeminiModel = {
-  id: GeminiModelId;
+export type AIModel = {
+  id: AIModelId;
   label: string;
   description: string;
 };
 
-export const AVAILABLE_MODELS: GeminiModel[] = [
-  { id: 'gemini-2.5-flash',       label: 'Gemini 2.5 Flash ⭐',    description: 'Recommended — fast, smart, supports tools' },
-  { id: 'gemini-2.5-pro',         label: 'Gemini 2.5 Pro',         description: 'Most capable — best for complex commands' },
-  { id: 'gemini-2.5-flash-lite',  label: 'Gemini 2.5 Flash Lite',  description: 'Lightest 2.5 — fastest response time' },
-  { id: 'gemini-2.0-flash',       label: 'Gemini 2.0 Flash',       description: 'Fast & reliable — solid all-rounder' },
-  { id: 'gemini-1.5-flash',       label: 'Gemini 1.5 Flash',       description: 'Proven stable model — highly reliable' },
-  { id: 'gemini-1.5-flash-8b',    label: 'Gemini 1.5 Flash 8B',    description: 'Smallest model — ultra-low latency' },
+export const AVAILABLE_MODELS: AIModel[] = [
+  { id: 'mistral-large',      label: 'Mistral Large ⭐',      description: 'Recommended — smart, supports tools' },
+  { id: 'mistral-medium-3-5', label: 'Mistral Medium 3.5',    description: 'Balanced — good speed & quality' },
+  { id: 'tencent-hy3',        label: 'Tencent Hy3',           description: 'Alternative — fast responses' },
 ];
+
+// Keep old type alias for backward compatibility with telegram.service.ts
+export type GeminiModelId = AIModelId;
+export type GeminiModel = AIModel;
 
 function modelKey(userId: string) { return `ai:model:${userId}`; }
 
-export async function getUserModel(userId: string): Promise<GeminiModelId> {
+export async function getUserModel(userId: string): Promise<AIModelId> {
   try {
     const stored = await getRedisClient().get<string>(modelKey(userId));
-    if (stored && AVAILABLE_MODELS.some(m => m.id === stored)) return stored as GeminiModelId;
+    if (stored && AVAILABLE_MODELS.some(m => m.id === stored)) return stored as AIModelId;
   } catch { /* Redis unavailable */ }
   return DEFAULT_MODEL;
 }
 
-export async function setUserModel(userId: string, modelId: GeminiModelId): Promise<void> {
-  // L-03 fix: 30-day TTL (was 365 days). getUserModel() already falls back to
-  // DEFAULT_MODEL when a stored id is no longer in AVAILABLE_MODELS, but a shorter
-  // TTL means deprecated model preferences auto-reset within a month rather than a year.
+export async function setUserModel(userId: string, modelId: AIModelId): Promise<void> {
   await getRedisClient().set(modelKey(userId), modelId, { ex: 60 * 60 * 24 * 30 });
 }
 
-// ── Config ───────────────────────────────────────────────────────────────────
+// ── Config ─────────────────────────────────────────────────────────────────
 
 const MAX_TOOL_ROUNDS = 6;
+
+const NARA_BASE_URL = 'https://router.bynara.id/v1';
 
 // ── System Prompt ────────────────────────────────────────────────────────────
 
@@ -88,160 +81,183 @@ RULES:
 • Always call the appropriate tools — never just describe what you would do
 • DIAGNOSING FAILURES: When the user asks why a mint failed / what went wrong / why it did not work, ALWAYS call diagnose_mint_failure FIRST. Read the returned failureReason, the log timeline, walletBalance and mintCost, then explain the ROOT CAUSE in plain language and give a concrete fix. ALWAYS include the USD values — walletBalance and mintCost already contain them (e.g. "0.00008 ETH (~$0.21)") — so the user knows how much real money to add. Do NOT reply with generic answers like "I can show you the status" — actually analyze and answer. Example: "Your Rarible Pepes mint failed because wallet 0x99…e5b1 has only 0.00008 ETH (~$0.21), but the mint costs 0.001 ETH (~$2.50) + ~$8 gas. Add about $11 of ETH to the wallet and retry." Map common reasons to fixes: insufficient/low balance → tell them the exact USD to add; sold out / ended → mint is over, nothing to do; reverted / wrong phase → public mint not open or allowlist-only; price unknown → set the price manually; nonce conflict → retry.`;
 
-// ── Tool Declarations ────────────────────────────────────────────────────────
+// ── Tool Declarations (OpenAI format) ────────────────────────────────────────
 
-const TOOLS: FunctionDeclarationsTool[] = [
+const TOOLS: ChatCompletionTool[] = [
   {
-    functionDeclarations: [
-      {
-        name: 'watch_wallet',
-        description:
-          'Add a wallet address to the whale tracker. Monitors on-chain activity (mints, purchases, transfers) via Alchemy webhooks.',
-        parameters: {
-          type: SchemaType.OBJECT,
-          properties: {
-            walletAddress: {
-              type: SchemaType.STRING,
-              description: 'The EVM wallet address (0x...)',
-            },
-            chain: {
-              type: SchemaType.STRING,
-              description:
-                'Chain to monitor: ethereum, base, polygon, or arbitrum. Default: ethereum',
-            },
-            walletName: {
-              type: SchemaType.STRING,
-              description: 'Optional friendly label for the wallet',
-            },
+    type: 'function',
+    function: {
+      name: 'watch_wallet',
+      description:
+        'Add a wallet address to the whale tracker. Monitors on-chain activity (mints, purchases, transfers) via Alchemy webhooks.',
+      parameters: {
+        type: 'object',
+        properties: {
+          walletAddress: {
+            type: 'string',
+            description: 'The EVM wallet address (0x...)',
           },
-          required: ['walletAddress'],
-        },
-      },
-      {
-        name: 'create_copy_mint_rule',
-        description:
-          'Create or update a copy-mint rule for a watched wallet. When the wallet mints NFTs matching the conditions, AutoMint will auto-mint for the user.',
-        parameters: {
-          type: SchemaType.OBJECT,
-          properties: {
-            walletAddress: {
-              type: SchemaType.STRING,
-              description: 'The watched wallet address (0x...)',
-            },
-            maxPrice: {
-              type: SchemaType.STRING,
-              description:
-                'Maximum mint price in ETH (e.g. "0.002" for ~$5). Omit for no limit.',
-            },
-            quantity: {
-              type: SchemaType.NUMBER,
-              description: 'How many NFTs to mint when triggered (default: 1)',
-            },
-            minMintCount: {
-              type: SchemaType.NUMBER,
-              description:
-                'Minimum number of mints by the whale in the same collection before triggering (default: 1). Set to 5 if user says "if they mint 5+".',
-            },
-            autoMint: {
-              type: SchemaType.BOOLEAN,
-              description:
-                'true = mint automatically without confirmation. false = notify only.',
-            },
-            riskThreshold: {
-              type: SchemaType.NUMBER,
-              description:
-                'Maximum risk score to allow (0-100, default 75). Higher = more permissive.',
-            },
+          chain: {
+            type: 'string',
+            description:
+              'Chain to monitor: ethereum, base, polygon, or arbitrum. Default: ethereum',
           },
-          required: ['walletAddress'],
-        },
-      },
-      {
-        name: 'mint_from_url',
-        description:
-          'Create an instant mint task from a collection URL (OpenSea, Etherscan, or any mint page).',
-        parameters: {
-          type: SchemaType.OBJECT,
-          properties: {
-            url: {
-              type: SchemaType.STRING,
-              description: 'The mint page URL',
-            },
-            quantity: {
-              type: SchemaType.NUMBER,
-              description: 'Number of NFTs to mint (default: 1)',
-            },
-          },
-          required: ['url'],
-        },
-      },
-      {
-        name: 'get_active_mints',
-        description: 'Get the status of active/pending mint tasks.',
-        parameters: {
-          type: SchemaType.OBJECT,
-          properties: {},
-        },
-      },
-      {
-        name: 'diagnose_mint_failure',
-        description:
-          'Diagnose why a mint failed or what went wrong. Returns the most recent mint task (or one for a specific contract) with its full execution log timeline, the real error reason, mint price, quantity, wallet address and current wallet balance. ALWAYS call this when the user asks why a mint failed, what went wrong, or why it did not work — then analyze the logs and explain the ROOT CAUSE.',
-        parameters: {
-          type: SchemaType.OBJECT,
-          properties: {
-            contractAddress: {
-              type: SchemaType.STRING,
-              description: 'Optional contract address (0x...) to diagnose a specific collection. Omit to diagnose the most recent mint task.',
-            },
+          walletName: {
+            type: 'string',
+            description: 'Optional friendly label for the wallet',
           },
         },
+        required: ['walletAddress'],
       },
-      {
-        name: 'cancel_mint',
-        description: 'Cancel a pending or scheduled mint task by its task ID.',
-        parameters: {
-          type: SchemaType.OBJECT,
-          properties: {
-            taskId: {
-              type: SchemaType.STRING,
-              description: 'The mint task ID to cancel',
-            },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'create_copy_mint_rule',
+      description:
+        'Create or update a copy-mint rule for a watched wallet. When the wallet mints NFTs matching the conditions, AutoMint will auto-mint for the user.',
+      parameters: {
+        type: 'object',
+        properties: {
+          walletAddress: {
+            type: 'string',
+            description: 'The watched wallet address (0x...)',
           },
-          required: ['taskId'],
+          maxPrice: {
+            type: 'string',
+            description:
+              'Maximum mint price in ETH (e.g. "0.002" for ~$5). Omit for no limit.',
+          },
+          quantity: {
+            type: 'number',
+            description: 'How many NFTs to mint when triggered (default: 1)',
+          },
+          minMintCount: {
+            type: 'number',
+            description:
+              'Minimum number of mints by the whale in the same collection before triggering (default: 1). Set to 5 if user says "if they mint 5+".',
+          },
+          autoMint: {
+            type: 'boolean',
+            description:
+              'true = mint automatically without confirmation. false = notify only.',
+          },
+          riskThreshold: {
+            type: 'number',
+            description:
+              'Maximum risk score to allow (0-100, default 75). Higher = more permissive.',
+          },
         },
+        required: ['walletAddress'],
       },
-      {
-        name: 'get_watched_wallets',
-        description: 'List all currently watched wallets and their status.',
-        parameters: {
-          type: SchemaType.OBJECT,
-          properties: {},
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'mint_from_url',
+      description:
+        'Create an instant mint task from a collection URL (OpenSea, Etherscan, or any mint page).',
+      parameters: {
+        type: 'object',
+        properties: {
+          url: {
+            type: 'string',
+            description: 'The mint page URL',
+          },
+          quantity: {
+            type: 'number',
+            description: 'Number of NFTs to mint (default: 1)',
+          },
         },
+        required: ['url'],
       },
-      {
-        name: 'get_copy_mint_rules',
-        description: 'List all active copy-mint rules.',
-        parameters: {
-          type: SchemaType.OBJECT,
-          properties: {},
-        },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_active_mints',
+      description: 'Get the status of active/pending mint tasks.',
+      parameters: {
+        type: 'object',
+        properties: {},
       },
-      {
-        name: 'get_wallet_balance',
-        description: "Check the ETH balance of the user's wallet.",
-        parameters: {
-          type: SchemaType.OBJECT,
-          properties: {
-            chain: {
-              type: SchemaType.STRING,
-              description:
-                'Chain to check: ethereum, base, polygon, or arbitrum. Default: ethereum',
-            },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'diagnose_mint_failure',
+      description:
+        'Diagnose why a mint failed or what went wrong. Returns the most recent mint task (or one for a specific contract) with its full execution log timeline, the real error reason, mint price, quantity, wallet address and current wallet balance. ALWAYS call this when the user asks why a mint failed, what went wrong, or why it did not work — then analyze the logs and explain the ROOT CAUSE.',
+      parameters: {
+        type: 'object',
+        properties: {
+          contractAddress: {
+            type: 'string',
+            description: 'Optional contract address (0x...) to diagnose a specific collection. Omit to diagnose the most recent mint task.',
           },
         },
       },
-    ],
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'cancel_mint',
+      description: 'Cancel a pending or scheduled mint task by its task ID.',
+      parameters: {
+        type: 'object',
+        properties: {
+          taskId: {
+            type: 'string',
+            description: 'The mint task ID to cancel',
+          },
+        },
+        required: ['taskId'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_watched_wallets',
+      description: 'List all currently watched wallets and their status.',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_copy_mint_rules',
+      description: 'List all active copy-mint rules.',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_wallet_balance',
+      description: "Check the ETH balance of the user's wallet.",
+      parameters: {
+        type: 'object',
+        properties: {
+          chain: {
+            type: 'string',
+            description:
+              'Chain to check: ethereum, base, polygon, or arbitrum. Default: ethereum',
+          },
+        },
+      },
+    },
   },
 ];
 
@@ -353,7 +369,6 @@ async function executeTool(
       const { mintTasks, taskLogs, wallets } = await import('@/drizzle/schema');
       const { and, eq, desc } = await import('drizzle-orm');
 
-      // Find the target task: a specific contract if given, else the most recent.
       const contract = input.contractAddress ? String(input.contractAddress).toLowerCase() : null;
       const conditions = contract
         ? and(eq(mintTasks.userId, userId), eq(mintTasks.contractAddress, contract))
@@ -370,7 +385,6 @@ async function executeTool(
         return { found: false, message: 'No mint tasks found to diagnose.' };
       }
 
-      // Full execution log timeline for this task (chronological order)
       const logs = await getDb()
         .select({
           event: taskLogs.event,
@@ -383,9 +397,6 @@ async function executeTool(
         .orderBy(desc(taskLogs.createdAt))
         .limit(25);
 
-      // Current wallet balance + mint cost in ETH and USD — the #1 cause of
-      // mint failures is an underfunded wallet, and showing $ makes the fix
-      // obvious ("add ~$10 of ETH" beats "add 0.004 ETH").
       let walletAddress: string | null = null;
       let walletBalance: string | null = null;
       let mintCost: string | null = null;
@@ -411,7 +422,6 @@ async function executeTool(
         }
       }
 
-      // Most recent error-level log = the proximate failure reason
       const errorLog = logs.find((l) => l.status === 'error');
 
       return {
@@ -430,7 +440,7 @@ async function executeTool(
         walletAddress,
         walletBalance,
         mintCost,
-        logs: logs.reverse(), // chronological for easier reasoning
+        logs: logs.reverse(),
       };
     }
 
@@ -509,75 +519,90 @@ export async function interpretTelegramMessage(
   message: string,
   userId: string,
 ): Promise<string> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.NARA_API_KEY;
   if (!apiKey) {
-    return 'AI features are not configured. Set GEMINI_API_KEY in your environment.\n\nUse slash commands instead:\n/mint <url> • /watch <address> • /status • /cancel • /settings';
+    return 'AI features are not configured. Set NARA_API_KEY in your environment.\n\nUse slash commands instead:\n/mint <url> • /watch <address> • /status • /cancel • /settings';
   }
 
   const selectedModel = await getUserModel(userId);
 
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: selectedModel,
-      systemInstruction: SYSTEM_PROMPT,
-      tools: TOOLS,
+    const client = new OpenAI({
+      baseURL: NARA_BASE_URL,
+      apiKey,
     });
 
-    const chat = model.startChat();
-    let result = await chat.sendMessage(message);
+    const messages: ChatCompletionMessageParam[] = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: message },
+    ];
+
+    let response = await client.chat.completions.create({
+      model: selectedModel,
+      messages,
+      tools: TOOLS,
+      tool_choice: 'auto',
+    });
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const calls = result.response.functionCalls();
-      if (!calls || calls.length === 0) break;
+      const choice = response.choices[0];
+      if (!choice) break;
 
-      const responseParts: Part[] = [];
+      const assistantMessage = choice.message;
+      messages.push(assistantMessage);
 
-      for (const call of calls) {
+      const toolCalls = assistantMessage.tool_calls;
+      if (!toolCalls || toolCalls.length === 0) break;
+
+      for (const call of toolCalls) {
+        const toolName = call.function.name;
+        let args: Record<string, unknown> = {};
+        try {
+          args = JSON.parse(call.function.arguments || '{}');
+        } catch {
+          args = {};
+        }
+
         logger.info('AI tool call', {
           area: 'ai-interpreter',
-          tool: call.name,
-          input: call.args,
+          tool: toolName,
+          input: args,
           userId,
         });
 
         try {
-          const toolResult = await executeTool(
-            userId,
-            call.name,
-            (call.args ?? {}) as Record<string, unknown>,
-          );
-          responseParts.push({
-            functionResponse: {
-              name: call.name,
-              response: toolResult,
-            },
+          const toolResult = await executeTool(userId, toolName, args);
+          messages.push({
+            role: 'tool',
+            tool_call_id: call.id,
+            content: JSON.stringify(toolResult),
           });
         } catch (error) {
           const errMsg =
             error instanceof Error ? error.message : String(error);
           logger.warn('AI tool error', {
             area: 'ai-interpreter',
-            tool: call.name,
+            tool: toolName,
             error: errMsg,
           });
-          responseParts.push({
-            functionResponse: {
-              name: call.name,
-              response: { error: errMsg },
-            },
+          messages.push({
+            role: 'tool',
+            tool_call_id: call.id,
+            content: JSON.stringify({ error: errMsg }),
           });
         }
       }
 
-      result = await chat.sendMessage(responseParts);
+      response = await client.chat.completions.create({
+        model: selectedModel,
+        messages,
+        tools: TOOLS,
+        tool_choice: 'auto',
+      });
     }
 
-    return result.response.text() || 'Done.';
+    return response.choices[0]?.message?.content || 'Done.';
   } catch (error) {
-    // Return a useful message instead of throwing — a thrown error surfaces to
-    // the user as the misleading "Unknown command". Showing the real reason
-    // (e.g. an invalid model name or quota error) makes the bot diagnosable.
     const msg = error instanceof Error ? error.message : String(error);
     return `⚠️ AI request failed: ${msg.slice(0, 180)}\n\nYou can still use slash commands:\n/mint <url> • /watch <address> • /status • /cancel • /settings`;
   }
