@@ -2,7 +2,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import {
-  Activity, ArrowRight, CheckCircle2, AlertTriangle, HelpCircle,
+  Activity, ArrowRight, CheckCircle2,
   Radio, Target, Wallet, Zap, Cpu,
 } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
@@ -11,6 +11,7 @@ import { MetricCard } from '@/components/ui/metric-card';
 import { PageHeader } from '@/components/ui/page-header';
 import { Stagger, StaggerItem, Reveal } from '@/components/motion';
 import { MintActivityChart } from '@/components/dashboard/mint-activity-chart';
+import { DashboardSystemHealthCard } from '@/components/dashboard/system-health-card';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getDb } from '@/lib/db';
 import { captureException } from '@/lib/observability/sentry';
@@ -19,7 +20,6 @@ import { and, desc, eq, gte } from 'drizzle-orm';
 import { getUserMintTasks } from '@/lib/services/mint.service';
 import { getRecentActivities } from '@/lib/monitoring';
 import { getNativeTokenUsdPrice, formatUsd } from '@/lib/services/native-price.service';
-import { getSystemStatusSnapshot, type ServiceStatus } from '@/lib/services/system-status.service';
 
 async function getDashboardData(userId: string) {
   const last7Labels = Array.from({ length: 7 }, (_, i) => {
@@ -32,7 +32,7 @@ async function getDashboardData(userId: string) {
     const db = getDb();
     const since7Days = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    const [tasks, recentHistoryRows, userWallets, userCollections, activities, systemStatus] = await Promise.all([
+    const [tasks, recentHistoryRows, userWallets, userCollections, activities] = await Promise.all([
       getUserMintTasks(userId),
       db.select({
         history: mintHistory,
@@ -45,10 +45,6 @@ async function getDashboardData(userId: string) {
       db.select().from(wallets).where(eq(wallets.userId, userId)),
       db.select().from(collections).where(eq(collections.userId, userId)),
       getRecentActivities(userId).catch(() => []),
-      // Real health snapshot (DB, Redis, RPC providers, recovery loop) --
-      // same source of truth as Settings > System. Falls back to null so a
-      // health-check hiccup never breaks the whole dashboard.
-      getSystemStatusSnapshot(userId).catch(() => null),
     ]);
 
     const recentHistory = recentHistoryRows.map(r => ({ ...r.history, collectionName: r.collectionName }));
@@ -80,7 +76,6 @@ async function getDashboardData(userId: string) {
       walletCount: userWallets.length, fundedWalletCount: fundedWallets.length,
       collectionCount: userCollections.length, recentHistory,
       chartData, activities, portfolioEth, portfolioUsdValue, ethUsdPrice,
-      systemStatus,
     };
   } catch (e) {
     captureException(e);
@@ -89,18 +84,9 @@ async function getDashboardData(userId: string) {
       walletCount: 0, fundedWalletCount: 0, collectionCount: 0, recentHistory: [],
       chartData: last7Labels.map(day => ({ day, completed: 0, failed: 0 })),
       activities: [], portfolioEth: 0, portfolioUsdValue: 0, ethUsdPrice: 0,
-      systemStatus: null,
     };
   }
 }
-
-type ServiceStatusValue = ServiceStatus['status'];
-
-const HEALTH_STATUS_DISPLAY: Record<ServiceStatusValue, { label: string; icon: typeof CheckCircle2; color: string }> = {
-  healthy: { label: 'Healthy', icon: CheckCircle2, color: 'text-success' },
-  unhealthy: { label: 'Unhealthy', icon: AlertTriangle, color: 'text-danger' },
-  unknown: { label: 'Unknown', icon: HelpCircle, color: 'text-muted' },
-};
 
 function statusConfig(status: string) {
   switch (status) {
@@ -163,60 +149,11 @@ export default async function DashboardPage() {
           <MintActivityChart data={d.chartData} />
         </Card>
 
-        {/* System Health -- shows nothing when everything is fine; only
-            surfaces the specific service(s) that are actually down/unknown
-            (DB, Redis, each RPC provider, recovery loop), so the panel is
-            silent noise-wise until something needs attention. */}
-        <Card tone="default" className="p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted">System Health</p>
-            <Link href="/settings/system" className="text-xs font-medium text-primary hover:underline">
-              Details
-            </Link>
-          </div>
-          {(() => {
-            const checks: { label: string; status: ServiceStatusValue; detail?: string }[] = d.systemStatus
-              ? [
-                  { label: 'Database', status: d.systemStatus.database.status, detail: d.systemStatus.database.detail },
-                  { label: 'Cache (Redis)', status: d.systemStatus.redis.status, detail: d.systemStatus.redis.detail },
-                  ...Object.entries(d.systemStatus.rpc).map(([provider, health]) => ({
-                    label: `${provider.charAt(0).toUpperCase()}${provider.slice(1)} RPC`,
-                    status: health.status,
-                    detail: health.detail,
-                  })),
-                  { label: 'Recovery Loop', status: d.systemStatus.recoveryLoop.status },
-                ]
-              : [{ label: 'System status', status: 'unknown' as const, detail: 'Could not reach the health check service' }];
-
-            const issues = checks.filter((c) => c.status !== 'healthy');
-
-            if (issues.length === 0) {
-              return (
-                <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2.5">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-success" />
-                  <span className="text-xs font-semibold text-success">All systems operational</span>
-                </div>
-              );
-            }
-
-            return (
-              <div className="space-y-2">
-                {issues.map((c) => {
-                  const display = HEALTH_STATUS_DISPLAY[c.status];
-                  return (
-                    <div key={c.label} className="flex items-start gap-2.5 rounded-lg bg-surface-hover px-3 py-2.5">
-                      <display.icon className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${display.color}`} />
-                      <div className="min-w-0">
-                        <p className={`text-xs font-semibold ${display.color}`}>{c.label} {display.label.toLowerCase()}</p>
-                        {c.detail && <p className="mt-0.5 truncate text-xs text-muted" title={c.detail}>{c.detail}</p>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })()}
-        </Card>
+        {/* System Health -- fetched client-side (see DashboardSystemHealthCard)
+            so it can't compete with the SSR dashboard queries above for
+            DB/Redis connections; only surfaces services that are actually
+            down/unknown, silent otherwise. */}
+        <DashboardSystemHealthCard />
       </Reveal>
 
       {/* Recent activity */}
