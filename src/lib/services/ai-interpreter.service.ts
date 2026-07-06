@@ -4,6 +4,7 @@ import OpenAI from 'openai';
 import type { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources/chat/completions';
 import { logger } from '@/lib/logger';
 import { getRedisClient } from '@/lib/redis';
+import { publishEvent, type EventType } from '@/lib/services/event-bus.service';
 
 // ── Provider config ─────────────────────────────────────────────────────────
 
@@ -238,6 +239,33 @@ const TOOLS: ChatCompletionTool[] = [
 ];
 
 // ── Tool Executor ────────────────────────────────────────────────────────────
+
+// ── Tool → Event mapping ────────────────────────────────────────────────────
+// Maps mutating tool names to event-bus event types. Read-only tools are
+// omitted — they don't need to trigger browser invalidation.
+const TOOL_EVENT_MAP: Record<string, EventType> = {
+  watch_wallet:                'watched-wallet:created',
+  remove_watched_wallet:       'watched-wallet:removed',
+  create_copy_mint_rule:       'copy-rule:created',
+  delete_copy_mint_rule:       'copy-rule:deleted',
+  mint_from_url:               'mint:created',
+  cancel_mint:                 'mint:cancelled',
+  retry_failed_mint:           'mint:retried',
+  analyze_contract:            'analyzer:completed',
+  discover_collection:         'collection:discovered',
+  refresh_collection_floor:    'collection:floor-refreshed',
+  remove_collection:           'collection:removed',
+  update_wallet:               'wallet:updated',
+  remove_wallet:               'wallet:removed',
+  set_default_wallet:          'wallet:updated',
+  refresh_wallet_balance:      'wallet:balance',
+  update_execution_settings:   'settings:updated',
+  update_notification_settings:'settings:updated',
+  update_email_settings:       'settings:updated',
+  add_monitoring_website:      'monitoring:website-added',
+  remove_monitoring_website:   'monitoring:website-removed',
+  reset_all_data:              'data:reset',
+};
 
 async function executeTool(
   userId: string,
@@ -840,6 +868,12 @@ export async function interpretTelegramMessage(
         try {
           const toolResult = await executeTool(userId, toolName, args);
           messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(toolResult) });
+
+          // ── Publish real-time event to sync the web UI ──
+          const eventType = TOOL_EVENT_MAP[toolName];
+          if (eventType && !('error' in toolResult)) {
+            void publishEvent(userId, eventType, { tool: toolName, ...args });
+          }
         } catch (_error) {
           const errMsg = _error instanceof Error ? _error.message : String(_error);
           logger.warn('AI tool error', { area: 'ai-interpreter', tool: toolName, error: errMsg });

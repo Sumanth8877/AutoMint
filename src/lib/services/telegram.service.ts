@@ -2,6 +2,7 @@ import 'server-only';
 
 import crypto from 'crypto';
 import { and, desc, eq, inArray } from 'drizzle-orm';
+import { logger } from '@/lib/logger';
 import { getDb } from '@/lib/db';
 import { getWalletBalance, isValidEthereumAddress } from '@/lib/blockchain/wallet';
 import { mintTasks, telegramAccounts, wallets } from '@/drizzle/schema';
@@ -11,6 +12,7 @@ import { fetchMintRequirements } from '@/lib/services/mint-requirements.service'
 import { createMintTaskFromUrl, withMintTaskCreationLock } from '@/lib/services/mint-orchestrator.service';
 import { cancelScheduledMint, scheduleMint } from '@/lib/services/qstash.service';
 import { watchWallet } from '@/lib/services/wallet-tracker.service';
+import { publishEvent } from '@/lib/services/event-bus.service';
 
 const TELEGRAM_API_BASE = 'https://api.telegram.org';
 const MAX_SEND_ATTEMPTS = 3;
@@ -668,6 +670,7 @@ async function handleMintCommand(message: TelegramMessage, userId: string, rawIn
 
   if (result.action === 'MONITORING') {
     await sendTelegramNotification(userId, 'mint_created', { url, taskId: result.taskId });
+    void publishEvent(userId, 'mint:created', { taskId: result.taskId, url });
     await reply(
       message,
       `⏳ Monitoring started.\nTask: ${result.taskId}\nQty: ${qtyLabel}\nYou'll be notified when the mint goes live.`,
@@ -677,6 +680,7 @@ async function handleMintCommand(message: TelegramMessage, userId: string, rawIn
 
   // TASK_CREATED: mint is live — task queued for near-immediate execution via QStash.
   await sendTelegramNotification(userId, 'mint_created', { url, taskId: result.taskId });
+  void publishEvent(userId, 'mint:created', { taskId: result.taskId, url });
   await reply(
     message,
     `✅ Mint task created.\nTask: ${result.taskId}\nQty: ${qtyLabel}\nExecution starting shortly — you'll be notified on completion.`,
@@ -792,6 +796,7 @@ async function handleWatchCommand(message: TelegramMessage, userId: string, addr
       symbol: balance.symbol,
     });
 
+    void publishEvent(userId, 'watched-wallet:created', { address: wallet.walletAddress });
     await reply(message, `Wallet tracker enabled.\n${wallet.walletAddress}\nChain: ${wallet.chain}\nStatus: ${wallet.active ? 'active' : 'inactive'}\nBalance: ${balance.balance} ${balance.symbol}`);
   } catch (error) {
     await reply(message, error instanceof Error ? error.message : 'Failed to watch wallet.');
@@ -844,6 +849,7 @@ async function handleCancelCommand(message: TelegramMessage, userId: string) {
 
   const task = await cancelScheduledMint(target.id, userId);
 
+  void publishEvent(userId, 'mint:cancelled', { taskId: task.id });
   await reply(message, `Cancelled mint task.\nTask: ${task.id}`);
 }
 
@@ -1071,7 +1077,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
     const text = message.text?.trim() ?? '';
 
     if (text.startsWith('http://') || text.startsWith('https://')) {
-      // Requires account + wallet — resolve both before handing off.
+      // Route URLs through AI interpreter so event-bus publishes to web UI.
       if (!message.from) {
         await reply(message, 'Unable to process message without a Telegram user ID.');
         return { handled: true };
@@ -1081,8 +1087,14 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
         await reply(message, accountRequiredText());
         return { handled: true };
       }
-      // Route to the same handler as /mint <url>
-      await handleMintCommand(message, urlAccount.userId, text);
+      try {
+        const { interpretTelegramMessage } = await import('@/lib/services/ai-interpreter.service');
+        const aiReply = await interpretTelegramMessage(`mint ${text}`, urlAccount.userId);
+        await reply(message, aiReply);
+      } catch {
+        // Fallback to direct handler if AI fails
+        await handleMintCommand(message, urlAccount.userId, text);
+      }
       return { handled: true };
     }
 
@@ -1127,37 +1139,47 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
     return { handled: true };
   }
 
-  switch (command) {
-    case '/mint':
-      await handleMintCommand(message, account.userId, rawArgs);
-      break;
-    case '/schedule':
-      await handleScheduleCommand(message, account.userId, rawArgs);
-      break;
-    case '/watch':
-      await handleWatchCommand(message, account.userId, rawArgs);
-      break;
-    case '/status':
-      await handleStatusCommand(message, account.userId);
-      break;
-    case '/cancel':
-      await handleCancelCommand(message, account.userId);
-      break;
-    case '/settings':
-      await handleSettingsCommand(message, account);
-      break;
-    case '/model':
-      await handleModelCommand(message, account.userId);
-      break;
-    default: {
-      try {
-        const { interpretTelegramMessage } = await import('@/lib/services/ai-interpreter.service');
-        const aiReply = await interpretTelegramMessage(message.text ?? '', account.userId);
-        await reply(message, aiReply);
-      } catch (_aiError) {
-        await reply(message, 'Unknown command. Use /settings to see available commands.');
-      }
-      break;
+  // /model is Telegram-UI-only (inline keyboard) — keep it native.
+  if (command === '/model') {
+    await handleModelCommand(message, account.userId);
+    return { handled: true };
+  }
+
+  // ── Route ALL other commands through the AI interpreter ──────────────
+  // The AI has equivalent tools for every slash command (/mint, /watch,
+  // /status, /cancel, /settings, /schedule, etc.) and can handle them
+  // with richer context, multi-step reasoning, and real-time event
+  // publishing to sync the web UI. Slash command text is passed as-is
+  // so the AI sees the user's original intent.
+  try {
+    const { interpretTelegramMessage } = await import('@/lib/services/ai-interpreter.service');
+    const aiReply = await interpretTelegramMessage(message.text ?? '', account.userId);
+    await reply(message, aiReply);
+  } catch (_aiError) {
+    // Fallback: if AI fails, try the legacy slash command handler
+    logger.warn('AI interpreter failed, falling back to slash handler', { area: 'telegram', command });
+    switch (command) {
+      case '/mint':
+        await handleMintCommand(message, account.userId, rawArgs);
+        break;
+      case '/schedule':
+        await handleScheduleCommand(message, account.userId, rawArgs);
+        break;
+      case '/watch':
+        await handleWatchCommand(message, account.userId, rawArgs);
+        break;
+      case '/status':
+        await handleStatusCommand(message, account.userId);
+        break;
+      case '/cancel':
+        await handleCancelCommand(message, account.userId);
+        break;
+      case '/settings':
+        await handleSettingsCommand(message, account);
+        break;
+      default:
+        await reply(message, 'AI processing failed. Try again or use /settings for help.');
+        break;
     }
   }
 

@@ -11,10 +11,10 @@ function getQueryClient() {
     return new QueryClient({
       defaultOptions: {
         queries: {
-          staleTime: 14400000, // 4 hours
-          gcTime: 14400000, // 4 hours
-          refetchOnWindowFocus: false,
-          refetchOnReconnect: false,
+          staleTime: 60_000,     // 1 minute — SSE handles real-time invalidation
+          gcTime: 600_000,       // 10 minutes — keep garbage-collected data longer
+          refetchOnWindowFocus: true,   // refetch when user tabs back
+          refetchOnReconnect: true,     // refetch after network reconnect
           retry: 1,
           retryDelay: 1000,
         },
@@ -26,10 +26,10 @@ function getQueryClient() {
       browserQueryClient = new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 14400000, // 4 hours
-            gcTime: 14400000, // 4 hours
-            refetchOnWindowFocus: false,
-            refetchOnReconnect: false,
+            staleTime: 60_000,     // 1 minute — SSE handles real-time invalidation
+            gcTime: 600_000,       // 10 minutes
+            refetchOnWindowFocus: true,
+            refetchOnReconnect: true,
             retry: 1,
             retryDelay: 1000,
           },

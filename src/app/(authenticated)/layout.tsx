@@ -5,6 +5,7 @@ import { syncUser } from '@/lib/auth/sync-user';
 import AppShell from '@/components/app-shell';
 import OnboardingGate from '@/components/onboarding/onboarding-gate';
 import { QueryClientProviderWrapper } from '@/components/providers/query-client-provider';
+import { EventStreamProvider } from '@/components/providers/event-stream-provider';
 
 export default async function AuthenticatedLayout({
   children,
@@ -33,9 +34,11 @@ export default async function AuthenticatedLayout({
 
   return (
     <QueryClientProviderWrapper>
-      <AppShell>
-        <OnboardingGate>{children}</OnboardingGate>
-      </AppShell>
+      <EventStreamProvider>
+        <AppShell>
+          <OnboardingGate>{children}</OnboardingGate>
+        </AppShell>
+      </EventStreamProvider>
     </QueryClientProviderWrapper>
   );
 }
