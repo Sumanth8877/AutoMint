@@ -3,7 +3,6 @@ import 'server-only';
 import { and, eq } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
 import { collections, emailNotificationPreferences, mintTasks, users, wallets } from '@/drizzle/schema';
-import { captureException } from '@/lib/observability/sentry';
 import { renderEmailTemplate } from '@/lib/email-templates';
 
 type PreferenceUpdate = Partial<Pick<
@@ -67,9 +66,7 @@ const SENSITIVE_ENV_KEYS = new Set([
   'QSTASH_NEXT_SIGNING_KEY',
   // Email
   'RESEND_API_KEY',
-  // Monitoring / observability
-  'SENTRY_DSN',
-  'SENTRY_AUTH_TOKEN',
+
   // RPC providers (stored in DB but may also be present as env fallbacks)
   'ALCHEMY_API_KEY',
   'INFURA_API_KEY',
@@ -219,11 +216,6 @@ async function sendNotificationEmail(userId: string, type: EmailType, heading: s
 
     return await sendEmail(allowed.user.email, `AutoMint: ${heading}`, html);
   } catch (error) {
-    await captureException(error, {
-      area: 'email',
-      context: { userId, taskId: payload.taskId, provider: 'resend' },
-      fingerprint: ['email', type],
-    });
     return false;
   }
 }

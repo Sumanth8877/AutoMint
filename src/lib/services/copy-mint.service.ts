@@ -7,7 +7,6 @@ import { logActivity } from '@/lib/monitoring';
 import { executeMintTask } from '@/lib/services/mint.service';
 import { fetchMintRequirements } from '@/lib/services/mint-requirements.service';
 import { getMintState } from '@/lib/services/mint-state.service';
-import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
 import { acquireLock, releaseLock } from '@/lib/services/mint-lock.service';
 import { normalizeAddress, isValidEvmAddress } from '@/lib/utils/address';
 import { getRedisClient } from '@/lib/redis';
@@ -31,7 +30,6 @@ type CopyMintRuleInput = {
   minMintCount?: string | number | null;
   enabled?: boolean;
 };
-
 
 function normalizeQuantity(quantity: string | number | null | undefined) {
   return Math.max(1, parseInt(String(quantity ?? '1'), 10) || 1);
@@ -98,12 +96,6 @@ async function loadDefaultMintWallet(userId: string, chain: string, destinationW
   if (sameChain) return sameChain;
 
   // Fallback: use any EVM wallet — log warning so caller knows chain may mismatch
-  addBreadcrumb({
-    category: 'copy-mint',
-    message: `loadDefaultMintWallet: no wallet found for chain "${chain}" — falling back to first available EVM wallet`,
-    level: 'warning',
-    data: { userId, chain, destinationWalletId },
-  });
 
   const [fallback] = await getDb()
     .select()
@@ -113,12 +105,6 @@ async function loadDefaultMintWallet(userId: string, chain: string, destinationW
     .limit(1);
 
   if (fallback) {
-    addBreadcrumb({
-      category: 'copy-mint',
-      message: `loadDefaultMintWallet: using fallback wallet ${fallback.address} (chain: ${fallback.chain ?? 'unknown'}) — expected "${chain}"`,
-      level: 'warning',
-      data: { walletId: fallback.id, walletChain: fallback.chain, expectedChain: chain },
-    });
   }
 
   return fallback ?? null;
@@ -281,12 +267,6 @@ export async function handleCopyMintEvent(event: CopyMintEvent) {
   }
 
   try {
-    addBreadcrumb({
-      category: 'copy-mint',
-      message: 'copy mint evaluation started',
-      level: 'info',
-      data: { userId: event.userId, wallet: event.watchedWalletAddress, chain: event.chain, contractAddress },
-    });
 
     // ── Min Mint Count Gate ──────────────────────────────────────────────
     // If the rule requires the whale to mint N+ times in the same collection
@@ -311,20 +291,8 @@ export async function handleCopyMintEvent(event: CopyMintEvent) {
           return { status: 'skipped' as const, reason: `mint_count_below_threshold:${currentCount}/${rule.minMintCount}` };
         }
 
-        addBreadcrumb({
-          category: 'copy-mint',
-          message: `Whale mint count threshold reached: ${currentCount}/${rule.minMintCount}`,
-          level: 'info',
-          data: { contractAddress, currentCount, requiredCount: rule.minMintCount },
-        });
       } catch {
         // Redis error — fail-open and proceed with copy-mint evaluation
-        addBreadcrumb({
-          category: 'copy-mint',
-          message: 'Redis mint count check failed — proceeding anyway (fail-open)',
-          level: 'warning',
-          data: { contractAddress },
-        });
       }
     }
 
@@ -438,17 +406,6 @@ export async function handleCopyMintEvent(event: CopyMintEvent) {
     await releaseLock(lockName, lockToken);
   }
   } catch (error) {
-    await captureException(error, {
-      area: 'copy-mint',
-      context: {
-        userId: event.userId,
-        wallet: event.watchedWalletAddress,
-        chain: event.chain,
-        collection: event.contractAddress,
-        transactionHash: event.transactionHash,
-      },
-      fingerprint: ['copy-mint', 'execution'],
-    });
     throw error;
   }
 }

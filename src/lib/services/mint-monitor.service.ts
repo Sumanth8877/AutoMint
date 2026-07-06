@@ -3,7 +3,6 @@ import 'server-only';
 import { createPublicClient, webSocket } from 'viem';
 import { getChain, CHAIN_KEYS, type ChainKey } from '@/lib/blockchain/chains';
 import { getMintState } from '@/lib/services/mint-state.service';
-import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
 import { getAllSettings } from '@/lib/services/integration-settings.service';
 
 // Fix #2: Record<ChainKey, string> is exhaustive — TypeScript will fail to
@@ -114,12 +113,6 @@ export async function watchForMintLive(
   const wsUrl = await getWebSocketUrl(chain);
 
   if (!wsUrl) {
-    addBreadcrumb({
-      category: 'mint-monitor',
-      message: 'No WebSocket URL configured — falling back to HTTP polling',
-      level: 'info',
-      data: { chain },
-    });
     return 'error'; // Caller will use HTTP polling reschedule
   }
 
@@ -146,13 +139,6 @@ export async function watchForMintLive(
       try { unwatchTransfer?.(); } catch {}
       try { (client as unknown as { destroy?: () => void })?.destroy?.(); } catch {}
 
-      addBreadcrumb({
-        category: 'mint-monitor',
-        message: `WebSocket monitor settled: ${result}`,
-        level: 'info',
-        data: { contractAddress, chain, result },
-      });
-
       resolve(result);
     }
 
@@ -170,7 +156,6 @@ export async function watchForMintLive(
       });
     } catch (err) {
       clearTimeout(timer);
-      captureException(err, { area: 'mint-monitor', context: { chain }, fingerprint: ['mint-monitor', 'client-error'] });
       resolve('error');
       return;
     }
@@ -204,7 +189,6 @@ export async function watchForMintLive(
             (log) => (log as { args?: { from?: string } }).args?.from === '0x0000000000000000000000000000000000000000'
           );
           if (isMint) {
-            addBreadcrumb({ category: 'mint-monitor', message: 'Transfer(from=0x0) detected — mint is live', level: 'info', data: { contractAddress, chain } });
             settle('live');
           }
         },
@@ -219,14 +203,12 @@ export async function watchForMintLive(
           if (settled) return;
           try {
             const state = await getMintState(contractAddress, chain);
-            addBreadcrumb({ category: 'mint-monitor', message: `Block ${blockNumber}: mint state = ${state.status}`, level: 'info', data: { contractAddress, chain, blockNumber: blockNumber.toString(), status: state.status } });
             if (state.status === 'LIVE')  { settle('live');  }
             if (state.status === 'ENDED') { settle('ended'); }
           } catch { /* ignore per-block errors */ }
         },
         onError: (error: Error) => {
           if (settled) return;
-          addBreadcrumb({ category: 'mint-monitor', message: 'WebSocket block subscription error', level: 'warning', data: { error: String(error) } });
           if (!unwatchTransfer) settle('error');
         },
         emitOnBegin: true,
@@ -234,7 +216,6 @@ export async function watchForMintLive(
     } catch (err) {
       clearTimeout(timer);
       try { unwatchTransfer?.(); } catch {}
-      captureException(err, { area: 'mint-monitor', context: { chain }, fingerprint: ['mint-monitor', 'subscribe-error'] });
       resolve('error');
       return;
     }

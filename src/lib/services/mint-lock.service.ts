@@ -2,7 +2,6 @@ import 'server-only';
 
 import crypto from 'crypto';
 import { getRedisClient } from '@/lib/redis';
-import { addBreadcrumb, captureException, captureMessage } from '@/lib/observability/sentry';
 
 // Mint lock TTL. Tightened from 5 min → 60s because Vercel maxDuration is
 // 10s for the qstash route, so a single execute attempt cannot run longer
@@ -50,25 +49,11 @@ export async function acquireLock(mintId: string, ttlSeconds = LOCK_TTL_SECONDS)
     });
 
     if (result === null || result === undefined) {
-      addBreadcrumb({ category: 'mint-lock', message: 'Lock already exists — deduplicate', level: 'warning', data: { mintId, key } });
-      addBreadcrumb({ category: 'mint-lock', message: 'Lock exists', level: 'info', data: { mintId, key } });
-      await captureMessage('Mint lock exists', {
-        area: 'mint-lock',
-        level: 'warning',
-        context: { taskId: mintId },
-        fingerprint: ['mint-lock', 'exists'],
-      });
       return null;
     }
 
-    addBreadcrumb({ category: 'mint-lock', message: 'Lock acquired', level: 'info', data: { mintId, key } });
     return token;
   } catch (error) {
-    await captureException(error, {
-      area: 'mint-lock',
-      context: { taskId: mintId, key },
-      fingerprint: ['mint-lock', 'acquire'],
-    });
     return null;
   }
 }
@@ -91,23 +76,15 @@ export async function releaseLock(mintId: string, token?: string) {
       `;
       const deleted = await getRedisClient().eval(luaRelease, [key], [token]) as number;
       if (deleted === 0) {
-        addBreadcrumb({ category: 'mint-lock', message: 'Release skipped — token mismatch or lock already expired', level: 'warning', data: { mintId, key } });
         return false;
       }
     } else {
       // No token — fall back to plain DEL (best-effort release).
-      addBreadcrumb({ category: 'mint-lock', message: 'releaseLock called without token — plain DEL fallback', level: 'warning', data: { mintId, key } });
       await getRedisClient().del(key);
     }
 
-    addBreadcrumb({ category: 'mint-lock', message: 'Lock released', level: 'info', data: { mintId, key } });
     return true;
   } catch (error) {
-    await captureException(error, {
-      area: 'mint-lock',
-      context: { taskId: mintId, key },
-      fingerprint: ['mint-lock', 'release'],
-    });
     return false;
   }
 }
@@ -129,18 +106,11 @@ export async function extendLock(mintId: string, token: string, ttlSeconds = LOC
     const extended = await getRedisClient().eval(luaExtend, [key], [token, String(ttlSeconds)]) as number;
 
     if (extended === 0) {
-      addBreadcrumb({ category: 'mint-lock', message: 'Extend skipped — token mismatch or lock already expired', level: 'warning', data: { mintId, key } });
       return false;
     }
 
-    addBreadcrumb({ category: 'mint-lock', message: 'Lock extended', level: 'info', data: { mintId, key, ttlSeconds } });
     return true;
   } catch (error) {
-    await captureException(error, {
-      area: 'mint-lock',
-      context: { taskId: mintId, key },
-      fingerprint: ['mint-lock', 'extend'],
-    });
     throw error;
   }
 }

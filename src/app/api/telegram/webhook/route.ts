@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { parseJsonBody } from '@/lib/api/errors';
 import { handleTelegramUpdate, isTelegramEnabled, type TelegramUpdate } from '@/lib/services/telegram.service';
-import { captureException } from '@/lib/observability/sentry';
 import { logger } from '@/lib/logger';
 import { secureCompare } from '@/lib/security/timing-safe-compare';
 
@@ -91,16 +90,10 @@ export async function POST(request: Request) {
     await handleTelegramUpdate(update);
     return NextResponse.json({ ok: true });
   } catch (error) {
-    captureException(error, { area: 'telegram', context: { route: 'telegram/webhook' }, fingerprint: ['telegram', 'webhook-error'] });
     const message = error instanceof Error ? error.message : 'Telegram webhook failed';
     const status = message === 'Invalid JSON request body' ? 400 : 500;
     console.error('Telegram webhook error:', message);
     if (status >= 500) {
-      await captureException(error, {
-        area: 'telegram',
-        context: { route: '/api/telegram/webhook' },
-        fingerprint: ['telegram', 'webhook'],
-      });
     }
     return NextResponse.json({ error: message }, { status });
   }

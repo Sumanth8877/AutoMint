@@ -1,7 +1,6 @@
 import 'server-only';
 
 import { extractDiscoveryFields, type DiscoveryProviderResult } from '@/lib/services/discovery-extractor';
-import { captureException } from '@/lib/observability/sentry';
 
 type FirecrawlScrapeResponse = {
   success?: boolean;
@@ -55,11 +54,6 @@ export async function discoverWithFirecrawl(openseaUrl: string): Promise<Discove
   const apiKey = getFirecrawlApiKey();
   if (!apiKey) {
     const error = new Error('FIRECRAWL_API_KEY is not configured');
-    await captureException(error, {
-      area: 'discovery',
-      context: { url: openseaUrl, provider: 'firecrawl' },
-      fingerprint: ['discovery', 'firecrawl', 'config'],
-    });
     throw error;
   }
 
@@ -80,22 +74,12 @@ export async function discoverWithFirecrawl(openseaUrl: string): Promise<Discove
   if (!response.ok) {
     const text = await response.text().catch(() => '');
     const error = new Error(text || `Firecrawl discovery failed with status ${response.status}`);
-    await captureException(error, {
-      area: 'discovery',
-      context: { url: openseaUrl, provider: 'firecrawl' },
-      fingerprint: ['discovery', 'firecrawl'],
-    });
     throw error;
   }
 
   const json = await response.json() as FirecrawlScrapeResponse;
   if (json.success === false) {
     const error = new Error(json.error || 'Firecrawl discovery failed');
-    await captureException(error, {
-      area: 'discovery',
-      context: { url: openseaUrl, provider: 'firecrawl' },
-      fingerprint: ['discovery', 'firecrawl'],
-    });
     throw error;
   }
 

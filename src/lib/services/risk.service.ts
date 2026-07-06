@@ -5,7 +5,6 @@ import { getDb } from '@/lib/db';
 import { collections, mintHistory, mintTasks, wallets } from '@/drizzle/schema';
 import { logActivity } from '@/lib/monitoring';
 import { getMintState } from '@/lib/services/mint-state.service';
-import { addBreadcrumb, captureException, startSpan } from '@/lib/observability/sentry';
 import { isTelegramEnabled } from '@/lib/services/telegram.service';
 import { getEffectiveExecutionDefaults } from '@/lib/services/execution-settings.service';
 import { checkTokenSecurity } from '@/lib/services/goplus-security.service';
@@ -24,7 +23,6 @@ function applyRiskWeights(
     raw.domainAge * weights.domainAge
   ) / total;
 }
-
 
 const RISK_THRESHOLD = 75;
 
@@ -173,12 +171,6 @@ async function scoreContractAnalysis(params: {
       }
     } catch (error) {
       // GoPlus check failed, but don't fail the entire risk analysis
-      addBreadcrumb({
-        category: 'risk',
-        message: 'GoPlus Security check failed',
-        level: 'warning',
-        data: { error: error instanceof Error ? error.message : String(error) },
-      });
     }
   }
 
@@ -374,7 +366,7 @@ export async function analyzeAnalyzerRisk(params: {
 }
 
 export async function analyzeMintRisk(taskId: string): Promise<RiskAnalysis> {
-  return startSpan('risk.analyze_mint', { area: 'risk', taskId }, async () => {
+  return (async () => {
   const subject = await loadRiskSubject(taskId);
   if (!subject?.task) throw new Error('Mint task not found');
 
@@ -454,20 +446,8 @@ export async function analyzeMintRisk(taskId: string): Promise<RiskAnalysis> {
     weights: analysis.weights,
   });
 
-  addBreadcrumb({
-    category: 'risk',
-    message: 'risk analysis completed',
-    level: 'info',
-    data: { taskId, userId: task.userId, riskScore, riskReasons },
-  });
-
   return analysis;
   }).catch(async (error) => {
-    await captureException(error, {
-      area: 'risk',
-      context: { taskId },
-      fingerprint: ['risk', 'analysis'],
-    });
     throw error;
   });
 }

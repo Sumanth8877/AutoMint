@@ -1,5 +1,4 @@
 import { getClient } from './client';
-import { captureException } from '@/lib/observability/sentry';
 import type { Address, Hex } from 'viem';
 
 export type GasStrategy = 'STANDARD' | 'FAST' | 'AGGRESSIVE';
@@ -59,11 +58,6 @@ export async function getEip1559GasParams(
       maxPriorityFeePerGas: priorityFee,
     };
   } catch (error) {
-    await captureException(error, {
-      area: 'gas',
-      context: { chain, strategy },
-      fingerprint: ['gas', 'fee-history-error'],
-    });
 
     const gasPrice = await client.getGasPrice();
     const priorityFee = scale(gasPrice / 10n, multiplier.priority);
@@ -125,7 +119,7 @@ export async function estimateGas(chain: string): Promise<GasEstimate> {
     } catch {
       // Chain doesn't support EIP-1559 (e.g. Polygon PoS legacy mode)
       // or the pending block isn't available — fall through to legacy path.
-      // This is expected behaviour, not an error — no Sentry capture needed.
+      // This is expected behaviour, not an error.
     }
 
     // ── Legacy fallback (Polygon PoS, or any non-EIP-1559 chain) ───────────
@@ -136,11 +130,6 @@ export async function estimateGas(chain: string): Promise<GasEstimate> {
       symbol,
     };
   } catch (error) {
-    await captureException(error, {
-      area: 'gas',
-      context: { chain },
-      fingerprint: ['gas', 'estimate-error'],
-    });
     return {
       gasPrice: '0',
       estimatedFee: '0',

@@ -5,7 +5,6 @@ import { syncUser } from '@/lib/auth/sync-user';
 import AppShell from '@/components/app-shell';
 import OnboardingGate from '@/components/onboarding/onboarding-gate';
 import { QueryClientProviderWrapper } from '@/components/providers/query-client-provider';
-import { captureException } from '@/lib/observability/sentry';
 
 export default async function AuthenticatedLayout({
   children,
@@ -30,7 +29,6 @@ export default async function AuthenticatedLayout({
   try {
     await syncUser();
   } catch (e) {
-    captureException(e, { area: 'authenticated-layout.syncUser' });
   }
 
   return (

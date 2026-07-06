@@ -12,7 +12,6 @@ import {
   type AnalyzerResolutionTelemetry,
   type AnalyzerProviderAttempt,
 } from '@/lib/resolve-mint-intent';
-import { addBreadcrumb } from '@/lib/observability/sentry';
 import { createAnalyzerCacheStats } from '@/lib/services/analyzer-cache.service';
 import { discoverContractABI, discoverMintFunction } from '@/lib/services/mint-abi-discovery.service';
 import { fetchMintRequirements, type MintRequirements } from '@/lib/services/mint-requirements.service';
@@ -129,9 +128,6 @@ export async function runAnalyzer(params: {
     log('info', 'input', 'Analysis started');
     log('info', 'input', `Input received: ${params.input}`);
     log('success', 'input', `Input type detected: ${detectInputType(params.input)}`);
-
-    addBreadcrumb({ category: 'discovery', message: 'URL submitted', level: 'info',
-      data: { url: normalizedInput, userId: params.userId } });
 
     // ── Step 1: Resolve intent ──────────────────────────────────────────────
     const intent = await resolveIntentWithCache({ normalizedInput,
@@ -269,9 +265,6 @@ export async function runAnalyzer(params: {
     await saveAnalyzerHistorySafely({ userId: params.userId, input: params.input, result, scores, analysisDurationMs: result.analysisDurationMs }, log);
     log('success', 'completion', `Total analysis duration: ${result.analysisDurationMs}ms`);
     log('success', 'completion', `Total duration reduced with cache hit rate ${result.performanceMetrics.cacheHitRate}%`);
-
-    addBreadcrumb({ category: 'discovery', message: 'discovery completed', level: 'info',
-      data: { url: normalizedInput, userId: params.userId, contractAddress: intent.contractAddress, chain: intent.chain } });
 
     if ((params.notify ?? true) && settings.riskAnalysisEnabled) {
       await sendTelegramNotification(params.userId, 'risk_analysis_complete', {

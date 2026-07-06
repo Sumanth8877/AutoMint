@@ -1,7 +1,6 @@
 import { getDb } from '@/lib/db';
 import { activities } from '@/drizzle/schema';
 import { eq, desc } from 'drizzle-orm';
-import { addBreadcrumb } from '@/lib/observability/sentry';
 
 export type ActivityType = 
   | 'wallet_added' 
@@ -26,7 +25,6 @@ export async function logActivity(userId: string, type: ActivityType, title: str
       metadata: metadata || {},
     });
   } catch (error) {
-    addBreadcrumb({ category: 'monitoring', message: 'Failed to log activity', level: 'error', data: { error: String(error) } });
   }
 }
 

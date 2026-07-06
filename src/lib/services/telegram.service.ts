@@ -11,7 +11,6 @@ import { fetchMintRequirements } from '@/lib/services/mint-requirements.service'
 import { createMintTaskFromUrl, withMintTaskCreationLock } from '@/lib/services/mint-orchestrator.service';
 import { cancelScheduledMint, scheduleMint } from '@/lib/services/qstash.service';
 import { watchWallet } from '@/lib/services/wallet-tracker.service';
-import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
 
 const TELEGRAM_API_BASE = 'https://api.telegram.org';
 const MAX_SEND_ATTEMPTS = 3;
@@ -204,15 +203,6 @@ async function telegramRequest<T>(method: string, payload: Record<string, unknow
             chatId: typeof payload.chat_id === 'string' || typeof payload.chat_id === 'number' ? String(payload.chat_id) : undefined,
             error: lastError.message,
           },
-        });
-        await captureException(lastError, {
-          area: 'telegram',
-          context: {
-            chatId: typeof payload.chat_id === 'string' || typeof payload.chat_id === 'number' ? String(payload.chat_id) : undefined,
-            method,
-          },
-          extra: { payload: { ...payload, text: typeof payload.text === 'string' ? payload.text.slice(0, 120) : undefined } },
-          fingerprint: ['telegram', method],
         });
       }
       if (attempt < MAX_SEND_ATTEMPTS) {
@@ -485,7 +475,6 @@ export async function sendTelegramNotification(
     });
     return { sent: true };
   } catch (error) {
-    await captureException(error instanceof Error ? error : new Error(String(error)), { area: 'telegram', fingerprint: ['telegram', 'notification-failed'] });
     return {
       sent: false,
       reason: error instanceof Error ? error.message : 'telegram_notification_failed',
@@ -519,7 +508,6 @@ export async function sendTelegramSafeModePrompt(params: SafeModePromptParams) {
 
     return { sent: true };
   } catch (error) {
-    await captureException(error instanceof Error ? error : new Error(String(error)), { area: 'telegram', fingerprint: ['telegram', 'safe-mode-prompt-failed'] });
     return {
       sent: false,
       reason: error instanceof Error ? error.message : 'telegram_safe_mode_prompt_failed',
@@ -549,7 +537,6 @@ export async function sendTelegramRiskChangePrompt(params: RiskChangePromptParam
 
     return { sent: true };
   } catch (error) {
-    await captureException(error instanceof Error ? error : new Error(String(error)), { area: 'telegram', fingerprint: ['telegram', 'risk-change-prompt-failed'] });
     return {
       sent: false,
       reason: error instanceof Error ? error.message : 'telegram_risk_change_prompt_failed',
@@ -628,12 +615,6 @@ async function handleStart(message: TelegramMessage, token: string) {
     chatId: String(message.chat.id),
   });
 
-  addBreadcrumb({
-    category: 'telegram',
-    message: 'telegram linked',
-    level: 'info',
-    data: { telegramId: message.from.id, chatId: message.chat.id },
-  });
   await sendTelegramMessage(account.chatId, 'Telegram linked to AutoMint. Commands: /mint <url>, /schedule <url>, /watch <wallet>, /status, /cancel, /settings.');
 }
 
@@ -1017,20 +998,9 @@ async function handleRiskCallback(callback: TelegramCallbackQuery) {
   await answerCallbackQuery(callback.id);
   return { handled: false };
   } catch (error) {
-    await captureException(error, {
-      area: 'telegram',
-      context: {
-        telegramId: String(callback.from.id),
-        chatId: callback.message?.chat.id ? String(callback.message.chat.id) : undefined,
-        callbackData: callback.data,
-      },
-      fingerprint: ['telegram', 'callback'],
-    });
     throw error;
   }
 }
-
-
 
 async function handleScheduledMintCallback(callback: TelegramCallbackQuery) {
   try {
@@ -1068,14 +1038,6 @@ async function handleScheduledMintCallback(callback: TelegramCallbackQuery) {
     await answerCallbackQuery(callback.id);
     return { handled: false };
   } catch (error) {
-    await captureException(error instanceof Error ? error : new Error(String(error)), {
-      area: 'telegram',
-      context: {
-        telegramId: String(callback.from.id),
-        callbackData: callback.data,
-      },
-      fingerprint: ['telegram', 'scheduled-mint-callback'],
-    });
     throw error;
   }
 }
@@ -1140,11 +1102,6 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
         const aiReply = await interpretTelegramMessage(text, aiAccount.userId);
         await reply(message, aiReply);
       } catch (aiError) {
-        await captureException(aiError instanceof Error ? aiError : new Error(String(aiError)), {
-          area: 'telegram',
-          context: { telegramId: String(message.from.id), messagePreview: text.slice(0, 100) },
-          fingerprint: ['telegram', 'ai-interpreter-failed'],
-        });
         await reply(
           message,
           'AI processing failed. Try a slash command:\n/mint <url> • /watch <address> • /status • /cancel • /settings',
@@ -1198,11 +1155,6 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
         const aiReply = await interpretTelegramMessage(message.text ?? '', account.userId);
         await reply(message, aiReply);
       } catch (aiError) {
-        await captureException(aiError instanceof Error ? aiError : new Error(String(aiError)), {
-          area: 'telegram',
-          context: { telegramId: String(message.from?.id), command: command },
-          fingerprint: ['telegram', 'ai-interpreter-failed'],
-        });
         await reply(message, 'Unknown command. Use /settings to see available commands.');
       }
       break;

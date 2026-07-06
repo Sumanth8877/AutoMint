@@ -19,12 +19,6 @@ vi.mock('@/lib/redis', () => ({
   setCache: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('@/lib/observability/sentry', () => ({
-  addBreadcrumb: vi.fn(),
-  captureException: vi.fn(),
-  captureMessage: vi.fn(),
-}));
-
 vi.mock('@/lib/services/integration-settings.service', () => ({
   getAllSettings: vi.fn().mockResolvedValue({
     ALCHEMY_API_KEY: { value: 'test-alchemy-key' },

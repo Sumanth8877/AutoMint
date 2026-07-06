@@ -1,7 +1,5 @@
 import 'server-only';
 
-import { addBreadcrumb, captureMessage } from '@/lib/observability/sentry';
-
 // ─── Private Mempool Endpoints ────────────────────────────────────────────────
 //
 // These endpoints accept signed transactions via eth_sendRawTransaction but route
@@ -67,12 +65,6 @@ export async function broadcastViaPrivateMempool(
 
   if (endpoints.length === 0) {
     // Chain does not support private mempools — broadcast publicly
-    addBreadcrumb({
-      category: 'private-mempool',
-      message: `No private endpoints for chain ${chain} — using public broadcast`,
-      level: 'info',
-      data: { chain },
-    });
     return broadcastPublicFallback(chain, signedTx);
   }
 
@@ -82,32 +74,13 @@ export async function broadcastViaPrivateMempool(
     try {
       const txHash = await sendToPrivateEndpoint(endpoint, signedTx);
 
-      addBreadcrumb({
-        category: 'private-mempool',
-        message: 'Private broadcast succeeded',
-        level: 'info',
-        data: { chain, endpoint, txHash },
-      });
-
       return { txHash, endpoint, isPrivate: true };
     } catch (error) {
-      addBreadcrumb({
-        category: 'private-mempool',
-        message: `Private endpoint failed: ${endpoint}`,
-        level: 'warning',
-        data: { chain, endpoint, error: String(error) },
-      });
       // Try the next endpoint
     }
   }
 
   // All private endpoints failed — fall back to public broadcast
-  await captureMessage('All private mempool endpoints failed — falling back to public broadcast', {
-    area: 'private-mempool',
-    level: 'warning',
-    context: { chain, endpointCount: endpoints.length },
-    fingerprint: ['private-mempool', 'all-failed', chain],
-  });
 
   return broadcastPublicFallback(chain, signedTx);
 }

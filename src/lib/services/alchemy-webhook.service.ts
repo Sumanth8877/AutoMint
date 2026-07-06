@@ -1,7 +1,6 @@
 import 'server-only';
 
 import { logger } from '@/lib/logger';
-import { captureException } from '@/lib/observability/sentry';
 import { getDb } from '@/lib/db';
 import { mintTasks } from '@/drizzle/schema';
 import { and, eq, inArray, ne } from 'drizzle-orm';
@@ -81,11 +80,6 @@ export async function registerContractForMonitoring(
   } catch (error) {
     // Non-blocking — a failed registration just means we fall back to the
     // 30s polling loop. Don't let this break the mint task creation.
-    await captureException(error, {
-      area: 'alchemy-webhook',
-      context: { contractAddress },
-      fingerprint: ['alchemy-webhook', 'registration-error'],
-    }).catch(() => {});
   }
 }
 
@@ -144,11 +138,6 @@ export async function unregisterIfIdle(
     });
   } catch (error) {
     // Best-effort cleanup — never let this break the calling code
-    await captureException(error, {
-      area: 'alchemy-webhook',
-      context: { contractAddress },
-      fingerprint: ['alchemy-webhook', 'idle-cleanup-error'],
-    }).catch(() => {});
   }
 }
 

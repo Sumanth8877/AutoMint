@@ -1,7 +1,6 @@
 import { formatEther, multicall3Abi } from 'viem';
 import { getClient } from './client';
 import { CHAIN_NATIVE_TOKENS } from './chains';
-import { captureException } from '@/lib/observability/sentry';
 
 export async function getWalletBalance(address: string, chain: string) {
   try {
@@ -11,7 +10,6 @@ export async function getWalletBalance(address: string, chain: string) {
     const symbol = CHAIN_NATIVE_TOKENS[chain as keyof typeof CHAIN_NATIVE_TOKENS] || 'ETH';
     return { balance: formatted, symbol };
   } catch (error) {
-    captureException(error, { area: 'wallet', context: { address, chain }, fingerprint: ['wallet', 'balance-error'] });
     return { balance: '0', symbol: CHAIN_NATIVE_TOKENS[chain as keyof typeof CHAIN_NATIVE_TOKENS] || 'ETH' };
   }
 }
@@ -71,11 +69,6 @@ export async function getWalletBalancesMulticall(
       return { address, balance: '0', symbol, error: result.error?.message ?? 'Balance lookup failed' };
     });
   } catch (error) {
-    captureException(error, {
-      area: 'wallet',
-      context: { chain, walletCount: addresses.length },
-      fingerprint: ['wallet', 'multicall-balance-error'],
-    });
     // Fail closed per-address rather than throwing — callers (e.g. fanout)
     // should treat a lookup failure the same as "insufficient balance
     // unknown, be conservative" rather than aborting the whole batch.

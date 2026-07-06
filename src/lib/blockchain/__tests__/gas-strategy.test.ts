@@ -21,11 +21,6 @@ vi.mock('@/lib/blockchain/client', () => ({
   }),
 }));
 
-vi.mock('@/lib/observability/sentry', () => ({
-  addBreadcrumb:    vi.fn(),
-  captureException: vi.fn(),
-}));
-
 vi.mock('@/lib/services/integration-settings.service', () => ({
   getAllSettings: vi.fn().mockResolvedValue({}),
 }));

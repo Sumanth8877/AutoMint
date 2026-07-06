@@ -3,7 +3,6 @@ import 'server-only'; // reliability: r1-r5
 import { getDb } from '@/lib/db';
 import { mintTasks, wallets } from '@/drizzle/schema';
 import { eq, and, isNull, isNotNull, lt, inArray } from 'drizzle-orm';
-import { addBreadcrumb, captureException, captureMessage } from '@/lib/observability/sentry';
 import { getClient } from '@/lib/blockchain/client';
 
 // Tasks stuck in 'running' longer than this are assumed to have crashed
@@ -71,13 +70,6 @@ export async function recoverStuckMintTasks(): Promise<RecoveryResult> {
 
     if (stuckTasks.length === 0) return result;
 
-    addBreadcrumb({
-      category: 'recovery',
-      message: `Recovery scan: ${stuckTasks.length} stuck task(s) found`,
-      level: 'warning',
-      data: { count: stuckTasks.length, threshold: threshold.toISOString() },
-    });
-
     for (const task of stuckTasks) {
       try {
         if (!task.txHash) {
@@ -89,29 +81,13 @@ export async function recoverStuckMintTasks(): Promise<RecoveryResult> {
         }
       } catch (err) {
         result.errors++;
-        await captureException(err, {
-          area: 'recovery',
-          context: { taskId: task.id, hasTxHash: !!task.txHash },
-          fingerprint: ['recovery', 'task-error'],
-        });
       }
     }
 
     const total = result.preBroadcastRecovered + result.postBroadcastRecovered;
     if (total > 0) {
-      await captureMessage('Stuck mint task recovery completed', {
-        area: 'recovery',
-        level: 'info',
-        context: { ...result },
-        fingerprint: ['recovery', 'completed'],
-      });
     }
   } catch (error) {
-    await captureException(error, {
-      area: 'recovery',
-      context: {},
-      fingerprint: ['recovery', 'scan-failed'],
-    });
   }
 
   return result;
@@ -146,12 +122,6 @@ async function recoverPreBroadcastTask(task: typeof mintTasks.$inferSelect): Pro
           // broadcast may be in flight for this task. Do NOT re-execute; defer to
           // the next recovery cycle (the mempool clears within minutes). Erring
           // toward a delayed retry is strictly safer than a double-spend.
-          await captureMessage('Recovery deferred — wallet has an in-flight transaction; not re-executing to avoid double-spend', {
-            area: 'recovery',
-            level: 'warning',
-            context: { taskId, walletId: task.walletId, latest: Number(latest), pending: Number(pending) },
-            fingerprint: ['recovery', 'inflight-defer'],
-          });
           return;
         }
       }
@@ -159,11 +129,6 @@ async function recoverPreBroadcastTask(task: typeof mintTasks.$inferSelect): Pro
       // Could not verify on-chain state — be conservative and skip re-execution
       // this cycle (a later cycle retries once RPC recovers). Avoids re-broadcast
       // when we cannot prove the wallet is idle.
-      await captureException(nonceErr, {
-        area: 'recovery',
-        context: { taskId, walletId: task.walletId },
-        fingerprint: ['recovery', 'nonce-check-failed'],
-      });
       return;
     }
   }
@@ -184,12 +149,6 @@ async function recoverPreBroadcastTask(task: typeof mintTasks.$inferSelect): Pro
 
   if (!reset) {
     // Another worker already claimed/resolved this task — skip
-    addBreadcrumb({
-      category: 'recovery',
-      message: 'Pre-broadcast recovery skipped — task already resolved',
-      level: 'info',
-      data: { taskId },
-    });
     return;
   }
 
@@ -197,12 +156,6 @@ async function recoverPreBroadcastTask(task: typeof mintTasks.$inferSelect): Pro
   const { scheduleMint } = await import('@/lib/services/qstash.service');
   await scheduleMint({ taskId, userId });
 
-  addBreadcrumb({
-    category: 'recovery',
-    message: 'Pre-broadcast stuck task recovered — rescheduled for execution',
-    level: 'info',
-    data: { taskId, userId },
-  });
 }
 
 // ─── Mode B: crashed during receipt wait ──────────────────────────────────────
@@ -226,12 +179,6 @@ async function recoverPostBroadcastTask(taskId: string, txHash: string): Promise
     .returning();
 
   if (!transitioned) {
-    addBreadcrumb({
-      category: 'recovery',
-      message: 'Post-broadcast recovery skipped — task already resolved',
-      level: 'info',
-      data: { taskId },
-    });
     return;
   }
 
@@ -239,10 +186,4 @@ async function recoverPostBroadcastTask(taskId: string, txHash: string): Promise
   const { scheduleReceiptRecheck } = await import('@/lib/services/qstash.service');
   await scheduleReceiptRecheck(taskId, txHash);
 
-  addBreadcrumb({
-    category: 'recovery',
-    message: 'Post-broadcast stuck task recovered — routing to receipt recheck',
-    level: 'info',
-    data: { taskId, txHash },
-  });
 }

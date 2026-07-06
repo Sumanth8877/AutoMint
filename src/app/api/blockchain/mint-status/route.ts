@@ -4,7 +4,6 @@ import { NextResponse } from 'next/server';
 import { requireApiSession } from '@/lib/auth/require-auth';
 import { parseAbi } from 'viem';
 import { getClient } from '@/lib/blockchain/client';
-import { captureException } from '@/lib/observability/sentry';
 import { logger } from '@/lib/logger';
 
 type MintStatus = 'LIVE' | 'NOT_STARTED' | 'PAUSED' | 'ENDED' | 'UNKNOWN';
@@ -102,7 +101,6 @@ export async function GET(req: Request) {
     });
 
   } catch (error) {
-    void captureException(error, { area: 'blockchain', context: { contractAddress, chain } });
     return NextResponse.json({
       status: 'UNKNOWN' as MintStatus,
       reason: 'rpc_error',

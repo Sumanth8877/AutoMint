@@ -28,12 +28,6 @@ vi.mock('@/lib/redis', () => ({
   setCache: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('@/lib/observability/sentry', () => ({
-  addBreadcrumb:    vi.fn(),
-  captureException: vi.fn(),
-  captureMessage:   vi.fn(),
-}));
-
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('mint-lock — Redis CAS lock', () => {

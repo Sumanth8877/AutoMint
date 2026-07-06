@@ -10,7 +10,6 @@ import { getDb } from '@/lib/db';
 import { monitoredWebsites } from '@/drizzle/schema/monitoring';
 import { eq } from 'drizzle-orm';
 import { requireApiUser } from '@/lib/auth/require-auth';
-import { captureException } from '@/lib/observability/sentry';
 
 // GET /api/monitoring/websites
 export async function GET() {
@@ -24,7 +23,6 @@ export async function GET() {
 
     return NextResponse.json(websites);
   } catch (error) {
-    await captureException(error, { area: 'api', context: { route: 'monitoring/websites' }, fingerprint: ['api', 'monitoring-websites-get'] });
     return NextResponse.json({ error: 'Failed to fetch websites' }, { status: 500 });
   }
 }
@@ -55,7 +53,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json(website);
   } catch (error) {
-    await captureException(error, { area: 'api', context: { route: 'monitoring/websites' }, fingerprint: ['api', 'monitoring-websites-post'] });
     return NextResponse.json({ error: 'Failed to create website' }, { status: 500 });
   }
 }

@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getSystemStatusSnapshot } from '@/lib/services/system-status.service';
-import { captureException } from '@/lib/observability/sentry';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -20,7 +19,6 @@ export async function GET() {
     const snapshot = await getSystemStatusSnapshot(authResult.userId);
     return NextResponse.json(snapshot);
   } catch (error) {
-    captureException(error, { area: 'system-status', context: { route: '/api/system/status' }, fingerprint: ['system-status'] });
     return NextResponse.json({ error: 'Failed to load system status' }, { status: 500 });
   }
 }

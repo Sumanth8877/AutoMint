@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { parseJsonBody } from '@/lib/api/errors';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { discoverCollection } from '@/lib/services/discovery.service';
-import { captureException } from '@/lib/observability/sentry';
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Discovery request failed';
@@ -31,11 +30,6 @@ export async function POST(req: Request) {
         : 500;
 
     if (status >= 500) {
-      await captureException(error, {
-        area: 'discovery',
-        context: { route: '/api/discovery' },
-        fingerprint: ['discovery', 'route'],
-      });
     }
 
     return NextResponse.json({ error: message }, { status });

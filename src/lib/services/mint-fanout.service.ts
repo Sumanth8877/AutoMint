@@ -9,7 +9,6 @@ import { fetchMintRequirements } from '@/lib/services/mint-requirements.service'
 import { scheduleMint } from '@/lib/services/qstash.service';
 import { getWalletBalancesMulticall } from '@/lib/blockchain/wallet';
 import { estimatePreFlightGasBufferEth } from '@/lib/blockchain/gas';
-import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
 import { logActivity } from '@/lib/monitoring';
 
 export interface FanoutWalletResult {
@@ -257,25 +256,8 @@ export async function fanoutMintFromUrl(
         status: 'error',
         reason: result.reason instanceof Error ? result.reason.message : String(result.reason),
       });
-      await captureException(result.reason, {
-        area: 'fanout',
-        context: { taskId, walletId, contractAddress: intent.contractAddress },
-        fingerprint: ['fanout', 'schedule-failed'],
-      });
     }
   }
-
-  addBreadcrumb({
-    category: 'fanout',
-    message: 'Multi-wallet fanout scheduled',
-    level: 'info',
-    data: {
-      contractAddress: intent.contractAddress,
-      chain: intent.chain,
-      walletCount: tasksToCreate.length,
-      mintState: mintState.status,
-    },
-  });
 
   await logActivity(userId, 'task_created', `Fanout mint scheduled — ${tasksToCreate.length} wallets`, {
     contractAddress: intent.contractAddress,

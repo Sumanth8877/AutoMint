@@ -18,11 +18,6 @@ vi.mock('@/lib/blockchain/client', () => ({
   }),
 }));
 
-vi.mock('@/lib/observability/sentry', () => ({
-  addBreadcrumb: vi.fn(),
-  captureException: vi.fn(),
-}));
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const CONTRACT = '0x' + 'a'.repeat(40);

@@ -4,7 +4,6 @@ import { createHash } from 'node:crypto';
 import { createPublicClient, createWalletClient, http, type Account, type PublicClient, type WalletClient } from 'viem';
 import { getCache, setCache } from '@/lib/redis';
 import { getChain } from '@/lib/blockchain/chains';
-import { addBreadcrumb, captureException, captureMessage } from '@/lib/observability/sentry';
 import { getAllSettings } from '@/lib/services/integration-settings.service';
 import { getRpcProviderSettings } from '@/lib/services/rpc-provider-settings.service';
 
@@ -127,7 +126,6 @@ async function getInfuraUrl(chain: string): Promise<string | undefined> {
   return process.env[`INFURA_${chainName.toUpperCase()}_RPC_URL`] || process.env.INFURA_RPC_URL;
 }
 
-
 async function getChainstackUrl(chain: string): Promise<string | undefined> {
   // Chainstack: supports either a full node URL (CHAINSTACK_RPC_URL / chain-specific)
   // or an API key (CHAINSTACK_API_KEY) from which we build the endpoint automatically.
@@ -199,7 +197,6 @@ function sleep(ms: number) {
 }
 
 function logRpc(message: string, metadata: Record<string, unknown>) {
-  addBreadcrumb({ category: 'rpc', message, level: 'info', data: metadata });
 }
 
 async function trackRpcAnalytics(input: {
@@ -353,11 +350,6 @@ async function recordSuccess(provider: RpcProvider, responseTime: number) {
 
   if (restored) {
     logRpc('provider restored', { provider, responseTime });
-    await captureMessage('RPC provider restored', {
-      area: 'rpc',
-      level: 'info',
-      context: { provider, responseTime },
-    });
   }
 }
 
@@ -392,13 +384,6 @@ async function recordFailure(provider: RpcProvider, error: unknown, responseTime
       metadata: { error: health.lastFailure, unhealthyUntil },
     });
     logRpc('failover activation', { provider, unhealthyUntil });
-    await captureMessage('RPC failover activation', {
-      area: 'rpc',
-      level: 'warning',
-      context: { provider, unhealthyUntil },
-      extra: { error: health.lastFailure },
-      fingerprint: ['rpc', provider, 'failover'],
-    });
   }
 }
 
@@ -487,12 +472,6 @@ export async function withRpcFailover<T>(
         chain: normalizedChain,
         operationName,
         error: error instanceof Error ? error.message : String(error),
-      });
-      await captureException(error, {
-        area: 'rpc',
-        level: 'warning',
-        context: { provider, chain: normalizedChain, operationName },
-        fingerprint: ['rpc', provider, operationName],
       });
       if (!settings.autoFailover) break;
     }
@@ -698,12 +677,6 @@ export async function broadcastRawTransaction(
     for (const err of errors) {
       void recordFailure('alchemy', err, Date.now() - startedAt); // log under primary
     }
-    await captureException(aggregateError, {
-      area: 'rpc',
-      level: 'error',
-      context: { chain: normalizedChain, providerCount: configured.length },
-      fingerprint: ['rpc', 'broadcast-race', 'all-failed'],
-    });
     throw errors[0] instanceof Error ? errors[0] : new Error('All broadcast providers failed');
   }
 }

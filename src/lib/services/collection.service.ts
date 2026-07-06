@@ -3,7 +3,6 @@ import { collections, mintHistory } from '@/drizzle/schema';
 import { eq, and, inArray } from 'drizzle-orm';
 import { getCollectionMetadata } from '@/lib/blockchain/collections';
 import { logActivity } from '@/lib/monitoring';
-import { captureException } from '@/lib/observability/sentry';
 import { ConflictError, NotFoundError } from '@/lib/api/errors';
 import { CHAIN_KEYS, type ChainKey } from '@/lib/blockchain/chains';
 import { fetchCollectionIntelligence } from '@/lib/services/analyzer-market-intelligence.service';
@@ -89,7 +88,6 @@ export async function addCollection(userId: string, data: { name: string; contra
 
     if (syncedCollection) collection = syncedCollection;
   } catch (error) {
-    captureException(error, { area: 'collection', context: {}, fingerprint: ['collection', 'metadata-sync-failed'] });
   }
 
   await logActivity(userId, 'collection_added', 'Collection added', {
@@ -151,7 +149,6 @@ export async function ensureCollectionForMint(
       return inserted;
     }
   } catch (error) {
-    captureException(error, { area: 'collection', context: { contractAddress, chain }, fingerprint: ['collection', 'ensure-for-mint-metadata-failed'] });
   }
 
   // onConflictDoNothing returned nothing (race with a concurrent insert) or
@@ -238,7 +235,6 @@ export async function syncCollectionFloorPrice(
 
     return updated ?? null;
   } catch (error) {
-    captureException(error, { area: 'collection', context: { collectionId, contractAddress, chain }, fingerprint: ['collection', 'floor-sync-failed'] });
     return null;
   }
 }

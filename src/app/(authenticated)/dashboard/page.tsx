@@ -13,7 +13,6 @@ import { Stagger, StaggerItem, Reveal } from '@/components/motion';
 import { MintActivityChart } from '@/components/dashboard/mint-activity-chart';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getDb } from '@/lib/db';
-import { captureException } from '@/lib/observability/sentry';
 import { wallets, collections, mintHistory } from '@/drizzle/schema';
 import { and, desc, eq, gte } from 'drizzle-orm';
 import { getUserMintTasks } from '@/lib/services/mint.service';
@@ -77,7 +76,6 @@ async function getDashboardData(userId: string) {
       chartData, activities, portfolioEth, portfolioUsdValue, ethUsdPrice,
     };
   } catch (e) {
-    captureException(e);
     return {
       tasks: [], completedTasks: 0, pendingTasks: 0, failedTasks: 0,
       walletCount: 0, fundedWalletCount: 0, collectionCount: 0, recentHistory: [],

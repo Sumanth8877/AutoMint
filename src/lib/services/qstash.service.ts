@@ -10,7 +10,6 @@ import { executeMintTask } from '@/lib/services/mint.service';
 import { prewarmWalletKey } from '@/lib/services/wallet.service';
 import { getMintState } from '@/lib/services/mint-state.service';
 import { requireRiskApproval } from '@/lib/services/risk.service';
-import { addBreadcrumb, captureMessage } from '@/lib/observability/sentry';
 import { logger } from '@/lib/logger';
 import { acquireLock, releaseLock } from '@/lib/services/mint-lock.service';
 import { executeScheduledRiskCheck, hasBlockingRiskChange, storeOriginalRiskSnapshot } from '@/lib/services/scheduled-risk-check.service';
@@ -95,8 +94,6 @@ function getWebhookUrl() {
   return resolveWebhookSource().url;
 }
 
-
-
 function secondsFromDate(date: Date) {
   return Math.floor(date.getTime() / 1000);
 }
@@ -111,9 +108,6 @@ function isImmediateDelivery(date: Date): boolean {
   // Treat any date within 2 seconds of now as "immediate"
   return date.getTime() <= Date.now() + 2_000;
 }
-
-
-
 
 export async function verifyQStashSignature(headers: Headers, rawBody: string) {
   const signature = headers.get('upstash-signature');
@@ -141,8 +135,6 @@ async function publishQStashMessage(
   scheduledTime: Date,
   type: ScheduledMintPayload['type'] = 'execute',
 ) {
-  addBreadcrumb({ category: 'qstash', message: 'scheduling started', level: 'info',
-    data: { taskId, scheduledTime: scheduledTime.toISOString(), type } });
 
   const result = await getQStashClient().publishJSON({
     url: getWebhookUrl(),
@@ -158,7 +150,6 @@ async function publishQStashMessage(
 
   return result;
 }
-
 
 function getRiskCheckTime(scheduledTime: Date) {
   const oneHourBefore = new Date(scheduledTime.getTime() - 60 * 60 * 1000);
@@ -263,12 +254,6 @@ export async function scheduleMint(params: {
   const qstash = await publishQStashMessage(task.id, scheduledTime, 'execute');
   const qstashMessageId = qstash.messageId || (qstash as unknown as { scheduleId?: string }).scheduleId;
   if (!qstashMessageId) throw new Error('QStash response did not include a message id');
-  addBreadcrumb({
-    category: 'qstash',
-    message: 'scheduling completed',
-    level: 'info',
-    data: { taskId: task.id, qstashMessageId, scheduledTime: scheduledTime.toISOString() },
-  });
   const effectiveStatus = params.initialStatus ?? 'monitoring';
   // Diagnostic: surface the exact webhook URL QStash will POST back to, and warn
   // when it resolves to the ephemeral VERCEL_URL (deployment-specific, often
@@ -479,12 +464,6 @@ export async function executeScheduledMint(taskId: string) {
   // H1 fix: capture the lock token so the release uses the atomic Lua CAS path.
   const lockToken = (await acquireLock(taskId)) ?? undefined;
   if (!lockToken) {
-    await captureMessage('QStash duplicate execution attempt', {
-      area: 'qstash',
-      level: 'warning',
-      context: { taskId },
-      fingerprint: ['qstash', 'duplicate-execution'],
-    });
     return { success: false, skipped: true, error: 'Mint task is already locked' };
   }
 
@@ -562,12 +541,6 @@ export async function executeScheduledMint(taskId: string) {
             const liveReqs = await fetchMintRequirements(task.contractAddress!, wallet.chain);
             return liveReqs.mintPrice;
           } catch {
-            addBreadcrumb({
-              category: 'qstash',
-              message: 'Live price re-fetch failed — using stored price as fallback',
-              level: 'warning',
-              data: { taskId, storedPrice: task.mintPrice },
-            });
             return null;
           }
         })();
@@ -668,12 +641,6 @@ export async function executeScheduledMint(taskId: string) {
           await addTaskLog(taskId, 'websocket_live_detected', 'success', 'Mint went live during watch window — executing immediately');
           // Mint went live during the watch window — execute immediately.
           // Don't reschedule — fall through to the execution path below.
-          addBreadcrumb({
-            category: 'qstash',
-            message: 'WebSocket monitor detected mint-live — executing immediately',
-            level: 'info',
-            data: { taskId, contractAddress: task.contractAddress },
-          });
           // Don't notify here — executeMintTask() (reached by falling through
           // below) sends the "⚡ Mint Executing" message, avoiding a redundant
           // "live detected" notification right before it.
@@ -729,12 +696,6 @@ export async function executeScheduledMint(taskId: string) {
 
       if (livePrice != null && livePrice !== task.mintPrice) {
         void addTaskLog(taskId, 'price_changed', 'warning', `Mint price changed: ${task.mintPrice} → ${livePrice}`).catch(() => {});
-        addBreadcrumb({
-          category: 'qstash',
-          message: 'Mint price changed since task creation — updating task',
-          level: 'warning',
-          data: { taskId, oldPrice: task.mintPrice, newPrice: livePrice },
-        });
 
         await getDb()
           .update(mintTasks)
@@ -908,23 +869,11 @@ export async function executeScheduledMint(taskId: string) {
         await publishQStashMessage(taskId, retryAt, 'execute');
 
         await addTaskLog(taskId, 'task_retrying', 'warning', `Retrying in ${Math.round(delay/1000)}s (attempt ${EXECUTION_MAX_ATTEMPTS - retriesRemaining + 1}/${EXECUTION_MAX_ATTEMPTS}, ${retriesRemaining - 1} left)`);
-        addBreadcrumb({
-          category: 'qstash',
-          message: 'mint execution retry scheduled',
-          level: 'warning',
-          data: { taskId, retriesRemaining: retriesRemaining - 1, retryAt: retryAt.toISOString(), error: mintResult.error },
-        });
 
         return { success: false, retrying: true, retriesRemaining: retriesRemaining - 1, error: mintResult.error };
       }
 
       // Retries exhausted — already failed by executeMintTask, nothing more to do
-      addBreadcrumb({
-        category: 'qstash',
-        message: 'mint execution retries exhausted',
-        level: 'error',
-        data: { taskId, error: mintResult.error },
-      });
     }
 
     return mintResult;
@@ -973,12 +922,6 @@ export async function executeScheduledRiskRecheck(taskId: string) {
 const RECEIPT_RECHECK_DELAY_MS = 30_000;     // 30 s between receipt checks
 
 export async function scheduleReceiptRecheck(taskId: string, txHash: string) {
-  addBreadcrumb({
-    category: 'qstash',
-    message: 'receipt recheck scheduled',
-    level: 'info',
-    data: { taskId, txHash },
-  });
   const recheckAt = new Date(Date.now() + RECEIPT_RECHECK_DELAY_MS);
   await publishQStashMessage(taskId, recheckAt, 'receipt_check');
 }
@@ -1001,12 +944,6 @@ export async function executeReceiptRecheck(taskId: string) {
 
   if (!task.txHash) {
     // Defensive: should not happen — log and do nothing
-    await captureMessage('receipt_check fired for task with no txHash', {
-      area: 'qstash',
-      level: 'error',
-      context: { taskId },
-      fingerprint: ['qstash', 'receipt-check-no-hash'],
-    });
     return { success: false, error: 'No txHash on unconfirmed task' };
   }
 
@@ -1046,13 +983,6 @@ export async function executeReceiptRecheck(taskId: string) {
         .set({ status: 'ready', txHash: null, updatedAt: new Date() })
         .where(and(eq(mintTasks.id, taskId), eq(mintTasks.status, 'unconfirmed')));
 
-      await captureMessage('Transaction dropped from mempool — resetting for re-execution', {
-        area: 'qstash',
-        level: 'warning',
-        context: { taskId, transactionHash: hash },
-        fingerprint: ['qstash', 'tx-dropped'],
-      });
-
       await logActivity(task.userId, 'mint_status_changed', 'Dropped transaction detected — rescheduling', {
         taskId, txHash: hash,
       });
@@ -1060,24 +990,11 @@ export async function executeReceiptRecheck(taskId: string) {
       // Re-schedule immediately via QStash
       await scheduleMint({ taskId, userId: task.userId });
 
-      addBreadcrumb({
-        category: 'qstash',
-        message: 'receipt recheck: dropped tx detected — rescheduled for execution',
-        level: 'warning',
-        data: { taskId, txHash: hash },
-      });
-
       return { success: false, dropped: true, txHash: hash };
     }
   } catch (dropCheckError) {
     // Drop-check failed — proceed with waitForTransactionReceipt anyway.
     // Non-fatal: if the tx is truly dropped, future rechecks will catch it.
-    addBreadcrumb({
-      category: 'qstash',
-      message: 'receipt recheck: drop-check failed (non-fatal)',
-      level: 'warning',
-      data: { taskId, error: String(dropCheckError) },
-    });
   }
 
   try {
@@ -1101,12 +1018,6 @@ export async function executeReceiptRecheck(taskId: string) {
       );
 
     if (!confirmed) {
-      await captureMessage('Unconfirmed mint transaction reverted on recheck', {
-        area: 'qstash',
-        level: 'error',
-        context: { taskId, transactionHash: hash },
-        fingerprint: ['qstash', 'receipt-reverted'],
-      });
     }
 
     await logActivity(task.userId, 'task_completed', 'Unconfirmed mint confirmed on recheck', {
@@ -1121,13 +1032,6 @@ export async function executeReceiptRecheck(taskId: string) {
         status: 'Confirmed (recheck)',
       });
     }
-
-    addBreadcrumb({
-      category: 'qstash',
-      message: 'receipt recheck: confirmed',
-      level: 'info',
-      data: { taskId, txHash: hash, status: receipt.status },
-    });
 
     return { success: confirmed, txHash: hash };
 
@@ -1176,32 +1080,13 @@ export async function executeReceiptRecheck(taskId: string) {
               gasLimit: txForBump.gas,
               userId: task.userId,
             });
-            addBreadcrumb({
-              category: 'qstash',
-              message: 'receipt recheck: gas bump attempted',
-              level: 'info',
-              data: { taskId, txHash: hash },
-            });
           } catch (bumpError) {
             // Best-effort — never block the recheck on a failed bump
-            addBreadcrumb({
-              category: 'qstash',
-              message: 'receipt recheck: gas bump failed (non-fatal)',
-              level: 'warning',
-              data: { taskId, error: String(bumpError) },
-            });
           }
         })();
       }
 
       await publishQStashMessage(taskId, recheckAt, 'receipt_check');
-
-      addBreadcrumb({
-        category: 'qstash',
-        message: 'receipt recheck: rescheduled',
-        level: 'warning',
-        data: { taskId, txHash: hash, recheckAttemptsRemaining: recheckAttemptsRemaining - 1 },
-      });
 
       return {
         success: false,
@@ -1228,13 +1113,6 @@ export async function executeReceiptRecheck(taskId: string) {
       .update(mintTasks)
       .set({ status: 'failed', updatedAt: new Date() })
       .where(and(eq(mintTasks.id, taskId), eq(mintTasks.status, 'unconfirmed')));
-
-    await captureMessage('Receipt recheck budget exhausted — task marked failed', {
-      area: 'qstash',
-      level: 'error',
-      context: { taskId, transactionHash: hash },
-      fingerprint: ['qstash', 'receipt-recheck-exhausted'],
-    });
 
     await logActivity(task.userId, 'mint_status_changed', 'Receipt recheck exhausted — mint marked failed', {
       taskId, txHash: hash,
@@ -1279,12 +1157,6 @@ export async function scheduleRecoveryCheck(): Promise<void> {
     await publishQStashMessage('recovery', new Date(), 'recovery');
   } catch (error) {
     // Log but don't throw — recovery scheduling failure should not break the calling path
-    addBreadcrumb({
-      category: 'recovery',
-      message: 'Failed to schedule recovery check via QStash',
-      level: 'warning',
-      data: { error: String(error) },
-    });
   }
 }
 
@@ -1308,13 +1180,6 @@ export async function executeRecoveryCheck() {
   // /api/system/status can show "last cron heartbeat" without needing a
   // dedicated monitoring table. Non-fatal if Redis is briefly unavailable.
   void setCache('system:last-recovery-heartbeat', new Date().toISOString(), 60 * 60 * 24 * 7).catch(() => {});
-
-  addBreadcrumb({
-    category: 'recovery',
-    message: 'Recovery check completed',
-    level: 'info',
-    data: { ...result },
-  });
 
   // Self-schedule the next recovery check via QStash in 5 minutes.
   // This keeps the recovery loop running entirely within QStash —

@@ -3,7 +3,6 @@ import { getDb } from '@/lib/db';
 import { monitoredWebsites } from '@/drizzle/schema/monitoring';
 import { eq, and } from 'drizzle-orm';
 import { requireApiUser } from '@/lib/auth/require-auth';
-import { captureException } from '@/lib/observability/sentry';
 
 // DELETE /api/monitoring/websites/:id
 export async function DELETE(
@@ -25,7 +24,6 @@ export async function DELETE(
 
     return NextResponse.json({ success: true, id: websiteId });
   } catch (error) {
-    captureException(error, { area: 'api', context: { route: 'monitoring/websites/[id]' }, fingerprint: ['api', 'monitoring-website-delete'] });
     return NextResponse.json({ error: 'Failed to delete website' }, { status: 500 });
   }
 }

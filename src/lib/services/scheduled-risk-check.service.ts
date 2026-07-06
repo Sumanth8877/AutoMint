@@ -4,7 +4,6 @@ import { eq } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
 import { mintTasks } from '@/drizzle/schema';
 import { logActivity } from '@/lib/monitoring';
-import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
 import { analyzeMintRisk } from '@/lib/services/risk.service';
 import { isTelegramEnabled } from '@/lib/services/telegram.service';
 
@@ -31,11 +30,6 @@ export async function storeOriginalRiskSnapshot(taskId: string) {
 
     return risk;
   } catch (error) {
-    await captureException(error, {
-      area: 'scheduled-risk-check',
-      context: { taskId },
-      fingerprint: ['scheduled-risk-check', 'original'],
-    });
     throw error;
   }
 }
@@ -48,13 +42,6 @@ export async function executeScheduledRiskCheck(taskId: string) {
     if (task.overrideRiskFlag) {
       return { continue: true, skipped: true, reason: 'override_enabled' };
     }
-
-    addBreadcrumb({
-      category: 'risk',
-      message: 'scheduled risk re-analysis started',
-      level: 'info',
-      data: { taskId, userId: task.userId },
-    });
 
     const risk = await analyzeMintRisk(taskId);
     const previousScore = task.originalRiskScore ?? task.riskScore ?? risk.riskScore;
@@ -76,13 +63,6 @@ export async function executeScheduledRiskCheck(taskId: string) {
       previousScore,
       latestRiskScore: risk.riskScore,
       delta,
-    });
-
-    addBreadcrumb({
-      category: 'risk',
-      message: 'scheduled risk re-analysis completed',
-      level: 'info',
-      data: { taskId, previousScore, latestRiskScore: risk.riskScore, delta },
     });
 
     if (delta >= RISK_CHANGE_THRESHOLD) {
@@ -122,11 +102,6 @@ export async function executeScheduledRiskCheck(taskId: string) {
 
     return { continue: true, previousScore, latestRiskScore: risk.riskScore, delta };
   } catch (error) {
-    await captureException(error, {
-      area: 'scheduled-risk-check',
-      context: { taskId },
-      fingerprint: ['scheduled-risk-check', 'execute'],
-    });
     throw error;
   }
 }

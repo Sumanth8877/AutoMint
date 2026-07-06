@@ -22,12 +22,6 @@
 
 import { vi } from 'vitest';
 
-vi.mock('@/lib/observability/sentry', () => ({
-  captureException: vi.fn().mockResolvedValue(undefined),
-  captureMessage: vi.fn().mockResolvedValue(undefined),
-  addBreadcrumb: vi.fn(),
-}));
-
 // In-memory Redis mock
 const createMockRedis = () => {
   const store = new Map<string, string>();
@@ -172,7 +166,6 @@ import {
   getNonceStatus,
   NONCE_KEYS,
 } from '../nonce-allocator.service';
-import { captureMessage } from '@/lib/observability/sentry';
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -326,13 +319,6 @@ describe('C-03 Nonce Allocator', () => {
       mockChainPendingNonce = 5;
       await scanAndFillGaps(ADDR, CHAIN);
 
-      expect(captureMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Nonce gap confirmed'),
-        expect.objectContaining({
-          area: 'nonce-allocator',
-          level: 'error',
-        }),
-      );
     });
 
     it('does not report gaps for fresh inflight entries', async () => {
@@ -345,10 +331,6 @@ describe('C-03 Nonce Allocator', () => {
       mockChainPendingNonce = 3;
       await scanAndFillGaps(ADDR, CHAIN);
 
-      expect(captureMessage).not.toHaveBeenCalledWith(
-        expect.stringContaining('Nonce gap confirmed'),
-        expect.anything(),
-      );
     });
   });
 
@@ -398,25 +380,6 @@ describe('C-03 Nonce Allocator', () => {
       expect(result.source).toBe('rpc-fallback');
     });
 
-    it('reports lock exhaustion via captureMessage', async () => {
-      mockChainPendingNonce = 0;
-      const lockKey = NONCE_KEYS.lock(ADDR, CHAIN);
-      mockRedis.set = vi.fn(async (key: string, _value: string, opts?: { nx?: boolean }) => {
-        if (key === lockKey && opts?.nx) return null;
-        mockRedis.store.set(key, _value);
-        return 'OK';
-      }) as typeof mockRedis.set;
-
-      await allocateNonce(ADDR, CHAIN);
-
-      expect(captureMessage).toHaveBeenCalledWith(
-        expect.stringContaining('slot lock exhausted'),
-        expect.objectContaining({
-          area: 'nonce-allocator',
-          level: 'warning',
-        }),
-      );
-    });
   });
 
   // ── 1 + 9. Concurrent / multi-instance allocation ────────────────

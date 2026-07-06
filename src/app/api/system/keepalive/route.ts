@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { Client } from '@upstash/qstash';
-import { addBreadcrumb } from '@/lib/observability/sentry';
 import { isAuthorizedBearer } from '@/lib/security/timing-safe-compare';
 
 /**
@@ -75,13 +74,6 @@ export async function POST(request: Request) {
       destination: healthUrl,
       cron: '0 0 */3 * *',
       retries: 2,
-    });
-
-    addBreadcrumb({
-      category: 'keepalive',
-      message: 'QStash keepalive schedule registered',
-      level: 'info',
-      data: { scheduleId: schedule.scheduleId, healthUrl },
     });
 
     return NextResponse.json({

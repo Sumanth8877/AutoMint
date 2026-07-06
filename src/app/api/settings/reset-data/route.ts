@@ -3,7 +3,6 @@ import { requireApiUser } from '@/lib/auth/require-auth';
 import { getDb } from '@/lib/db';
 import { analyzerHistory, collections, mintHistory, mintTasks } from '@/drizzle/schema';
 import { eq } from 'drizzle-orm';
-import { captureException } from '@/lib/observability/sentry';
 
 // Deletes all activity data for the current user.
 // Wallets, collections, watched wallets, and settings are preserved.
@@ -27,10 +26,6 @@ export async function DELETE() {
       message: 'All activity data and collections deleted. Wallets and settings are intact.',
     });
   } catch (error) {
-    await captureException(error, {
-      area: 'settings',
-      fingerprint: ['settings', 'reset-data'],
-    });
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to reset data' },
       { status: 500 },

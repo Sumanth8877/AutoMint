@@ -23,7 +23,7 @@
  * Gap recovery:
  *   If a worker crashes after allocation but before broadcast, the inflight entry
  *   ages past GAP_THRESHOLD_MS. The next call to scanAndFillGaps detects it and
- *   records a Sentry alert (L5 fix: this function itself does NOT re-sign or
+ *   logs an error (L5 fix: this function itself does NOT re-sign or
  *   re-broadcast — it only surfaces gaps). The dead-task recovery job (separate
  *   logic in mint-recovery.service: tasks stuck in 'running' with no txHash) is
  *   what actually re-routes the task; it relies on the Vercel cron heartbeat
@@ -36,11 +36,6 @@ import 'server-only';
 import { randomBytes } from 'node:crypto';
 import { getRedisClient } from '@/lib/redis';
 import { getClient } from '@/lib/blockchain/client';
-import {
-  addBreadcrumb,
-  captureException,
-  captureMessage,
-} from '@/lib/observability/sentry';
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -119,12 +114,6 @@ async function acquireSlotLock(address: string, chain: string): Promise<string |
 
     // Upstash returns "OK" on success, null on NX-rejected SET
     if (result === 'OK') {
-      addBreadcrumb({
-        category: 'nonce-allocator',
-        message: 'Slot lock acquired',
-        level: 'info',
-        data: { address, chain, attempt },
-      });
       return token;
     }
 
@@ -159,12 +148,6 @@ async function releaseSlotLock(
     await (redis as unknown as { eval: (script: string, keys: string[], args: string[]) => Promise<unknown> }).eval(luaScript, [key], [token]);
   } catch (error) {
     // Non-fatal: the lock will expire on its own via TTL
-    addBreadcrumb({
-      category: 'nonce-allocator',
-      message: 'Slot lock release via Lua failed — TTL will expire it',
-      level: 'warning',
-      data: { address, chain, error: String(error) },
-    });
   }
 }
 
@@ -218,16 +201,10 @@ export async function allocateNonce(
     // they are unlikely to both land on the same pending nonce value.
     // This does not fully eliminate the race but reduces it significantly.
     // The proper fix is to never exhaust the lock — tune SLOT_LOCK_MAX_RETRIES
-    // or SLOT_LOCK_TTL_MS if fallbacks are occurring frequently (watch Sentry).
+    // or SLOT_LOCK_TTL_MS if fallbacks are occurring frequently (monitor logs).
     await sleep(Math.floor(Math.random() * 150));
 
     const rpcNonce = await getChainPendingNonce(address, chain);
-    await captureMessage('Nonce allocator: slot lock exhausted — falling back to RPC nonce', {
-      area: 'nonce-allocator',
-      level: 'warning',
-      context: { address, chain, rpcNonce },
-      fingerprint: ['nonce-allocator', 'lock-exhausted'],
-    });
     return { success: false, nonce: rpcNonce, source: 'rpc-fallback' };
   }
 
@@ -282,20 +259,6 @@ export async function allocateNonce(
     pipeline.zadd(inflightKey, { score: epochMs, member: String(nextNonce) });
     await pipeline.exec();
 
-    addBreadcrumb({
-      category: 'nonce-allocator',
-      message: 'Nonce allocated',
-      level: 'info',
-      data: {
-        address,
-        chain,
-        nextNonce,
-        chainPendingNonce,
-        redisCounter,
-        source: 'allocator',
-      },
-    });
-
     return { success: true, nonce: nextNonce, source: 'allocator' };
   } finally {
     // Step 7: Always release the slot lock — even if allocation threw
@@ -308,7 +271,7 @@ export async function allocateNonce(
  * Must be called after every sendTransaction(), success or failure.
  *
  * Failure to call this will cause the nonce to appear as a gap candidate after
- * GAP_THRESHOLD_MS and trigger a Sentry alert.
+ * GAP_THRESHOLD_MS and log an error.
  */
 export async function releaseInflightNonce(
   address: string,
@@ -318,20 +281,9 @@ export async function releaseInflightNonce(
   try {
     const redis = getRedisClient();
     await redis.zrem(NONCE_KEYS.inflight(address, chain), String(nonce));
-    addBreadcrumb({
-      category: 'nonce-allocator',
-      message: 'Inflight nonce released',
-      level: 'info',
-      data: { address, chain, nonce },
-    });
   } catch (error) {
     // Non-fatal. The nonce will be treated as a gap candidate and investigated.
     // Do not rethrow — the transaction has already been broadcast.
-    await captureException(error, {
-      area: 'nonce-allocator',
-      context: { address, chain, nonce },
-      fingerprint: ['nonce-allocator', 'release-failed'],
-    });
   }
 }
 
@@ -341,7 +293,7 @@ export async function releaseInflightNonce(
  * For each candidate:
  *   1. Verify the nonce is genuinely missing from the chain/mempool.
  *   2. If confirmed (chain moved past it) — stale entry, clean up.
- *   3. If genuinely missing — record in Sentry. NOTE: this function itself
+ *   3. If genuinely missing — log the error. NOTE: this function itself
  *      does NOT re-sign or rebroadcast. The dead-task recovery job (which
  *      already detects tasks stuck in 'running' with no txHash > 10 min) is
  *      what actually re-routes the task using DB-stored parameters.
@@ -371,24 +323,12 @@ export async function scanAndFillGaps(
 
     const staleNonces = staleMembers.map(Number);
 
-    addBreadcrumb({
-      category: 'nonce-allocator',
-      message: 'Stale inflight nonces detected',
-      level: 'warning',
-      data: { address, chain, staleNonces },
-    });
-
     // For each stale nonce, verify against chain state
     for (const staleNonce of staleNonces) {
       await investigateStaleNonce(address, chain, staleNonce);
     }
   } catch (error) {
     // Scan failure is non-fatal. Gap detection will retry on next broadcast.
-    await captureException(error, {
-      area: 'nonce-allocator',
-      context: { address, chain },
-      fingerprint: ['nonce-allocator', 'scan-failed'],
-    });
   }
 }
 
@@ -406,30 +346,13 @@ async function investigateStaleNonce(
     if (chainPending > nonce) {
       // Nonce is confirmed or in mempool. Stale inflight entry — clean up.
       await redis.zrem(inflightKey, String(nonce));
-      addBreadcrumb({
-        category: 'nonce-allocator',
-        message: 'Stale inflight entry removed (nonce already past chain pending)',
-        level: 'info',
-        data: { address, chain, nonce, chainPending },
-      });
       return;
     }
 
     // Nonce is genuinely missing from mempool.
-    // Reliability fix (R-2): previously this only fired a Sentry alert with a hint
+    // Reliability fix (R-2): previously this only fired a error log with a hint
     // to run a manual recovery query. Now we trigger the recovery job directly so
     // the stuck task is found and re-executed automatically.
-    await captureMessage('Nonce gap confirmed — triggering automatic task recovery', {
-      area: 'nonce-allocator',
-      level: 'error',
-      context: {
-        address,
-        chain,
-        gapNonce: nonce,
-        chainPending,
-      },
-      fingerprint: ['nonce-allocator', 'gap-confirmed', address, chain],
-    });
 
     // Trigger the recovery job immediately — best-effort, non-blocking.
     // recoverStuckMintTasks() will find any task stuck in 'running' with no txHash
@@ -439,16 +362,11 @@ async function investigateStaleNonce(
         const { recoverStuckMintTasks } = await import('@/lib/services/mint-recovery.service');
         await recoverStuckMintTasks();
       } catch {
-        // Non-fatal — Sentry alert above already notifies; recovery will
+        // Non-fatal — error logged above already notifies; recovery will
         // also run on the next scheduled recovery check.
       }
     })();
   } catch (error) {
-    await captureException(error, {
-      area: 'nonce-allocator',
-      context: { address, chain, nonce },
-      fingerprint: ['nonce-allocator', 'investigate-failed'],
-    });
   }
 }
 
@@ -470,13 +388,6 @@ export async function resetNonceCounter(address: string, chain: string): Promise
   resetPipeline.set(NONCE_KEYS.counter(address, chain), String(chainPendingNonce - 1));
   resetPipeline.del(NONCE_KEYS.inflight(address, chain));
   await resetPipeline.exec();
-
-  addBreadcrumb({
-    category: 'nonce-allocator',
-    message: 'Nonce counter reset',
-    level: 'warning',
-    data: { address, chain, chainPendingNonce },
-  });
 
   return chainPendingNonce;
 }

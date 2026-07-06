@@ -1,7 +1,6 @@
 import 'server-only';
 
 import { logger } from '@/lib/logger';
-import { captureException } from '@/lib/observability/sentry';
 
 /**
  * mint-discovery.service.ts
@@ -457,7 +456,6 @@ export async function discoverMintRequirements(
     }
   } catch (err) {
     logger.warn('Tier 2 threw unexpectedly', { area: 'mint-discovery',  error: String(err) });
-    void captureException(err, { area: 'mint-discovery', extra: { tier: 2 } });
   }
 
   const afterTier2Missing = computeMissing(current);

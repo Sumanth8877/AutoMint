@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { verifyAlchemyWebhookSignature } from '@/lib/services/wallet-tracker.service';
-import { captureException } from '@/lib/observability/sentry';
 import { getDb } from '@/lib/db';
 import { mintTasks } from '@/drizzle/schema';
 import { and, inArray } from 'drizzle-orm';
@@ -139,21 +138,11 @@ export async function POST(request: Request) {
           contractAddress: task.contractAddress,
         });
       } catch (err) {
-        await captureException(err, {
-          area: 'webhooks/alchemy/contract',
-          context: { taskId: task.id },
-          fingerprint: ['alchemy-contract-webhook', 'schedule-error'],
-        });
       }
     }
 
     return NextResponse.json({ ok: true, handled: triggered, contracts: [...mintContracts] });
   } catch (error) {
-    await captureException(error, {
-      area: 'webhooks/alchemy/contract',
-      context: { route: '/api/webhooks/alchemy/contract' },
-      fingerprint: ['alchemy-contract-webhook', 'unhandled'],
-    });
     return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 });
   }
 }

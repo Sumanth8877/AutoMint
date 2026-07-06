@@ -6,7 +6,6 @@ import { encryptPrivateKey, decryptPrivateKey } from '@/lib/security/encryption'
 import { getCache, setCache } from '@/lib/redis';
 import { logActivity } from '@/lib/monitoring';
 import { deriveWalletFromPrivateKey, type ImportWalletType } from '@/lib/wallets/private-key';
-import { addBreadcrumb } from '@/lib/observability/sentry';
 import { ConflictError, NotFoundError } from '@/lib/api/errors';
 import type { ChainKey } from '@/lib/blockchain/chains';
 
@@ -446,13 +445,6 @@ export async function getDefaultMintWallet(
     .limit(1);
 
   if (sameChain) return sameChain;
-
-  addBreadcrumb({
-    category: 'wallet',
-    message: `getDefaultMintWallet: no wallet on chain "${chain}" — falling back to first EVM wallet`,
-    level: 'warning',
-    data: { userId, chain },
-  });
 
   const [fallback] = await db
     .select()

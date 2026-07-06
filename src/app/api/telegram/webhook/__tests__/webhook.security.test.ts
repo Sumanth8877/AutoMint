@@ -29,12 +29,6 @@ vi.mock('@/lib/api/errors', () => ({
   parseJsonBody: vi.fn(),
 }));
 
-vi.mock('@/lib/observability/sentry', () => ({
-  addBreadcrumb: vi.fn(),
-  captureException: vi.fn().mockResolvedValue(undefined),
-  captureMessage: vi.fn(),
-}));
-
 vi.mock('crypto', async (importOriginal) => {
   const actual = await importOriginal<typeof import('crypto')>();
   const timingSafeEqual = vi.fn(actual.timingSafeEqual);
@@ -137,11 +131,6 @@ describe('Security Finding C-2 — Telegram webhook authentication', () => {
         handleTelegramUpdate: vi.fn(),
       }));
       vi.mock('@/lib/api/errors', () => ({ parseJsonBody: vi.fn() }));
-      vi.mock('@/lib/observability/sentry', () => ({
-        addBreadcrumb: vi.fn(),
-        captureException: vi.fn(),
-        captureMessage: vi.fn(),
-      }));
 
       const { POST } = await import('../route');
       const res = await POST(makeRequest(VALID_SECRET));

@@ -13,7 +13,6 @@ type KnownService =
   | 'Chainstack'
   | 'Firecrawl'
   | 'QStash'
-  | 'Sentry'
   | 'Database'
   | 'Redis'
   | 'Clerk';
@@ -47,8 +46,6 @@ const KNOWN_VARIABLES: Array<{ variableName: string; serviceName: KnownService }
   { variableName: 'QSTASH_TOKEN', serviceName: 'QStash' },
   { variableName: 'QSTASH_CURRENT_SIGNING_KEY', serviceName: 'QStash' },
   { variableName: 'QSTASH_NEXT_SIGNING_KEY', serviceName: 'QStash' },
-  { variableName: 'NEXT_PUBLIC_SENTRY_DSN', serviceName: 'Sentry' },
-  { variableName: 'SENTRY_AUTH_TOKEN', serviceName: 'Sentry' },
   { variableName: 'DATABASE_URL', serviceName: 'Database' },
   { variableName: 'KV_REST_API_URL', serviceName: 'Redis' },
   { variableName: 'KV_REST_API_TOKEN', serviceName: 'Redis' },
@@ -60,14 +57,13 @@ const SERVICE_KEYWORDS: Array<[string, KnownService]> = [
   ['ALCHEMY', 'Alchemy'],
   ['FIRECRAWL', 'Firecrawl'],
   ['QSTASH', 'QStash'],
-  ['SENTRY', 'Sentry'],
   ['DATABASE', 'Database'],
   ['REDIS', 'Redis'],
   ['KV_REST', 'Redis'],
   ['CLERK', 'Clerk'],
 ];
 
-const SERVICE_DISCOVERY_PATTERN = /(ALCHEMY|FIRECRAWL|QSTASH|SENTRY|CLERK|REDIS|KV_REST)/;
+const SERVICE_DISCOVERY_PATTERN = /(ALCHEMY|FIRECRAWL|QSTASH|CLERK|REDIS|KV_REST)/;
 const GENERIC_SERVICE_SECRET_PATTERN = /^[A-Z][A-Z0-9_]+_(API_KEY|RPC_URL|WSS_URL|DSN)$/;
 const IGNORED_PREFIXES = [
   'npm_',
@@ -110,7 +106,6 @@ const IGNORED_NAMES = new Set([
   'KV_URL',
   'QSTASH_WEBHOOK_URL',
   'REDIS_URL',
-  'SENTRY_DSN',
   'UPSTASH_REDIS_REST_TOKEN',
   'UPSTASH_REDIS_REST_URL',
   'WINDIR',
@@ -300,38 +295,6 @@ async function testQStash() {
   });
 }
 
-async function testSentry() {
-  return runTest('Sentry', async () => {
-    const dsn = requireEnv('NEXT_PUBLIC_SENTRY_DSN');
-    const url = new URL(dsn);
-    const publicKey = url.username;
-    const projectId = url.pathname.replace(/^\//, '').split('/').pop();
-    if (!publicKey || !projectId) throw new Error('Invalid Sentry DSN');
-
-    const eventId = crypto.randomUUID().replace(/-/g, '');
-    const endpoint = `${url.protocol}//${url.host}/api/${projectId}/envelope/?sentry_key=${publicKey}&sentry_version=7`;
-    const event = {
-      event_id: eventId,
-      platform: 'javascript',
-      timestamp: Date.now() / 1000,
-      level: 'info',
-      message: 'Integration status test event',
-      tags: { area: 'integration-status', integration: 'sentry' },
-    };
-    const envelope = [
-      JSON.stringify({ event_id: eventId, sent_at: new Date().toISOString() }),
-      JSON.stringify({ type: 'event' }),
-      JSON.stringify(event),
-    ].join('\n');
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-sentry-envelope' },
-      body: envelope,
-    });
-
-    if (!response.ok) throw new Error(`Sentry test event failed with status ${response.status}`);
-  });
-}
 
 async function testClerk() {
   return runTest('Clerk', async () => {
@@ -345,7 +308,6 @@ async function testAllIntegrations() {
     testAlchemy(),
     testFirecrawl(),
     testQStash(),
-    testSentry(),
     testDatabase(),
     testRedis(),
     testClerk(),

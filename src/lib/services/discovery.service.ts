@@ -3,7 +3,6 @@ import 'server-only';
 import { getCache, setCache } from '@/lib/redis';
 import { discoverWithFirecrawl } from '@/lib/services/firecrawl.provider';
 import { type DiscoveryProviderResult, type DiscoverySocials } from '@/lib/services/discovery-extractor';
-import { addBreadcrumb, captureException, startSpan } from '@/lib/observability/sentry';
 
 const DISCOVERY_TTL_SECONDS = 24 * 60 * 60;
 export type DiscoveryResult = {
@@ -91,17 +90,14 @@ function toDiscoveryResult(result: DiscoveryProviderResult): DiscoveryResult {
   };
 }
 
-
 export async function discoverCollection(openseaUrl: string): Promise<DiscoveryResult> {
-  return startSpan('discovery.collection', { area: 'discovery', url: openseaUrl }, async () => {
+  return (async () => {
   const { url, slug } = parseOpenSeaUrl(openseaUrl);
-  addBreadcrumb({ category: 'discovery', message: 'URL submitted', level: 'info', data: { url, slug } });
   const cacheKey = getCacheKey(slug);
   const cached = await getCache<DiscoveryResult>(cacheKey);
 
   if (cached) return cached;
 
-  addBreadcrumb({ category: 'discovery', message: 'discovery started', level: 'info', data: { url, provider: 'firecrawl' } });
   const { trackAnalyticsEvent } = await import('@/lib/services/analytics.service');
   const firecrawlStartedAt = Date.now();
   let result: ReturnType<typeof toDiscoveryResult>;
@@ -123,11 +119,6 @@ export async function discoverCollection(openseaUrl: string): Promise<DiscoveryR
       durationMs: Date.now() - firecrawlStartedAt,
       metadata: { url, slug },
     });
-    await captureException(error, {
-      area: 'discovery',
-      context: { url, provider: 'firecrawl', collection: slug },
-      fingerprint: ['discovery', 'firecrawl'],
-    });
     throw error;
   }
 
@@ -138,7 +129,6 @@ export async function discoverCollection(openseaUrl: string): Promise<DiscoveryR
   };
 
   await setCache(cacheKey, normalized, DISCOVERY_TTL_SECONDS);
-  addBreadcrumb({ category: 'discovery', message: 'discovery completed', level: 'info', data: { url, slug, collection: normalized.collectionName, contract: normalized.contract } });
   return normalized;
   });
 }

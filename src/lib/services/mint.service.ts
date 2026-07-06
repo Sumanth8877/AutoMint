@@ -7,7 +7,6 @@ import { sendTelegramNotification } from '@/lib/services/telegram.service';
 import { sendMintFailedEmail, sendMintSuccessEmail, sendSystemErrorEmail } from '@/lib/services/email-notification.service';
 import type { GasStrategy } from '@/lib/services/execution-settings.service';
 import { requireRiskApproval } from '@/lib/services/risk.service';
-import { addBreadcrumb, captureException, captureMessage, startSpan } from '@/lib/observability/sentry';
 import { acquireLock, releaseLock } from '@/lib/services/mint-lock.service';
 import type { Hex } from 'viem';
 import { unregisterIfIdle } from '@/lib/services/alchemy-webhook.service';
@@ -150,7 +149,7 @@ export async function executeMintTask(
     return { success: false, error: 'Invalid task ID format. Expected UUID, got contract address.' };
   }
 
-  return startSpan('mint.execute_task', { area: 'minting', taskId, userId }, async (): Promise<{ success: boolean; txHash?: string; error?: string }> => {
+  return (async () => {
   // H1 fix: acquireLock now returns the lock token (or null). Capture it so the
   // release uses the atomic Lua CAS path instead of a plain DEL. When invoked from
   // executeScheduledMint the token is handed off via options.existingLockToken, so
@@ -191,12 +190,6 @@ export async function executeMintTask(
   }
 
   void logActivity(claimed.userId, 'mint_status_changed', 'Mint task started', { taskId, status: 'running' }); // fire-and-forget: non-critical logging must not block mint execution
-  addBreadcrumb({
-    category: 'mint',
-    message: 'mint started',
-    level: 'info',
-    data: { taskId, userId: claimed.userId, walletId: claimed.walletId, collectionId: claimed.collectionId, chain: claimed.contractAddress },
-  });
   // notifyStarted defaults to true. The QStash scheduler passes false because it
   // already sent "⚡ Mint Executing" before the balance gate (see qstash.service.ts).
   if (options.notifyStarted !== false) {
@@ -214,12 +207,6 @@ export async function executeMintTask(
 
   if (!claimed.walletId || !claimed.contractAddress) {
     await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
-    await captureMessage('Mint task missing wallet or contract', {
-      area: 'minting',
-      level: 'error',
-      context: { userId: claimed.userId, taskId, walletId: claimed.walletId ?? undefined, collection: claimed.collectionId ?? undefined },
-      fingerprint: ['mint', 'missing-wallet-contract'],
-    });
     await sendTelegramNotification(claimed.userId, 'mint_failed', {
       taskId,
       error: 'Mint task missing wallet or contract',
@@ -239,12 +226,6 @@ export async function executeMintTask(
   const [wallet] = await getDb().select().from(wallets).where(and(eq(wallets.id, claimed.walletId), eq(wallets.userId, claimed.userId))).limit(1);
   if (!wallet) {
     await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
-    await captureMessage('Wallet not found for mint task', {
-      area: 'minting',
-      level: 'error',
-      context: { userId: claimed.userId, taskId, walletId: claimed.walletId },
-      fingerprint: ['mint', 'wallet-not-found'],
-    });
     await sendTelegramNotification(claimed.userId, 'mint_failed', {
       taskId,
       contractAddress: claimed.contractAddress,
@@ -304,26 +285,12 @@ export async function executeMintTask(
           .update(mintTasks)
           .set({ status: 'unconfirmed', txHash: result.txHash, updatedAt: new Date() })
           .where(eq(mintTasks.id, taskId));
-        await captureMessage('Mint receipt tracking failed — task is unconfirmed', {
-          area: 'minting',
-          level: 'warning',
-          context: { userId: claimed.userId, taskId, walletId: claimed.walletId, wallet: wallet.address, chain, transactionHash: result.txHash },
-          extra: { error: result.error, contractAddress: claimed.contractAddress },
-          fingerprint: ['mint', 'receipt-timeout'],
-        });
         const { scheduleReceiptRecheck } = await import('@/lib/services/qstash.service');
         await scheduleReceiptRecheck(taskId, result.txHash);
         return { success: false, txHash: result.txHash, error: 'unconfirmed' };
       }
 
       await getDb().update(mintTasks).set({ status: 'failed', updatedAt: new Date() }).where(eq(mintTasks.id, taskId));
-      await captureMessage('Mint transaction failed', {
-        area: 'minting',
-        level: 'error',
-        context: { userId: claimed.userId, taskId, walletId: claimed.walletId, wallet: wallet.address, collection: claimed.collectionId ?? undefined, chain },
-        extra: { error: result.error, contractAddress: claimed.contractAddress },
-        fingerprint: ['mint', 'transaction-failed'],
-      });
       await sendTelegramNotification(claimed.userId, 'mint_failed', {
         taskId,
         collectionName: options.collectionName,
@@ -367,11 +334,6 @@ export async function executeMintTask(
         await getDb().update(mintTasks).set({ collectionId: ensured.id, updatedAt: now }).where(eq(mintTasks.id, taskId));
       }
     } catch (error) {
-      captureException(error, {
-        area: 'minting',
-        context: { taskId, userId: claimed.userId, contractAddress: claimed.contractAddress, chain },
-        fingerprint: ['mint', 'ensure-collection-for-mint-failed'],
-      });
     }
   }
 
@@ -432,13 +394,6 @@ export async function executeMintTask(
     }
   }
 
-  addBreadcrumb({
-    category: 'mint',
-    message: 'mint completed',
-    level: 'info',
-    data: { taskId, userId: claimed.userId, txHash: result.txHash, chain },
-  });
-
   return { success: true, txHash: result.txHash };
   } finally {
     await releaseLock(taskId, lockToken);
@@ -452,11 +407,6 @@ export async function executeMintTask(
         error: error instanceof Error ? error.message : String(error),
       });
     }
-    await captureException(error, {
-      area: 'minting',
-      context: { userId, taskId },
-      fingerprint: ['mint', 'execute-task'],
-    });
     throw error;
   });
 }

@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { parseJsonBody } from '@/lib/api/errors';
-import { captureException } from '@/lib/observability/sentry';
 import { AnalyzerExecutionError, AnalyzerResolutionError, runAnalyzer } from '@/lib/services/analyzer.service';
 
 export async function POST(req: Request) {
@@ -32,11 +31,6 @@ export async function POST(req: Request) {
     }
 
     if (status >= 500) {
-      await captureException(error, {
-        area: 'discovery',
-        context: { route: '/api/analyzer' },
-        fingerprint: ['analyzer', 'route'],
-      });
     }
 
     return NextResponse.json({ error: message }, { status });

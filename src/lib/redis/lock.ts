@@ -1,5 +1,4 @@
 import { getRedisClient } from './index';
-import { addBreadcrumb } from '@/lib/observability/sentry';
 import crypto from 'crypto';
 
 const DEFAULT_LOCK_TTL = 60; // seconds
@@ -29,12 +28,10 @@ export async function acquireCronLock(
       nx: true,
     });
     if (result !== null && result !== undefined) {
-      addBreadcrumb({ category: 'redis-lock', message: `Cron lock acquired for "${lockName}"`, level: 'info', data: { lockName } });
       return token;
     }
     return null;
   } catch (error) {
-    addBreadcrumb({ category: 'redis-lock', message: `Lock acquire error for "${lockName}"`, level: 'error', data: { lockName, error: String(error) } });
     return null; // Fail open — allow execution rather than blocking
   }
 }
@@ -65,10 +62,8 @@ export async function releaseCronLock(lockName: string, token: string): Promise<
     `;
     const deleted = await client.eval(luaRelease, [key], [token]) as number;
     if (deleted === 0) {
-      addBreadcrumb({ category: 'redis-lock', message: `Cron lock release skipped — token mismatch or already expired for "${lockName}"`, level: 'warning', data: { lockName } });
     }
   } catch (error) {
-    addBreadcrumb({ category: 'redis-lock', message: `Lock release error for "${lockName}"`, level: 'error', data: { lockName, error: String(error) } });
     // Non-fatal — TTL expiry handles crash recovery
   }
 }

@@ -1,7 +1,6 @@
 import 'server-only';
 
 import { getClient } from '@/lib/blockchain/client';
-import { addBreadcrumb } from '@/lib/observability/sentry';
 import { logger } from '@/lib/logger';
 import type { Hex } from 'viem';
 import {
@@ -92,12 +91,6 @@ export async function checkHoneypot(params: {
         value,
         account:      walletAddress as Hex,
       });
-      addBreadcrumb({
-        category: 'honeypot',
-        message:  'SeaDrop simulation passed — contract appears safe',
-        level:    'info',
-        data: { contractAddress, chain, mintFunction, mintPrice, quantity },
-      });
       return { isSafe: true };
     }
 
@@ -119,12 +112,6 @@ export async function checkHoneypot(params: {
         to:      contractAddress as Hex,
         data:    built.data,
         value:   unitWei * BigInt(built.valueMultiplier),
-      });
-      addBreadcrumb({
-        category: 'honeypot',
-        message:  'Generic simulation passed — contract appears safe',
-        level:    'info',
-        data: { contractAddress, chain, mintFunction, mintPrice, quantity },
       });
       return { isSafe: true };
     }
@@ -159,13 +146,6 @@ export async function checkHoneypot(params: {
 
     const { request } = await client.simulateContract(simParams);
 
-    addBreadcrumb({
-      category: 'honeypot',
-      message:  'Simulation passed — contract appears safe',
-      level:    'info',
-      data: { contractAddress, chain, mintFunction, mintPrice, quantity },
-    });
-
     return { isSafe: true, gasUsed: request.gas };
 
   } catch (error) {
@@ -190,12 +170,6 @@ export async function checkHoneypot(params: {
     }
 
     // Non-revert error (network timeout, ABI mismatch, etc.) — skip check, don't block
-    addBreadcrumb({
-      category: 'honeypot',
-      message:  'Simulation skipped due to non-revert error',
-      level:    'warning',
-      data: { contractAddress, chain, error: message },
-    });
 
     return { isSafe: true, skipped: true, reason: `Simulation skipped: ${message.slice(0, 100)}` };
   }

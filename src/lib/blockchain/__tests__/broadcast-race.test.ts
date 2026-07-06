@@ -37,12 +37,6 @@ vi.mock('@/lib/services/wallet.service', () => ({
   getDecryptedPrivateKey: vi.fn().mockResolvedValue('a'.repeat(64)),
 }));
 
-vi.mock('@/lib/observability/sentry', () => ({
-  addBreadcrumb:    vi.fn(),
-  captureException: vi.fn(),
-  captureMessage:   vi.fn(),
-}));
-
 vi.mock('@/lib/blockchain/chains', () => ({
   getChain: vi.fn().mockReturnValue({ id: 1, name: 'Ethereum' }),
   SUPPORTED_CHAINS: { ethereum: { id: 1 } },

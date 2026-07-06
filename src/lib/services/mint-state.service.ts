@@ -13,7 +13,6 @@
 
 import { getClient } from '@/lib/blockchain/client';
 import { type Hex, parseAbi } from 'viem';
-import { addBreadcrumb } from '@/lib/observability/sentry';
 import { getSeaDropPublicDrop } from '@/lib/services/seadrop.service';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -311,7 +310,6 @@ export async function getMintState(contractAddress: string, chain: string): Prom
     // causing the function to fall through to UNKNOWN — missing live mints.
     // Set OPENSEA_API_KEY in your environment to avoid this.
     if (!process.env.OPENSEA_API_KEY) {
-      addBreadcrumb({ category: 'mint-state', message: 'OPENSEA_API_KEY not configured — skipping OpenSea state check', level: 'warning' });
       return { status: 'UNKNOWN', startTime, endTime, maxSupply, minted: totalMinted };
     }
 

@@ -6,7 +6,6 @@ import { getClient } from './client';
 import { getChain } from './chains';
 import { getWalletClient, broadcastRawTransaction } from '@/lib/services/rpc-manager.service';
 import { getDecryptedPrivateKey } from '@/lib/services/wallet.service';
-import { addBreadcrumb, captureException, captureMessage } from '@/lib/observability/sentry';
 
 import {
   allocateNonce,
@@ -29,7 +28,6 @@ import {
 } from '@/lib/services/mint-calldata.service';
 
 // ─── Config ──────────────────────────────────────────
-
 
 // H2 fix: the in-function receipt wait must fit inside Vercel's function budget.
 // The qstash + instant-mint routes are capped at maxDuration: 10s, so the old
@@ -79,7 +77,7 @@ export interface MintResult {
  *     at the DB layer (wallets.userId = userId predicate).
  *   - Error messages returned to callers are sanitised: they do not expose
  *     walletId values, decryption internals, or stack traces.
- *   - Full diagnostic details are logged server-side via captureException.
+ *   - Full diagnostic details are logged server-side.
  */
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -87,9 +85,6 @@ export interface MintResult {
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Unknown mint error';
 }
-
-
-
 
 function buildMintData(params: MintParams): Hex {
   const abi =
@@ -161,7 +156,6 @@ async function resolveMintTx(
   };
 }
 
-
 // ─── EIP-1559 gas strategy ────────────────────────────────────────────────────
 //
 // Legacy getGasPrice() returns a single value and cannot distinguish between
@@ -208,11 +202,6 @@ export async function resolveGasParams(
     const gasPrice = await client.getGasPrice();
     return { gasPrice };
   } catch (error) {
-    await captureException(error, {
-      area: 'minting',
-      context: { chain },
-      fingerprint: ['mint', 'gas-params'],
-    });
     // Fallback: return empty object — viem will use its own gas estimation
     return {};
   }
@@ -238,15 +227,9 @@ export async function estimateMintGas(
     });
     return { gasLimit: estimate };
   } catch (error) {
-    await captureException(error, {
-      area: 'minting',
-      context: { wallet: address, chain, collection: params.contractAddress },
-      fingerprint: ['mint', 'gas-estimation'],
-    });
     return { gasLimit: BigInt(0), error: getErrorMessage(error) || 'Gas estimation failed' };
   }
 }
-
 
 // ── Pre-mint simulation (eth_call dry-run) ──────────────────────────────────
 //
@@ -360,13 +343,6 @@ export async function simulateMint(
 
     const reason = classifyRevert(revertMsg);
 
-    addBreadcrumb({
-      category: 'simulation',
-      message: `Mint simulation failed: ${reason}`,
-      level: 'warning',
-      data: { chain, contract: params.contractAddress, revertMsg: revertMsg.slice(0, 200), reason },
-    });
-
     return { success: false, reason, revertReason: revertMsg.slice(0, 300) };
   }
 }
@@ -392,12 +368,6 @@ async function simulateResolvedMint(
       revertMsg = error.message ?? '';
     }
     const reason = classifyRevert(revertMsg);
-    addBreadcrumb({
-      category: 'simulation',
-      message: `Mint simulation failed: ${reason}`,
-      level: 'warning',
-      data: { chain, contract: tx.to, revertMsg: revertMsg.slice(0, 200), reason },
-    });
     return { success: false, reason, revertReason: revertMsg.slice(0, 300) };
   }
 }
@@ -576,7 +546,6 @@ export async function executeMint(
       };
     }
 
-
     // ── Decrypt per-user signing key (deferred until after simulation) ─────────
     // getDecryptedPrivateKey(walletId, userId) enforces ownership at the
     // DB layer: it only returns a key when wallets.id = walletId AND
@@ -609,11 +578,6 @@ export async function executeMint(
       if (nonceResult?.nonce !== undefined) {
         void releaseInflightNonce(address, chain, nonceResult.nonce).catch(() => undefined);
       }
-      await captureException(keyError, {
-        area: 'minting',
-        context: { chain, collection: params.contractAddress },
-        fingerprint: ['mint', 'key-decryption'],
-      });
       const OWNERSHIP_ERROR_PATTERNS = [
         'not found', 'access denied', 'unauthorized',
         'permission denied', 'belongs to another user',
@@ -688,23 +652,12 @@ export async function executeMint(
         const { broadcastViaPrivateMempool } = await import('@/lib/services/private-mempool.service');
         const result = await broadcastViaPrivateMempool(chain, signedTx);
         hash = result.txHash;
-        addBreadcrumb({
-          category: 'mint',
-          message: result.isPrivate ? 'Transaction broadcast via private mempool' : 'Private mempool unavailable — used public broadcast',
-          level: 'info',
-          data: { chain, endpoint: result.endpoint, isPrivate: result.isPrivate },
-        });
       } else {
         hash = await broadcastRawTransaction(chain, signedTx, { userId });
       }
     } catch (broadcastError) {
       // sendTransaction itself failed — transaction was never broadcast.
       // Safe to retry; no hash to preserve.
-      await captureException(broadcastError, {
-        area: 'minting',
-        context: { wallet: address, chain, collection: params.contractAddress },
-        fingerprint: ['mint', 'broadcast'],
-      });
       return {
         success: false,
         error: getErrorMessage(broadcastError) || 'Transaction broadcast failed',
@@ -719,12 +672,6 @@ export async function executeMint(
       try {
         await options.onBroadcast(hash);
       } catch (persistError) {
-        await captureException(persistError, {
-          area: 'minting',
-          level: 'error',
-          context: { wallet: address, chain, collection: params.contractAddress, transactionHash: hash },
-          fingerprint: ['mint', 'onbroadcast-persist'],
-        });
       }
     }
 
@@ -753,12 +700,6 @@ export async function executeMint(
       });
 
       if (receipt.status !== 'success') {
-        await captureMessage('Mint transaction reverted', {
-          area: 'minting',
-          level: 'error',
-          context: { wallet: address, chain, collection: params.contractAddress, transactionHash: hash },
-          fingerprint: ['mint', 'reverted'],
-        });
       }
 
       return {
@@ -771,11 +712,6 @@ export async function executeMint(
       // waitForTransactionReceipt timed out or failed — but the transaction IS
       // on-chain. Return txHash so the caller transitions to 'unconfirmed'
       // and polls for the receipt without broadcasting a second transaction.
-      await captureException(receiptError, {
-        area: 'minting',
-        context: { wallet: address, chain, collection: params.contractAddress, transactionHash: hash },
-        fingerprint: ['mint', 'receipt-timeout'],
-      });
       return {
         success: false,
         txHash: hash,
@@ -785,11 +721,6 @@ export async function executeMint(
   } catch (error) {
     // Catch-all for errors before sendTransaction (key decryption,
     // gas estimation, nonce allocation). No hash exists at this stage.
-    await captureException(error, {
-      area: 'minting',
-      context: { wallet: address, chain, collection: params.contractAddress },
-      fingerprint: ['mint', 'execute'],
-    });
     return {
       success: false,
       error: getErrorMessage(error) || 'Mint execution failed',

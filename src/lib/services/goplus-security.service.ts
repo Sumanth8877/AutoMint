@@ -1,6 +1,5 @@
 import 'server-only';
 
-import { captureException } from '@/lib/observability/sentry';
 import { logger } from '@/lib/logger';
 
 // Fix #3: this service previously called GoPlus Labs' fungible-token
@@ -190,7 +189,6 @@ export async function checkTokenSecurity(params: {
     };
   } catch (error) {
     logger.error('GoPlus NFT Security check failed:', { error: error instanceof Error ? error.message : String(error) });
-    void captureException(error, { area: 'goplus-security' });
     return null;
   }
 }

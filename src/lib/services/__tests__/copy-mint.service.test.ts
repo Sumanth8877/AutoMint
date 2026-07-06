@@ -34,11 +34,6 @@ vi.mock('@/lib/services/telegram.service', () => ({
   sendTelegramNotification: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('@/lib/observability/sentry', () => ({
-  addBreadcrumb: vi.fn(),
-  captureException: vi.fn().mockResolvedValue(undefined),
-}));
-
 vi.mock('@/lib/monitoring', () => ({
   logActivity: vi.fn().mockResolvedValue(undefined),
 }));

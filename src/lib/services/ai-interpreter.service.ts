@@ -6,7 +6,6 @@ import {
   type FunctionDeclarationsTool,
   type Part,
 } from '@google/generative-ai';
-import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
 import { logger } from '@/lib/logger';
 import { getRedisClient } from '@/lib/redis';
 
@@ -53,7 +52,6 @@ export async function setUserModel(userId: string, modelId: GeminiModelId): Prom
   // TTL means deprecated model preferences auto-reset within a month rather than a year.
   await getRedisClient().set(modelKey(userId), modelId, { ex: 60 * 60 * 24 * 30 });
 }
-
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
@@ -518,13 +516,6 @@ export async function interpretTelegramMessage(
 
   const selectedModel = await getUserModel(userId);
 
-  addBreadcrumb({
-    category: 'ai-interpreter',
-    message: 'Starting Gemini interpretation',
-    level: 'info',
-    data: { userId, messageLength: message.length, model: selectedModel },
-  });
-
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
@@ -584,11 +575,6 @@ export async function interpretTelegramMessage(
 
     return result.response.text() || 'Done.';
   } catch (error) {
-    await captureException(error, {
-      area: 'ai-interpreter',
-      context: { userId, messagePreview: message.slice(0, 100) },
-      fingerprint: ['ai-interpreter', 'gemini'],
-    });
     // Return a useful message instead of throwing — a thrown error surfaces to
     // the user as the misleading "Unknown command". Showing the real reason
     // (e.g. an invalid model name or quota error) makes the bot diagnosable.

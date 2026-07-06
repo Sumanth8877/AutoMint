@@ -1,7 +1,6 @@
 import 'server-only';
 
 import { Redis } from '@upstash/redis';
-import { addBreadcrumb } from '@/lib/observability/sentry';
 
 let _redis: Redis | null = null;
 
@@ -74,7 +73,6 @@ export async function getCache<T>(key: string): Promise<T | null> {
     if (raw === null || raw === undefined) return null;
     return raw as T;
   } catch (error) {
-    addBreadcrumb({ category: 'redis', message: `GET error for key "${key}"`, level: 'error', data: { key, error: String(error) } });
     return null;
   }
 }
@@ -88,7 +86,6 @@ export async function setCache<T>(key: string, value: T, ttl: number): Promise<b
     await client.set(key, value, { ex: ttl });
     return true;
   } catch (error) {
-    addBreadcrumb({ category: 'redis', message: `SET error for key "${key}"`, level: 'error', data: { key, error: String(error) } });
     return false;
   }
 }
@@ -102,7 +99,6 @@ export async function invalidateCache(key: string): Promise<boolean> {
     await client.del(key);
     return true;
   } catch (error) {
-    addBreadcrumb({ category: 'redis', message: `DEL error for key "${key}"`, level: 'error', data: { key, error: String(error) } });
     return false;
   }
 }
@@ -170,11 +166,9 @@ export async function hasCache(key: string): Promise<boolean> {
     const exists = await client.exists(key);
     return exists === 1;
   } catch (error) {
-    addBreadcrumb({ category: 'redis', message: `EXISTS error for key "${key}"`, level: 'error', data: { key, error: String(error) } });
     return false;
   }
 }
-
 
 // ─── Health Check ────────────────────────────────────
 

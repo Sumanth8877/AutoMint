@@ -3,7 +3,6 @@ import 'server-only';
 import { and, asc, eq, isNotNull, sql } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
 import { analyticsEvents, mintHistory, mintTasks } from '@/drizzle/schema';
-import { captureException } from '@/lib/observability/sentry';
 
 type AnalyticsStatus = 'success' | 'failed' | 'scheduled' | 'executed' | 'triggered';
 
@@ -131,12 +130,6 @@ export async function trackAnalyticsEvent(input: AnalyticsEventInput) {
       metadata: input.metadata,
     });
   } catch (error) {
-    await captureException(error, {
-      area: 'analytics',
-      context: { userId: input.userId ?? undefined, provider: input.provider ?? undefined },
-      extra: { eventType: input.eventType, status: input.status },
-      fingerprint: ['analytics', 'track-event'],
-    });
   }
 }
 
@@ -305,11 +298,6 @@ export async function getAnalyticsDashboard(userId: string): Promise<AnalyticsDa
       hasData: totalMints > 0 || (mintStats?.collectionsAnalyzed ?? 0) > 0,
     };
   } catch (error) {
-    await captureException(error, {
-      area: 'analytics',
-      context: { userId },
-      fingerprint: ['analytics', 'dashboard'],
-    });
     throw error;
   }
 }

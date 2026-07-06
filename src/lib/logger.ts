@@ -1,7 +1,5 @@
 import 'server-only';
 
-import { addBreadcrumb } from '@/lib/observability/sentry';
-
 // ── Log levels ────────────────────────────────────────────────────────────────
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -13,8 +11,8 @@ type LogEntry = {
   timestamp: string;
 };
 
-// ── Sentry breadcrumb category map ───────────────────────────────────────────
-const SENTRY_LEVEL_MAP: Record<LogLevel, 'debug' | 'info' | 'warning' | 'error'> = {
+// ── Log level map ────────────────────────────────────────────────────────────
+const LOG_LEVEL_MAP: Record<LogLevel, 'debug' | 'info' | 'warning' | 'error'> = {
   debug: 'debug',
   info: 'info',
   warn: 'warning',
@@ -29,7 +27,7 @@ const SENTRY_LEVEL_MAP: Record<LogLevel, 'debug' | 'info' | 'warning' | 'error'>
 //      Vercel captures these and makes them searchable in the Functions log dashboard.
 //      Format: { "level": "info", "message": "...", "ts": "...", ...context }
 //
-//   2. Adds a Sentry breadcrumb so the full log trail appears in error reports.
+//   2. Structured logging for debugging.
 //      Breadcrumbs do NOT appear in Vercel logs on their own — that's the gap
 //      this function closes.
 //
@@ -56,13 +54,6 @@ function emit(level: LogLevel, message: string, context?: Record<string, unknown
     process.stdout.write(line + '\n');
   }
 
-  // ── Sentry breadcrumb (appears in error context) ─────────────────────────
-  addBreadcrumb({
-    category: 'app',
-    message,
-    level: SENTRY_LEVEL_MAP[level],
-    data: context,
-  });
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────────

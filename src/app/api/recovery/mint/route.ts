@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { executeRecoveryCheck } from '@/lib/services/qstash.service';
-import { addBreadcrumb } from '@/lib/observability/sentry';
 import { isAuthorizedBearer } from '@/lib/security/timing-safe-compare';
 
 /**
@@ -39,13 +38,6 @@ async function handle(request: Request, trigger: 'manual' | 'cron') {
   if (!authorized) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-
-  addBreadcrumb({
-    category: 'recovery',
-    message: trigger === 'cron' ? 'Cron heartbeat triggered recovery' : 'Manual recovery triggered',
-    level: 'info',
-    data: { trigger },
-  });
 
   try {
     const result = await executeRecoveryCheck();

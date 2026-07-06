@@ -32,7 +32,7 @@ export async function GET() {
     { name: 'Clerk',             configured: check('CLERK_SECRET_KEY') },
     { name: 'Telegram Bot',      configured: check('TELEGRAM_BOT_TOKEN') },
     { name: 'Resend',            configured: check('RESEND_API_KEY') },
-    { name: 'Sentry',            configured: check('NEXT_PUBLIC_SENTRY_DSN') },
+
     // Blockchain RPC
     { name: 'Alchemy',           configured: check('ALCHEMY_API_KEY') },
     { name: 'Infura',            configured: check('INFURA_API_KEY') },

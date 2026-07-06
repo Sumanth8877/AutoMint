@@ -6,7 +6,6 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { watchedWallets } from '@/drizzle/schema';
 import { getDb } from '@/lib/db';
 import { logActivity } from '@/lib/monitoring';
-import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
 import { ConflictError } from '@/lib/api/errors';
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
@@ -131,12 +130,6 @@ async function updateAlchemyWebhookAddresses(params: {
   if (!response.ok) {
     const text = await response.text().catch(() => '');
     const error = new Error(text || `Alchemy webhook update failed with status ${response.status}`);
-    await captureException(error, {
-      area: 'wallet-tracker',
-      context: { chain: params.chain },
-      extra: { add: params.add, remove: params.remove },
-      fingerprint: ['wallet-tracker', 'alchemy-webhook-update'],
-    });
     throw error;
   }
 
@@ -159,7 +152,6 @@ async function sendWalletTrackerNotification(
 export function verifyAlchemyWebhookSignature(headers: Headers, rawBody: string) {
   const signingKey = process.env.ALCHEMY_WEBHOOK_SIGNING_KEY;
   if (!signingKey) {
-    void captureException(new Error('ALCHEMY_WEBHOOK_SIGNING_KEY is not configured — rejecting webhook request'), { area: 'wallet-tracker', fingerprint: ['wallet-tracker', 'missing-signing-key'] });
     throw new Error('Webhook signature verification is not configured');
   }
 
@@ -229,10 +221,8 @@ export async function watchWallet(userId: string, data: { walletAddress: string;
     try {
       const registration = await updateAlchemyWebhookAddresses({ chain, add: [walletAddress] });
       if (!registration.synced) {
-        addBreadcrumb({ category: 'wallet-tracker', message: `Alchemy webhook registration skipped for ${walletAddress} on ${chain}: ${registration.reason}`, level: 'warning' });
       }
     } catch (error) {
-      addBreadcrumb({ category: 'wallet-tracker', message: `Alchemy webhook registration failed for ${walletAddress} on ${chain}`, level: 'warning', data: { error: error instanceof Error ? error.message : String(error) } });
     }
   }
   await logActivity(userId, 'wallet_added', 'Wallet tracker enabled', { walletAddress, chain });
@@ -272,7 +262,6 @@ export async function unwatchWallet(userId: string, data: { walletAddress: strin
     try {
       await updateAlchemyWebhookAddresses({ chain, remove: [walletAddress] });
     } catch (error) {
-      addBreadcrumb({ category: 'wallet-tracker', message: `Alchemy webhook removal failed for ${walletAddress} on ${chain}`, level: 'warning', data: { error: error instanceof Error ? error.message : String(error) } });
     }
   }
 
@@ -334,7 +323,6 @@ export async function deleteWatchedWallet(userId: string, id: string) {
       try {
         await updateAlchemyWebhookAddresses({ chain: wallet.chain, remove: [wallet.walletAddress] });
       } catch (error) {
-        addBreadcrumb({ category: 'wallet-tracker', message: `Alchemy webhook removal failed for ${wallet.walletAddress} on ${wallet.chain}`, level: 'warning', data: { error: error instanceof Error ? error.message : String(error) } });
       }
     }
   }
@@ -386,7 +374,6 @@ export async function handleAlchemyWalletWebhook(payload: AlchemyWebhookPayload)
   try {
   const chain = normalizeChain(payload.event?.network ?? payload.network);
   const activities = payload.event?.activity ?? payload.activity ?? [];
-  addBreadcrumb({ category: 'wallet-tracker', message: 'webhook received', level: 'info', data: { chain, activityCount: activities.length } });
   const candidateAddresses = Array.from(new Set(activities.flatMap((activity) => [
     activity.fromAddress ? normalizeAddress(activity.fromAddress) : null,
     activity.toAddress ? normalizeAddress(activity.toAddress) : null,
@@ -444,11 +431,6 @@ export async function handleAlchemyWalletWebhook(payload: AlchemyWebhookPayload)
             transactionHash: event.transactionHash,
           });
           } catch (error) {
-            await captureException(error, {
-              area: 'wallet-tracker',
-              context: { userId: watcher.userId, wallet: watcher.walletAddress, chain, collection: event.contractAddress, transactionHash: event.transactionHash },
-              fingerprint: ['wallet-tracker', 'copy-mint'],
-            });
           }
         }
       }
@@ -466,12 +448,6 @@ export async function handleAlchemyWalletWebhook(payload: AlchemyWebhookPayload)
 
   return { processed: events.length, events };
   } catch (error) {
-    await captureException(error, {
-      area: 'wallet-tracker',
-      context: { provider: 'alchemy' },
-      extra: { payload },
-      fingerprint: ['wallet-tracker', 'webhook-parsing'],
-    });
     throw error;
   }
 }

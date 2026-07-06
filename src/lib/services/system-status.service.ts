@@ -8,14 +8,13 @@ import { sql } from 'drizzle-orm';
 import { checkRedisHealth } from '@/lib/redis';
 import { getCache } from '@/lib/redis';
 import { getRpcHealthSnapshot } from '@/lib/services/rpc-manager.service';
-import { captureException } from '@/lib/observability/sentry';
 
 // ── System status / failed-jobs dashboard ──────────────────────────────
 //
 // Aggregates the health signals that already exist across the app (DB,
 // Redis, RPC providers, recovery-loop heartbeat) plus "what recently failed
 // and why" into one snapshot for a Settings > System status panel — so you
-// don't have to piece it together from Sentry, the QStash console, and the
+// don't have to piece it together from logs, the QStash console, and the
 // mint history page separately.
 // ────────────────────────────────────────────────────────────────────────
 
@@ -133,7 +132,6 @@ async function getFailedMintTasks(userId: string, limit = 20): Promise<FailedJob
     }
     return jobs;
   } catch (error) {
-    captureException(error, { area: 'system-status', context: { check: 'failed-mint-tasks', userId }, fingerprint: ['system-status', 'failed-mint-tasks'] });
     return [];
   }
 }
@@ -168,7 +166,6 @@ async function settleOrFallback<T>(promise: Promise<T>, fallback: T, checkName: 
   const result = await Promise.allSettled([promise]);
   const [outcome] = result;
   if (outcome.status === 'fulfilled') return outcome.value;
-  captureException(outcome.reason, { area: 'system-status', context: { check: checkName }, fingerprint: ['system-status', checkName] });
   return fallback;
 }
 

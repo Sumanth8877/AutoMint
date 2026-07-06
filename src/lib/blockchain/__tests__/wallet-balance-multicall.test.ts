@@ -18,10 +18,6 @@ vi.mock('@/lib/blockchain/client', () => ({
   }),
 }));
 
-vi.mock('@/lib/observability/sentry', () => ({
-  captureException: vi.fn(),
-}));
-
 import { getWalletBalancesMulticall } from '../wallet';
 
 const ADDR_A = '0x1111111111111111111111111111111111111111';

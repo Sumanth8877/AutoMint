@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireApiSession } from '@/lib/auth/require-auth';
 import { getCollectionMetadata } from '@/lib/blockchain/collections';
-import { captureException } from '@/lib/observability/sentry';
 
 export async function GET(req: Request) {
   const authResult = await requireApiSession();
@@ -19,7 +18,6 @@ export async function GET(req: Request) {
     const metadata = await getCollectionMetadata(contractAddress, chain);
     return NextResponse.json({ metadata });
   } catch (error) {
-    captureException(error, { area: 'api', context: { route: 'blockchain/collection' }, fingerprint: ['api', 'blockchain-collection'] });
     return NextResponse.json({ error: 'Failed to fetch collection metadata' }, { status: 500 });
   }
 }

@@ -25,12 +25,6 @@ vi.mock('@/lib/services/qstash.service', () => ({
   verifyQStashSignature:         () => mockVerifyQStashSignature(),
 }));
 
-vi.mock('@/lib/observability/sentry', () => ({
-  addBreadcrumb:    vi.fn(),
-  captureException: vi.fn(),
-  captureMessage:   vi.fn(),
-}));
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function makeRequest(body: object, headers: Record<string, string> = {}) {

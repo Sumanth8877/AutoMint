@@ -46,12 +46,6 @@ vi.mock('../client', () => ({
   getClient: vi.fn(),
 }));
 
-vi.mock('@/lib/observability/sentry', () => ({
-  addBreadcrumb: vi.fn(),
-  captureException: vi.fn().mockResolvedValue(undefined),
-  captureMessage: vi.fn().mockResolvedValue(undefined),
-}));
-
 vi.mock('@/lib/services/nonce-allocator.service', () => ({
   allocateNonce: vi.fn().mockResolvedValue({ nonce: 42, release: vi.fn() }),
   releaseInflightNonce: vi.fn().mockResolvedValue(undefined),
