@@ -12,9 +12,6 @@
     },
     "src/app/api/analyzer/stream/route.ts": {
       "maxDuration": 10
-    },
-    "src/app/api/instant-mint/route.ts": {
-      "maxDuration": 10
     }
   }
 }

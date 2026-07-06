@@ -14,6 +14,7 @@ import {
   type MintIntent,
 } from '@/lib/resolve-mint-intent';
 import { discoverWithFirecrawl } from '@/lib/services/firecrawl.provider';
+import { assertPublicHttpUrl } from '@/lib/security/ssrf-guard';
 import { extractDiscoveryFields, type DiscoveryProviderResult, type DiscoverySocials } from '@/lib/services/discovery-extractor';
 import {
   ANALYZER_CACHE_KEYS,
@@ -256,6 +257,13 @@ async function discoverOpenSeaMetadataSocials(input: string) {
 }
 
 async function discoverWebsiteMetadataSocials(url: string) {
+  // SSRF guard: `url` ultimately derives from user-supplied analyzer input
+  // (see isLikelyProjectWebsite / normalizeUrlCandidate above), which only
+  // validates that it parses as http(s) — it does not block private/internal
+  // addresses. Reject anything that doesn't resolve to a public IP before
+  // making the server-side request.
+  await assertPublicHttpUrl(url);
+
   const response = await fetch(url, {
     headers: { Accept: 'text/html,application/xhtml+xml', 'User-Agent': 'AutoMintAnalyzer/1.0' },
     signal: AbortSignal.timeout(8_000),

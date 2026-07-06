@@ -1,6 +1,5 @@
 import 'server-only';
 
-import { timingSafeEqual } from 'node:crypto';
 import { auth } from '@clerk/nextjs/server';
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
@@ -8,6 +7,7 @@ import { syncUser } from '@/lib/auth/sync-user';
 import { getDb } from '@/lib/db';
 import { users } from '@/drizzle/schema';
 import { eq } from 'drizzle-orm';
+import { secureCompare } from '@/lib/security/timing-safe-compare';
 
 type SessionClaims = Record<string, unknown> | null;
 
@@ -38,13 +38,6 @@ function jsonError(error: string, status: number) {
 //   curl -H "Authorization: Bearer <AUTOMINT_API_KEY>" https://your-app/api/...
 // ─────────────────────────────────────────────────────────────────────────────
 
-function constantTimeEqual(a: string, b: string): boolean {
-  const aBuf = Buffer.from(a);
-  const bBuf = Buffer.from(b);
-  if (aBuf.length !== bBuf.length) return false;
-  return timingSafeEqual(aBuf, bBuf);
-}
-
 async function authenticateBearer(): Promise<ApiUserSuccess | null> {
   const headersList = await headers();
   const authHeader = headersList.get('authorization');
@@ -55,7 +48,10 @@ async function authenticateBearer(): Promise<ApiUserSuccess | null> {
   const expected = process.env.AUTOMINT_API_KEY;
   const ownerClerkId = process.env.AUTOMINT_API_KEY_USER;
   if (!expected || !ownerClerkId) return null;
-  if (!constantTimeEqual(token, expected)) return null;
+  // secureCompare hashes both sides to a fixed-length digest before the
+  // constant-time compare, so it never branches on input length the way a
+  // naive `if (a.length !== b.length) return false` + timingSafeEqual would.
+  if (!secureCompare(token, expected)) return null;
 
   const [user] = await getDb()
     .select()

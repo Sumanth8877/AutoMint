@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import crypto from 'crypto';
 import { parseJsonBody } from '@/lib/api/errors';
 import { handleTelegramUpdate, isTelegramEnabled, type TelegramUpdate } from '@/lib/services/telegram.service';
 import { captureException } from '@/lib/observability/sentry';
 import { logger } from '@/lib/logger';
+import { secureCompare } from '@/lib/security/timing-safe-compare';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -56,15 +56,11 @@ function isAuthorized(request: Request): boolean {
   // Missing or empty header → deny.
   if (!provided) return false;
 
-  // Convert to fixed-length buffers for timing-safe comparison.
-  const providedBuf = Buffer.from(provided,  'utf8');
-  const expectedBuf = Buffer.from(expected,  'utf8');
-
-  // timingSafeEqual requires equal-length buffers; length mismatch → deny.
-  if (providedBuf.length !== expectedBuf.length) return false;
-
-  // Constant-time comparison — no timing oracle on the secret.
-  return crypto.timingSafeEqual(providedBuf, expectedBuf);
+  // secureCompare hashes both sides to a fixed-length digest before the
+  // constant-time compare, so — unlike a raw timingSafeEqual() call — it
+  // never needs an early length-mismatch branch that could itself leak
+  // timing information about the secret's length.
+  return secureCompare(provided, expected);
 }
 
 // ── Route ─────────────────────────────────────────────────────────────────────

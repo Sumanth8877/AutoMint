@@ -17,7 +17,11 @@
  *   5. Vercel auto-deploys → packages installed during build
  *
  * Required env vars:
- *   GITHUB_PAT    — personal access token with repo:contents write permission
+ *   GITHUB_PAT    — personal access token with repo:contents write permission.
+ *                   Security note: use a fine-grained PAT scoped to *only*
+ *                   this repository's Contents (read/write) permission —
+ *                   not a classic PAT with the broad "repo" scope — so a
+ *                   leak/misuse of this token can't reach your other repos.
  *   GITHUB_OWNER  — repo owner (default: Sumanth8877)
  *   GITHUB_REPO   — repo name  (default: AutoMint)
  *
