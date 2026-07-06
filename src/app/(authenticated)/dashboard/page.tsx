@@ -2,9 +2,8 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import {
-  Activity, ArrowRight, CheckCircle2,
-  Flame, Radio, ShieldCheck, Target,
-  Wallet, Zap, Cpu,
+  Activity, ArrowRight, CheckCircle2, AlertTriangle, HelpCircle,
+  Radio, Target, Wallet, Zap, Cpu,
 } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Card from '@/components/ui/Card';
@@ -20,6 +19,7 @@ import { and, desc, eq, gte } from 'drizzle-orm';
 import { getUserMintTasks } from '@/lib/services/mint.service';
 import { getRecentActivities } from '@/lib/monitoring';
 import { getNativeTokenUsdPrice, formatUsd } from '@/lib/services/native-price.service';
+import { getSystemStatusSnapshot, type ServiceStatus } from '@/lib/services/system-status.service';
 
 async function getDashboardData(userId: string) {
   const last7Labels = Array.from({ length: 7 }, (_, i) => {
@@ -32,7 +32,7 @@ async function getDashboardData(userId: string) {
     const db = getDb();
     const since7Days = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    const [tasks, recentHistoryRows, userWallets, userCollections, activities] = await Promise.all([
+    const [tasks, recentHistoryRows, userWallets, userCollections, activities, systemStatus] = await Promise.all([
       getUserMintTasks(userId),
       db.select({
         history: mintHistory,
@@ -45,6 +45,10 @@ async function getDashboardData(userId: string) {
       db.select().from(wallets).where(eq(wallets.userId, userId)),
       db.select().from(collections).where(eq(collections.userId, userId)),
       getRecentActivities(userId).catch(() => []),
+      // Real health snapshot (DB, Redis, RPC providers, recovery loop) --
+      // same source of truth as Settings > System. Falls back to null so a
+      // health-check hiccup never breaks the whole dashboard.
+      getSystemStatusSnapshot(userId).catch(() => null),
     ]);
 
     const recentHistory = recentHistoryRows.map(r => ({ ...r.history, collectionName: r.collectionName }));
@@ -76,6 +80,7 @@ async function getDashboardData(userId: string) {
       walletCount: userWallets.length, fundedWalletCount: fundedWallets.length,
       collectionCount: userCollections.length, recentHistory,
       chartData, activities, portfolioEth, portfolioUsdValue, ethUsdPrice,
+      systemStatus,
     };
   } catch (e) {
     captureException(e);
@@ -84,9 +89,27 @@ async function getDashboardData(userId: string) {
       walletCount: 0, fundedWalletCount: 0, collectionCount: 0, recentHistory: [],
       chartData: last7Labels.map(day => ({ day, completed: 0, failed: 0 })),
       activities: [], portfolioEth: 0, portfolioUsdValue: 0, ethUsdPrice: 0,
+      systemStatus: null,
     };
   }
 }
+
+/** Overall RPC health across every configured provider -- 'unknown' if none
+ * have reported in yet, 'unhealthy' if any provider's circuit is open. */
+function aggregateRpcStatus(rpc: Record<string, ServiceStatus> | undefined): ServiceStatus['status'] {
+  if (!rpc) return 'unknown';
+  const statuses = Object.values(rpc).map((h) => h.status);
+  if (statuses.length === 0) return 'unknown';
+  if (statuses.some((s) => s === 'unhealthy')) return 'unhealthy';
+  if (statuses.every((s) => s === 'healthy')) return 'healthy';
+  return 'unknown';
+}
+
+const HEALTH_STATUS_DISPLAY: Record<ServiceStatus['status'], { label: string; icon: typeof CheckCircle2; color: string }> = {
+  healthy: { label: 'Healthy', icon: CheckCircle2, color: 'text-success' },
+  unhealthy: { label: 'Unhealthy', icon: AlertTriangle, color: 'text-danger' },
+  unknown: { label: 'Unknown', icon: HelpCircle, color: 'text-muted' },
+};
 
 function statusConfig(status: string) {
   switch (status) {
@@ -149,25 +172,33 @@ export default async function DashboardPage() {
           <MintActivityChart data={d.chartData} />
         </Card>
 
-        {/* System health */}
+        {/* System health -- real status from the same health checks used in
+            Settings > System (DB, Redis, RPC circuit breakers, recovery loop). */}
         <Card tone="default" className="p-6">
-          <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-muted">System Health</p>
+          <div className="mb-4 flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted">System Health</p>
+            <Link href="/settings/system" className="text-xs font-medium text-primary hover:underline">
+              Details
+            </Link>
+          </div>
           <div className="space-y-3">
             {[
-              { label: 'RPC Providers', status: 'Operational', icon: CheckCircle2, color: 'text-success' },
-              { label: 'Analyzer Queue', status: 'Clear', icon: CheckCircle2, color: 'text-success' },
-              { label: 'Gas Oracle', status: 'Active', icon: Flame, color: 'text-warning' },
-              { label: 'Mint Monitor', status: 'Watching', icon: Radio, color: 'text-primary' },
-              { label: 'Risk Engine', status: 'Online', icon: ShieldCheck, color: 'text-success' },
-            ].map(s => (
-              <div key={s.label} className="flex items-center justify-between rounded-lg bg-surface-hover px-3 py-2.5">
-                <span className="text-xs text-secondary">{s.label}</span>
-                <div className="flex items-center gap-1.5">
-                  <s.icon className={`h-3 w-3 ${s.color}`} />
-                  <span className={`text-xs font-semibold ${s.color}`}>{s.status}</span>
+              { label: 'Database', status: d.systemStatus?.database.status ?? 'unknown' },
+              { label: 'Cache (Redis)', status: d.systemStatus?.redis.status ?? 'unknown' },
+              { label: 'RPC Providers', status: aggregateRpcStatus(d.systemStatus?.rpc) },
+              { label: 'Recovery Loop', status: d.systemStatus?.recoveryLoop.status ?? 'unknown' },
+            ].map(s => {
+              const display = HEALTH_STATUS_DISPLAY[s.status];
+              return (
+                <div key={s.label} className="flex items-center justify-between rounded-lg bg-surface-hover px-3 py-2.5">
+                  <span className="text-xs text-secondary">{s.label}</span>
+                  <div className="flex items-center gap-1.5">
+                    <display.icon className={`h-3 w-3 ${display.color}`} />
+                    <span className={`text-xs font-semibold ${display.color}`}>{display.label}</span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </Card>
       </Reveal>
