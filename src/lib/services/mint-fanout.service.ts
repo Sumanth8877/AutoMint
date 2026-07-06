@@ -7,6 +7,8 @@ import { resolveMintIntent } from '@/lib/resolve-mint-intent';
 import { getMintState } from '@/lib/services/mint-state.service';
 import { fetchMintRequirements } from '@/lib/services/mint-requirements.service';
 import { scheduleMint } from '@/lib/services/qstash.service';
+import { getWalletBalancesMulticall } from '@/lib/blockchain/wallet';
+import { estimatePreFlightGasBufferEth } from '@/lib/blockchain/gas';
 import { addBreadcrumb, captureException } from '@/lib/observability/sentry';
 import { logActivity } from '@/lib/monitoring';
 
@@ -113,7 +115,7 @@ export async function fanoutMintFromUrl(
 
   // ── 6. Build per-wallet results ───────────────────────────────────────
   const walletResults: FanoutWalletResult[] = [];
-  const tasksToCreate: Array<{ walletId: string; walletAddress: string }> = [];
+  const candidates: Array<{ walletId: string; walletAddress: string }> = [];
 
   for (const walletId of walletIds) {
     const walletAddress = ownedMap.get(walletId);
@@ -141,7 +143,53 @@ export async function fanoutMintFromUrl(
       continue;
     }
 
-    tasksToCreate.push({ walletId, walletAddress });
+    candidates.push({ walletId, walletAddress });
+  }
+
+  // Funding pre-check for every remaining candidate wallet, in ONE RPC
+  // round-trip instead of one getBalance() call per wallet (fanout supports
+  // up to 50 wallets — polling those individually is both slow, competing
+  // against the mint window, and expensive on a metered RPC plan).
+  // getWalletBalancesMulticall() batches all native-balance reads through
+  // Multicall3's getEthBalance(address), which every supported chain has
+  // deployed at the same address.
+  const tasksToCreate: Array<{ walletId: string; walletAddress: string }> = [];
+
+  if (candidates.length > 0) {
+    const [balances, gasBufferEth] = await Promise.all([
+      getWalletBalancesMulticall(candidates.map((c) => c.walletAddress), intent.chain),
+      estimatePreFlightGasBufferEth(intent.chain, quantity),
+    ]);
+    const balanceByAddress = new Map(balances.map((b) => [b.address.toLowerCase(), b]));
+
+    // mintPrice is `string | null` — if the price genuinely can't be
+    // determined at this point, allow through (same policy as the
+    // single-wallet check in qstash.service.ts): the real gate is
+    // executeMint()'s pre-broadcast simulation.
+    const mintPriceEth = requirements.mintPrice != null ? Number(requirements.mintPrice) : null;
+
+    for (const candidate of candidates) {
+      const balanceResult = balanceByAddress.get(candidate.walletAddress.toLowerCase());
+      const balanceEth = balanceResult ? Number(balanceResult.balance) : 0;
+
+      if (mintPriceEth != null && Number.isFinite(balanceEth)) {
+        const requiredEth = mintPriceEth * quantity + gasBufferEth;
+        if (balanceEth < requiredEth) {
+          walletResults.push({
+            walletId: candidate.walletId,
+            walletAddress: candidate.walletAddress,
+            taskId: '',
+            status: 'skipped',
+            reason: balanceResult?.error
+              ? `Balance check failed: ${balanceResult.error}`
+              : `Insufficient balance: have ${balanceEth.toFixed(5)}, need ~${requiredEth.toFixed(5)} (mint cost + gas)`,
+          });
+          continue;
+        }
+      }
+
+      tasksToCreate.push(candidate);
+    }
   }
 
   if (tasksToCreate.length === 0) {

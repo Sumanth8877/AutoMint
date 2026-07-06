@@ -189,12 +189,23 @@ describe('Security Finding C-2 — Telegram webhook authentication', () => {
       expect(mockHandleTelegramUpdate).not.toHaveBeenCalled();
     });
 
-    it('does NOT call timingSafeEqual when lengths differ (no throw risk)', async () => {
+    it('still calls timingSafeEqual when lengths differ (fixed-length digest compare closes the length-timing leak)', async () => {
+      // Security follow-up: secureCompare() hashes both the provided header
+      // and the expected secret to a fixed-length SHA-256 digest *before*
+      // comparing, so timingSafeEqual is always invoked — on equal-length
+      // 32-byte buffers — regardless of how the raw input lengths compare.
+      // This removes the early length-mismatch branch (and its associated
+      // timing side-channel) that a naive `if (a.length !== b.length)
+      // return false` + timingSafeEqual would have.
       mockTimingSafeEqual.mockClear();
       const { POST } = await import('../route');
       await POST(makeRequest('short'));
-      // timingSafeEqual must NOT be called — length mismatch exits early
-      expect(mockTimingSafeEqual).not.toHaveBeenCalled();
+      expect(mockTimingSafeEqual).toHaveBeenCalledTimes(1);
+      const [buf1, buf2] = mockTimingSafeEqual.mock.calls[0];
+      expect(Buffer.isBuffer(buf1)).toBe(true);
+      expect(Buffer.isBuffer(buf2)).toBe(true);
+      expect(buf1.length).toBe(32); // SHA-256 digest — fixed length regardless of input
+      expect(buf2.length).toBe(32);
     });
   });
 

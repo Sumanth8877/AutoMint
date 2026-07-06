@@ -16,10 +16,12 @@ import { acquireLock, releaseLock } from '@/lib/services/mint-lock.service';
 import { executeScheduledRiskCheck, hasBlockingRiskChange, storeOriginalRiskSnapshot } from '@/lib/services/scheduled-risk-check.service';
 import { sendMintFailedEmail, sendMintScheduledEmail, sendMintSuccessEmail, sendSystemErrorEmail } from '@/lib/services/email-notification.service';
 import { getClient } from '@/lib/blockchain/client';
+import { estimatePreFlightGasBufferEth } from '@/lib/blockchain/gas';
 import type { Hex } from 'viem';
 import { unregisterIfIdle } from '@/lib/services/alchemy-webhook.service';
 import { addTaskLog, type TaskLogEvent } from '@/lib/services/task-log.service';
 import { getNativeTokenUsdPrice, formatWithUsd } from '@/lib/services/native-price.service';
+import { setCache } from '@/lib/redis';
 
 // Monitoring fix: reduced from 60s to 30s.
 // WebSocket monitoring watches for 25s per invocation;
@@ -381,7 +383,7 @@ async function loadTaskWithWallet(taskId: string, userId?: string) {
  * normalise it to ETH before comparing so the check never silently blocks a
  * wallet that actually has enough funds.
  */
-function hasEnoughBalance(balance: string, mintPrice: string | null, quantity: number) {
+function hasEnoughBalance(balance: string, mintPrice: string | null, quantity: number, gasBufferEth = 0) {
   const balanceValue = Number(balance); // ETH units from formatEther
   if (!Number.isFinite(balanceValue)) return false;
 
@@ -395,8 +397,19 @@ function hasEnoughBalance(balance: string, mintPrice: string | null, quantity: n
     priceEth = priceEth / 1e18;
   }
 
-  return balanceValue >= priceEth * quantity;
+  // H-fix: require enough balance for gas as well as mint cost, not just mint
+  // cost. Previously this check ignored gas entirely, so a wallet that could
+  // exactly afford the mint price would still pass here and then fail later
+  // at broadcast/simulation with a less clear error, after the task was
+  // already claimed. gasBufferEth is a conservative pre-flight estimate (see
+  // call site) — the real gas limit is still determined by executeMint()'s
+  // own simulation immediately before sending the transaction.
+  return balanceValue >= priceEth * quantity + gasBufferEth;
 }
+
+// Conservative gas-limit assumption for the pre-flight balance/gas check
+// below — see estimatePreFlightGasBufferEth() in @/lib/blockchain/gas for
+// the shared implementation (also used by mint-fanout's per-wallet check).
 
 // ——— Retry classification ———————————————————————————————————————————————
 //
@@ -452,18 +465,14 @@ function isRetryableError(error: string | undefined): boolean {
   return RETRYABLE_PATTERNS.some((p) => lower.includes(p));
 }
 
-// Transient-error retry policy.
-// 2s base so the first retry fires near-instantly (~2-3s end-to-end including
-// QStash delivery), doubling each attempt (2s, 4s, 8s, 16s ...), capped at
-// 10 min. Most transient mint failures (RPC blip, nonce-too-low, gas estimate
-// races) clear on the very next attempt — keeping the first delay tiny is the
-// difference between "missed the mint" and "got in on the retry".
-const RETRY_BASE_DELAY_MS = 2_000;
-
-function retryDelayMs(retriesRemaining: number, maxRetries: number): number {
-  const attempt = maxRetries - retriesRemaining + 1;
-  return Math.min(RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1), 10 * 60 * 1000); // cap at 10 min
-}
+// On-chain execution-failure retry policy: fixed 2s delay, up to 5 attempts
+// total. Unlike the monitoring reschedule above, a transient execution
+// failure (RPC blip, nonce-too-low, gas estimate race) usually clears within
+// a couple of seconds, so a short fixed interval — rather than exponential
+// backoff — gives the best chance of still catching a fast-moving mint
+// window while bounding total retry time to ~10s.
+const EXECUTION_RETRY_DELAY_MS = 2_000;
+const EXECUTION_MAX_ATTEMPTS = 5;
 
 export async function executeScheduledMint(taskId: string) {
   await addTaskLog(taskId, 'qstash_received', 'info', 'QStash webhook received — starting execution pipeline');
@@ -780,13 +789,17 @@ export async function executeScheduledMint(taskId: string) {
     // ~200-400ms eth_call round-trip for no additional safety — the internal
     // simulation is now the single source of truth (skipSimulation is no
     // longer forced true below).
-    const balance = await getWalletBalance(wallet.address, wallet.chain);
-    if (!hasEnoughBalance(balance.balance, effectiveMintPrice, task.quantity)) {
+    const [balance, gasBufferEth] = await Promise.all([
+      getWalletBalance(wallet.address, wallet.chain),
+      estimatePreFlightGasBufferEth(wallet.chain, task.quantity),
+    ]);
+    if (!hasEnoughBalance(balance.balance, effectiveMintPrice, task.quantity, gasBufferEth)) {
       const usdPrice = await getNativeTokenUsdPrice(wallet.chain).catch(() => 0);
       const mintCostEth = Number(effectiveMintPrice) * task.quantity;
       const haveStr = usdPrice ? formatWithUsd(balance.balance, balance.symbol, usdPrice) : `${balance.balance} ${balance.symbol}`;
       const costStr = usdPrice ? formatWithUsd(mintCostEth, balance.symbol, usdPrice) : `${mintCostEth} ${balance.symbol}`;
-      await addTaskLog(taskId, 'balance_check_failed', 'error', `Insufficient balance: have ${haveStr}, mint costs ${costStr} + gas. Fund the wallet and retry.`);
+      const gasStr = usdPrice ? formatWithUsd(gasBufferEth, balance.symbol, usdPrice) : `~${gasBufferEth.toFixed(5)} ${balance.symbol}`;
+      await addTaskLog(taskId, 'balance_check_failed', 'error', `Insufficient balance: have ${haveStr}, mint costs ${costStr} + ~${gasStr} estimated gas. Fund the wallet and retry.`);
       await getDb()
         .update(mintTasks)
         .set({ status: 'failed', qstashMessageId: null, scheduledTime: null, updatedAt: new Date() })
@@ -865,34 +878,39 @@ export async function executeScheduledMint(taskId: string) {
     });
     await addTaskLog(taskId, mintResult.txHash ? 'tx_submitted' : 'task_completed', mintResult.success ? 'success' : 'error', mintResult.txHash ? `Transaction submitted: ${mintResult.txHash}` : mintResult.error ?? 'Unknown error');
 
-    // ——— Retry on transient failure ——————————————————————————————
+    // ——— Retry on transient failure ————————————————————
     // C-04: NEVER retry if a txHash is present — the transaction is already
     // on-chain and executeMintTask has transitioned the task to 'unconfirmed'.
     // Retrying here would call sendTransaction a second time.
+    //
+    // Fixed policy: up to EXECUTION_MAX_ATTEMPTS (5) attempts total, spaced
+    // EXECUTION_RETRY_DELAY_MS (2s) apart. Uses its own `executionRetriesRemaining`
+    // counter (not `maxRetries`, which governs the separate pre-live monitoring
+    // reschedule loop above).
     if (!mintResult.success && !mintResult.txHash && isRetryableError(mintResult.error)) {
       const currentTask = (await getDb()
-        .select({ maxRetries: mintTasks.maxRetries })
+        .select({ executionRetriesRemaining: mintTasks.executionRetriesRemaining })
         .from(mintTasks)
         .where(eq(mintTasks.id, taskId))
         .limit(1))[0];
 
-      const retriesRemaining = currentTask?.maxRetries ?? 0;
+      const retriesRemaining = currentTask?.executionRetriesRemaining ?? 0;
 
       if (retriesRemaining > 0) {
-        const delay = retryDelayMs(retriesRemaining, task.maxRetries);
+        const delay = EXECUTION_RETRY_DELAY_MS;
         const retryAt = new Date(Date.now() + delay);
 
         await getDb()
           .update(mintTasks)
-          .set({ maxRetries: retriesRemaining - 1, status: 'pending', updatedAt: new Date() })
+          .set({ executionRetriesRemaining: retriesRemaining - 1, status: 'pending', updatedAt: new Date() })
           .where(eq(mintTasks.id, taskId));
 
         await publishQStashMessage(taskId, retryAt, 'execute');
 
-        await addTaskLog(taskId, 'task_retrying', 'warning', `Retrying in ${Math.round(delay/1000)}s (${retriesRemaining - 1} retries left)`);
+        await addTaskLog(taskId, 'task_retrying', 'warning', `Retrying in ${Math.round(delay/1000)}s (attempt ${EXECUTION_MAX_ATTEMPTS - retriesRemaining + 1}/${EXECUTION_MAX_ATTEMPTS}, ${retriesRemaining - 1} left)`);
         addBreadcrumb({
           category: 'qstash',
-          message: 'mint retry scheduled',
+          message: 'mint execution retry scheduled',
           level: 'warning',
           data: { taskId, retriesRemaining: retriesRemaining - 1, retryAt: retryAt.toISOString(), error: mintResult.error },
         });
@@ -903,7 +921,7 @@ export async function executeScheduledMint(taskId: string) {
       // Retries exhausted — already failed by executeMintTask, nothing more to do
       addBreadcrumb({
         category: 'qstash',
-        message: 'mint retries exhausted',
+        message: 'mint execution retries exhausted',
         level: 'error',
         data: { taskId, error: mintResult.error },
       });
@@ -1285,6 +1303,11 @@ const RECOVERY_INTERVAL_MS = 60 * 1000; // 60 seconds
 export async function executeRecoveryCheck() {
   const { recoverStuckMintTasks } = await import('@/lib/services/mint-recovery.service');
   const result = await recoverStuckMintTasks();
+
+  // Status dashboard: record that the recovery loop is alive, so
+  // /api/system/status can show "last cron heartbeat" without needing a
+  // dedicated monitoring table. Non-fatal if Redis is briefly unavailable.
+  void setCache('system:last-recovery-heartbeat', new Date().toISOString(), 60 * 60 * 24 * 7).catch(() => {});
 
   addBreadcrumb({
     category: 'recovery',

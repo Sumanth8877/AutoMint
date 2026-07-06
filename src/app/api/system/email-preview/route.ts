@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { renderEmailTemplate } from '@/lib/email-templates';
+import { requireApiUser } from '@/lib/auth/require-auth';
 
 const SAMPLE_DETAILS = {
   taskName: 'Mint Task abc12345',
@@ -12,6 +13,13 @@ const SAMPLE_DETAILS = {
 };
 
 export async function GET(req: Request) {
+  // Renders only hardcoded sample data (no real user data), but this is a
+  // "system" route sitting alongside genuinely sensitive ones — require auth
+  // for consistency and so a future edit wiring in live data doesn't
+  // accidentally ship unauthenticated.
+  const authResult = await requireApiUser();
+  if ('error' in authResult) return authResult.error;
+
   const { searchParams } = new URL(req.url);
   const type = (searchParams.get('type') ?? 'mintSuccess') as 'mintScheduled' | 'mintSuccess' | 'mintFailed' | 'systemErrors';
 

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { timingSafeEqual } from 'node:crypto';
 import { Client } from '@upstash/qstash';
 import { addBreadcrumb } from '@/lib/observability/sentry';
+import { isAuthorizedBearer } from '@/lib/security/timing-safe-compare';
 
 /**
  * POST /api/system/keepalive
@@ -37,13 +37,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'CRON_SECRET is not configured' }, { status: 503 });
   }
 
-  const provided = request.headers.get('authorization') ?? '';
-  const expected = `Bearer ${cronSecret}`;
-  const providedBuf = Buffer.from(provided);
-  const expectedBuf = Buffer.from(expected);
-  const authorized =
-    providedBuf.length === expectedBuf.length &&
-    timingSafeEqual(providedBuf, expectedBuf);
+  const authorized = isAuthorizedBearer(request.headers.get('authorization'), cronSecret);
 
   if (!authorized) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -112,13 +106,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'CRON_SECRET is not configured' }, { status: 503 });
   }
 
-  const provided = request.headers.get('authorization') ?? '';
-  const expected = `Bearer ${cronSecret}`;
-  const providedBuf = Buffer.from(provided);
-  const expectedBuf = Buffer.from(expected);
-  const authorized =
-    providedBuf.length === expectedBuf.length &&
-    timingSafeEqual(providedBuf, expectedBuf);
+  const authorized = isAuthorizedBearer(request.headers.get('authorization'), cronSecret);
 
   if (!authorized) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
