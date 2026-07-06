@@ -16,7 +16,7 @@ import { acquireLock, releaseLock } from '@/lib/services/mint-lock.service';
 import { executeScheduledRiskCheck, hasBlockingRiskChange, storeOriginalRiskSnapshot } from '@/lib/services/scheduled-risk-check.service';
 import { sendMintFailedEmail, sendMintScheduledEmail, sendMintSuccessEmail, sendSystemErrorEmail } from '@/lib/services/email-notification.service';
 import { getClient } from '@/lib/blockchain/client';
-import { estimateGas } from '@/lib/blockchain/gas';
+import { estimatePreFlightGasBufferEth } from '@/lib/blockchain/gas';
 import type { Hex } from 'viem';
 import { unregisterIfIdle } from '@/lib/services/alchemy-webhook.service';
 import { addTaskLog, type TaskLogEvent } from '@/lib/services/task-log.service';
@@ -408,27 +408,8 @@ function hasEnoughBalance(balance: string, mintPrice: string | null, quantity: n
 }
 
 // Conservative gas-limit assumption for the pre-flight balance/gas check
-// below. Real NFT mint calls typically run 120k-250k gas for a single unit;
-// this intentionally overestimates (extra safety margin) rather than risk
-// letting a too-low balance through. The actual gas limit used for the
-// transaction itself still comes from executeMint()'s live simulation/
-// estimateGas call — this is only used to decide whether to bother trying.
-const PRE_FLIGHT_GAS_LIMIT_BASE = 220_000n;
-const PRE_FLIGHT_GAS_LIMIT_PER_EXTRA_UNIT = 60_000n;
-
-async function estimatePreFlightGasBufferEth(chain: string, quantity: number): Promise<number> {
-  try {
-    const gas = await estimateGas(chain);
-    const gasLimit = PRE_FLIGHT_GAS_LIMIT_BASE + PRE_FLIGHT_GAS_LIMIT_PER_EXTRA_UNIT * BigInt(Math.max(0, quantity - 1));
-    const feeWei = BigInt(gas.gasPrice) * gasLimit;
-    return Number(feeWei) / 1e18;
-  } catch {
-    // Gas estimation failed — don't block the mint over a UI-only estimate;
-    // executeMint()'s own simulation is the real gate and will fail loudly
-    // (with a clear error + retry) if gas truly can't be covered.
-    return 0;
-  }
-}
+// below — see estimatePreFlightGasBufferEth() in @/lib/blockchain/gas for
+// the shared implementation (also used by mint-fanout's per-wallet check).
 
 // ——— Retry classification ———————————————————————————————————————————————
 //

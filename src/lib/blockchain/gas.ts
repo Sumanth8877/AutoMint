@@ -164,3 +164,31 @@ export function formatFee(wei: string): string {
   if (eth < 0.001) return '< 0.001';
   return eth.toFixed(4);
 }
+
+// ── Pre-flight gas buffer estimate (used before deciding whether to even
+// attempt a mint, not for the transaction itself) ──────────────────────
+//
+// Conservative gas-limit assumption for pre-flight balance/gas checks (see
+// qstash.service.ts's executeScheduledMint balance gate, and mint-fanout's
+// per-wallet funding check). Real NFT mint calls typically run 120k-250k gas
+// for a single unit; this intentionally overestimates (extra safety margin)
+// rather than risk letting a too-low balance through. The actual gas limit
+// used for the transaction itself still comes from executeMint()'s live
+// simulation/estimateGas call — this is only used to decide whether it's
+// worth trying in the first place.
+const PRE_FLIGHT_GAS_LIMIT_BASE = 220_000n;
+const PRE_FLIGHT_GAS_LIMIT_PER_EXTRA_UNIT = 60_000n;
+
+export async function estimatePreFlightGasBufferEth(chain: string, quantity: number): Promise<number> {
+  try {
+    const gas = await estimateGas(chain);
+    const gasLimit = PRE_FLIGHT_GAS_LIMIT_BASE + PRE_FLIGHT_GAS_LIMIT_PER_EXTRA_UNIT * BigInt(Math.max(0, quantity - 1));
+    const feeWei = BigInt(gas.gasPrice) * gasLimit;
+    return Number(feeWei) / 1e18;
+  } catch {
+    // Gas estimation failed — don't block the mint over a UI-only estimate;
+    // executeMint()'s own simulation is the real gate and will fail loudly
+    // (with a clear error + retry) if gas truly can't be covered.
+    return 0;
+  }
+}
