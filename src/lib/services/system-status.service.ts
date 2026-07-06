@@ -8,6 +8,7 @@ import { sql } from 'drizzle-orm';
 import { checkRedisHealth } from '@/lib/redis';
 import { getCache } from '@/lib/redis';
 import { getRpcHealthSnapshot } from '@/lib/services/rpc-manager.service';
+import { captureException } from '@/lib/observability/sentry';
 
 // ── System status / failed-jobs dashboard ──────────────────────────────
 //
@@ -93,41 +94,48 @@ async function checkRecoveryLoop() {
   }
 }
 
-/** Recently failed mint tasks for this user, with their last log line as the reason. */
+/** Recently failed mint tasks for this user, with their last log line as the reason.
+ * Never throws -- a query failure here (e.g. a transient DB blip) shouldn't take
+ * down the entire status snapshot, so we log and return an empty list instead. */
 async function getFailedMintTasks(userId: string, limit = 20): Promise<FailedJob[]> {
-  const { taskLogs } = await import('@/drizzle/schema');
+  try {
+    const { taskLogs } = await import('@/drizzle/schema');
 
-  const failedTasks = await getDb()
-    .select({
-      id: mintTasks.id,
-      contractAddress: mintTasks.contractAddress,
-      updatedAt: mintTasks.updatedAt,
-      collectionName: collections.name,
-    })
-    .from(mintTasks)
-    .leftJoin(collections, eq(collections.contractAddress, mintTasks.contractAddress))
-    .where(and(eq(mintTasks.userId, userId), eq(mintTasks.status, 'failed')))
-    .orderBy(desc(mintTasks.updatedAt))
-    .limit(limit);
+    const failedTasks = await getDb()
+      .select({
+        id: mintTasks.id,
+        contractAddress: mintTasks.contractAddress,
+        updatedAt: mintTasks.updatedAt,
+        collectionName: collections.name,
+      })
+      .from(mintTasks)
+      .leftJoin(collections, eq(collections.contractAddress, mintTasks.contractAddress))
+      .where(and(eq(mintTasks.userId, userId), eq(mintTasks.status, 'failed')))
+      .orderBy(desc(mintTasks.updatedAt))
+      .limit(limit);
 
-  const jobs: FailedJob[] = [];
-  for (const task of failedTasks) {
-    const [lastLog] = await getDb()
-      .select({ message: taskLogs.message, createdAt: taskLogs.createdAt })
-      .from(taskLogs)
-      .where(eq(taskLogs.taskId, task.id))
-      .orderBy(desc(taskLogs.createdAt))
-      .limit(1);
+    const jobs: FailedJob[] = [];
+    for (const task of failedTasks) {
+      const [lastLog] = await getDb()
+        .select({ message: taskLogs.message, createdAt: taskLogs.createdAt })
+        .from(taskLogs)
+        .where(eq(taskLogs.taskId, task.id))
+        .orderBy(desc(taskLogs.createdAt))
+        .limit(1);
 
-    jobs.push({
-      source: 'mint_task',
-      id: task.id,
-      label: task.collectionName || task.contractAddress || task.id,
-      reason: lastLog?.message ?? 'Task failed (no log message recorded)',
-      failedAt: task.updatedAt ? new Date(task.updatedAt).toISOString() : null,
-    });
+      jobs.push({
+        source: 'mint_task',
+        id: task.id,
+        label: task.collectionName || task.contractAddress || task.id,
+        reason: lastLog?.message ?? 'Task failed (no log message recorded)',
+        failedAt: task.updatedAt ? new Date(task.updatedAt).toISOString() : null,
+      });
+    }
+    return jobs;
+  } catch (error) {
+    captureException(error, { area: 'system-status', context: { check: 'failed-mint-tasks', userId }, fingerprint: ['system-status', 'failed-mint-tasks'] });
+    return [];
   }
-  return jobs;
 }
 
 /** QStash's own dead-letter queue — jobs that failed at the delivery layer (e.g. signature/URL errors), not just app-level mint failures. */
@@ -151,12 +159,28 @@ async function getQStashDeadLetterJobs(limit = 20): Promise<FailedJob[]> {
   }
 }
 
+const UNKNOWN_STATUS: ServiceStatus = { status: 'unknown', detail: 'Health check failed to run' };
+const UNKNOWN_RECOVERY_LOOP = { status: 'unknown' as const, lastHeartbeat: null, staleAfterMinutes: RECOVERY_STALE_AFTER_MINUTES };
+
+/** Runs a settled promise, logging + falling back to `fallback` on rejection
+ * instead of letting one bad check take down the whole snapshot. */
+async function settleOrFallback<T>(promise: Promise<T>, fallback: T, checkName: string): Promise<T> {
+  const result = await Promise.allSettled([promise]);
+  const [outcome] = result;
+  if (outcome.status === 'fulfilled') return outcome.value;
+  captureException(outcome.reason, { area: 'system-status', context: { check: checkName }, fingerprint: ['system-status', checkName] });
+  return fallback;
+}
+
 export async function getSystemStatusSnapshot(userId: string): Promise<SystemStatusSnapshot> {
+  // Each check is isolated: a failure in one (e.g. RPC health lookup) falls
+  // back to 'unknown' for just that item instead of nulling the whole
+  // snapshot, so the dashboard still shows real status for everything else.
   const [database, redis, rpc, recoveryLoop, mintJobs, dlqJobs] = await Promise.all([
-    checkDatabase(),
-    checkRedis(),
-    getRpcHealthSnapshot(),
-    checkRecoveryLoop(),
+    settleOrFallback(checkDatabase(), UNKNOWN_STATUS, 'database'),
+    settleOrFallback(checkRedis(), UNKNOWN_STATUS, 'redis'),
+    settleOrFallback(getRpcHealthSnapshot(), {} as Awaited<ReturnType<typeof getRpcHealthSnapshot>>, 'rpc'),
+    settleOrFallback(checkRecoveryLoop(), UNKNOWN_RECOVERY_LOOP, 'recovery-loop'),
     getFailedMintTasks(userId),
     getQStashDeadLetterJobs(),
   ]);
