@@ -6,6 +6,8 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import AutoMintUserButton from '@/components/auth/automint-user-button';
+import { AIProviderBanner } from '@/components/dashboard/ai-provider-banner';
+import { AIProviderStatus } from '@/components/dashboard/ai-provider-banner';
 import { apiRequest } from '@/lib/api/client';
 import {
   BarChart3, ChevronRight, FolderKanban, Gauge, History,
@@ -131,6 +133,9 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       <div className="h-px bg-border" />
       <div className="space-y-2">
         <AutoMintUserButton />
+        <div className="flex items-center justify-center gap-1.5">
+          <AIProviderStatus />
+        </div>
         <div className="flex items-center justify-center gap-1.5">
           <span className="live-dot" />
           <span className="text-xs font-semibold uppercase tracking-wider text-muted/70">System Live</span>
@@ -338,6 +343,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         />
         <main className="flex-1 overflow-y-auto bg-surface">
           <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+            <AIProviderBanner />
             {children}
           </div>
         </main>

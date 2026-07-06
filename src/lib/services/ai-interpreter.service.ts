@@ -5,6 +5,7 @@ import type { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/reso
 import { logger } from '@/lib/logger';
 import { getRedisClient } from '@/lib/redis';
 import { publishEvent, type EventType } from '@/lib/services/event-bus.service';
+import { recordSuccess, recordFailure, isProviderHealthy } from '@/lib/services/provider-health.service';
 
 // ── Provider config ─────────────────────────────────────────────────────────
 
@@ -860,20 +861,37 @@ export async function interpretTelegramMessage(
   }
 
   const selectedModel = await getUserModel(userId);
-
-  // Resolve which provider owns the selected model
   const primaryProvider = resolveProviderForModel(selectedModel) ?? providers[0];
   const fallbackProvider = getFallbackProvider(primaryProvider.name);
 
-  // Try primary provider first, then fallback if it fails
-  const providersToTry: { provider: ProviderConfig; model: string }[] = [
-    { provider: primaryProvider, model: selectedModel },
-  ];
-  if (fallbackProvider) {
-    providersToTry.push({
-      provider: fallbackProvider,
-      model: fallbackProvider.defaultModel,
+  // ── Circuit breaker: check if primary is healthy ──────────────────────
+  // Gemini is always preferred. If Gemini is marked "down" by the circuit
+  // breaker, skip it and go straight to Nara (no wasted latency on a
+  // known-dead provider). But we still include it as a last-resort retry
+  // in case the health check is stale.
+
+  const primaryHealthy = await isProviderHealthy(primaryProvider.name);
+
+  const providersToTry: { provider: ProviderConfig; model: string }[] = [];
+
+  if (primaryHealthy) {
+    // Normal path: try primary first, then fallback
+    providersToTry.push({ provider: primaryProvider, model: selectedModel });
+    if (fallbackProvider) {
+      providersToTry.push({ provider: fallbackProvider, model: fallbackProvider.defaultModel });
+    }
+  } else {
+    // Primary is down: try fallback first (fast path), then primary as last resort
+    logger.info('Primary provider is down, using fallback first', {
+      area: 'circuit-breaker',
+      downProvider: primaryProvider.name,
+      fallback: fallbackProvider?.name,
     });
+    if (fallbackProvider) {
+      providersToTry.push({ provider: fallbackProvider, model: fallbackProvider.defaultModel });
+    }
+    // Still try primary as last resort (maybe it recovered)
+    providersToTry.push({ provider: primaryProvider, model: selectedModel });
   }
 
   let lastError = '';
@@ -883,13 +901,31 @@ export async function interpretTelegramMessage(
       logger.info('AI attempt', { area: 'ai-interpreter', provider: provider.name, model, userId });
 
       const result = await runWithProvider(provider, model, message, userId);
+
+      // ✅ Success — record it in the circuit breaker
+      void recordSuccess(provider.name);
+
+      // If this was a fallback provider (not the user's primary), notify the dashboard
+      if (provider.name !== primaryProvider.name) {
+        void publishEvent(userId, 'ai:provider-switch', {
+          from: primaryProvider.name,
+          to: provider.name,
+          reason: 'primary_failed',
+        });
+      }
+
       return result;
     } catch (_error) {
       lastError = _error instanceof Error ? _error.message : String(_error);
-      logger.warn('AI provider failed, trying fallback', {
-        area: 'ai-interpreter',
+
+      // ❌ Failure — record it in the circuit breaker
+      const newStatus = await recordFailure(provider.name, lastError);
+
+      logger.warn('AI provider failed', {
+        area: 'circuit-breaker',
         failedProvider: provider.name,
         failedModel: model,
+        newStatus,
         error: lastError,
         userId,
       });
