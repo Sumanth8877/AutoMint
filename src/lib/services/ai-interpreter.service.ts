@@ -364,8 +364,8 @@ async function executeTool(
         .where(eq(mintTasks.id, failedTask.id))
         .returning({ id: mintTasks.id, contractAddress: mintTasks.contractAddress });
       // Queue it for execution
-      const { enqueueMintExecution } = await import('@/lib/services/qstash.service');
-      await enqueueMintExecution(retried.id);
+      const { scheduleMint } = await import('@/lib/services/qstash.service');
+      await scheduleMint({ taskId: failedTask.id, userId });
       return { success: true, retriedTaskId: retried.id, contractAddress: retried.contractAddress };
     }
 
@@ -404,25 +404,24 @@ async function executeTool(
 
     // ─── Analyzer ───
     case 'analyze_contract': {
-      const { analyzeUrl } = await import('@/lib/services/analyzer.service');
-      const { normalizeAnalyzerInput } = await import('@/lib/services/analyzer-resolver.service');
+      const { runAnalyzer } = await import('@/lib/services/analyzer.service');
       const rawInput = String(input.input);
-      const chain = String(input.chain ?? 'ethereum');
-      const normalized = normalizeAnalyzerInput(rawInput);
-      const result = await analyzeUrl(rawInput, userId);
+      const result = await runAnalyzer({ userId, input: rawInput });
       // Return a condensed summary for the AI
       return {
         success: true,
-        contractAddress: result.contractAddress,
-        chain: result.chain,
-        name: result.name,
-        mintStatus: result.mintStatus,
-        mintPrice: result.mintPrice,
-        totalSupply: result.totalSupply,
-        mintedCount: result.mintedCount,
-        mintFunction: result.mintFunction,
-        risk: result.risk,
-        performanceMetrics: result.performanceMetrics,
+        name: result.metadata?.name,
+        contractAddress: result.intent?.contractAddress,
+        chain: result.intent?.chain,
+        mintState: result.mintState,
+        mintFunction: result.mintFunction?.functionName,
+        totalSupply: result.metadata?.totalSupply,
+        riskScore: result.riskAnalysis?.riskScore,
+        riskLevel: result.riskAnalysis?.riskLevel,
+        riskFactors: result.riskAnalysis?.riskFactors,
+        socials: result.socials,
+        providerUsed: result.providerUsed,
+        analysisDurationMs: result.analysisDurationMs,
       };
     }
 
@@ -430,7 +429,7 @@ async function executeTool(
     case 'get_analytics': {
       const { getDb } = await import('@/lib/db');
       const { mintTasks, mintHistory } = await import('@/drizzle/schema');
-      const { eq, count, sql, and, gte } = await import('drizzle-orm');
+      const { eq, count, and, sql } = await import('drizzle-orm');
       // Total tasks
       const [totalResult] = await getDb().select({ count: count() }).from(mintTasks).where(eq(mintTasks.userId, userId));
       // Successful (confirmed)
@@ -484,7 +483,7 @@ async function executeTool(
       const { collections } = await import('@/drizzle/schema');
       const { eq, desc } = await import('drizzle-orm');
       const rows = await getDb()
-        .select({ id: collections.id, name: collections.name, contractAddress: collections.contractAddress, chain: collections.chain, imageUrl: collections.imageUrl, createdAt: collections.createdAt })
+        .select({ id: collections.id, name: collections.name, contractAddress: collections.contractAddress, chain: collections.chain, floorPrice: collections.floorPrice, createdAt: collections.createdAt })
         .from(collections)
         .where(eq(collections.userId, userId))
         .orderBy(desc(collections.createdAt))
@@ -507,50 +506,48 @@ async function executeTool(
     }
 
     case 'update_execution_settings': {
-      const { updateExecutionDefaults } = await import('@/lib/services/execution-settings.service');
+      const { updateExecutionSettings } = await import('@/lib/services/execution-settings.service');
       const updates: Record<string, unknown> = {};
       if (input.gasStrategy !== undefined) updates.gasStrategy = String(input.gasStrategy);
       if (input.riskAnalysisEnabled !== undefined) updates.riskAnalysisEnabled = Boolean(input.riskAnalysisEnabled);
       if (input.safeModeEnabled !== undefined) updates.safeModeEnabled = Boolean(input.safeModeEnabled);
       if (input.maxGasPriceGwei !== undefined) updates.maxGasPriceGwei = Number(input.maxGasPriceGwei);
       if (input.maxMintPriceEth !== undefined) updates.maxMintPriceEth = String(input.maxMintPriceEth);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result = await updateExecutionDefaults(userId, updates as any);
+      const result = await updateExecutionSettings(userId, updates);
       return { success: true, updated: result };
     }
 
     case 'get_notification_settings': {
-      const { getIntegrationSettings } = await import('@/lib/services/integration-settings.service');
-      const settings = await getIntegrationSettings(userId);
+      const { getAllSettings } = await import('@/lib/services/integration-settings.service');
+      const settings = await getAllSettings();
       return { ...settings };
     }
 
     case 'update_notification_settings': {
-      const { updateIntegrationSettings } = await import('@/lib/services/integration-settings.service');
-      const updates: Record<string, unknown> = {};
-      if (input.emailEnabled !== undefined) updates.emailEnabled = Boolean(input.emailEnabled);
-      if (input.telegramEnabled !== undefined) updates.telegramEnabled = Boolean(input.telegramEnabled);
-      if (input.notifyOnMintSuccess !== undefined) updates.notifyOnMintSuccess = Boolean(input.notifyOnMintSuccess);
-      if (input.notifyOnMintFailure !== undefined) updates.notifyOnMintFailure = Boolean(input.notifyOnMintFailure);
-      if (input.notifyOnWhaleActivity !== undefined) updates.notifyOnWhaleActivity = Boolean(input.notifyOnWhaleActivity);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result = await updateIntegrationSettings(userId, updates as any);
-      return { success: true, updated: result };
+      const { setSetting } = await import('@/lib/services/integration-settings.service');
+      const updated: Record<string, string> = {};
+      for (const [key, value] of Object.entries(input)) {
+        if (value !== undefined) {
+          const stringValue = String(value);
+          await setSetting(key as Parameters<typeof setSetting>[0], stringValue);
+          updated[key] = stringValue;
+        }
+      }
+      return { success: true, updated };
     }
 
     // ─── System ───
     case 'get_system_status': {
-      const { getSystemHealthReport } = await import('@/lib/services/system-status.service');
-      const report = await getSystemHealthReport();
+      const { getSystemStatusSnapshot } = await import('@/lib/services/system-status.service');
+      const report = await getSystemStatusSnapshot(userId);
       return { ...report };
     }
 
     // ─── Search ───
     case 'search_data': {
       const { getDb } = await import('@/lib/db');
-      const { mintTasks, collections, wallets, watchedWallets } = await import('@/drizzle/schema');
-      const { eq, or, ilike, desc } = await import('drizzle-orm');
-      const q = `%${String(input.query)}%`;
+      const { mintTasks, collections, wallets } = await import('@/drizzle/schema');
+      const { eq } = await import('drizzle-orm');
       // Search across multiple tables
       const [mintResults, collectionResults, walletResults] = await Promise.all([
         getDb().select({ id: mintTasks.id, type: mintTasks.status, contractAddress: mintTasks.contractAddress, createdAt: mintTasks.createdAt })
@@ -562,7 +559,7 @@ async function executeTool(
       ]);
       // Filter client-side by query (drizzle ilike needs text columns)
       const query = String(input.query).toLowerCase();
-      const filteredMints = mintResults.filter(m => m.contractAddress?.toLowerCase().includes(query) || m.status?.toLowerCase().includes(query));
+      const filteredMints = mintResults.filter(m => m.contractAddress?.toLowerCase().includes(query) || m.type?.toLowerCase().includes(query));
       const filteredCollections = collectionResults.filter(c => c.name?.toLowerCase().includes(query) || c.contractAddress?.toLowerCase().includes(query));
       const filteredWallets = walletResults.filter(w => w.address?.toLowerCase().includes(query) || w.chain?.toLowerCase().includes(query));
       return { mints: filteredMints, collections: filteredCollections, wallets: filteredWallets, totalResults: filteredMints.length + filteredCollections.length + filteredWallets.length };
