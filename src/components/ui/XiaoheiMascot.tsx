@@ -46,48 +46,93 @@ export type MascotPosition =
   | "right";
 
 /* ━━━ Eye tracking hook ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-function useEyeTracking(svgRef: React.RefObject<SVGSVGElement | null>, reduce: boolean | null) {
+/* Pauses all continuous work (mousemove tracking, infinite animations,
+ * blink intervals) for mascots scrolled out of view. With one mascot per
+ * primary button, a long list can mount dozens of these -- without this
+ * gate every one keeps ticking RAF loops and reflow-triggering listeners
+ * while the page scrolls, which is what caused the scroll jank. */
+function useInViewport(ref: React.RefObject<Element | null>) {
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === "undefined") {
+      setInView(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => setInView(entry.isIntersecting),
+      { rootMargin: "100px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref]);
+  return inView;
+}
+
+function useEyeTracking(
+  svgRef: React.RefObject<SVGSVGElement | null>,
+  reduce: boolean | null,
+  active: boolean
+) {
   const [pupilOffset, setPupilOffset] = useState({ x: 0, y: 0 });
+  const pointerRef = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
-    if (reduce) return;
+    if (reduce || !active) return;
+
+    // Only record the pointer position on mousemove (no layout read here) --
+    // avoids forcing a synchronous reflow on every single mouse event.
+    const onMove = (e: MouseEvent) => {
+      pointerRef.current = { x: e.clientX, y: e.clientY };
+    };
+    window.addEventListener("mousemove", onMove, { passive: true });
+
+    // A single rAF loop does at most one getBoundingClientRect read per
+    // frame, no matter how many mousemove events fired in that frame.
     let raf: number;
-    const track = (e: MouseEvent) => {
-      if (!svgRef.current) return;
-      const rect = svgRef.current.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top + rect.height / 2;
-      const dx = e.clientX - cx;
-      const dy = e.clientY - cy;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const max = 1.8;
-      const fx = dist > 0 ? (dx / dist) * Math.min(max, dist / 80) : 0;
-      const fy = dist > 0 ? (dy / dist) * Math.min(max, dist / 80) : 0;
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => setPupilOffset({ x: fx, y: fy }));
+    const tick = () => {
+      const el = svgRef.current;
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const dx = pointerRef.current.x - cx;
+        const dy = pointerRef.current.y - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const max = 1.8;
+        const fx = dist > 0 ? (dx / dist) * Math.min(max, dist / 80) : 0;
+        const fy = dist > 0 ? (dy / dist) * Math.min(max, dist / 80) : 0;
+        setPupilOffset((prev) =>
+          Math.abs(prev.x - fx) < 0.02 && Math.abs(prev.y - fy) < 0.02
+            ? prev
+            : { x: fx, y: fy }
+        );
+      }
+      raf = requestAnimationFrame(tick);
     };
-    window.addEventListener("mousemove", track);
+    raf = requestAnimationFrame(tick);
+
     return () => {
-      window.removeEventListener("mousemove", track);
+      window.removeEventListener("mousemove", onMove);
       cancelAnimationFrame(raf);
     };
-  }, [svgRef, reduce]);
+  }, [svgRef, reduce, active]);
 
   return pupilOffset;
 }
 
 /* ━━━ Blink hook ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-function useBlink(reduce: boolean | null) {
+function useBlink(reduce: boolean | null, active: boolean) {
   const [blinking, setBlinking] = useState(false);
   useEffect(() => {
-    if (reduce) return;
+    if (reduce || !active) return;
     const blink = () => {
       setBlinking(true);
       setTimeout(() => setBlinking(false), 150);
     };
     const interval = setInterval(blink, 3000 + Math.random() * 2000);
     return () => clearInterval(interval);
-  }, [reduce]);
+  }, [reduce, active]);
   return blinking;
 }
 
@@ -202,12 +247,12 @@ function SweatDrop({ visible, x = 32, y = 6 }: { visible: boolean; x?: number; y
 
 /* ━━━ Pose: Sitting ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 function SittingPose(props: PoseProps) {
-  const { hovered, pupilOffset, blinking, reduce } = props;
+  const { hovered, pupilOffset, blinking, reduce, active } = props;
   return (
     <>
       {/* Legs (swing independently) */}
       <motion.g
-        animate={reduce ? undefined : { rotate: hovered ? [0, 10, -10, 0] : [0, 6, 0] }}
+        animate={reduce || !active ? undefined : { rotate: hovered ? [0, 10, -10, 0] : [0, 6, 0] }}
         transition={hovered ? { duration: 0.6, repeat: Infinity } : { duration: 2, repeat: Infinity, ease: "easeInOut" }}
         style={{ originX: "14px", originY: "30px" }}
       >
@@ -215,7 +260,7 @@ function SittingPose(props: PoseProps) {
         <ellipse cx="13.5" cy="43" rx="3.8" ry="2" fill="#1a1a1a" />
       </motion.g>
       <motion.g
-        animate={reduce ? undefined : { rotate: hovered ? [0, -10, 10, 0] : [0, -6, 0] }}
+        animate={reduce || !active ? undefined : { rotate: hovered ? [0, -10, 10, 0] : [0, -6, 0] }}
         transition={hovered ? { duration: 0.6, repeat: Infinity, delay: 0.15 } : { duration: 2, repeat: Infinity, ease: "easeInOut", delay: 0.3 }}
         style={{ originX: "26px", originY: "30px" }}
       >
@@ -247,19 +292,19 @@ function SittingPose(props: PoseProps) {
 
 /* ━━━ Pose: Peeking ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 function PeekingPose(props: PoseProps) {
-  const { hovered, pupilOffset, blinking, reduce } = props;
+  const { hovered, pupilOffset, blinking, reduce, active } = props;
   return (
     <>
       <ellipse cx="18" cy="16" rx="14" ry="13" fill="#1a1a1a" />
       <Eye cx={12} cy={13} pupilOffset={pupilOffset} blinking={blinking} hovered={hovered} rx={2.2} ry={2.6} />
       <Eye cx={24} cy={13} pupilOffset={pupilOffset} blinking={blinking} hovered={hovered} rx={2.2} ry={2.6} />
       {/* Gripping hands */}
-      <motion.g animate={reduce ? undefined : hovered ? { y: -2 } : { y: [0, 1, 0] }}
+      <motion.g animate={reduce || !active ? undefined : hovered ? { y: -2 } : { y: [0, 1, 0] }}
         transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}>
         <ellipse cx="5" cy="27" rx="3.5" ry="2.5" fill="#1a1a1a" />
         <rect x="3.5" y="24" width="2.5" height="4" rx="1.2" fill="#1a1a1a" />
       </motion.g>
-      <motion.g animate={reduce ? undefined : hovered ? { y: -2 } : { y: [0, 1, 0] }}
+      <motion.g animate={reduce || !active ? undefined : hovered ? { y: -2 } : { y: [0, 1, 0] }}
         transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut", delay: 0.2 }}>
         <ellipse cx="31" cy="27" rx="3.5" ry="2.5" fill="#1a1a1a" />
         <rect x="30.5" y="24" width="2.5" height="4" rx="1.2" fill="#1a1a1a" />
@@ -271,17 +316,17 @@ function PeekingPose(props: PoseProps) {
 
 /* ━━━ Pose: Waving ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 function WavingPose(props: PoseProps) {
-  const { hovered, pupilOffset, blinking, reduce } = props;
+  const { hovered, pupilOffset, blinking, reduce, active } = props;
   return (
     <>
       {/* Legs */}
-      <motion.g animate={reduce ? undefined : { rotate: [0, 5, 0] }}
+      <motion.g animate={reduce || !active ? undefined : { rotate: [0, 5, 0] }}
         transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
         style={{ originX: "16px", originY: "32px" }}>
         <rect x="14" y="32" width="4" height="10" rx="2" fill="#1a1a1a" />
         <ellipse cx="16" cy="43" rx="3.5" ry="2" fill="#1a1a1a" />
       </motion.g>
-      <motion.g animate={reduce ? undefined : { rotate: [0, -5, 0] }}
+      <motion.g animate={reduce || !active ? undefined : { rotate: [0, -5, 0] }}
         transition={{ duration: 2, repeat: Infinity, ease: "easeInOut", delay: 0.3 }}
         style={{ originX: "28px", originY: "32px" }}>
         <rect x="26" y="32" width="4" height="10" rx="2" fill="#1a1a1a" />
@@ -293,7 +338,7 @@ function WavingPose(props: PoseProps) {
       <ellipse cx="6" cy="24" rx="3" ry="2" fill="#1a1a1a" />
       {/* Right arm (waving) */}
       <motion.g
-        animate={reduce ? undefined : hovered ? { rotate: [-15, 20, -15] } : { rotate: [-5, 15, -5] }}
+        animate={reduce || !active ? undefined : hovered ? { rotate: [-15, 20, -15] } : { rotate: [-5, 15, -5] }}
         transition={hovered ? { duration: 0.4, repeat: Infinity } : { duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
         style={{ originX: "36px", originY: "22px" }}>
         <rect x="35" y="6" width="3.5" height="14" rx="1.75" fill="#1a1a1a" />
@@ -311,7 +356,7 @@ function WavingPose(props: PoseProps) {
 
 /* ━━━ Pose: Sleeping ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 function SleepingPose(props: PoseProps) {
-  const { hovered, pupilOffset, blinking, reduce } = props;
+  const { hovered, pupilOffset, blinking, reduce, active } = props;
   return (
     <>
       <ellipse cx="22" cy="20" rx="17" ry="12" fill="#1a1a1a" />
@@ -334,7 +379,7 @@ function SleepingPose(props: PoseProps) {
       <circle cx="35" cy="22" r="2" fill="#555" opacity={0.15} />
       {/* Z's (disappear on hover) */}
       <AnimatePresence>
-        {!hovered && !reduce && (
+        {!hovered && !reduce && active && (
           <motion.g exit={{ opacity: 0 }}>
             <motion.text x="37" y="8" fill="#94A3B8" fontSize="9" fontWeight="bold" fontFamily="sans-serif"
               animate={{ opacity: [0, 1, 0], x: [0, 4, 8], y: [0, -6, -12] }}
@@ -353,17 +398,17 @@ function SleepingPose(props: PoseProps) {
 
 /* ━━━ Pose: Carrying ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 function CarryingPose(props: PoseProps) {
-  const { hovered, pupilOffset, blinking, reduce } = props;
+  const { hovered, pupilOffset, blinking, reduce, active } = props;
   return (
     <>
       {/* Legs */}
-      <motion.g animate={reduce ? undefined : { rotate: [0, 4, 0] }}
+      <motion.g animate={reduce || !active ? undefined : { rotate: [0, 4, 0] }}
         transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
         style={{ originX: "14px", originY: "30px" }}>
         <rect x="12" y="30" width="4" height="11" rx="2" fill="#1a1a1a" />
         <ellipse cx="14" cy="42" rx="3.5" ry="2" fill="#1a1a1a" />
       </motion.g>
-      <motion.g animate={reduce ? undefined : { rotate: [0, -4, 0] }}
+      <motion.g animate={reduce || !active ? undefined : { rotate: [0, -4, 0] }}
         transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut", delay: 0.25 }}
         style={{ originX: "26px", originY: "30px" }}>
         <rect x="24" y="30" width="4" height="11" rx="2" fill="#1a1a1a" />
@@ -375,7 +420,7 @@ function CarryingPose(props: PoseProps) {
       <rect x="6" y="8" width="3" height="9" rx="1.5" fill="#1a1a1a" />
       <rect x="31" y="8" width="3" height="9" rx="1.5" fill="#1a1a1a" />
       {/* Box on head */}
-      <motion.g animate={reduce ? undefined : { rotate: hovered ? [-2, 2, -2] : [0, 1, 0] }}
+      <motion.g animate={reduce || !active ? undefined : { rotate: hovered ? [-2, 2, -2] : [0, 1, 0] }}
         transition={{ duration: hovered ? 0.3 : 2, repeat: Infinity, ease: "easeInOut" }}
         style={{ originX: "20px", originY: "8px" }}>
         <rect x="7" y="-6" width="26" height="14" rx="2" fill="none" stroke="#1a1a1a" strokeWidth="1.5" strokeDasharray="3 2" />
@@ -399,6 +444,9 @@ interface PoseProps {
   pupilOffset: { x: number; y: number };
   blinking: boolean;
   reduce: boolean | null;
+  /** False when the mascot is scrolled out of view -- freezes continuous
+   * idle animations so off-screen mascots don't burn main-thread time. */
+  active: boolean;
 }
 
 /* ━━━ Position styles ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
@@ -434,9 +482,13 @@ export default function XiaoheiMascot({
   scale?: number;
 }) {
   const reduce = useReducedMotion();
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
-  const pupilOffset = useEyeTracking(svgRef, reduce);
-  const blinking = useBlink(reduce);
+  // Freezes all continuous work (mousemove tracking, infinite loops, blink
+  // timers) once this mascot scrolls out of view -- see useInViewport.
+  const active = useInViewport(wrapperRef);
+  const pupilOffset = useEyeTracking(svgRef, reduce, active);
+  const blinking = useBlink(reduce, active);
   const [showParticles, setShowParticles] = useState(false);
 
   useEffect(() => {
@@ -448,7 +500,7 @@ export default function XiaoheiMascot({
     }
   }, [pressed]);
 
-  const poseProps: PoseProps = { hovered, pupilOffset, blinking, reduce };
+  const poseProps: PoseProps = { hovered, pupilOffset, blinking, reduce, active };
 
   const PoseComponent = {
     sitting: SittingPose,
@@ -468,6 +520,7 @@ export default function XiaoheiMascot({
 
   return (
     <motion.div
+      ref={wrapperRef}
       style={{
         ...positionStyles[position],
         pointerEvents: "none",
@@ -477,7 +530,7 @@ export default function XiaoheiMascot({
       }}
       aria-hidden="true"
       animate={
-        reduce ? undefined
+        reduce || !active ? undefined
         : pressed ? { scale: 0.85, y: 4 }
         : hovered ? { y: -6 }
         : { y: [0, -2, 0] }
@@ -495,7 +548,7 @@ export default function XiaoheiMascot({
         xmlns="http://www.w3.org/2000/svg"
         style={{ width: 48, height: "auto", overflow: "visible" }}
         animate={
-          reduce ? undefined
+          reduce || !active ? undefined
           : pressed ? { scaleY: 0.8, scaleX: 1.15 }
           : { scaleY: 1, scaleX: 1 }
         }
