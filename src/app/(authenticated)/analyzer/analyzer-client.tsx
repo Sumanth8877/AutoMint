@@ -461,8 +461,6 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
           </form>
         </Card>
 
-        <RecentAnalyses onSelect={(input) => { setUrl(input); setError(null); }} />
-
         <Stagger className="grid gap-4 md:grid-cols-3" inView>
           <StaggerItem><MetricCard label="Opportunity Score" value={result ? String(scores.opportunity) : '--'} detail={result ? 'Collection opportunity' : 'Awaiting analysis'} icon={Sparkles} tone="accent" /></StaggerItem>
           <StaggerItem><MetricCard label="Risk Score" value={result ? String(scores.risk) : '--'} detail={result ? riskLabel(result.riskAnalysis.riskLevel) : 'Awaiting analysis'} icon={AlertTriangle} tone="warning" /></StaggerItem>
@@ -579,8 +577,9 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
         )}
       </div>
 
-      <div className="lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto">
+      <div className="space-y-6 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto">
         <LiveDebugConsole logs={logs} />
+        <RecentAnalyses onSelect={(input) => { setUrl(input); setError(null); }} />
       </div>
       </div>
     </div>
