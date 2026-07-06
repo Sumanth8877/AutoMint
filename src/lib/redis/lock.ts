@@ -31,7 +31,7 @@ export async function acquireCronLock(
       return token;
     }
     return null;
-  } catch (error) {
+  } catch (_error) {
     return null; // Fail open — allow execution rather than blocking
   }
 }
@@ -63,7 +63,7 @@ export async function releaseCronLock(lockName: string, token: string): Promise<
     const deleted = await client.eval(luaRelease, [key], [token]) as number;
     if (deleted === 0) {
     }
-  } catch (error) {
+  } catch (_error) {
     // Non-fatal — TTL expiry handles crash recovery
   }
 }

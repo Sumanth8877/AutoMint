@@ -72,7 +72,7 @@ export async function getCache<T>(key: string): Promise<T | null> {
     const raw = await client.get(key);
     if (raw === null || raw === undefined) return null;
     return raw as T;
-  } catch (error) {
+  } catch (_error) {
     return null;
   }
 }
@@ -85,7 +85,7 @@ export async function setCache<T>(key: string, value: T, ttl: number): Promise<b
     const client = getRedisClient();
     await client.set(key, value, { ex: ttl });
     return true;
-  } catch (error) {
+  } catch (_error) {
     return false;
   }
 }
@@ -98,7 +98,7 @@ export async function invalidateCache(key: string): Promise<boolean> {
     const client = getRedisClient();
     await client.del(key);
     return true;
-  } catch (error) {
+  } catch (_error) {
     return false;
   }
 }
@@ -165,7 +165,7 @@ export async function hasCache(key: string): Promise<boolean> {
     const client = getRedisClient();
     const exists = await client.exists(key);
     return exists === 1;
-  } catch (error) {
+  } catch (_error) {
     return false;
   }
 }

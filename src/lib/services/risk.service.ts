@@ -169,7 +169,7 @@ async function scoreContractAnalysis(params: {
           addRisk(reasons, 'GoPlus: Supply cap can be bypassed (oversupply minting)', 15);
         }
       }
-    } catch (error) {
+    } catch (_error) {
       // GoPlus check failed, but don't fail the entire risk analysis
     }
   }
@@ -447,7 +447,7 @@ export async function analyzeMintRisk(taskId: string): Promise<RiskAnalysis> {
   });
 
   return analysis;
-  }).catch(async (error) => {
+  })().catch(async (error: unknown) => {
     throw error;
   });
 }

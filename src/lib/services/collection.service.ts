@@ -87,7 +87,7 @@ export async function addCollection(userId: string, data: { name: string; contra
       .returning();
 
     if (syncedCollection) collection = syncedCollection;
-  } catch (error) {
+  } catch (_error) {
   }
 
   await logActivity(userId, 'collection_added', 'Collection added', {
@@ -148,7 +148,7 @@ export async function ensureCollectionForMint(
       void syncCollectionFloorPrice(inserted.id, inserted.contractAddress, inserted.chain, inserted.name).catch(() => {});
       return inserted;
     }
-  } catch (error) {
+  } catch (_error) {
   }
 
   // onConflictDoNothing returned nothing (race with a concurrent insert) or
@@ -234,7 +234,7 @@ export async function syncCollectionFloorPrice(
       .returning();
 
     return updated ?? null;
-  } catch (error) {
+  } catch (_error) {
     return null;
   }
 }

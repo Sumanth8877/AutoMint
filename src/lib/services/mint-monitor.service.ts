@@ -154,7 +154,7 @@ export async function watchForMintLive(
           reconnect: false,           // don't reconnect — we control the lifecycle
         }),
       });
-    } catch (err) {
+    } catch (_err) {
       clearTimeout(timer);
       resolve('error');
       return;
@@ -199,7 +199,7 @@ export async function watchForMintLive(
     // Strategy 2: Block-level state check
     try {
       unwatch = client.watchBlockNumber({
-        onBlockNumber: async (blockNumber: bigint) => {
+        onBlockNumber: async (_blockNumber: bigint) => {
           if (settled) return;
           try {
             const state = await getMintState(contractAddress, chain);
@@ -207,13 +207,13 @@ export async function watchForMintLive(
             if (state.status === 'ENDED') { settle('ended'); }
           } catch { /* ignore per-block errors */ }
         },
-        onError: (error: Error) => {
+        onError: (_error: Error) => {
           if (settled) return;
           if (!unwatchTransfer) settle('error');
         },
         emitOnBegin: true,
       } as Parameters<ReturnType<typeof createPublicClient>['watchBlockNumber']>[0]);
-    } catch (err) {
+    } catch (_err) {
       clearTimeout(timer);
       try { unwatchTransfer?.(); } catch {}
       resolve('error');

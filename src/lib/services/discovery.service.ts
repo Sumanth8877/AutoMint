@@ -130,5 +130,5 @@ export async function discoverCollection(openseaUrl: string): Promise<DiscoveryR
 
   await setCache(cacheKey, normalized, DISCOVERY_TTL_SECONDS);
   return normalized;
-  });
+  })();
 }

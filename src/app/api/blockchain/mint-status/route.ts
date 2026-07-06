@@ -100,7 +100,7 @@ export async function GET(req: Request) {
       maxSupply: resolvedMax?.toString() ?? null,
     });
 
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json({
       status: 'UNKNOWN' as MintStatus,
       reason: 'rpc_error',

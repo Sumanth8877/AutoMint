@@ -25,7 +25,7 @@ export async function GET(req: Request) {
       symbol: balance.symbol,
     });
     return NextResponse.json({ balance });
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json({ error: 'Failed to fetch balance' }, { status: 500 });
   }
 }

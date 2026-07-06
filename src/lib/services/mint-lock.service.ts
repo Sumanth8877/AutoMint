@@ -53,7 +53,7 @@ export async function acquireLock(mintId: string, ttlSeconds = LOCK_TTL_SECONDS)
     }
 
     return token;
-  } catch (error) {
+  } catch (_error) {
     return null;
   }
 }
@@ -84,7 +84,7 @@ export async function releaseLock(mintId: string, token?: string) {
     }
 
     return true;
-  } catch (error) {
+  } catch (_error) {
     return false;
   }
 }

@@ -75,7 +75,7 @@ export async function broadcastViaPrivateMempool(
       const txHash = await sendToPrivateEndpoint(endpoint, signedTx);
 
       return { txHash, endpoint, isPrivate: true };
-    } catch (error) {
+    } catch (_error) {
       // Try the next endpoint
     }
   }

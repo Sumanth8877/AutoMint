@@ -17,7 +17,7 @@ export async function GET(req: Request) {
   try {
     const metadata = await getCollectionMetadata(contractAddress, chain);
     return NextResponse.json({ metadata });
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json({ error: 'Failed to fetch collection metadata' }, { status: 500 });
   }
 }

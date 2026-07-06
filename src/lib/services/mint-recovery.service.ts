@@ -79,7 +79,7 @@ export async function recoverStuckMintTasks(): Promise<RecoveryResult> {
           await recoverPostBroadcastTask(task.id, task.txHash);
           result.postBroadcastRecovered++;
         }
-      } catch (err) {
+      } catch (_err) {
         result.errors++;
       }
     }
@@ -87,7 +87,7 @@ export async function recoverStuckMintTasks(): Promise<RecoveryResult> {
     const total = result.preBroadcastRecovered + result.postBroadcastRecovered;
     if (total > 0) {
     }
-  } catch (error) {
+  } catch (_error) {
   }
 
   return result;
@@ -125,7 +125,7 @@ async function recoverPreBroadcastTask(task: typeof mintTasks.$inferSelect): Pro
           return;
         }
       }
-    } catch (nonceErr) {
+    } catch (_nonceErr) {
       // Could not verify on-chain state — be conservative and skip re-execution
       // this cycle (a later cycle retries once RPC recovers). Avoids re-broadcast
       // when we cannot prove the wallet is idle.

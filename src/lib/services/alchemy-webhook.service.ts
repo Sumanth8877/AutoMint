@@ -77,7 +77,7 @@ export async function registerContractForMonitoring(
       contract: contractAddress,
       webhookId: cfg.webhookId,
     });
-  } catch (error) {
+  } catch (_error) {
     // Non-blocking — a failed registration just means we fall back to the
     // 30s polling loop. Don't let this break the mint task creation.
   }
@@ -136,7 +136,7 @@ export async function unregisterIfIdle(
       area: 'alchemy-webhook',
       contract: contractAddress,
     });
-  } catch (error) {
+  } catch (_error) {
     // Best-effort cleanup — never let this break the calling code
   }
 }

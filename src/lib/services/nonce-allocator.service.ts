@@ -146,7 +146,7 @@ async function releaseSlotLock(
 
   try {
     await (redis as unknown as { eval: (script: string, keys: string[], args: string[]) => Promise<unknown> }).eval(luaScript, [key], [token]);
-  } catch (error) {
+  } catch (_error) {
     // Non-fatal: the lock will expire on its own via TTL
   }
 }
@@ -281,7 +281,7 @@ export async function releaseInflightNonce(
   try {
     const redis = getRedisClient();
     await redis.zrem(NONCE_KEYS.inflight(address, chain), String(nonce));
-  } catch (error) {
+  } catch (_error) {
     // Non-fatal. The nonce will be treated as a gap candidate and investigated.
     // Do not rethrow — the transaction has already been broadcast.
   }
@@ -327,7 +327,7 @@ export async function scanAndFillGaps(
     for (const staleNonce of staleNonces) {
       await investigateStaleNonce(address, chain, staleNonce);
     }
-  } catch (error) {
+  } catch (_error) {
     // Scan failure is non-fatal. Gap detection will retry on next broadcast.
   }
 }
@@ -366,7 +366,7 @@ async function investigateStaleNonce(
         // also run on the next scheduled recovery check.
       }
     })();
-  } catch (error) {
+  } catch (_error) {
   }
 }
 

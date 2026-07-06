@@ -196,7 +196,7 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function logRpc(message: string, metadata: Record<string, unknown>) {
+function logRpc(_message: string, _metadata: Record<string, unknown>) {
 }
 
 async function trackRpcAnalytics(input: {

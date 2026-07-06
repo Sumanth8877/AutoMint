@@ -57,7 +57,7 @@ export async function getEip1559GasParams(
       maxFeePerGas: scale(baseFee, multiplier.base) + priorityFee,
       maxPriorityFeePerGas: priorityFee,
     };
-  } catch (error) {
+  } catch (_error) {
 
     const gasPrice = await client.getGasPrice();
     const priorityFee = scale(gasPrice / 10n, multiplier.priority);
@@ -129,7 +129,7 @@ export async function estimateGas(chain: string): Promise<GasEstimate> {
       estimatedFee: (gasPrice * GAS_LIMIT).toString(),
       symbol,
     };
-  } catch (error) {
+  } catch (_error) {
     return {
       gasPrice: '0',
       estimatedFee: '0',

@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import crypto from 'node:crypto';
 import { createPublicClient, http } from 'viem';
 import { sql } from 'drizzle-orm';
 import { Redis } from '@upstash/redis';

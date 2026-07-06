@@ -9,7 +9,7 @@ export async function getWalletBalance(address: string, chain: string) {
     const formatted = formatEther(balance);
     const symbol = CHAIN_NATIVE_TOKENS[chain as keyof typeof CHAIN_NATIVE_TOKENS] || 'ETH';
     return { balance: formatted, symbol };
-  } catch (error) {
+  } catch (_error) {
     return { balance: '0', symbol: CHAIN_NATIVE_TOKENS[chain as keyof typeof CHAIN_NATIVE_TOKENS] || 'ETH' };
   }
 }

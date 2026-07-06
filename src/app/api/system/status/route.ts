@@ -18,7 +18,7 @@ export async function GET() {
 
     const snapshot = await getSystemStatusSnapshot(authResult.userId);
     return NextResponse.json(snapshot);
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json({ error: 'Failed to load system status' }, { status: 500 });
   }
 }

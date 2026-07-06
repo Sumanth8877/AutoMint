@@ -129,7 +129,7 @@ export async function trackAnalyticsEvent(input: AnalyticsEventInput) {
       durationMs: input.durationMs ?? null,
       metadata: input.metadata,
     });
-  } catch (error) {
+  } catch (_error) {
   }
 }
 

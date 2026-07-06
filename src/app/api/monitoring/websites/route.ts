@@ -22,7 +22,7 @@ export async function GET() {
       .orderBy(monitoredWebsites.createdAt);
 
     return NextResponse.json(websites);
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json({ error: 'Failed to fetch websites' }, { status: 500 });
   }
 }
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     }).returning();
 
     return NextResponse.json(website);
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json({ error: 'Failed to create website' }, { status: 500 });
   }
 }

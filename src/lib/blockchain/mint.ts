@@ -201,7 +201,7 @@ export async function resolveGasParams(
     // Legacy chain (Polygon PoS or any non-EIP-1559 chain)
     const gasPrice = await client.getGasPrice();
     return { gasPrice };
-  } catch (error) {
+  } catch (_error) {
     // Fallback: return empty object — viem will use its own gas estimation
     return {};
   }
@@ -671,7 +671,7 @@ export async function executeMint(
     if (hash && options.onBroadcast) {
       try {
         await options.onBroadcast(hash);
-      } catch (persistError) {
+      } catch (_persistError) {
       }
     }
 
@@ -708,7 +708,7 @@ export async function executeMint(
         gasUsed: receipt.gasUsed?.toString(),
         blockNumber: receipt.blockNumber,
       };
-    } catch (receiptError) {
+    } catch (_receiptError) {
       // waitForTransactionReceipt timed out or failed — but the transaction IS
       // on-chain. Return txHash so the caller transitions to 'unconfirmed'
       // and polls for the receipt without broadcasting a second transaction.

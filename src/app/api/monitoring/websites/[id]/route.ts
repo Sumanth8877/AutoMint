@@ -23,7 +23,7 @@ export async function DELETE(
     if (!deleted) return NextResponse.json({ error: 'Website not found' }, { status: 404 });
 
     return NextResponse.json({ success: true, id: websiteId });
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json({ error: 'Failed to delete website' }, { status: 500 });
   }
 }

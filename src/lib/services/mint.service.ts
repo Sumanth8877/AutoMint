@@ -333,7 +333,7 @@ export async function executeMintTask(
         resolvedCollectionId = ensured.id;
         await getDb().update(mintTasks).set({ collectionId: ensured.id, updatedAt: now }).where(eq(mintTasks.id, taskId));
       }
-    } catch (error) {
+    } catch (_error) {
     }
   }
 
@@ -399,7 +399,7 @@ export async function executeMintTask(
     await releaseLock(taskId, lockToken);
   }
   return { success: false, error: 'Mint execution did not complete' };
-  }).catch(async (error) => {
+  })().catch(async (error: unknown) => {
     if (userId) {
       await sendSystemErrorEmail(userId, {
         taskId,

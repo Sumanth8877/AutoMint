@@ -9,7 +9,7 @@ export async function GET() {
   try {
     const dashboard = await getAnalyticsDashboard(auth.userId);
     return NextResponse.json({ dashboard });
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json({ error: 'Failed to load analytics' }, { status: 500 });
   }
 }

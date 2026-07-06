@@ -131,7 +131,7 @@ async function getFailedMintTasks(userId: string, limit = 20): Promise<FailedJob
       });
     }
     return jobs;
-  } catch (error) {
+  } catch (_error) {
     return [];
   }
 }
@@ -162,7 +162,7 @@ const UNKNOWN_RECOVERY_LOOP = { status: 'unknown' as const, lastHeartbeat: null,
 
 /** Runs a settled promise, logging + falling back to `fallback` on rejection
  * instead of letting one bad check take down the whole snapshot. */
-async function settleOrFallback<T>(promise: Promise<T>, fallback: T, checkName: string): Promise<T> {
+async function settleOrFallback<T>(promise: Promise<T>, fallback: T, _checkName: string): Promise<T> {
   const result = await Promise.allSettled([promise]);
   const [outcome] = result;
   if (outcome.status === 'fulfilled') return outcome.value;

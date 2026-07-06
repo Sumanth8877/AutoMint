@@ -215,7 +215,7 @@ async function sendNotificationEmail(userId: string, type: EmailType, heading: s
     const html = renderEmailTemplate(type, heading, preview, details);
 
     return await sendEmail(allowed.user.email, `AutoMint: ${heading}`, html);
-  } catch (error) {
+  } catch (_error) {
     return false;
   }
 }

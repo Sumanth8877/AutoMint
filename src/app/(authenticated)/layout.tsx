@@ -28,7 +28,7 @@ export default async function AuthenticatedLayout({
   // opportunistically, but never let it take down every route in the app.
   try {
     await syncUser();
-  } catch (e) {
+  } catch (_e) {
   }
 
   return (

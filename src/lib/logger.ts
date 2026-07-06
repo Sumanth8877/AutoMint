@@ -11,14 +11,6 @@ type LogEntry = {
   timestamp: string;
 };
 
-// ── Log level map ────────────────────────────────────────────────────────────
-const LOG_LEVEL_MAP: Record<LogLevel, 'debug' | 'info' | 'warning' | 'error'> = {
-  debug: 'debug',
-  info: 'info',
-  warn: 'warning',
-  error: 'error',
-};
-
 // ── Core emit ─────────────────────────────────────────────────────────────────
 //
 // Each log line does two things:

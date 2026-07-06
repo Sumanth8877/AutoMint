@@ -75,7 +75,7 @@ async function getDashboardData(userId: string) {
       collectionCount: userCollections.length, recentHistory,
       chartData, activities, portfolioEth, portfolioUsdValue, ethUsdPrice,
     };
-  } catch (e) {
+  } catch (_e) {
     return {
       tasks: [], completedTasks: 0, pendingTasks: 0, failedTasks: 0,
       walletCount: 0, fundedWalletCount: 0, collectionCount: 0, recentHistory: [],

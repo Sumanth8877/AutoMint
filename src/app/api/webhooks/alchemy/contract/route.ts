@@ -137,12 +137,12 @@ export async function POST(request: Request) {
           taskId: task.id,
           contractAddress: task.contractAddress,
         });
-      } catch (err) {
+      } catch (_err) {
       }
     }
 
     return NextResponse.json({ ok: true, handled: triggered, contracts: [...mintContracts] });
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 });
   }
 }

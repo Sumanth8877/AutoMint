@@ -921,7 +921,7 @@ export async function executeScheduledRiskRecheck(taskId: string) {
 
 const RECEIPT_RECHECK_DELAY_MS = 30_000;     // 30 s between receipt checks
 
-export async function scheduleReceiptRecheck(taskId: string, txHash: string) {
+export async function scheduleReceiptRecheck(taskId: string, _txHash: string) {
   const recheckAt = new Date(Date.now() + RECEIPT_RECHECK_DELAY_MS);
   await publishQStashMessage(taskId, recheckAt, 'receipt_check');
 }
@@ -992,7 +992,7 @@ export async function executeReceiptRecheck(taskId: string) {
 
       return { success: false, dropped: true, txHash: hash };
     }
-  } catch (dropCheckError) {
+  } catch (_dropCheckError) {
     // Drop-check failed — proceed with waitForTransactionReceipt anyway.
     // Non-fatal: if the tx is truly dropped, future rechecks will catch it.
   }
@@ -1080,7 +1080,7 @@ export async function executeReceiptRecheck(taskId: string) {
               gasLimit: txForBump.gas,
               userId: task.userId,
             });
-          } catch (bumpError) {
+          } catch (_bumpError) {
             // Best-effort — never block the recheck on a failed bump
           }
         })();
@@ -1155,7 +1155,7 @@ export async function executeReceiptRecheck(taskId: string) {
 export async function scheduleRecoveryCheck(): Promise<void> {
   try {
     await publishQStashMessage('recovery', new Date(), 'recovery');
-  } catch (error) {
+  } catch (_error) {
     // Log but don't throw — recovery scheduling failure should not break the calling path
   }
 }

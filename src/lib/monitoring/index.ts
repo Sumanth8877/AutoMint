@@ -24,7 +24,7 @@ export async function logActivity(userId: string, type: ActivityType, title: str
       title,
       metadata: metadata || {},
     });
-  } catch (error) {
+  } catch (_error) {
   }
 }
 

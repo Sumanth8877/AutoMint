@@ -65,7 +65,7 @@ export async function getCollectionMetadata(contractAddress: string, chain: stri
         };
       }
     }
-  } catch (error) {
+  } catch (_error) {
     throw new Error('Failed to fetch collection metadata');
   }
 }

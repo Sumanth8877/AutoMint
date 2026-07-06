@@ -222,7 +222,7 @@ export async function watchWallet(userId: string, data: { walletAddress: string;
       const registration = await updateAlchemyWebhookAddresses({ chain, add: [walletAddress] });
       if (!registration.synced) {
       }
-    } catch (error) {
+    } catch (_error) {
     }
   }
   await logActivity(userId, 'wallet_added', 'Wallet tracker enabled', { walletAddress, chain });
@@ -261,7 +261,7 @@ export async function unwatchWallet(userId: string, data: { walletAddress: strin
     // Alchemy webhook prevent the user from un-tracking a wallet.
     try {
       await updateAlchemyWebhookAddresses({ chain, remove: [walletAddress] });
-    } catch (error) {
+    } catch (_error) {
     }
   }
 
@@ -322,7 +322,7 @@ export async function deleteWatchedWallet(userId: string, id: string) {
       // stale address lingers on the webhook until the next successful sync.
       try {
         await updateAlchemyWebhookAddresses({ chain: wallet.chain, remove: [wallet.walletAddress] });
-      } catch (error) {
+      } catch (_error) {
       }
     }
   }
@@ -430,7 +430,7 @@ export async function handleAlchemyWalletWebhook(payload: AlchemyWebhookPayload)
             tokenId: event.tokenId,
             transactionHash: event.transactionHash,
           });
-          } catch (error) {
+          } catch (_error) {
           }
         }
       }

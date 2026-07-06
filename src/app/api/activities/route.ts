@@ -19,7 +19,7 @@ export async function GET() {
       .limit(50);
 
     return NextResponse.json({ activities: result });
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json({ error: 'Failed to fetch activities' }, { status: 500 });
   }
 }

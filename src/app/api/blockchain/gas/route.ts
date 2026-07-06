@@ -16,7 +16,7 @@ export async function GET(req: Request) {
   try {
     const gas = await estimateGas(chain);
     return NextResponse.json({ gas });
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json({ error: 'Failed to estimate gas' }, { status: 500 });
   }
 }
