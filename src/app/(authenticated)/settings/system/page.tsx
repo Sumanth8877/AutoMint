@@ -3,8 +3,8 @@
  */
 import { redirect } from 'next/navigation';
 import { auth } from '@clerk/nextjs/server';
-import { DependencyUpdateCenter } from '@/components/settings/DependencyUpdateCenter';
 import { MigrationBanner } from '@/components/settings/MigrationBanner';
+import { SystemStatusPanel } from '@/components/settings/SystemStatusPanel';
 
 export const revalidate = 0;
 
@@ -17,9 +17,11 @@ export default async function SystemMaintenancePage() {
       <div>
         <h2 className="text-xl font-bold tracking-tight text-text">System</h2>
         <p className="mt-1 max-w-2xl text-sm text-muted">
-          Dependency audits and package updates for AutoMint.
+          Database migrations and system status for AutoMint.
         </p>
       </div>
+
+      <SystemStatusPanel />
 
       <MigrationBanner />
       <MigrationBanner
@@ -27,10 +29,6 @@ export default async function SystemMaintenancePage() {
         tableLabel="collections"
         affectedFeature="Collections floor-price tracking"
       />
-
-      <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
-        <DependencyUpdateCenter />
-      </div>
     </div>
   );
 }

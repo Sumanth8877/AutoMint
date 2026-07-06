@@ -260,6 +260,12 @@ export const mintTasks = pgTable('mint_tasks', {
   riskReasons: json('risk_reasons').$type<string[]>(),
   gasStrategy: text('gas_strategy').default('STANDARD').notNull().$type<'STANDARD' | 'FAST' | 'AGGRESSIVE'>(),
   maxRetries: integer('max_retries').default(25).notNull(),
+  // Dedicated counter for retrying a failed on-chain execution attempt
+  // (RPC blip, nonce race, transient gas estimation error, etc.) — separate
+  // from `maxRetries`, which is reused as the "reschedule while waiting for
+  // mint to go live" counter. Fixed at 5 attempts, 2s apart (see
+  // EXECUTION_RETRY_DELAY_MS / EXECUTION_MAX_RETRIES in qstash.service.ts).
+  executionRetriesRemaining: integer('execution_retries_remaining').default(5).notNull(),
   receiptRecheckAttempts: integer('receipt_recheck_attempts').default(10).notNull(),
   riskThreshold: integer('risk_threshold').default(75).notNull(),
   originalRiskScore: integer('original_risk_score'),
