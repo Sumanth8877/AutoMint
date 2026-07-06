@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { CalendarClock, Copy, Eye, Gauge, Pencil, ReceiptText, RefreshCcw, Search, Trash2 } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
@@ -246,7 +247,11 @@ function DetailGrid({ rows }: { rows: Array<[string, string]> }) {
 
 export default function HistoryClient() {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<TabKey>('mints');
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState<TabKey>(
+    initialTab === 'mints' || initialTab === 'scheduled' || initialTab === 'analyzer' ? initialTab : 'mints'
+  );
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [analyzerFilter, setAnalyzerFilter] = useState('');

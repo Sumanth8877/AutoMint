@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Gauge, Save, ShieldAlert, ShieldCheck, Sparkles, TerminalSquare, Zap } from 'lucide-react';
+import Link from 'next/link';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, CheckCircle2, Clock, Gauge, History, Save, ShieldAlert, ShieldCheck, Sparkles, TerminalSquare, Zap } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -184,7 +186,7 @@ function LiveDebugConsole({ logs }: { logs: AnalyzerDebugLog[] }) {
       </div>
       <div
         ref={scrollRef}
-        className="max-h-80 overflow-y-auto bg-slate-950 p-4 font-mono text-xs leading-6 text-slate-400"
+        className="h-[30rem] overflow-y-auto bg-slate-950 p-4 font-mono text-xs leading-6 text-slate-400"
         aria-live="polite"
       >
         {logs.length > 0 ? (
@@ -232,7 +234,108 @@ function readSseEvent(raw: string) {
   return { event, data: JSON.parse(dataLines.join('\n')) as unknown };
 }
 
+type BadgeVariant = 'default' | 'success' | 'warning' | 'danger' | 'info';
+
+type AnalyzerHistoryItem = {
+  id: string;
+  input: string;
+  sourceUrl: string | null;
+  collectionName: string | null;
+  contractAddress: string | null;
+  chain: string | null;
+  riskScore: number | null;
+  riskLevel: string | null;
+  createdAt: string;
+};
+
+function riskBadgeVariant(level?: string | null): BadgeVariant {
+  if (level === 'Low') return 'success';
+  if (level === 'Medium') return 'info';
+  if (level === 'High') return 'warning';
+  if (level === 'Critical') return 'danger';
+  return 'default';
+}
+
+function formatRelativeTime(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const minutes = Math.round(diffMs / 60_000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
+/** Quick-access list of this user's last few analyses, pulled from the same
+ * /api/analyzer/history endpoint that powers the full History > Analyzer
+ * tab. Clicking an entry re-populates the Mint URL field so you can rerun
+ * or pick back up where you left off without retyping the URL. */
+function RecentAnalyses({ onSelect }: { onSelect: (input: string) => void }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['analyzer-history-recent'],
+    queryFn: async (): Promise<AnalyzerHistoryItem[]> => {
+      const res = await fetch('/api/analyzer/history?limit=5');
+      if (!res.ok) throw new Error('Failed to load analyzer history');
+      const body = (await res.json()) as { items: AnalyzerHistoryItem[] };
+      return body.items;
+    },
+    staleTime: 15_000,
+  });
+
+  const items = data ?? [];
+
+  return (
+    <Card className="p-5">
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <History className="h-4 w-4 text-primary" aria-hidden="true" />
+          <h2 className="font-semibold text-text">Recent Analyses</h2>
+        </div>
+        <Link href="/history?tab=analyzer" className="flex items-center gap-1.5 text-xs text-primary hover:text-primary-hover transition-colors">
+          View all
+        </Link>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
+        </div>
+      ) : items.length === 0 ? (
+        <p className="text-sm text-muted">No analyses yet — run one above and it will show up here.</p>
+      ) : (
+        <div className="space-y-2">
+          {items.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onSelect(item.sourceUrl || item.contractAddress || item.input)}
+              className="flex w-full items-center justify-between gap-3 rounded-lg border border-border bg-surface-hover px-3 py-2.5 text-left transition-colors hover:border-border-strong hover:bg-surface"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-text">
+                  {item.collectionName || (item.contractAddress ? `${item.contractAddress.slice(0, 6)}\u2026${item.contractAddress.slice(-4)}` : item.input)}
+                </p>
+                <p className="mt-0.5 flex items-center gap-1 text-xs text-muted">
+                  <Clock className="h-3 w-3" aria-hidden="true" />
+                  {formatRelativeTime(item.createdAt)}
+                </p>
+              </div>
+              {item.riskLevel && (
+                <Badge variant={riskBadgeVariant(item.riskLevel)} className="shrink-0">
+                  {item.riskLevel}
+                </Badge>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export default function AnalyzerClient({ initialInput = '' }: { initialInput?: string }) {
+  const queryClient = useQueryClient();
   const [url, setUrl] = useState(initialInput);
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<AnalyzerResponse | null>(null);
@@ -289,6 +392,8 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
             setResult(analyzerResult);
             setLogs(analyzerResult.logs ?? []);
             setSaved(true);
+            // Refresh the Recent Analyses list so this run shows up immediately.
+            void queryClient.invalidateQueries({ queryKey: ['analyzer-history-recent'] });
           }
           if (event === 'error') {
             const payload = data as { error?: string; logs?: AnalyzerDebugLog[] };
@@ -355,6 +460,8 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
             ) : null}
           </form>
         </Card>
+
+        <RecentAnalyses onSelect={(input) => { setUrl(input); setError(null); }} />
 
         <Stagger className="grid gap-4 md:grid-cols-3" inView>
           <StaggerItem><MetricCard label="Opportunity Score" value={result ? String(scores.opportunity) : '--'} detail={result ? 'Collection opportunity' : 'Awaiting analysis'} icon={Sparkles} tone="accent" /></StaggerItem>
