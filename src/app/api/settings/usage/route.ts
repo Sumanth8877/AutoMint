@@ -39,7 +39,7 @@ export async function GET() {
     { name: 'Chainstack',        configured: check('CHAINSTACK_API_KEY') },
     { name: 'Etherscan',         configured: check('ETHERSCAN_API_KEY') },
     // AI / Scraping
-    { name: 'NaraRouter AI',     configured: check('NARA_API_KEY') },
+    { name: 'AI Provider',       configured: check('GEMINI_API_KEY') || check('NARA_API_KEY') },
     { name: 'Firecrawl',         configured: check('FIRECRAWL_API_KEY') },
     // NFT Data
     { name: 'OpenSea',           configured: check('OPENSEA_API_KEY') },

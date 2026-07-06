@@ -148,10 +148,14 @@ export function validateEnv(): void {
         name: 'TELEGRAM_WEBHOOK_SECRET',
         reason: 'TELEGRAM_ENABLED=true but webhook secret missing — all webhook requests rejected',
       },
-      {
-        name: 'NARA_API_KEY',
-        reason: 'TELEGRAM_ENABLED=true but Nara Router API key missing — Telegram AI interpreter commands will fail',
-      },
+      // AI interpreter needs at least one of GEMINI_API_KEY or NARA_API_KEY.
+      // We check both below instead of a single name.
+      ...(!process.env.GEMINI_API_KEY?.trim() && !process.env.NARA_API_KEY?.trim()
+        ? [{
+            name: 'GEMINI_API_KEY / NARA_API_KEY',
+            reason: 'TELEGRAM_ENABLED=true but no AI API key found — set GEMINI_API_KEY or NARA_API_KEY for the AI interpreter',
+          }]
+        : []),
     );
   }
 

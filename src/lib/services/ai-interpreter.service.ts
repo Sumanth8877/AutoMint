@@ -5,50 +5,128 @@ import type { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/reso
 import { logger } from '@/lib/logger';
 import { getRedisClient } from '@/lib/redis';
 
-// ── Model management ────────────────────────────────────────────────────────
+// ── Provider config ─────────────────────────────────────────────────────────
+// Supports two AI providers via env vars:
+//   AI_PROVIDER=gemini  → uses Google's OpenAI-compatible endpoint (default)
+//   AI_PROVIDER=nara    → uses Nara Router
+// Falls back to whichever API key is set if AI_PROVIDER is not specified.
 
-const DEFAULT_MODEL = 'mistral-large';
-
-export type AIModelId =
-  | 'mistral-large'
-  | 'mistral-medium-3-5'
-  | 'tencent-hy3';
-
-export type AIModel = {
-  id: AIModelId;
-  label: string;
-  description: string;
+type ProviderConfig = {
+  name: string;
+  baseURL: string;
+  apiKey: string;
+  defaultModel: string;
+  models: AIModel[];
 };
 
-export const AVAILABLE_MODELS: AIModel[] = [
+const GEMINI_MODELS: AIModel[] = [
+  { id: 'gemini-3.5-flash',      label: 'Gemini 3.5 Flash ⭐',     description: 'Most intelligent — frontier agentic performance' },
+  { id: 'gemini-3.1-flash',      label: 'Gemini 3.1 Flash',        description: 'Cost-efficient — optimized for high-volume tasks' },
+  { id: 'gemini-2.5-flash',      label: 'Gemini 2.5 Flash',        description: 'Fast & reliable — solid all-rounder' },
+  { id: 'gemini-2.5-pro',        label: 'Gemini 2.5 Pro',          description: 'Deep reasoning — best for complex analysis' },
+];
+
+const NARA_MODELS: AIModel[] = [
   { id: 'mistral-large',      label: 'Mistral Large ⭐',      description: 'Recommended — smart, supports tools' },
   { id: 'mistral-medium-3-5', label: 'Mistral Medium 3.5',    description: 'Balanced — good speed & quality' },
   { id: 'tencent-hy3',        label: 'Tencent Hy3',           description: 'Alternative — fast responses' },
 ];
 
-// Keep old type alias for backward compatibility with telegram.service.ts
+function resolveProvider(): ProviderConfig | null {
+  const explicit = process.env.AI_PROVIDER?.toLowerCase();
+  const geminiKey = process.env.GEMINI_API_KEY;
+  const naraKey = process.env.NARA_API_KEY;
+
+  if (explicit === 'gemini' || (!explicit && geminiKey)) {
+    if (!geminiKey) return null;
+    return {
+      name: 'Gemini',
+      baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+      apiKey: geminiKey,
+      defaultModel: 'gemini-3.5-flash',
+      models: GEMINI_MODELS,
+    };
+  }
+
+  if (explicit === 'nara' || (!explicit && naraKey)) {
+    if (!naraKey) return null;
+    return {
+      name: 'NaraRouter',
+      baseURL: 'https://router.bynara.id/v1',
+      apiKey: naraKey,
+      defaultModel: 'mistral-large',
+      models: NARA_MODELS,
+    };
+  }
+
+  return null;
+}
+
+// ── Model management ────────────────────────────────────────────────────────
+
+export type AIModelId = string;
+
+export type AIModel = {
+  id: string;
+  label: string;
+  description: string;
+};
+
+// Dynamic — depends on which provider is active.
+// Exported as a getter so telegram.service.ts always sees current models.
+export function getAvailableModels(): AIModel[] {
+  const provider = resolveProvider();
+  return provider?.models ?? [];
+}
+
+// Backward-compatible: telegram.service.ts imports AVAILABLE_MODELS and calls .map()/.find().
+// We keep it as a const but resolve it lazily on first access via a module-level getter.
+let _modelsCache: AIModel[] | null = null;
+let _modelsCacheProvider: string | null = null;
+export function getModels(): AIModel[] {
+  const provider = resolveProvider();
+  const key = provider?.name ?? '';
+  if (_modelsCache && _modelsCacheProvider === key) return _modelsCache;
+  _modelsCache = provider?.models ?? [];
+  _modelsCacheProvider = key;
+  return _modelsCache;
+}
+
+// For call sites that do `AVAILABLE_MODELS.map(...)` — they destructure and call immediately,
+// so this getter is evaluated at call time (not at import time). Works in Next.js server context.
+export const AVAILABLE_MODELS = {
+  get length() { return getModels().length; },
+  find(fn: (m: AIModel) => boolean) { return getModels().find(fn); },
+  map<T>(fn: (m: AIModel) => T) { return getModels().map(fn); },
+  some(fn: (m: AIModel) => boolean) { return getModels().some(fn); },
+  filter(fn: (m: AIModel) => boolean) { return getModels().filter(fn); },
+  forEach(fn: (m: AIModel) => void) { getModels().forEach(fn); },
+  [Symbol.iterator]() { return getModels()[Symbol.iterator](); },
+};
+
+// Keep old type aliases for backward compatibility with telegram.service.ts
 export type GeminiModelId = AIModelId;
 export type GeminiModel = AIModel;
 
 function modelKey(userId: string) { return `ai:model:${userId}`; }
 
-export async function getUserModel(userId: string): Promise<AIModelId> {
+export async function getUserModel(userId: string): Promise<string> {
+  const provider = resolveProvider();
+  const models = provider?.models ?? [];
   try {
     const stored = await getRedisClient().get<string>(modelKey(userId));
-    if (stored && AVAILABLE_MODELS.some(m => m.id === stored)) return stored as AIModelId;
+    if (stored && models.some(m => m.id === stored)) return stored;
   } catch { /* Redis unavailable */ }
-  return DEFAULT_MODEL;
+  return provider?.defaultModel ?? 'mistral-large';
 }
 
-export async function setUserModel(userId: string, modelId: AIModelId): Promise<void> {
+export async function setUserModel(userId: string, modelId: string): Promise<void> {
   await getRedisClient().set(modelKey(userId), modelId, { ex: 60 * 60 * 24 * 30 });
 }
 
 // ── Config ─────────────────────────────────────────────────────────────────
 
 const MAX_TOOL_ROUNDS = 6;
-
-const NARA_BASE_URL = 'https://router.bynara.id/v1';
 
 // ── System Prompt ────────────────────────────────────────────────────────────
 
@@ -519,17 +597,17 @@ export async function interpretTelegramMessage(
   message: string,
   userId: string,
 ): Promise<string> {
-  const apiKey = process.env.NARA_API_KEY;
-  if (!apiKey) {
-    return 'AI features are not configured. Set NARA_API_KEY in your environment.\n\nUse slash commands instead:\n/mint <url> • /watch <address> • /status • /cancel • /settings';
+  const provider = resolveProvider();
+  if (!provider) {
+    return 'AI features are not configured. Set GEMINI_API_KEY or NARA_API_KEY in your environment.\n\nUse slash commands instead:\n/mint <url> • /watch <address> • /status • /cancel • /settings';
   }
 
   const selectedModel = await getUserModel(userId);
 
   try {
     const client = new OpenAI({
-      baseURL: NARA_BASE_URL,
-      apiKey,
+      baseURL: provider.baseURL,
+      apiKey: provider.apiKey,
     });
 
     const messages: ChatCompletionMessageParam[] = [
