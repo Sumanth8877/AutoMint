@@ -3,8 +3,8 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import {
   Activity, ArrowRight, CheckCircle2,
-  Flame, Gauge, Radio, ShieldCheck, Target,
-  Wallet, Zap, Eye, Cpu,
+  Flame, Radio, ShieldCheck, Target,
+  Wallet, Zap, Cpu,
 } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Card from '@/components/ui/Card';
@@ -228,33 +228,6 @@ export default async function DashboardPage() {
       </Card>
       </Reveal>
 
-      {/* Quick actions */}
-      <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" inView>
-        {[
-          { href: '/analyzer',      icon: Gauge,     label: 'Analyze Mint',    desc: 'AI contract scan',      tone: 'text-primary',  bg: 'bg-indigo-50',  border: 'border-primary/15' },
-          { href: '/collections',   icon: Target,    label: 'Collections',     desc: 'Manage watchlist',      tone: 'text-primary',  bg: 'bg-indigo-50',  border: 'border-primary/15' },
-          { href: '/wallets',       icon: Wallet,    label: 'Wallets',          desc: 'Fund & configure',      tone: 'text-success',  bg: 'bg-emerald-50', border: 'border-success/15' },
-          { href: '/whale-tracker', icon: Eye,       label: 'Whale Tracker',   desc: 'Follow smart money',    tone: 'text-gold',     bg: 'bg-amber-50',   border: 'border-gold/15' },
-        ].map(a => (
-          <StaggerItem key={a.href}>
-          <Link
-            href={a.href}
-            className="group flex h-full items-center gap-4 rounded-xl border border-border bg-surface p-4 hover:border-border-strong hover:shadow-md transition-all duration-200"
-          >
-            <div
-              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border ${a.bg} ${a.border} transition-transform duration-200 group-hover:scale-105`}
-            >
-              <a.icon className={`h-4 w-4 ${a.tone}`} />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-text">{a.label}</p>
-              <p className="text-xs text-muted">{a.desc}</p>
-            </div>
-            <ArrowRight className="ml-auto h-3.5 w-3.5 text-muted opacity-0 group-hover:opacity-100 transition-opacity" />
-          </Link>
-          </StaggerItem>
-        ))}
-      </Stagger>
     </div>
   );
 }
