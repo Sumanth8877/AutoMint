@@ -628,7 +628,7 @@ async function executeTool(
     // ─── Monitoring ───
     case 'get_monitoring_websites': {
       const { getDb } = await import('@/lib/db');
-      const { monitoredWebsites } = await import('@/drizzle/schema');
+      const { monitoredWebsites } = await import('@/drizzle/schema/monitoring');
       const { eq } = await import('drizzle-orm');
       const rows = await getDb().select().from(monitoredWebsites).where(eq(monitoredWebsites.userId, userId));
       return { websites: rows, count: rows.length };
@@ -636,14 +636,14 @@ async function executeTool(
 
     case 'add_monitoring_website': {
       const { getDb } = await import('@/lib/db');
-      const { monitoredWebsites } = await import('@/drizzle/schema');
-      const [created] = await getDb().insert(monitoredWebsites).values({ userId, url: String(input.url), name: input.name ? String(input.name) : String(input.url) }).returning();
+      const { monitoredWebsites } = await import('@/drizzle/schema/monitoring');
+      const [created] = await getDb().insert(monitoredWebsites).values({ userId, url: String(input.url), name: input.name ? String(input.name) : String(input.url) } as typeof monitoredWebsites.$inferInsert).returning();
       return { success: true, website: created };
     }
 
     case 'remove_monitoring_website': {
       const { getDb } = await import('@/lib/db');
-      const { monitoredWebsites } = await import('@/drizzle/schema');
+      const { monitoredWebsites } = await import('@/drizzle/schema/monitoring');
       const { eq, and } = await import('drizzle-orm');
       const [deleted] = await getDb().delete(monitoredWebsites).where(and(eq(monitoredWebsites.id, String(input.websiteId)), eq(monitoredWebsites.userId, userId))).returning({ id: monitoredWebsites.id });
       if (!deleted) return { error: 'Website monitor not found' };
@@ -652,14 +652,14 @@ async function executeTool(
 
     case 'get_monitoring_events': {
       const { getDb } = await import('@/lib/db');
-      const { websiteEvents, monitoredWebsites } = await import('@/drizzle/schema');
+      const { monitoringEvents, monitoredWebsites } = await import('@/drizzle/schema/monitoring');
       const { eq, desc, inArray } = await import('drizzle-orm');
       const limit = Math.min(Number(input.limit ?? 20), 50);
       // Get user's website IDs first, then their events
       const userSites = await getDb().select({ id: monitoredWebsites.id }).from(monitoredWebsites).where(eq(monitoredWebsites.userId, userId));
       const siteIds = userSites.map(s => s.id);
       if (siteIds.length === 0) return { events: [], count: 0 };
-      const rows = await getDb().select().from(websiteEvents).where(inArray(websiteEvents.websiteId, siteIds)).orderBy(desc(websiteEvents.createdAt)).limit(limit);
+      const rows = await getDb().select().from(monitoringEvents).where(inArray(monitoringEvents.websiteId, siteIds)).orderBy(desc(monitoringEvents.createdAt)).limit(limit);
       return { events: rows, count: rows.length };
     }
 
@@ -675,7 +675,7 @@ async function executeTool(
 
     case 'check_mint_status_onchain': {
       const { getMintState } = await import('@/lib/services/mint-state.service');
-      const state = await getMintState(String(input.contractAddress), String(input.chain ?? 'ethereum'), null);
+      const state = await getMintState(String(input.contractAddress), String(input.chain ?? 'ethereum'));
       return { contractAddress: String(input.contractAddress), chain: String(input.chain ?? 'ethereum'), ...state };
     }
 
@@ -774,8 +774,13 @@ async function executeTool(
       if (!input.confirm || input.confirm !== true) {
         return { error: '⚠️ This will DELETE ALL your data permanently. Pass confirm: true to proceed.' };
       }
-      const { deleteUserData } = await import('@/lib/services/account-deletion.service');
-      await deleteUserData(userId);
+      const { deleteAccount } = await import('@/lib/services/account-deletion.service');
+      const { getDb: getDb3 } = await import('@/lib/db');
+      const { users } = await import('@/drizzle/schema');
+      const { eq: eq3 } = await import('drizzle-orm');
+      const [user] = await getDb3().select({ clerkId: users.clerkId }).from(users).where(eq3(users.id, userId)).limit(1);
+      if (!user) return { error: 'User not found' };
+      await deleteAccount({ userId, clerkId: user.clerkId });
       return { success: true, message: 'All data has been permanently deleted.' };
     }
 
