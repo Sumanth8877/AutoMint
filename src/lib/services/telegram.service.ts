@@ -757,11 +757,18 @@ async function loadDefaultWallet(userId: string) {
   return wallet ?? null;
 }
 
+// Plain-text reply — for AI interpreter, mint shortcuts, and external content
+// that may contain < > & characters which would break HTML parse mode.
 async function reply(message: TelegramMessage, text: string) {
+  await sendTelegramMessage(String(message.chat.id), text, { replyMarkup: QUICK_KEYBOARD });
+}
+
+// HTML-formatted reply — for our own structured messages with <b>, <code>, etc.
+async function replyHtml(message: TelegramMessage, text: string) {
   await sendRichMessage(String(message.chat.id), text, { replyMarkup: QUICK_KEYBOARD });
 }
 
-// Reply with inline buttons (HTML formatted)
+// HTML reply with inline buttons (no persistent keyboard — Telegram only allows one reply_markup)
 async function replyWithButtons(
   message: TelegramMessage,
   text: string,
@@ -781,7 +788,7 @@ async function handleStart(message: TelegramMessage, token: string) {
   }
 
   if (!token) {
-    await reply(message, accountRequiredText());
+    await replyHtml(message, accountRequiredText());
     return;
   }
 
@@ -838,7 +845,7 @@ function parseMintInput(rawInput: string): { url: string; quantity: number } | {
 
 async function handleMintCommand(message: TelegramMessage, userId: string, rawInput: string) {
   if (!rawInput) {
-    await reply(message, [
+    await replyHtml(message, [
       `\u{1F4E6} <b>Mint Command Usage</b>`,
       `${SEP}`,
       `<code>/mint &lt;url&gt; [qty]</code>`,
@@ -855,7 +862,7 @@ async function handleMintCommand(message: TelegramMessage, userId: string, rawIn
 
   const wallet = await loadDefaultWallet(userId);
   if (!wallet) {
-    await reply(message, `\u{26A0}\u{FE0F} Add a wallet in <a href="https://app.automint.xyz/wallets">AutoMint</a> before triggering a mint from Telegram.`);
+    await replyHtml(message, `\u{26A0}\u{FE0F} Add a wallet in <a href="https://app.automint.xyz/wallets">AutoMint</a> before triggering a mint from Telegram.`);
     return;
   }
 
@@ -868,7 +875,7 @@ async function handleMintCommand(message: TelegramMessage, userId: string, rawIn
 
   if (result.action === 'FAILED') {
     await sendTelegramNotification(userId, 'mint_failed', { url, error: result.error });
-    await reply(message, `\u{274C} <b>Mint Failed</b>\n${escapeHtml(result.error || 'Unknown error')}`);
+    await replyHtml(message, `\u{274C} <b>Mint Failed</b>\n${escapeHtml(result.error || 'Unknown error')}`);
     return;
   }
 
@@ -907,20 +914,20 @@ async function handleMintCommand(message: TelegramMessage, userId: string, rawIn
 
 async function handleScheduleCommand(message: TelegramMessage, userId: string, url: string) {
   if (!url) {
-    await reply(message, `\u{1F4E6} <b>Schedule Command Usage</b>\n${SEP}\n<code>/schedule &lt;url&gt;</code>`);
+    await replyHtml(message, `\u{1F4E6} <b>Schedule Command Usage</b>\n${SEP}\n<code>/schedule &lt;url&gt;</code>`);
     return;
   }
 
   const wallet = await loadDefaultWallet(userId);
   if (!wallet) {
-    await reply(message, `\u{26A0}\u{FE0F} Add a wallet in <a href="https://app.automint.xyz/wallets">AutoMint</a> before scheduling a mint.`);
+    await replyHtml(message, `\u{26A0}\u{FE0F} Add a wallet in <a href="https://app.automint.xyz/wallets">AutoMint</a> before scheduling a mint.`);
     return;
   }
 
   const normalizedInput = url.startsWith('0x') ? `https://etherscan.io/address/${url}` : url;
   const intent = await resolveMintIntent(normalizedInput);
   if (!intent.contractAddress) {
-    await reply(message, '\u{274C} Could not resolve a contract address from that URL.');
+    await replyHtml(message, '\u{274C} Could not resolve a contract address from that URL.');
     return;
   }
 
@@ -931,7 +938,7 @@ async function handleScheduleCommand(message: TelegramMessage, userId: string, u
 
   if (mintState.status === 'ENDED') {
     await sendTelegramNotification(userId, 'mint_failed', { url, error: 'Mint has already ended' });
-    await reply(message, '\u{1F6AB} <b>This mint has already ended.</b>');
+    await replyHtml(message, '\u{1F6AB} <b>This mint has already ended.</b>');
     return;
   }
 
@@ -967,10 +974,10 @@ async function handleScheduleCommand(message: TelegramMessage, userId: string, u
       : undefined;
     const scheduledTask = await scheduleMint({ taskId: task.id, userId, scheduledTime });
     if (!scheduledTask.qstashMessageId) {
-      await reply(message, `\u{1F6E1}\u{FE0F} <b>Risk Approval Requested</b>\n${SEP}\n\u{1F9F1} Task: ${shortId(scheduledTask.id)}`);
+      await replyHtml(message, `\u{1F6E1}\u{FE0F} <b>Risk Approval Requested</b>\n${SEP}\n\u{1F9F1} Task: ${shortId(scheduledTask.id)}`);
       return;
     }
-    await reply(message, [
+    await replyHtml(message, [
       `\u{1F552} <b>Mint Scheduled</b>`,
       `${SEP}`,
       `\u{1F9F1} Task: ${shortId(scheduledTask.id)}`,
@@ -981,7 +988,7 @@ async function handleScheduleCommand(message: TelegramMessage, userId: string, u
   const { requireRiskApproval } = await import('@/lib/services/risk.service');
   const riskGate = await requireRiskApproval({ taskId: task.id, action: 'mint', userId });
   if (!riskGate.approved) {
-    await reply(message, `\u{1F6E1}\u{FE0F} <b>Risk Approval Requested</b>\n${SEP}\n\u{1F9F1} Task: ${shortId(task.id)}`);
+    await replyHtml(message, `\u{1F6E1}\u{FE0F} <b>Risk Approval Requested</b>\n${SEP}\n\u{1F9F1} Task: ${shortId(task.id)}`);
     return;
   }
 
@@ -990,7 +997,7 @@ async function handleScheduleCommand(message: TelegramMessage, userId: string, u
     taskId: task.id,
     contractAddress: intent.contractAddress,
   });
-  await reply(message, [
+  await replyHtml(message, [
     `\u{1F680} <b>Mint Is Live and Ready</b>`,
     `${SEP}`,
     `\u{1F9F1} Task: ${shortId(task.id)}`,
@@ -999,7 +1006,7 @@ async function handleScheduleCommand(message: TelegramMessage, userId: string, u
 
 async function handleWatchCommand(message: TelegramMessage, userId: string, address: string) {
   if (!address || !isValidEthereumAddress(address)) {
-    await reply(message, `\u{1F4E6} <b>Watch Command Usage</b>\n${SEP}\n<code>/watch &lt;wallet&gt;</code>\n\n<i>Example: <code>/watch 0x1234...</code></i>`);
+    await replyHtml(message, `\u{1F4E6} <b>Watch Command Usage</b>\n${SEP}\n<code>/watch &lt;wallet&gt;</code>\n\n<i>Example: <code>/watch 0x1234...</code></i>`);
     return;
   }
 
@@ -1021,7 +1028,7 @@ async function handleWatchCommand(message: TelegramMessage, userId: string, addr
     void publishEvent(userId, 'watched-wallet:created', { address: wallet.walletAddress });
 
     const statusIcon = wallet.active ? '\u{2705}' : '\u{23F8}';
-    await reply(message, [
+    await replyHtml(message, [
       `\u{1F441} <b>Whale Wallet Tracker Enabled</b>`,
       `${SEP}`,
       `\u{1F4CD} Address: ${shortAddr(wallet.walletAddress)}`,
@@ -1030,7 +1037,7 @@ async function handleWatchCommand(message: TelegramMessage, userId: string, addr
       `\u{1F4B0} Balance: <b>${escapeHtml(balance.balance)} ${escapeHtml(balance.symbol)}</b>`,
     ].join('\n'));
   } catch (error) {
-    await reply(message, `\u{274C} ${escapeHtml(error instanceof Error ? error.message : 'Failed to watch wallet.')}`);
+    await replyHtml(message, `\u{274C} ${escapeHtml(error instanceof Error ? error.message : 'Failed to watch wallet.')}`);
   }
 }
 
@@ -1043,7 +1050,7 @@ async function handleStatusCommand(message: TelegramMessage, userId: string) {
     .limit(10);
 
   if (rows.length === 0) {
-    await reply(message, [
+    await replyHtml(message, [
       `\u{1F4CB} <b>Mint Status</b>`,
       `${SEP}`,
       `<i>No mint tasks yet. Paste a URL or use /mint to get started!</i>`,
@@ -1104,7 +1111,7 @@ async function handleStatusCommand(message: TelegramMessage, userId: string) {
   if (inlineKeyboard) {
     await replyWithButtons(message, lines.join('\n'), inlineKeyboard);
   } else {
-    await reply(message, lines.join('\n'));
+    await replyHtml(message, lines.join('\n'));
   }
 }
 
@@ -1120,7 +1127,7 @@ async function handleCancelCommand(message: TelegramMessage, userId: string) {
     .limit(1);
 
   if (!target) {
-    await reply(message, [
+    await replyHtml(message, [
       `\u{1F6D1} <b>Cancel Mint</b>`,
       `${SEP}`,
       `<i>No cancellable mint task found.</i>`,
@@ -1131,7 +1138,7 @@ async function handleCancelCommand(message: TelegramMessage, userId: string) {
   const task = await cancelScheduledMint(target.id, userId);
 
   void publishEvent(userId, 'mint:cancelled', { taskId: task.id });
-  await reply(message, [
+  await replyHtml(message, [
     `\u{1F6D1} <b>Mint Task Cancelled</b>`,
     `${SEP}`,
     `\u{1F9F1} Task: ${shortId(task.id)}`,
@@ -1140,7 +1147,7 @@ async function handleCancelCommand(message: TelegramMessage, userId: string) {
 
 async function handleSettingsCommand(message: TelegramMessage, account: { username: string | null; chatId: string }) {
   const username = account.username ? `@${escapeHtml(account.username)}` : '<i>not set</i>';
-  await reply(message, [
+  await replyHtml(message, [
     `\u{2699}\u{FE0F} <b>AutoMint Telegram Settings</b>`,
     `${SEP}`,
     `\u{1F464} Username: ${username}`,
@@ -1547,14 +1554,14 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
     }
     const account = await getTelegramAccountByTelegramId(String(message.from.id));
     if (!account) {
-      await reply(message, accountRequiredText());
+      await replyHtml(message, accountRequiredText());
       return { handled: true };
     }
 
     switch (effectiveCommand) {
       case '/mint':
         // For "Quick Mint" button, show usage hint
-        await reply(message, [
+        await replyHtml(message, [
           `\u{26A1} <b>Quick Mint</b>`,
           `${SEP}`,
           `Paste a URL or use:`,
@@ -1567,7 +1574,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
         await handleStatusCommand(message, account.userId);
         return { handled: true };
       case '/watch':
-        await reply(message, `\u{1F441} <b>Watch a Whale Wallet</b>\n${SEP}\nUse: <code>/watch &lt;0xaddress&gt;</code>`);
+        await replyHtml(message, `\u{1F441} <b>Watch a Whale Wallet</b>\n${SEP}\nUse: <code>/watch &lt;0xaddress&gt;</code>`);
         return { handled: true };
       case '/cancel':
         await handleCancelCommand(message, account.userId);
@@ -1593,7 +1600,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
       }
       const urlAccount = await getTelegramAccountByTelegramId(String(message.from.id));
       if (!urlAccount) {
-        await reply(message, accountRequiredText());
+        await replyHtml(message, accountRequiredText());
         return { handled: true };
       }
       try {
@@ -1622,7 +1629,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
     {
       const aiAccount = await getTelegramAccountByTelegramId(String(message.from.id));
       if (!aiAccount) {
-        await reply(message, accountRequiredText());
+        await replyHtml(message, accountRequiredText());
         return { handled: true };
       }
       try {
@@ -1651,7 +1658,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
         const aiReply = await interpretTelegramMessage(text, aiAccount.userId);
         await reply(message, aiReply);
       } catch (_aiError) {
-        await reply(
+        await replyHtml(
           message,
           [
             `\u{274C} <b>AI Processing Failed</b>`,
@@ -1683,7 +1690,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
     }
     const account = await getTelegramAccountByTelegramId(String(message.from.id));
     if (!account) {
-      await reply(message, accountRequiredText());
+      await replyHtml(message, accountRequiredText());
       return { handled: true };
     }
     await handleMenuCommand(message);
@@ -1697,7 +1704,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
 
   const account = await getTelegramAccountByTelegramId(String(message.from.id));
   if (!account) {
-    await reply(message, accountRequiredText());
+    await replyHtml(message, accountRequiredText());
     return { handled: true };
   }
 
@@ -1764,7 +1771,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
         await handleHelpCommand(message);
         break;
       default:
-        await reply(message, [
+        await replyHtml(message, [
           `\u{274C} <b>AI Processing Failed</b>`,
           `${SEP}`,
           `<i>Try again or use </i><code>/help</code><i> for the command guide.</i>`,
