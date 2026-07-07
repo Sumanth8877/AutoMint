@@ -136,6 +136,23 @@ function explorerTxLink(txHash: string, chain = 'ethereum'): string {
 
 const SEP = '━━━━━━━━━━━━━━━━━━';
 
+// ── Markdown → Telegram HTML converter ───────────────────────────────────────
+// The AI responds in Markdown (**bold**, `code`, * bullets). Telegram shows
+// asterisks literally in plain-text mode. This converts common Markdown to
+// Telegram-compatible HTML so formatting renders properly.
+function markdownToHtml(md: string): string {
+  let html = escapeHtml(md);
+  // **bold** → <b>bold</b>
+  html = html.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  // *italic* (but NOT bullet points like "* item")
+  html = html.replace(/(?<!\w)\*(?!\s)(.+?)(?<!\s)\*(?!\w)/g, '<i>$1</i>');
+  // `code` → <code>code</code>
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // Bullet points: "* text" or "- text" at line start → "• text"
+  html = html.replace(/^[*\-]\s+/gm, '• ');
+  return html;
+}
+
 type NotificationPayload = {
   url?: string;
   wallet?: string;
@@ -1613,7 +1630,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
         }
         const { interpretTelegramMessage } = await import('@/lib/services/ai-interpreter.service');
         const aiReply = await interpretTelegramMessage(`mint ${text}`, urlAccount.userId);
-        await reply(message, aiReply);
+        await replyHtml(message, markdownToHtml(aiReply));
       } catch {
         // Fallback to direct handler if AI fails
         await handleMintCommand(message, urlAccount.userId, text);
@@ -1656,7 +1673,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
         }
         const { interpretTelegramMessage } = await import('@/lib/services/ai-interpreter.service');
         const aiReply = await interpretTelegramMessage(text, aiAccount.userId);
-        await reply(message, aiReply);
+        await replyHtml(message, markdownToHtml(aiReply));
       } catch (_aiError) {
         await replyHtml(
           message,
@@ -1744,7 +1761,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
     }
     const { interpretTelegramMessage } = await import('@/lib/services/ai-interpreter.service');
     const aiReply = await interpretTelegramMessage(message.text ?? '', account.userId);
-    await reply(message, aiReply);
+    await replyHtml(message, markdownToHtml(aiReply));
   } catch (_aiError) {
     // Fallback: if AI fails, try the legacy slash command handler
     logger.warn('AI interpreter failed, falling back to slash handler', { area: 'telegram', command });
