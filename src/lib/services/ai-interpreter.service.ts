@@ -7,6 +7,7 @@ import { getRedisClient } from '@/lib/redis';
 import { publishEvent, type EventType } from '@/lib/services/event-bus.service';
 import { recordSuccess, recordFailure, isProviderHealthy } from '@/lib/services/provider-health.service';
 import { getSetting } from '@/lib/services/integration-settings.service';
+import { getKnowledgeBase } from '@/lib/services/knowledge-base.service';
 
 // ── Provider config ─────────────────────────────────────────────────────────
 
@@ -163,7 +164,8 @@ const MAX_TOOL_ROUNDS = 8;
 
 // ── System Prompt ────────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are AutoMint AI — a full-featured NFT minting assistant with complete control over the AutoMint platform. You run inside a Telegram bot and interpret natural language to execute any action the web app can do.
+// SYSTEM_PROMPT is built dynamically: base instructions + live knowledge base
+const BASE_SYSTEM_PROMPT = `You are AutoMint AI — a full-featured NFT minting assistant with complete control over the AutoMint platform. You run inside a Telegram bot and interpret natural language to execute any action the web app can do.
 
 CAPABILITIES:
 • Wallet management — list wallets, check balances (across all EVM chains)
@@ -210,6 +212,19 @@ RULES:
 • For QUESTIONS or CONVERSATION (greetings, "what can you do", "which AI are you", general chat) — respond directly in plain text WITHOUT calling any tools.
 • DIAGNOSING FAILURES: When user asks why a mint failed, ALWAYS call diagnose_mint_failure FIRST. Read failureReason, log timeline, walletBalance and mintCost, then explain the ROOT CAUSE with exact USD values and a concrete fix.
 • When updating settings, always show the user what changed.`;
+
+function buildSystemPrompt(): string {
+  const guide = getKnowledgeBase();
+  if (!guide) return BASE_SYSTEM_PROMPT;
+  return (
+    BASE_SYSTEM_PROMPT +
+    '\n\n---\n\n' +
+    '# AutoMint Knowledge Base\n\n' +
+    'The following is your reference guide for AutoMint. Use it to answer ' +
+    'feature questions, explain workflows, and guide users step by step.\n\n' +
+    guide
+  );
+}
 
 // ── Tool Declarations (OpenAI format) ────────────────────────────────────────
 
@@ -1024,7 +1039,7 @@ async function runWithProvider(
 
   // Build messages: system prompt + full conversation history
   const messages: ChatCompletionMessageParam[] = [
-    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'system', content: buildSystemPrompt() },
     // Include prior turns so the AI remembers context (multi-turn web chat)
     ...history.slice(0, -1).map(m => ({
       role: m.role as 'user' | 'assistant',
