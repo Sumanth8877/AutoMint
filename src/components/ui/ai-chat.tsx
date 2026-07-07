@@ -90,6 +90,7 @@ export function AIChat() {
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const msgCounter = useRef(0);
 
   // Auto-scroll to latest message
   useEffect(() => {
@@ -105,11 +106,12 @@ export function AIChat() {
     const trimmed = text.trim();
     if (!trimmed || loading) return;
 
+    const uid = ++msgCounter.current;
     const userMsg: Message = {
-      id: `u-${Date.now()}`,
+      id: `u-${uid}`,
       role: 'user',
       text: trimmed,
-      ts: Date.now(),
+      ts: uid,
     };
 
     setMessages(prev => [...prev, userMsg]);
@@ -125,20 +127,22 @@ export function AIChat() {
 
       const data = await res.json() as { reply?: string; error?: string };
 
+      const aid = ++msgCounter.current;
       const aiMsg: Message = {
-        id: `a-${Date.now()}`,
+        id: `a-${aid}`,
         role: 'assistant',
         text: data.reply ?? data.error ?? 'Something went wrong.',
-        ts: Date.now(),
+        ts: aid,
         error: !!data.error || !res.ok,
       };
       setMessages(prev => [...prev, aiMsg]);
     } catch {
+      const eid = ++msgCounter.current;
       setMessages(prev => [...prev, {
-        id: `a-${Date.now()}`,
+        id: `a-${eid}`,
         role: 'assistant',
         text: 'Network error — please try again.',
-        ts: Date.now(),
+        ts: eid,
         error: true,
       }]);
     } finally {
