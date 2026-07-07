@@ -615,20 +615,20 @@ export async function sendTelegramNotification(
     if (type === 'mint_scheduled' && payload.taskId) {
       replyMarkup = {
         inline_keyboard: [[
-          { text: '\u{1F6D1} Cancel Task', callback_data: `schedule:cancel:${payload.taskId}` },
+          { text: '🛑 Cancel Task', callback_data: `schedule:cancel:${payload.taskId}` },
         ]],
       };
     } else if (type === 'mint_success' && payload.txHash) {
       const link = explorerTxLink(payload.txHash);
       replyMarkup = {
         inline_keyboard: [[
-          { text: '\u{1F517} View on Etherscan', url: link },
+          { text: '🔗 View on Etherscan', url: link },
         ]],
       };
     } else if (type === 'mint_failed' && payload.taskId) {
       replyMarkup = {
         inline_keyboard: [[
-          { text: '\u{1F504} Retry Mint', callback_data: `retry:mint:${payload.taskId}` },
+          { text: '🔄 Retry Mint', callback_data: `retry:mint:${payload.taskId}` },
         ]],
       };
     }
@@ -650,14 +650,14 @@ export async function sendTelegramSafeModePrompt(params: SafeModePromptParams) {
     const account = await getTelegramAccountByUserId(params.userId);
     if (!account) return { sent: false, reason: 'telegram_not_linked' };
 
-    const primaryLabel = params.action === 'schedule' ? '\u{27A14}\u{FE0F} Schedule Anyway' : '\u{26A1} Mint Anyway';
+    const primaryLabel = params.action === 'schedule' ? '𧨔️ Schedule Anyway' : '⚡ Mint Anyway';
     const primaryAction = params.action === 'schedule' ? 'schedule_anyway' : 'mint_anyway';
-    const reasons = params.riskReasons.slice(0, 5).map((r) => `\u{2022} ${escapeHtml(r)}`).join('\n');
+    const reasons = params.riskReasons.slice(0, 5).map((r) => `• ${escapeHtml(r)}`).join('\n');
 
     const text = [
-      `\u{1F6A8} <b>High Risk ${params.action === 'schedule' ? 'Scheduled Mint' : 'Live Mint'}</b>`,
+      `🚨 <b>High Risk ${params.action === 'schedule' ? 'Scheduled Mint' : 'Live Mint'}</b>`,
       `${SEP}`,
-      `\u{1F6E1}\u{FE0F} Risk Score: <b>${params.riskScore}/100</b>`,
+      `🛡️ Risk Score: <b>${params.riskScore}/100</b>`,
       '',
       reasons || '<i>No specific risk reasons available.</i>',
     ].join('\n');
@@ -666,7 +666,7 @@ export async function sendTelegramSafeModePrompt(params: SafeModePromptParams) {
       replyMarkup: {
         inline_keyboard: [[
           { text: primaryLabel, callback_data: `risk:${primaryAction}:${params.taskId}` },
-          { text: '\u{1F6D1} Cancel', callback_data: `risk:cancel:${params.taskId}` },
+          { text: '🛑 Cancel', callback_data: `risk:cancel:${params.taskId}` },
         ]],
       },
     });
@@ -687,9 +687,9 @@ export async function sendTelegramRiskChangePrompt(params: RiskChangePromptParam
     const account = await getTelegramAccountByUserId(params.userId);
     if (!account) return { sent: false, reason: 'telegram_not_linked' };
 
-    const arrow = params.currentScore > params.previousScore ? '\u{2B06}\u{FE0F}' : '\u{2B07}\u{FE0F}';
+    const arrow = params.currentScore > params.previousScore ? '⬆️' : '⬇️';
     const text = [
-      `\u{1F6E1}\u{FE0F} <b>Risk Score Changed</b>`,
+      `🛡️ <b>Risk Score Changed</b>`,
       `${SEP}`,
       `Previous: <b>${params.previousScore}/100</b>`,
       `${arrow} Current: <b>${params.currentScore}/100</b>`,
@@ -698,8 +698,8 @@ export async function sendTelegramRiskChangePrompt(params: RiskChangePromptParam
     await sendRichMessage(account.chatId, text, {
       replyMarkup: {
         inline_keyboard: [[
-          { text: '\u{26A1} Mint Anyway', callback_data: `risk:approve_mint:${params.taskId}` },
-          { text: '\u{1F6D1} Cancel', callback_data: `risk:cancel:${params.taskId}` },
+          { text: '⚡ Mint Anyway', callback_data: `risk:approve_mint:${params.taskId}` },
+          { text: '🛑 Cancel', callback_data: `risk:cancel:${params.taskId}` },
         ]],
       },
     });
@@ -735,11 +735,11 @@ export async function notifyWalletBalanceIfLow(params: {
     if (!account) return { sent: false, reason: 'telegram_not_linked' };
 
     const text = [
-      `\u{1F4C9} <b>Wallet Balance Low</b>`,
+      `📉 <b>Wallet Balance Low</b>`,
       `${SEP}`,
-      `\u{1F4CD} Address: ${shortAddr(params.address)}`,
-      `\u{1F310} Chain: <b>${escapeHtml(params.chain)}</b>`,
-      `\u{1F4B0} Balance: <b>${escapeHtml(params.balance)} ${escapeHtml(params.symbol)}</b>`,
+      `📍 Address: ${shortAddr(params.address)}`,
+      `🌐 Chain: <b>${escapeHtml(params.chain)}</b>`,
+      `💰 Balance: <b>${escapeHtml(params.balance)} ${escapeHtml(params.symbol)}</b>`,
     ].join('\n');
 
     await sendRichMessage(account.chatId, text);
@@ -795,12 +795,15 @@ async function replyWithButtons(
 }
 
 function accountRequiredText() {
-  return '\\u{26A0}\\u{FE0F} <b>Telegram Not Linked</b>\\n' + SEP + '\\nOpen <a href="https://app.automint.xyz/settings/notifications">AutoMint Settings</a>, generate a Telegram link token, then send:\\n<code>/start &lt;token&gt;</code> here.';
+  return `⚠️ <b>Telegram Not Linked</b>
+${SEP}
+Open <a href="https://app.automint.xyz/settings/notifications">AutoMint Settings</a>, generate a Telegram link token, then send:
+<code>/start &lt;token&gt;</code> here.`;
 }
 
 async function handleStart(message: TelegramMessage, token: string) {
   if (!message.from) {
-    await reply(message, '\u{26A0}\u{FE0F} Unable to link Telegram without a Telegram user ID.');
+    await reply(message, '⚠️ Unable to link Telegram without a Telegram user ID.');
     return;
   }
 
@@ -817,25 +820,25 @@ async function handleStart(message: TelegramMessage, token: string) {
   });
 
   const welcomeText = [
-    `\u{2705} <b>Telegram linked to your AutoMint account!</b>`,
+    `✅ <b>Telegram linked to your AutoMint account!</b>`,
     ``,
     `You can now control your full AutoMint platform from here.`,
     ``,
     `${SEP}`,
-    `<b>\u{26A1} Quick Actions</b>`,
-    `\u{2022} Just paste a URL to mint instantly`,
-    `\u{2022} Tap a button below for common actions`,
+    `<b>⚡ Quick Actions</b>`,
+    `• Just paste a URL to mint instantly`,
+    `• Tap a button below for common actions`,
     ``,
-    `<b>\u{1F4E3} Commands</b>`,
-    `\u{2022} <code>/mint &lt;url&gt; [qty]</code> \u{2014} queue a mint`,
-    `\u{2022} <code>/watch &lt;wallet&gt;</code> \u{2014} track a whale`,
-    `\u{2022} <code>/status</code> \u{2014} active mints`,
-    `\u{2022} <code>/cancel</code> \u{2014} cancel latest mint`,
-    `\u{2022} <code>/settings</code> \u{2014} view settings`,
-    `\u{2022} <code>/model</code> \u{2014} change AI model`,
-    `\u{2022} <code>/help</code> \u{2014} full command guide`,
+    `<b>📣 Commands</b>`,
+    `• <code>/mint &lt;url&gt; [qty]</code> — queue a mint`,
+    `• <code>/watch &lt;wallet&gt;</code> — track a whale`,
+    `• <code>/status</code> — active mints`,
+    `• <code>/cancel</code> — cancel latest mint`,
+    `• <code>/settings</code> — view settings`,
+    `• <code>/model</code> — change AI model`,
+    `• <code>/help</code> — full command guide`,
     ``,
-    `Or just type anything in plain English \u{2014} the AI handles it \u{1F916}`,
+    `Or just type anything in plain English — the AI handles it 🤖`,
   ].join('\n');
 
   await sendRichMessage(account.chatId, welcomeText, { replyMarkup: QUICK_KEYBOARD });
@@ -863,14 +866,14 @@ function parseMintInput(rawInput: string): { url: string; quantity: number } | {
 async function handleMintCommand(message: TelegramMessage, userId: string, rawInput: string) {
   if (!rawInput) {
     await replyHtml(message, [
-      `\u{1F4E6} <b>Mint Command Usage</b>`,
+      `📦 <b>Mint Command Usage</b>`,
       `${SEP}`,
       `<code>/mint &lt;url&gt; [qty]</code>`,
       ``,
       `<b>Examples:</b>`,
-      `\u{2022} <code>/mint https://... 1</code> (default)`,
-      `\u{2022} <code>/mint https://... 5</code>`,
-      `\u{2022} <code>https://... 3</code> (bare URL)`,
+      `• <code>/mint https://... 1</code> (default)`,
+      `• <code>/mint https://... 5</code>`,
+      `• <code>https://... 3</code> (bare URL)`,
       ``,
       `<i>Max: ${MAX_MINT_QUANTITY} NFTs per mint</i>`,
     ].join('\n'));
@@ -879,7 +882,7 @@ async function handleMintCommand(message: TelegramMessage, userId: string, rawIn
 
   const wallet = await loadDefaultWallet(userId);
   if (!wallet) {
-    await replyHtml(message, `\u{26A0}\u{FE0F} Add a wallet in <a href="https://app.automint.xyz/wallets">AutoMint</a> before triggering a mint from Telegram.`);
+    await replyHtml(message, `⚠️ Add a wallet in <a href="https://app.automint.xyz/wallets">AutoMint</a> before triggering a mint from Telegram.`);
     return;
   }
 
@@ -892,7 +895,7 @@ async function handleMintCommand(message: TelegramMessage, userId: string, rawIn
 
   if (result.action === 'FAILED') {
     await sendTelegramNotification(userId, 'mint_failed', { url, error: result.error });
-    await replyHtml(message, `\u{274C} <b>Mint Failed</b>\n${escapeHtml(result.error || 'Unknown error')}`);
+    await replyHtml(message, `❌ <b>Mint Failed</b>\n${escapeHtml(result.error || 'Unknown error')}`);
     return;
   }
 
@@ -902,10 +905,10 @@ async function handleMintCommand(message: TelegramMessage, userId: string, rawIn
     await reply(
       message,
       [
-        `\u{23F3} <b>Monitoring Started</b>`,
+        `⏳ <b>Monitoring Started</b>`,
         `${SEP}`,
-        `\u{1F9F1} Task: ${shortId(result.taskId ?? '')}`,
-        `\u{1F4E6} Qty: <b>${escapeHtml(qtyLabel)}</b>`,
+        `🧱 Task: ${shortId(result.taskId ?? '')}`,
+        `📦 Qty: <b>${escapeHtml(qtyLabel)}</b>`,
         ``,
         `<i>You'll be notified when the mint goes live.</i>`,
       ].join('\n'),
@@ -919,32 +922,32 @@ async function handleMintCommand(message: TelegramMessage, userId: string, rawIn
   await reply(
     message,
     [
-      `\u{2705} <b>Mint Task Created</b>`,
+      `✅ <b>Mint Task Created</b>`,
       `${SEP}`,
-      `\u{1F9F1} Task: ${shortId(result.taskId ?? '')}`,
-      `\u{1F4E6} Qty: <b>${escapeHtml(qtyLabel)}</b>`,
+      `🧱 Task: ${shortId(result.taskId ?? '')}`,
+      `📦 Qty: <b>${escapeHtml(qtyLabel)}</b>`,
       ``,
-      `<i>Execution starting shortly \u{2014} you'll be notified on completion.</i>`,
+      `<i>Execution starting shortly — you'll be notified on completion.</i>`,
     ].join('\n'),
   );
 }
 
 async function handleScheduleCommand(message: TelegramMessage, userId: string, url: string) {
   if (!url) {
-    await replyHtml(message, `\u{1F4E6} <b>Schedule Command Usage</b>\n${SEP}\n<code>/schedule &lt;url&gt;</code>`);
+    await replyHtml(message, `📦 <b>Schedule Command Usage</b>\n${SEP}\n<code>/schedule &lt;url&gt;</code>`);
     return;
   }
 
   const wallet = await loadDefaultWallet(userId);
   if (!wallet) {
-    await replyHtml(message, `\u{26A0}\u{FE0F} Add a wallet in <a href="https://app.automint.xyz/wallets">AutoMint</a> before scheduling a mint.`);
+    await replyHtml(message, `⚠️ Add a wallet in <a href="https://app.automint.xyz/wallets">AutoMint</a> before scheduling a mint.`);
     return;
   }
 
   const normalizedInput = url.startsWith('0x') ? `https://etherscan.io/address/${url}` : url;
   const intent = await resolveMintIntent(normalizedInput);
   if (!intent.contractAddress) {
-    await replyHtml(message, '\u{274C} Could not resolve a contract address from that URL.');
+    await replyHtml(message, '❌ Could not resolve a contract address from that URL.');
     return;
   }
 
@@ -955,7 +958,7 @@ async function handleScheduleCommand(message: TelegramMessage, userId: string, u
 
   if (mintState.status === 'ENDED') {
     await sendTelegramNotification(userId, 'mint_failed', { url, error: 'Mint has already ended' });
-    await replyHtml(message, '\u{1F6AB} <b>This mint has already ended.</b>');
+    await replyHtml(message, '🚫 <b>This mint has already ended.</b>');
     return;
   }
 
@@ -991,13 +994,13 @@ async function handleScheduleCommand(message: TelegramMessage, userId: string, u
       : undefined;
     const scheduledTask = await scheduleMint({ taskId: task.id, userId, scheduledTime });
     if (!scheduledTask.qstashMessageId) {
-      await replyHtml(message, `\u{1F6E1}\u{FE0F} <b>Risk Approval Requested</b>\n${SEP}\n\u{1F9F1} Task: ${shortId(scheduledTask.id)}`);
+      await replyHtml(message, `🛡️ <b>Risk Approval Requested</b>\n${SEP}\n🧱 Task: ${shortId(scheduledTask.id)}`);
       return;
     }
     await replyHtml(message, [
-      `\u{1F552} <b>Mint Scheduled</b>`,
+      `🕒 <b>Mint Scheduled</b>`,
       `${SEP}`,
-      `\u{1F9F1} Task: ${shortId(scheduledTask.id)}`,
+      `🧱 Task: ${shortId(scheduledTask.id)}`,
     ].join('\n'));
     return;
   }
@@ -1005,7 +1008,7 @@ async function handleScheduleCommand(message: TelegramMessage, userId: string, u
   const { requireRiskApproval } = await import('@/lib/services/risk.service');
   const riskGate = await requireRiskApproval({ taskId: task.id, action: 'mint', userId });
   if (!riskGate.approved) {
-    await replyHtml(message, `\u{1F6E1}\u{FE0F} <b>Risk Approval Requested</b>\n${SEP}\n\u{1F9F1} Task: ${shortId(task.id)}`);
+    await replyHtml(message, `🛡️ <b>Risk Approval Requested</b>\n${SEP}\n🧱 Task: ${shortId(task.id)}`);
     return;
   }
 
@@ -1015,15 +1018,15 @@ async function handleScheduleCommand(message: TelegramMessage, userId: string, u
     contractAddress: intent.contractAddress,
   });
   await replyHtml(message, [
-    `\u{1F680} <b>Mint Is Live and Ready</b>`,
+    `🚀 <b>Mint Is Live and Ready</b>`,
     `${SEP}`,
-    `\u{1F9F1} Task: ${shortId(task.id)}`,
+    `🧱 Task: ${shortId(task.id)}`,
   ].join('\n'));
 }
 
 async function handleWatchCommand(message: TelegramMessage, userId: string, address: string) {
   if (!address || !isValidEthereumAddress(address)) {
-    await replyHtml(message, `\u{1F4E6} <b>Watch Command Usage</b>\n${SEP}\n<code>/watch &lt;wallet&gt;</code>\n\n<i>Example: <code>/watch 0x1234...</code></i>`);
+    await replyHtml(message, `📦 <b>Watch Command Usage</b>\n${SEP}\n<code>/watch &lt;wallet&gt;</code>\n\n<i>Example: <code>/watch 0x1234...</code></i>`);
     return;
   }
 
@@ -1044,17 +1047,17 @@ async function handleWatchCommand(message: TelegramMessage, userId: string, addr
 
     void publishEvent(userId, 'watched-wallet:created', { address: wallet.walletAddress });
 
-    const statusIcon = wallet.active ? '\u{2705}' : '\u{23F8}';
+    const statusIcon = wallet.active ? '✅' : '⏸';
     await replyHtml(message, [
-      `\u{1F441} <b>Whale Wallet Tracker Enabled</b>`,
+      `👁 <b>Whale Wallet Tracker Enabled</b>`,
       `${SEP}`,
-      `\u{1F4CD} Address: ${shortAddr(wallet.walletAddress)}`,
-      `\u{1F310} Chain: <b>${escapeHtml(wallet.chain)}</b>`,
+      `📍 Address: ${shortAddr(wallet.walletAddress)}`,
+      `🌐 Chain: <b>${escapeHtml(wallet.chain)}</b>`,
       `${statusIcon} Status: <b>${wallet.active ? 'Active' : 'Inactive'}</b>`,
-      `\u{1F4B0} Balance: <b>${escapeHtml(balance.balance)} ${escapeHtml(balance.symbol)}</b>`,
+      `💰 Balance: <b>${escapeHtml(balance.balance)} ${escapeHtml(balance.symbol)}</b>`,
     ].join('\n'));
   } catch (error) {
-    await replyHtml(message, `\u{274C} ${escapeHtml(error instanceof Error ? error.message : 'Failed to watch wallet.')}`);
+    await replyHtml(message, `❌ ${escapeHtml(error instanceof Error ? error.message : 'Failed to watch wallet.')}`);
   }
 }
 
@@ -1068,7 +1071,7 @@ async function handleStatusCommand(message: TelegramMessage, userId: string) {
 
   if (rows.length === 0) {
     await replyHtml(message, [
-      `\u{1F4CB} <b>Mint Status</b>`,
+      `📋 <b>Mint Status</b>`,
       `${SEP}`,
       `<i>No mint tasks yet. Paste a URL or use /mint to get started!</i>`,
     ].join('\n'));
@@ -1081,22 +1084,22 @@ async function handleStatusCommand(message: TelegramMessage, userId: string) {
   }, {});
 
   const statusIcons: Record<string, string> = {
-    pending: '\u{23F3}',
-    monitoring: '\u{1F441}',
-    ready: '\u{2705}',
-    running: '\u{26A1}',
-    completed: '\u{1F3C6}',
-    failed: '\u{274C}',
-    cancelled: '\u{1F6AB}',
-    unconfirmed: '\u{2754}',
+    pending: '⏳',
+    monitoring: '👁',
+    ready: '✅',
+    running: '⚡',
+    completed: '🏆',
+    failed: '❌',
+    cancelled: '🚫',
+    unconfirmed: '❔',
   };
 
   const statusLines = Object.entries(counts).map(([status, count]) =>
-    `${statusIcons[status] ?? '\u{2754}'} ${escapeHtml(status)}: <b>${count}</b>`
+    `${statusIcons[status] ?? '❔'} ${escapeHtml(status)}: <b>${count}</b>`
   );
 
   const lines = [
-    `\u{1F4CB} <b>Mint Status</b>`,
+    `📋 <b>Mint Status</b>`,
     `${SEP}`,
     ...statusLines,
     ``,
@@ -1105,9 +1108,9 @@ async function handleStatusCommand(message: TelegramMessage, userId: string) {
 
   // Show up to 5 recent tasks with status icons
   for (const task of rows.slice(0, 5)) {
-    const icon = statusIcons[task.status] ?? '\u{2754}';
+    const icon = statusIcons[task.status] ?? '❔';
     const addr = task.contractAddress ? shortAddr(task.contractAddress) : shortId(task.id);
-    lines.push(`${icon} ${addr} \u{2014} <i>${escapeHtml(task.status)}</i>`);
+    lines.push(`${icon} ${addr} — <i>${escapeHtml(task.status)}</i>`);
   }
 
   // Build inline buttons for cancellable tasks
@@ -1119,7 +1122,7 @@ async function handleStatusCommand(message: TelegramMessage, userId: string) {
     cancellable.length > 0
       ? {
           inline_keyboard: cancellable.slice(0, 4).map(t => [{
-            text: `\u{1F6D1} Cancel ${t.id.slice(0, 8)}`,
+            text: `🛑 Cancel ${t.id.slice(0, 8)}`,
             callback_data: `schedule:cancel:${t.id}`,
           }]),
         }
@@ -1145,7 +1148,7 @@ async function handleCancelCommand(message: TelegramMessage, userId: string) {
 
   if (!target) {
     await replyHtml(message, [
-      `\u{1F6D1} <b>Cancel Mint</b>`,
+      `🛑 <b>Cancel Mint</b>`,
       `${SEP}`,
       `<i>No cancellable mint task found.</i>`,
     ].join('\n'));
@@ -1156,29 +1159,29 @@ async function handleCancelCommand(message: TelegramMessage, userId: string) {
 
   void publishEvent(userId, 'mint:cancelled', { taskId: task.id });
   await replyHtml(message, [
-    `\u{1F6D1} <b>Mint Task Cancelled</b>`,
+    `🛑 <b>Mint Task Cancelled</b>`,
     `${SEP}`,
-    `\u{1F9F1} Task: ${shortId(task.id)}`,
+    `🧱 Task: ${shortId(task.id)}`,
   ].join('\n'));
 }
 
 async function handleSettingsCommand(message: TelegramMessage, account: { username: string | null; chatId: string }) {
   const username = account.username ? `@${escapeHtml(account.username)}` : '<i>not set</i>';
   await replyHtml(message, [
-    `\u{2699}\u{FE0F} <b>AutoMint Telegram Settings</b>`,
+    `⚙️ <b>AutoMint Telegram Settings</b>`,
     `${SEP}`,
-    `\u{1F464} Username: ${username}`,
-    `\u{1F4AC} Chat ID: <code>${escapeHtml(account.chatId)}</code>`,
-    `\u{1F514} Notifications: <b>Enabled</b>`,
+    `👤 Username: ${username}`,
+    `💬 Chat ID: <code>${escapeHtml(account.chatId)}</code>`,
+    `🔔 Notifications: <b>Enabled</b>`,
     ``,
     `<b>Commands:</b>`,
-    `\u{2022} <code>/mint</code> &lt;url&gt; [qty]`,
-    `\u{2022} <code>/schedule</code> &lt;url&gt;`,
-    `\u{2022} <code>/watch</code> &lt;wallet&gt;`,
-    `\u{2022} <code>/status</code> \u{2014} active mints`,
-    `\u{2022} <code>/cancel</code> \u{2014} cancel latest mint`,
-    `\u{2022} <code>/model</code> \u{2014} change AI model`,
-    `\u{2022} <code>/help</code> \u{2014} full guide`,
+    `• <code>/mint</code> &lt;url&gt; [qty]`,
+    `• <code>/schedule</code> &lt;url&gt;`,
+    `• <code>/watch</code> &lt;wallet&gt;`,
+    `• <code>/status</code> — active mints`,
+    `• <code>/cancel</code> — cancel latest mint`,
+    `• <code>/model</code> — change AI model`,
+    `• <code>/help</code> — full guide`,
   ].join('\n'));
 }
 
@@ -1189,7 +1192,7 @@ async function handleModelCommand(message: TelegramMessage, userId: string) {
 
   const keyboard: InlineKeyboardMarkup = {
     inline_keyboard: AVAILABLE_MODELS.map(m => [{
-      text: m.id === current ? `\u{2705} ${m.label}` : m.label,
+      text: m.id === current ? `✅ ${m.label}` : m.label,
       callback_data: `model:select:${m.id}`,
     }]),
   };
@@ -1198,7 +1201,7 @@ async function handleModelCommand(message: TelegramMessage, userId: string) {
   await sendRichMessage(
     String(message.chat.id),
     [
-      `\u{1F916} <b>AI Model Selection</b>`,
+      `🤖 <b>AI Model Selection</b>`,
       `${SEP}`,
       `Current: <b>${escapeHtml(currentInfo?.label ?? current)}</b>`,
       `<i>${escapeHtml(currentInfo?.description ?? '')}</i>`,
@@ -1212,36 +1215,36 @@ async function handleModelCommand(message: TelegramMessage, userId: string) {
 // ── /help command — full command guide with inline buttons ─────────────────
 async function handleHelpCommand(message: TelegramMessage) {
   const helpText = [
-    `\u{2753} <b>AutoMint Help</b>`,
+    `❓ <b>AutoMint Help</b>`,
     `${SEP}`,
-    `<b>\u{26A1} Minting</b>`,
-    `\u{2022} <code>/mint &lt;url&gt; [qty]</code> \u{2014} Queue a mint`,
-    `\u{2022} <code>/schedule &lt;url&gt;</code> \u{2014} Schedule a future mint`,
-    `\u{2022} Paste any URL directly to mint instantly`,
+    `<b>⚡ Minting</b>`,
+    `• <code>/mint &lt;url&gt; [qty]</code> — Queue a mint`,
+    `• <code>/schedule &lt;url&gt;</code> — Schedule a future mint`,
+    `• Paste any URL directly to mint instantly`,
     ``,
-    `<b>\u{1F441} Tracking</b>`,
-    `\u{2022} <code>/watch &lt;wallet&gt;</code> \u{2014} Track a whale wallet`,
+    `<b>👁 Tracking</b>`,
+    `• <code>/watch &lt;wallet&gt;</code> — Track a whale wallet`,
     ``,
-    `<b>\u{1F4CB} Status & Control</b>`,
-    `\u{2022} <code>/status</code> \u{2014} View active mints`,
-    `\u{2022} <code>/cancel</code> \u{2014} Cancel latest mint`,
+    `<b>📋 Status & Control</b>`,
+    `• <code>/status</code> — View active mints`,
+    `• <code>/cancel</code> — Cancel latest mint`,
     ``,
-    `<b>\u{2699}\u{FE0F} Settings</b>`,
-    `\u{2022} <code>/settings</code> \u{2014} View Telegram settings`,
-    `\u{2022} <code>/model</code> \u{2014} Switch AI model`,
+    `<b>⚙️ Settings</b>`,
+    `• <code>/settings</code> — View Telegram settings`,
+    `• <code>/model</code> — Switch AI model`,
     ``,
-    `<b>\u{1F916} AI</b>`,
-    `\u{2022} Type anything in plain English`,
-    `\u{2022} The AI handles it automatically`,
+    `<b>🤖 AI</b>`,
+    `• Type anything in plain English`,
+    `• The AI handles it automatically`,
     ``,
     `<i>Or use the quick buttons below the chat input!</i>`,
   ].join('\n');
 
   const keyboard: InlineKeyboardMarkup = {
     inline_keyboard: [[
-      { text: '\u{1F4CB} Status', callback_data: 'nav:status' },
-      { text: '\u{2699}\u{FE0F} Settings', callback_data: 'nav:settings' },
-      { text: '\u{1F916} Model', callback_data: 'nav:model' },
+      { text: '📋 Status', callback_data: 'nav:status' },
+      { text: '⚙️ Settings', callback_data: 'nav:settings' },
+      { text: '🤖 Model', callback_data: 'nav:model' },
     ]],
   };
 
@@ -1251,7 +1254,7 @@ async function handleHelpCommand(message: TelegramMessage) {
 // ── /menu command — compact menu with inline action buttons ──────────────────
 async function handleMenuCommand(message: TelegramMessage) {
   const menuText = [
-    `\u{1F5BC} <b>AutoMint Menu</b>`,
+    `🖼 <b>AutoMint Menu</b>`,
     `${SEP}`,
     `<i>Tap an action below to get started:</i>`,
   ].join('\n');
@@ -1259,15 +1262,15 @@ async function handleMenuCommand(message: TelegramMessage) {
   const keyboard: InlineKeyboardMarkup = {
     inline_keyboard: [
       [
-        { text: '\u{1F4CB} My Mints', callback_data: 'nav:status' },
-        { text: '\u{1F441} Watch Whale', callback_data: 'nav:watch' },
+        { text: '📋 My Mints', callback_data: 'nav:status' },
+        { text: '👁 Watch Whale', callback_data: 'nav:watch' },
       ],
       [
-        { text: '\u{2699}\u{FE0F} Settings', callback_data: 'nav:settings' },
-        { text: '\u{1F916} AI Model', callback_data: 'nav:model' },
+        { text: '⚙️ Settings', callback_data: 'nav:settings' },
+        { text: '🤖 AI Model', callback_data: 'nav:model' },
       ],
       [
-        { text: '\u{2753} Help', callback_data: 'nav:help' },
+        { text: '❓ Help', callback_data: 'nav:help' },
       ],
     ],
   };
@@ -1313,7 +1316,7 @@ async function handleNavCallback(callback: TelegramCallbackQuery) {
       return { handled: true };
     case 'watch':
       await answerCallbackQuery(callback.id, 'Use /watch <address>');
-      await sendRichMessage(account.chatId, `\u{1F441} <b>Watch a Whale Wallet</b>\n${SEP}\nUse: <code>/watch &lt;0xaddress&gt;</code>\n\n<i>Example:</i> <code>/watch 0x1234...</code>`);
+      await sendRichMessage(account.chatId, `👁 <b>Watch a Whale Wallet</b>\n${SEP}\nUse: <code>/watch &lt;0xaddress&gt;</code>\n\n<i>Example:</i> <code>/watch 0x1234...</code>`);
       return { handled: true };
     default:
       return { handled: false };
@@ -1381,7 +1384,7 @@ async function handleRiskCallback(callback: TelegramCallbackQuery) {
     const { cancelScheduledMint } = await import('@/lib/services/qstash.service');
     await cancelScheduledMint(taskId, account.userId);
     await answerCallbackQuery(callback.id, 'Cancelled.');
-    await sendRichMessage(account.chatId, [`\u{1F6D1} <b>Mint Task Cancelled</b>`, `${SEP}`, `\u{1F9F1} Task: ${shortId(taskId)}`].join('\n'));
+    await sendRichMessage(account.chatId, [`🛑 <b>Mint Task Cancelled</b>`, `${SEP}`, `🧱 Task: ${shortId(taskId)}`].join('\n'));
     return { handled: true };
   }
 
@@ -1389,7 +1392,7 @@ async function handleRiskCallback(callback: TelegramCallbackQuery) {
     const { scheduleMint } = await import('@/lib/services/qstash.service');
     await scheduleMint({ taskId, userId: account.userId, overrideRiskFlag: true });
     await answerCallbackQuery(callback.id, 'Scheduled.');
-    await sendRichMessage(account.chatId, [`\u{1F552} <b>Mint Scheduled</b>`, `${SEP}`, `\u{1F9F1} Task: ${shortId(taskId)}`].join('\n'));
+    await sendRichMessage(account.chatId, [`🕒 <b>Mint Scheduled</b>`, `${SEP}`, `🧱 Task: ${shortId(taskId)}`].join('\n'));
     return { handled: true };
   }
 
@@ -1409,8 +1412,8 @@ async function handleRiskCallback(callback: TelegramCallbackQuery) {
     await sendRichMessage(
       account.chatId,
       result.success
-        ? [`\u{2705} <b>Mint Approved</b>`, `${SEP}`, `\u{1F9F1} Task: ${shortId(taskId)}` + (result.txHash ? `\n\u{1F517} Tx: <code>${escapeHtml(result.txHash.slice(0, 18))}...</code>` : '')].join('\n')
-        : [`\u{274C} <b>Mint Failed</b>`, `${SEP}`, `\u{1F9F1} Task: ${shortId(taskId)}`, `\u{26A0}\u{FE0F} ${escapeHtml(result.error || 'Unknown error')}`].join('\n'),
+        ? [`✅ <b>Mint Approved</b>`, `${SEP}`, `🧱 Task: ${shortId(taskId)}` + (result.txHash ? `\n🔗 Tx: <code>${escapeHtml(result.txHash.slice(0, 18))}...</code>` : '')].join('\n')
+        : [`❌ <b>Mint Failed</b>`, `${SEP}`, `🧱 Task: ${shortId(taskId)}`, `⚠️ ${escapeHtml(result.error || 'Unknown error')}`].join('\n'),
     );
     return { handled: true };
   }
@@ -1426,7 +1429,7 @@ async function handleRiskCallback(callback: TelegramCallbackQuery) {
       .where(and(eq(mintTasks.id, taskId), eq(mintTasks.userId, account.userId)));
 
     await answerCallbackQuery(callback.id, 'Approved.');
-    await sendRichMessage(account.chatId, [`\u{2705} <b>Mint Approved</b>`, `${SEP}`, `\u{1F9F1} Task: ${shortId(taskId)}`].join('\n'));
+    await sendRichMessage(account.chatId, [`✅ <b>Mint Approved</b>`, `${SEP}`, `🧱 Task: ${shortId(taskId)}`].join('\n'));
     return { handled: true };
   }
 
@@ -1454,13 +1457,13 @@ async function handleScheduledMintCallback(callback: TelegramCallbackQuery) {
       try {
         const { cancelScheduledMint } = await import('@/lib/services/qstash.service');
         const task = await cancelScheduledMint(taskId, account.userId);
-        await answerCallbackQuery(callback.id, '\u{2705} Task cancelled');
+        await answerCallbackQuery(callback.id, '✅ Task cancelled');
         await sendRichMessage(
           account.chatId,
           [
-            `\u{1F6D1} <b>Mint Task Cancelled</b>`,
+            `🛑 <b>Mint Task Cancelled</b>`,
             `${SEP}`,
-            `\u{1F9F1} Task: ${shortId(task.id)}`,
+            `🧱 Task: ${shortId(task.id)}`,
           ].join('\n'),
         );
       } catch (cancelError) {
@@ -1468,7 +1471,7 @@ async function handleScheduledMintCallback(callback: TelegramCallbackQuery) {
         await answerCallbackQuery(callback.id, `Failed: ${msg.slice(0, 50)}`);
         await sendRichMessage(
           account.chatId,
-          `\u{274C} Could not cancel task ${shortId(taskId)}: ${escapeHtml(msg.slice(0, 120))}`,
+          `❌ Could not cancel task ${shortId(taskId)}: ${escapeHtml(msg.slice(0, 120))}`,
         );
       }
       return { handled: true };
@@ -1497,13 +1500,13 @@ async function handleRetryCallback(callback: TelegramCallbackQuery) {
 
     const { scheduleMint } = await import('@/lib/services/qstash.service');
     const task = await scheduleMint({ taskId, userId: account.userId });
-    await answerCallbackQuery(callback.id, '\u{2705} Mint retried');
+    await answerCallbackQuery(callback.id, '✅ Mint retried');
     await sendRichMessage(
       account.chatId,
       [
-        `\u{1F504} <b>Mint Retry Started</b>`,
+        `🔄 <b>Mint Retry Started</b>`,
         `${SEP}`,
-        `\u{1F9F1} Task: ${shortId(task.id)}`,
+        `🧱 Task: ${shortId(task.id)}`,
         `<i>You'll be notified when it completes.</i>`,
       ].join('\n'),
     );
@@ -1579,7 +1582,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
       case '/mint':
         // For "Quick Mint" button, show usage hint
         await replyHtml(message, [
-          `\u{26A1} <b>Quick Mint</b>`,
+          `⚡ <b>Quick Mint</b>`,
           `${SEP}`,
           `Paste a URL or use:`,
           `<code>/mint &lt;url&gt; [qty]</code>`,
@@ -1591,7 +1594,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
         await handleStatusCommand(message, account.userId);
         return { handled: true };
       case '/watch':
-        await replyHtml(message, `\u{1F441} <b>Watch a Whale Wallet</b>\n${SEP}\nUse: <code>/watch &lt;0xaddress&gt;</code>`);
+        await replyHtml(message, `👁 <b>Watch a Whale Wallet</b>\n${SEP}\nUse: <code>/watch &lt;0xaddress&gt;</code>`);
         return { handled: true };
       case '/cancel':
         await handleCancelCommand(message, account.userId);
@@ -1678,10 +1681,10 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
         await replyHtml(
           message,
           [
-            `\u{274C} <b>AI Processing Failed</b>`,
+            `❌ <b>AI Processing Failed</b>`,
             `${SEP}`,
             `<i>Try a slash command:</i>`,
-            `<code>/mint</code> \u{2022} <code>/watch</code> \u{2022} <code>/status</code> \u{2022} <code>/cancel</code> \u{2022} <code>/help</code>`,
+            `<code>/mint</code> • <code>/watch</code> • <code>/status</code> • <code>/cancel</code> • <code>/help</code>`,
           ].join('\n'),
         );
       }
@@ -1789,7 +1792,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
         break;
       default:
         await replyHtml(message, [
-          `\u{274C} <b>AI Processing Failed</b>`,
+          `❌ <b>AI Processing Failed</b>`,
           `${SEP}`,
           `<i>Try again or use </i><code>/help</code><i> for the command guide.</i>`,
         ].join('\n'));
