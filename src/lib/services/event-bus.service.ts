@@ -29,7 +29,9 @@ export type EventType =
   | 'monitoring:website-added'
   | 'monitoring:website-removed'
   | 'data:reset'
-  | 'ai:provider-switch';
+  | 'ai:provider-switch'
+  | 'ai:command'
+  | 'ai:command:done';
 
 export interface BusEvent {
   type: EventType;
@@ -65,6 +67,8 @@ export const EVENT_TO_QUERY_KEYS: Record<EventType, string[]> = {
   'monitoring:website-removed':  ['monitoring-websites'],
   'data:reset':                  ['wallets', 'mints', 'collections', 'analytics', 'mint-history', 'watched-wallets', 'copy-mint-rules'],
   'ai:provider-switch':          ['ai-status'],
+  'ai:command':                  [],
+  'ai:command:done':             [],
 };
 
 // ── Redis key helpers ────────────────────────────────────────────────────────

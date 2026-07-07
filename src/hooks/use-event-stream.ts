@@ -1,12 +1,16 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import type { TelegramCommandEvent } from '@/components/ui/telegram-activity-toast';
 
-// ── useEventStream ───────────────────────────────────────────────────────────
+// ── useEventStream ────────────────────────────────────────────────────────────
 // Opens an SSE connection to /api/events/stream. When the server sends an
 // "invalidate" frame, we invalidate the matching React Query keys so the UI
 // refetches fresh data automatically.
+//
+// Also surfaces ai:command / ai:command:done events via the returned
+// `telegramEvent` state so the app shell can render the activity overlay.
 //
 // Reconnects automatically on disconnect (EventSource built-in + our 3s delay).
 
@@ -17,9 +21,15 @@ interface InvalidateEvent {
   ts: number;
 }
 
-export function useEventStream() {
+interface UseEventStreamResult {
+  /** Latest Telegram AI command event (null until first event fires) */
+  telegramEvent: TelegramCommandEvent | null;
+}
+
+export function useEventStream(): UseEventStreamResult {
   const queryClient = useQueryClient();
   const retryDelay = useRef(1500);
+  const [telegramEvent, setTelegramEvent] = useState<TelegramCommandEvent | null>(null);
 
   useEffect(() => {
     let es: EventSource | null = null;
@@ -34,7 +44,16 @@ export function useEventStream() {
         try {
           const data: InvalidateEvent = JSON.parse(e.data);
 
-          // Invalidate each query key so React Query refetches
+          // ── Telegram AI overlay ──────────────────────────────────────────
+          if (data.type === 'ai:command' || data.type === 'ai:command:done') {
+            setTelegramEvent({
+              type: data.type as TelegramCommandEvent['type'],
+              ts: data.ts,
+              meta: data.meta as TelegramCommandEvent['meta'],
+            });
+          }
+
+          // ── React Query cache invalidation ───────────────────────────────
           for (const key of data.queryKeys) {
             void queryClient.invalidateQueries({ queryKey: [key] });
           }
@@ -73,4 +92,6 @@ export function useEventStream() {
       es?.close();
     };
   }, [queryClient]);
+
+  return { telegramEvent };
 }

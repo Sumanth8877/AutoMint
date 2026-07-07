@@ -1,13 +1,20 @@
 'use client';
 
 import { useEventStream } from '@/hooks/use-event-stream';
+import { TelegramActivityToast } from '@/components/ui/telegram-activity-toast';
 
 /**
- * Thin client component that activates the SSE event stream.
+ * Activates the SSE event stream and renders the Telegram AI activity overlay.
  * Drop inside QueryClientProviderWrapper so it can access the query client.
- * Renders children transparently — no extra DOM nodes.
+ * Renders children transparently — the only extra DOM is the toast portal.
  */
 export function EventStreamProvider({ children }: { children: React.ReactNode }) {
-  useEventStream();
-  return <>{children}</>;
+  const { telegramEvent } = useEventStream();
+
+  return (
+    <>
+      {children}
+      <TelegramActivityToast event={telegramEvent} />
+    </>
+  );
 }

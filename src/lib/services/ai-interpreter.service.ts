@@ -953,6 +953,9 @@ export async function interpretTelegramMessage(
     providersToTry.push({ provider: primaryProvider, model: selectedModel });
   }
 
+  // Publish ai:command so the web UI shows a live Telegram activity overlay
+  void publishEvent(userId, 'ai:command', { message, source: 'telegram' });
+
   let lastError = '';
 
   for (const { provider, model } of providersToTry) {
@@ -972,6 +975,9 @@ export async function interpretTelegramMessage(
           reason: 'primary_failed',
         });
       }
+
+      // Notify web UI that the Telegram command finished
+      void publishEvent(userId, 'ai:command:done', { message, reply: result, source: 'telegram' });
 
       return result;
     } catch (_error) {
@@ -1037,6 +1043,9 @@ async function runWithProvider(
       try { args = JSON.parse(call.function.arguments || '{}'); } catch { args = {}; }
 
       logger.info('AI tool call', { area: 'ai-interpreter', tool: toolName, input: args, userId, provider: provider.name });
+
+      // Publish live tool activity so the web overlay tracks each running tool
+      void publishEvent(userId, 'ai:command', { tool: toolName, source: 'telegram' });
 
       try {
         const toolResult = await executeTool(userId, toolName, args);
