@@ -47,6 +47,9 @@ export async function POST(req: Request) {
       expectedMintDate: body.expectedMintDate ? new Date(body.expectedMintDate) : null,
       wlAnnouncementHint: body.wlAnnouncementHint ? new Date(body.wlAnnouncementHint) : null,
       pollFrequencyMinutes: body.pollFrequencyMinutes,
+      hasDailyCheckin: body.hasDailyCheckin ?? false,
+      dailyCheckinUrl: body.dailyCheckinUrl ?? null,
+      dailyCheckinTimeHint: body.dailyCheckinTimeHint ?? null,
     });
 
     return NextResponse.json({ project }, { status: 201 });
