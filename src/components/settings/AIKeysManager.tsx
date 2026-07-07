@@ -7,10 +7,12 @@ import Card from '@/components/ui/Card';
 import { apiRequest } from '@/lib/api/client';
 
 interface AIKeysStatus {
-  gemini: { configured: boolean; maskedKey: string | null; updatedAt: string | null };
-  nara: { configured: boolean; maskedKey: string | null; updatedAt: string | null };
-  geminiEnvConfigured: boolean;
-  naraEnvConfigured: boolean;
+  gemini:     { configured: boolean; maskedKey: string | null; updatedAt: string | null };
+  nara:       { configured: boolean; maskedKey: string | null; updatedAt: string | null };
+  openrouter: { configured: boolean; maskedKey: string | null; updatedAt: string | null };
+  geminiEnvConfigured:     boolean;
+  naraEnvConfigured:       boolean;
+  openrouterEnvConfigured: boolean;
 }
 
 function KeyInput({
@@ -23,7 +25,7 @@ function KeyInput({
   onDelete,
   saving,
 }: {
-  provider: 'gemini' | 'nara';
+  provider: 'gemini' | 'nara' | 'openrouter';
   label: string;
   placeholder: string;
   status: { configured: boolean; maskedKey: string | null; updatedAt: string | null };
@@ -235,6 +237,16 @@ export default function AIKeysManager() {
           placeholder="nara_..."
           status={status.nara}
           envConfigured={status.naraEnvConfigured}
+          onSave={(p, k) => saveMutation.mutate({ provider: p, key: k })}
+          onDelete={p => deleteMutation.mutate(p)}
+          saving={saveMutation.isPending || deleteMutation.isPending}
+        />
+        <KeyInput
+          provider="openrouter"
+          label="OpenRouter API Key"
+          placeholder="sk-or-v1-..."
+          status={status.openrouter}
+          envConfigured={status.openrouterEnvConfigured}
           onSave={(p, k) => saveMutation.mutate({ provider: p, key: k })}
           onDelete={p => deleteMutation.mutate(p)}
           saving={saveMutation.isPending || deleteMutation.isPending}

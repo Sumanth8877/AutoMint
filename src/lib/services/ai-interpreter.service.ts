@@ -32,18 +32,27 @@ const NARA_MODELS: AIModel[] = [
   { id: 'tencent-hy3',        label: 'Tencent Hy3',           description: 'Alternative \u2014 fast responses' },
 ];
 
+const OPENROUTER_MODELS: AIModel[] = [
+  { id: 'tencent/hunyuan-turbos-latest', label: 'Tencent HY3 ⭐',    description: 'Current default — fast, cheap, good tool use' },
+  { id: 'tencent/hunyuan-t1-20250321',   label: 'Tencent HY T1',     description: 'Reasoning model — slower but deeper thinking' },
+  { id: 'mistralai/mistral-large-2411',  label: 'Mistral Large',     description: 'Via OpenRouter — reliable fallback' },
+  { id: 'google/gemini-2.5-flash',       label: 'Gemini 2.5 Flash',  description: 'Via OpenRouter — fast & capable' },
+  { id: 'anthropic/claude-3-5-haiku',    label: 'Claude 3.5 Haiku',  description: 'Via OpenRouter — lightweight & snappy' },
+];
+
 // ── Multi-provider support ────────────────────────────────────────────────────
 // Both Gemini AND Nara models are shown if their API keys are set.
 // If one provider fails, the other is used as automatic fallback.
 
 const GEMINI_MODEL_IDS = new Set(GEMINI_MODELS.map(m => m.id));
-const NARA_MODEL_IDS = new Set(NARA_MODELS.map(m => m.id));
+const NARA_MODEL_IDS       = new Set(NARA_MODELS.map(m => m.id));
+const OPENROUTER_MODEL_IDS = new Set(OPENROUTER_MODELS.map(m => m.id));
 
 /**
  * Resolve an API key: check DB (encrypted storage) first, then env var fallback.
  * This lets users change keys from the Settings UI without redeploying.
  */
-async function resolveApiKey(settingKey: 'GEMINI_API_KEY' | 'NARA_API_KEY'): Promise<string | null> {
+async function resolveApiKey(settingKey: 'GEMINI_API_KEY' | 'NARA_API_KEY' | 'OPENROUTER_API_KEY'): Promise<string | null> {
   try {
     const dbSetting = await getSetting(settingKey);
     if (dbSetting?.value) return dbSetting.value;
@@ -75,19 +84,35 @@ async function getNaraProvider(): Promise<ProviderConfig | null> {
   };
 }
 
-/** Get all configured providers (can be 0, 1, or 2). */
+async function getOpenRouterProvider(): Promise<ProviderConfig | null> {
+  const key = await resolveApiKey('OPENROUTER_API_KEY');
+  if (!key) return null;
+  return {
+    name: 'OpenRouter',
+    baseURL: 'https://openrouter.ai/api/v1',
+    apiKey: key,
+    defaultModel: 'tencent/hunyuan-turbos-latest',
+    models: OPENROUTER_MODELS,
+  };
+}
+
+/** Get all configured providers (can be 0, 1, or 2, or 3). */
 async function getAllProviders(): Promise<ProviderConfig[]> {
-  const [gemini, nara] = await Promise.all([getGeminiProvider(), getNaraProvider()]);
+  const [gemini, nara, openrouter] = await Promise.all([
+    getGeminiProvider(), getNaraProvider(), getOpenRouterProvider(),
+  ]);
   const providers: ProviderConfig[] = [];
   if (gemini) providers.push(gemini);
   if (nara) providers.push(nara);
+  if (openrouter) providers.push(openrouter);
   return providers;
 }
 
 /** Resolve which provider owns a given model ID. */
 async function resolveProviderForModel(modelId: string): Promise<ProviderConfig | null> {
-  if (GEMINI_MODEL_IDS.has(modelId)) return getGeminiProvider();
-  if (NARA_MODEL_IDS.has(modelId)) return getNaraProvider();
+  if (GEMINI_MODEL_IDS.has(modelId))       return getGeminiProvider();
+  if (NARA_MODEL_IDS.has(modelId))         return getNaraProvider();
+  if (OPENROUTER_MODEL_IDS.has(modelId))   return getOpenRouterProvider();
   return null;
 }
 
@@ -98,8 +123,10 @@ async function resolveProvider(): Promise<ProviderConfig | null> {
 
 /** Get a fallback provider (the OTHER provider, not the given one). */
 async function getFallbackProvider(currentName: string): Promise<ProviderConfig | null> {
-  if (currentName === 'Gemini') return getNaraProvider();
-  if (currentName === 'NaraRouter') return getGeminiProvider();
+  // Fallback chain: Gemini → OpenRouter → Nara (and vice versa)
+  if (currentName === 'Gemini')      return (await getOpenRouterProvider()) ?? (await getNaraProvider());
+  if (currentName === 'OpenRouter')  return (await getGeminiProvider()) ?? (await getNaraProvider());
+  if (currentName === 'NaraRouter')  return (await getOpenRouterProvider()) ?? (await getGeminiProvider());
   return null;
 }
 
@@ -119,6 +146,7 @@ export function getAvailableModels(): AIModel[] {
 
 export function getModels(): AIModel[] {
   // For model listing we check env vars + assume DB keys may exist.
+  // OpenRouter models are shown if OPENROUTER_API_KEY is set (env or DB).
   // Show both provider models if either source has a key configured.
   // The actual key resolution (DB vs env) happens async at runtime.
   const models: AIModel[] = [];
