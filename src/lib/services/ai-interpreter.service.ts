@@ -33,11 +33,17 @@ const NARA_MODELS: AIModel[] = [
 ];
 
 const OPENROUTER_MODELS: AIModel[] = [
-  { id: 'tencent/hunyuan-turbos-latest', label: 'Tencent HY3 ⭐',    description: 'Current default — fast, cheap, good tool use' },
-  { id: 'tencent/hunyuan-t1-20250321',   label: 'Tencent HY T1',     description: 'Reasoning model — slower but deeper thinking' },
-  { id: 'mistralai/mistral-large-2411',  label: 'Mistral Large',     description: 'Via OpenRouter — reliable fallback' },
-  { id: 'google/gemini-2.5-flash',       label: 'Gemini 2.5 Flash',  description: 'Via OpenRouter — fast & capable' },
-  { id: 'anthropic/claude-3-5-haiku',    label: 'Claude 3.5 Haiku',  description: 'Via OpenRouter — lightweight & snappy' },
+  // ── Free tier (no cost) ──────────────────────────────────────────────────
+  { id: 'google/gemini-2.0-flash-exp:free',          label: 'Gemini 2.0 Flash ⚡ FREE',   description: 'Fastest free model — ~1-2s, strong tool use' },
+  { id: 'meta-llama/llama-3.1-8b-instruct:free',     label: 'Llama 3.1 8B FREE',          description: 'Fast & free — good for simple commands' },
+  { id: 'mistralai/mistral-7b-instruct:free',        label: 'Mistral 7B FREE',            description: 'Tiny, quick — basic commands only' },
+  { id: 'google/gemini-flash-1.5:free',              label: 'Gemini 1.5 Flash FREE',      description: 'Free Gemini — solid all-rounder' },
+  // ── Paid (fast) ──────────────────────────────────────────────────────────
+  { id: 'tencent/hunyuan-turbos-latest',             label: 'Tencent HY3',                description: 'Fast & cheap — good tool use' },
+  { id: 'google/gemini-2.5-flash',                   label: 'Gemini 2.5 Flash',           description: 'Best paid speed/quality ratio' },
+  { id: 'anthropic/claude-3-5-haiku',                label: 'Claude 3.5 Haiku',           description: 'Lightweight & fast via OpenRouter' },
+  { id: 'mistralai/mistral-large-2411',              label: 'Mistral Large',              description: 'Reliable paid fallback' },
+  { id: 'tencent/hunyuan-t1-20250321',               label: 'Tencent HY T1',              description: 'Reasoning model — slower but deep' },
 ];
 
 // ── Multi-provider support ────────────────────────────────────────────────────
@@ -91,7 +97,7 @@ async function getOpenRouterProvider(): Promise<ProviderConfig | null> {
     name: 'OpenRouter',
     baseURL: 'https://openrouter.ai/api/v1',
     apiKey: key,
-    defaultModel: 'tencent/hunyuan-turbos-latest',
+    defaultModel: 'google/gemini-2.0-flash-exp:free',
     models: OPENROUTER_MODELS,
   };
 }

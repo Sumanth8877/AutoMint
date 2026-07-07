@@ -618,7 +618,20 @@ async function handleStart(message: TelegramMessage, token: string) {
     chatId: String(message.chat.id),
   });
 
-  await sendTelegramMessage(account.chatId, 'Telegram linked to AutoMint. Commands: /mint <url>, /schedule <url>, /watch <wallet>, /status, /cancel, /settings.');
+  await sendTelegramMessage(
+    account.chatId,
+    '✅ *Telegram linked to your AutoMint account!*\n\n' +
+    'You can now control your full AutoMint platform from here.\n\n' +
+    '*Quick commands:*\n' +
+    '⚡ Just paste a URL to mint instantly\n' +
+    '/mint <url> [qty] — queue a mint\n' +
+    '/watch <wallet> — track a whale\n' +
+    '/status — active mints\n' +
+    '/cancel — cancel latest mint\n' +
+    '/settings — view settings\n' +
+    '/model — change AI model\n\n' +
+    'Or just type anything in plain English — the AI handles it 🤖',
+  );
 }
 
 const MAX_MINT_QUANTITY = 50;
