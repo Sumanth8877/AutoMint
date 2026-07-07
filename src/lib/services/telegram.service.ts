@@ -13,6 +13,7 @@ import { getMintState } from '@/lib/services/mint-state.service';
 import { fetchMintRequirements } from '@/lib/services/mint-requirements.service';
 import { createMintTaskFromUrl, withMintTaskCreationLock } from '@/lib/services/mint-orchestrator.service';
 import { cancelScheduledMint, scheduleMint } from '@/lib/services/qstash.service';
+import { secureCompare } from '@/lib/security/timing-safe-compare';
 import { watchWallet } from '@/lib/services/wallet-tracker.service';
 import { publishEvent } from '@/lib/services/event-bus.service';
 
@@ -347,12 +348,11 @@ function verifyTelegramLinkToken(token: string) {
   if (!encodedPayload || !signature) throw new Error('Invalid link token');
 
   const expected = signTokenPayload(encodedPayload);
-  const signatureBuffer = Buffer.from(signature);
-  const expectedBuffer = Buffer.from(expected);
-  if (
-    signatureBuffer.length !== expectedBuffer.length ||
-    !crypto.timingSafeEqual(signatureBuffer, expectedBuffer)
-  ) {
+  // Low: use the codebase's own secureCompare() helper instead of a raw
+  // length-check + timingSafeEqual, consistent with every other
+  // signature/secret comparison in this codebase (QStash bearer auth,
+  // Telegram webhook secret, Alchemy webhook signature).
+  if (!secureCompare(signature, expected)) {
     throw new Error('Invalid link token');
   }
 

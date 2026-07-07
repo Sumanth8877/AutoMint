@@ -313,8 +313,14 @@ const TOOLS: ChatCompletionTool[] = [
   // ─── Settings ───
   { type: 'function', function: { name: 'get_execution_settings', description: "Get the user's current execution settings: gas strategy, risk analysis toggle, safe mode, price limits.", parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'update_execution_settings', description: 'Update execution settings. Only pass the fields you want to change.', parameters: { type: 'object', properties: { gasStrategy: { type: 'string', description: 'Gas strategy: slow, normal, fast, or aggressive' }, riskAnalysisEnabled: { type: 'boolean', description: 'Enable/disable risk analysis before mints' }, safeModeEnabled: { type: 'boolean', description: 'Block high-risk mints automatically' }, maxGasPriceGwei: { type: 'number', description: 'Maximum gas price in Gwei' }, maxMintPriceEth: { type: 'string', description: 'Maximum mint price in ETH' } } } } },
-  { type: 'function', function: { name: 'get_notification_settings', description: "Get user's notification settings for email and Telegram alerts.", parameters: { type: 'object', properties: {} } } },
-  { type: 'function', function: { name: 'update_notification_settings', description: 'Update notification preferences.', parameters: { type: 'object', properties: { emailEnabled: { type: 'boolean', description: 'Enable email notifications' }, telegramEnabled: { type: 'boolean', description: 'Enable Telegram notifications' }, notifyOnMintSuccess: { type: 'boolean', description: 'Alert on successful mints' }, notifyOnMintFailure: { type: 'boolean', description: 'Alert on failed mints' }, notifyOnWhaleActivity: { type: 'boolean', description: 'Alert on whale activity' } } } } },
+  // NOTE: notification preferences (email alerts) are exposed via
+  // get_email_settings / update_email_settings below. There used to be a
+  // separate get_notification_settings / update_notification_settings pair
+  // here that was wired to the wrong backend (see fix note near the
+  // executeTool() cases) -- removed rather than fixed-in-place since
+  // get_email_settings/update_email_settings already cover this ground
+  // correctly and having two overlapping tools for the same concept
+  // invites the AI to pick the wrong one.
 
   // ─── System ───
   { type: 'function', function: { name: 'get_system_status', description: 'Get system health: database, Redis, RPC providers, QStash, and service status.', parameters: { type: 'object', properties: {} } } },
@@ -356,7 +362,7 @@ const TOOLS: ChatCompletionTool[] = [
   { type: 'function', function: { name: 'get_usage', description: 'Get usage summary — configured services and their status.', parameters: { type: 'object', properties: {} } } },
 
   // ─── Account ───
-  { type: 'function', function: { name: 'reset_all_data', description: 'DESTRUCTIVE: Delete ALL user data — wallets, mints, collections, settings. Cannot be undone. Use with extreme caution.', parameters: { type: 'object', properties: { confirm: { type: 'boolean', description: 'Must be true to proceed. Always ask the user to confirm first.' } }, required: ['confirm'] } } },
+  { type: 'function', function: { name: 'reset_all_data', description: 'DESTRUCTIVE: Clear the user\'s activity history -- mint history, analyzer history, and collections. Wallets, the mint queue, watched wallets, and account/login are always preserved (same scope as the website\'s "Reset Data" button). Cannot be undone.', parameters: { type: 'object', properties: { confirm: { type: 'boolean', description: 'Must be true to proceed. Always ask the user to confirm first.' } }, required: ['confirm'] } } },
 
   // ─── WL Tracker ───
   { type: 'function', function: { name: 'wl_list_projects', description: "List all of the user's tracked whitelist / allowlist projects (Twitter accounts we're watching for winner announcements, mint links, or delays).", parameters: { type: 'object', properties: {} } } },
@@ -541,16 +547,23 @@ async function executeTool(
     }
 
     case 'cancel_mint': {
-      const { getDb } = await import('@/lib/db');
-      const { mintTasks } = await import('@/drizzle/schema');
-      const { and, eq, inArray } = await import('drizzle-orm');
-      const [updated] = await getDb()
-        .update(mintTasks)
-        .set({ status: 'cancelled' })
-        .where(and(eq(mintTasks.id, String(input.taskId)), eq(mintTasks.userId, userId), inArray(mintTasks.status, ['pending', 'monitoring', 'ready'])))
-        .returning({ id: mintTasks.id });
-      if (!updated) return { success: false, error: 'Task not found or not cancellable' };
-      return { success: true, cancelledTaskId: updated.id };
+      // Bug fix: this previously did a raw UPDATE that skipped the same
+      // cleanup cancelScheduledMint() performs -- deleting the pending
+      // QStash message, clearing qstashMessageId/scheduledTime, and logging
+      // the activity. Not exploitable (executeScheduledMint() independently
+      // checks status === 'cancelled' before ever broadcasting), but it left
+      // an orphaned QStash message that fires and no-ops later, and
+      // cancellations made via AI chat never appeared in the web dashboard's
+      // Activity feed. Now delegates to the canonical implementation, same
+      // as the legacy /cancel slash-command fallback.
+      const { cancelScheduledMint } = await import('@/lib/services/qstash.service');
+      try {
+        const updated = await cancelScheduledMint(String(input.taskId), userId);
+        if (!updated) return { success: false, error: 'Task not found or not cancellable' };
+        return { success: true, cancelledTaskId: updated.id };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : 'Task not found or not cancellable' };
+      }
     }
 
     case 'retry_failed_mint': {
@@ -725,24 +738,19 @@ async function executeTool(
       return { success: true, updated: result };
     }
 
-    case 'get_notification_settings': {
-      const { getAllSettings } = await import('@/lib/services/integration-settings.service');
-      const settings = await getAllSettings();
-      return { ...settings };
-    }
-
-    case 'update_notification_settings': {
-      const { setSetting } = await import('@/lib/services/integration-settings.service');
-      const updated: Record<string, string> = {};
-      for (const [key, value] of Object.entries(input)) {
-        if (value !== undefined) {
-          const stringValue = String(value);
-          await setSetting(key as Parameters<typeof setSetting>[0], stringValue);
-          updated[key] = stringValue;
-        }
-      }
-      return { success: true, updated };
-    }
+    // Bug fix (Critical): this pair used to call integration-settings.service.ts
+    // -- the store for third-party API keys (Alchemy, Infura, Chainstack,
+    // Gemini, Nara, OpenRouter, SocialData) -- instead of the actual
+    // notification-preferences backend. That meant get_notification_settings
+    // returned every configured API key **fully decrypted** into the LLM's
+    // tool-call context (sent to the external AI provider, and liable to be
+    // echoed back into the Telegram chat), while update_notification_settings
+    // always threw (its schema's fields like `emailEnabled` are not valid
+    // integrationSettings keys, so assertSupportedKey() rejected every call).
+    // Removed: get_email_settings / update_email_settings (below) already
+    // cover this ground correctly against email-notification.service.ts.
+    // These two case blocks are intentionally deleted, not "fixed in place",
+    // to avoid leaving two overlapping tools for the same concept.
 
     // ─── System ───
     case 'get_system_status': {
@@ -924,7 +932,7 @@ async function executeTool(
         { name: 'Database', configured: check('DATABASE_URL') },
         { name: 'Redis', configured: check('KV_REST_API_URL') },
         { name: 'Clerk', configured: check('CLERK_SECRET_KEY') },
-        { name: 'AI Provider', configured: check('GEMINI_API_KEY') || check('NARA_API_KEY') },
+        { name: 'AI Provider', configured: check('GEMINI_API_KEY') || check('NARA_API_KEY') || check('OPENROUTER_API_KEY') },
       ];
       return { services, configuredCount: services.filter(s => s.configured).length, totalCount: services.length };
     }
@@ -943,16 +951,21 @@ async function executeTool(
     // ─── Account ───
     case 'reset_all_data': {
       if (!input.confirm || input.confirm !== true) {
-        return { error: '⚠️ This will DELETE ALL your data permanently. Pass confirm: true to proceed.' };
+        return { error: '⚠️ This will permanently delete your mint history, analyzer history, and collections. Pass confirm: true to proceed.' };
       }
-      const { deleteAccount } = await import('@/lib/services/account-deletion.service');
-      const { getDb: getDb3 } = await import('@/lib/db');
-      const { users } = await import('@/drizzle/schema');
-      const { eq: eq3 } = await import('drizzle-orm');
-      const [user] = await getDb3().select({ clerkId: users.clerkId }).from(users).where(eq3(users.id, userId)).limit(1);
-      if (!user) return { error: 'User not found' };
-      await deleteAccount({ userId, clerkId: user.clerkId });
-      return { success: true, message: 'All data has been permanently deleted.' };
+      // Bug fix: this previously called deleteAccount() -- the full
+      // account-deletion path that deletes wallets (with their encrypted
+      // private keys) and permanently removes the user's Clerk login,
+      // gated only by a boolean the LLM itself decides to set. The
+      // website's "Reset Data" button (which this tool's name/description
+      // mirrors) only clears history + collections and explicitly keeps
+      // wallets, the mint queue, and the account. Now delegates to the
+      // same scoped resetUserActivityData() the web UI uses, so "reset
+      // all data" via Telegram matches what the user expects from the
+      // identically-named button on the website.
+      const { resetUserActivityData } = await import('@/lib/services/reset-data.service');
+      const { results, total } = await resetUserActivityData(userId);
+      return { success: true, message: `${total} record(s) cleared. Wallets, mint queue, and account are intact.`, results };
     }
 
     // ─── WL Tracker ─────────────────────────────────────────────────────
