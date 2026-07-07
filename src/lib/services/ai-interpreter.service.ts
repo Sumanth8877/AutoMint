@@ -1284,5 +1284,22 @@ async function runWithProvider(
     });
   }
 
-  return response.choices[0]?.message?.content || 'Done.';
+  // Some models (notably Gemini via OpenAI compat) return null content after
+  // processing tool results. Force a text response with tool_choice: 'none'.
+  const finalContent = response.choices[0]?.message?.content;
+  if (finalContent) return finalContent;
+
+  // Push the (empty-content) assistant message so the model sees the full chain,
+  // then ask it to summarise without further tool calls.
+  const lastMsg = response.choices[0]?.message;
+  if (lastMsg) messages.push(lastMsg);
+
+  const retry = await client.chat.completions.create({
+    model,
+    messages,
+    tools: TOOLS,
+    tool_choice: 'none',   // force text — no more tool calls
+  });
+
+  return retry.choices[0]?.message?.content || 'Done.';
 }
