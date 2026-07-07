@@ -27,9 +27,8 @@ const GEMINI_MODELS: AIModel[] = [
 ];
 
 const NARA_MODELS: AIModel[] = [
-  { id: 'mistral-large',      label: 'Mistral Large \u2b50',      description: 'Recommended \u2014 smart, supports tools' },
-  { id: 'mistral-medium-3-5', label: 'Mistral Medium 3.5',    description: 'Balanced \u2014 good speed & quality' },
-  { id: 'tencent-hy3',        label: 'Tencent Hy3',           description: 'Alternative \u2014 fast responses' },
+  { id: 'mistral-large',      label: 'Mistral Large ⭐',      description: 'Recommended — smart, supports tools' },
+  { id: 'mistral-medium-3-5', label: 'Mistral Medium 3.5',   description: 'Balanced — good speed & quality' },
 ];
 
 const OPENROUTER_MODELS: AIModel[] = [
@@ -39,11 +38,9 @@ const OPENROUTER_MODELS: AIModel[] = [
   { id: 'mistralai/mistral-7b-instruct:free',        label: 'Mistral 7B FREE',            description: 'Tiny, quick — basic commands only' },
   { id: 'google/gemini-flash-1.5:free',              label: 'Gemini 1.5 Flash FREE',      description: 'Free Gemini — solid all-rounder' },
   // ── Paid (fast) ──────────────────────────────────────────────────────────
-  { id: 'tencent/hunyuan-turbos-latest',             label: 'Tencent HY3',                description: 'Fast & cheap — good tool use' },
   { id: 'google/gemini-2.5-flash',                   label: 'Gemini 2.5 Flash',           description: 'Best paid speed/quality ratio' },
   { id: 'anthropic/claude-3-5-haiku',                label: 'Claude 3.5 Haiku',           description: 'Lightweight & fast via OpenRouter' },
   { id: 'mistralai/mistral-large-2411',              label: 'Mistral Large',              description: 'Reliable paid fallback' },
-  { id: 'tencent/hunyuan-t1-20250321',               label: 'Tencent HY T1',              description: 'Reasoning model — slower but deep' },
 ];
 
 // ── Multi-provider support ────────────────────────────────────────────────────

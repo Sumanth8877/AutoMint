@@ -173,7 +173,7 @@ export function AIChat() {
         onClick={() => setOpen(v => !v)}
         aria-label={open ? 'Close AI chat' : 'Open AI chat'}
         className={`
-          fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center
+          fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center
           rounded-full shadow-lg transition-all duration-300
           ${open
             ? 'bg-surface border border-border text-muted hover:text-text'
