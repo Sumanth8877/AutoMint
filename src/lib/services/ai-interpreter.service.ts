@@ -102,35 +102,6 @@ async function getFallbackProvider(currentName: string): Promise<ProviderConfig 
   return null;
 }
 
-/** Get all configured providers (can be 0, 1, or 2). */
-function getAllProviders(): ProviderConfig[] {
-  const providers: ProviderConfig[] = [];
-  const gemini = getGeminiProvider();
-  const nara = getNaraProvider();
-  if (gemini) providers.push(gemini);
-  if (nara) providers.push(nara);
-  return providers;
-}
-
-/** Resolve which provider owns a given model ID. */
-function resolveProviderForModel(modelId: string): ProviderConfig | null {
-  if (GEMINI_MODEL_IDS.has(modelId)) return getGeminiProvider();
-  if (NARA_MODEL_IDS.has(modelId)) return getNaraProvider();
-  return null;
-}
-
-/** Get the primary provider (first available \u2014 Gemini preferred). */
-function resolveProvider(): ProviderConfig | null {
-  return getGeminiProvider() ?? getNaraProvider();
-}
-
-/** Get a fallback provider (the OTHER provider, not the given one). */
-function getFallbackProvider(currentName: string): ProviderConfig | null {
-  if (currentName === 'Gemini') return getNaraProvider();
-  if (currentName === 'NaraRouter') return getGeminiProvider();
-  return null;
-}
-
 // ── Model management ────────────────────────────────────────────────────────
 
 export type AIModelId = string;
@@ -914,14 +885,14 @@ export async function interpretTelegramMessage(
   message: string,
   userId: string,
 ): Promise<string> {
-  const providers = getAllProviders();
+  const providers = await getAllProviders();
   if (providers.length === 0) {
     return 'AI features are not configured. Set GEMINI_API_KEY or NARA_API_KEY in your environment.\n\nUse slash commands instead:\n/mint <url> \u2022 /watch <address> \u2022 /status \u2022 /cancel \u2022 /settings';
   }
 
   const selectedModel = await getUserModel(userId);
-  const primaryProvider = resolveProviderForModel(selectedModel) ?? providers[0];
-  const fallbackProvider = getFallbackProvider(primaryProvider.name);
+  const primaryProvider = (await resolveProviderForModel(selectedModel)) ?? providers[0];
+  const fallbackProvider = await getFallbackProvider(primaryProvider.name);
 
   // ── Circuit breaker: check if primary is healthy ──────────────────────
   // Gemini is always preferred. If Gemini is marked "down" by the circuit
