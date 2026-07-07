@@ -508,12 +508,20 @@ async function executeTool(
       const { createMintTaskFromUrl } = await import('@/lib/services/mint-orchestrator.service');
       const { getDb: getDb2 } = await import('@/lib/db');
       const { wallets: walletsTable } = await import('@/drizzle/schema');
-      const { eq: eq2 } = await import('drizzle-orm');
-      const [defaultWallet] = await getDb2()
+      const { eq: eq2, and: and2 } = await import('drizzle-orm');
+      // Prefer the user's default wallet; fall back to any wallet.
+      let [defaultWallet] = await getDb2()
         .select({ id: walletsTable.id })
         .from(walletsTable)
-        .where(eq2(walletsTable.userId, userId))
+        .where(and2(eq2(walletsTable.userId, userId), eq2(walletsTable.isDefault, true)))
         .limit(1);
+      if (!defaultWallet) {
+        [defaultWallet] = await getDb2()
+          .select({ id: walletsTable.id })
+          .from(walletsTable)
+          .where(eq2(walletsTable.userId, userId))
+          .limit(1);
+      }
       if (!defaultWallet) return { error: 'No wallet configured. Add a wallet first.' };
       const result = await createMintTaskFromUrl(String(input.url), defaultWallet.id, userId, input.quantity ? Number(input.quantity) : 1);
       return { success: true, action: result.action, taskId: result.taskId, error: result.error };
@@ -1245,10 +1253,14 @@ async function runWithProvider(
     if (!choice) break;
 
     const assistantMessage = choice.message;
-    messages.push(assistantMessage);
-
     const toolCalls = assistantMessage.tool_calls;
     if (!toolCalls || toolCalls.length === 0) break;
+
+    // Push assistant message AFTER confirming there are tool calls to process.
+    // Pushing before the check causes a duplicate assistant message when the
+    // loop exits without tool calls — Gemini rejects consecutive assistant
+    // messages, returning null content → 'Done.' fallback.
+    messages.push(assistantMessage);
 
     for (const call of toolCalls) {
       const toolName = call.function.name;

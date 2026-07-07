@@ -902,7 +902,7 @@ async function handleMintCommand(message: TelegramMessage, userId: string, rawIn
   if (result.action === 'MONITORING') {
     await sendTelegramNotification(userId, 'mint_created', { url, taskId: result.taskId });
     void publishEvent(userId, 'mint:created', { taskId: result.taskId, url });
-    await reply(
+    await replyHtml(
       message,
       [
         `⏳ <b>Monitoring Started</b>`,
@@ -919,7 +919,7 @@ async function handleMintCommand(message: TelegramMessage, userId: string, rawIn
   // TASK_CREATED: mint is live — task queued for near-immediate execution via QStash.
   await sendTelegramNotification(userId, 'mint_created', { url, taskId: result.taskId });
   void publishEvent(userId, 'mint:created', { taskId: result.taskId, url });
-  await reply(
+  await replyHtml(
     message,
     [
       `✅ <b>Mint Task Created</b>`,
@@ -1062,6 +1062,7 @@ async function handleWatchCommand(message: TelegramMessage, userId: string, addr
 }
 
 async function handleStatusCommand(message: TelegramMessage, userId: string) {
+  try {
   const rows = await getDb()
     .select()
     .from(mintTasks)
@@ -1133,9 +1134,15 @@ async function handleStatusCommand(message: TelegramMessage, userId: string) {
   } else {
     await replyHtml(message, lines.join('\n'));
   }
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : 'Failed to get status';
+    logger.error('handleStatusCommand error', { area: 'telegram', userId, error: errMsg });
+    await replyHtml(message, `❌ <b>Error</b>\n${escapeHtml(errMsg)}`);
+  }
 }
 
 async function handleCancelCommand(message: TelegramMessage, userId: string) {
+  try {
   const [target] = await getDb()
     .select({ id: mintTasks.id })
     .from(mintTasks)
@@ -1634,8 +1641,8 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
         const { interpretTelegramMessage } = await import('@/lib/services/ai-interpreter.service');
         const aiReply = await interpretTelegramMessage(`mint ${text}`, urlAccount.userId);
         await replyHtml(message, markdownToHtml(aiReply));
-      } catch {
-        // Fallback to direct handler if AI fails
+      } catch (_aiUrlError) {
+        logger.warn('AI interpreter failed for URL, falling back to handleMintCommand', { area: 'telegram', error: _aiUrlError instanceof Error ? _aiUrlError.message : String(_aiUrlError) });
         await handleMintCommand(message, urlAccount.userId, text);
       }
       return { handled: true };
@@ -1678,6 +1685,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
         const aiReply = await interpretTelegramMessage(text, aiAccount.userId);
         await replyHtml(message, markdownToHtml(aiReply));
       } catch (_aiError) {
+        logger.warn('AI interpreter failed for non-URL text', { area: 'telegram', error: _aiError instanceof Error ? _aiError.message : String(_aiError) });
         await replyHtml(
           message,
           [
