@@ -15,7 +15,6 @@ const NAV: NavItem[] = [
   { label: 'Profile', href: '/settings/profile', icon: User },
   { label: 'Notifications', href: '/settings/notifications', icon: Bell },
   { label: 'Integrations', href: '/settings/integrations', icon: KeyRound },
-  { label: 'System', href: '/settings/system', icon: Wrench },
 ];
 
 export default function SettingsLayout({ children }: { children: ReactNode }) {
