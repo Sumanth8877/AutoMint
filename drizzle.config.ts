@@ -9,6 +9,7 @@ export default defineConfig({
     './src/drizzle/schema/index.ts',
     './src/drizzle/schema/tasks.ts',
     './src/drizzle/schema/monitoring.ts',
+    './src/drizzle/schema/wl-tracker.ts',
   ],
   out: './src/drizzle/migrations',
   dialect: 'postgresql',
