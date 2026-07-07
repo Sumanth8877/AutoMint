@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, CheckCircle2, Clock, Gauge, History, Save, ShieldAlert, ShieldCheck, Sparkles, TerminalSquare, Zap } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, Gauge, History, Loader2, Save, ShieldAlert, ShieldCheck, Sparkles, TerminalSquare, Zap } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -410,6 +410,42 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
     }
   };
 
+  // ── Direct instant-mint (bypasses AI interpreter entirely) ─────────────────
+  const [isMinting, setIsMinting] = useState(false);
+  const [mintResult, setMintResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const handleInstantMint = async () => {
+    if (!result || isMinting) return;
+    setIsMinting(true);
+    setMintResult(null);
+    try {
+      const res = await fetch('/api/mints', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mintUrl: result.intent.sourceUrl,
+          quantity: 1,
+        }),
+      });
+      const data = await res.json() as { taskId?: string; action?: string; error?: string };
+      if (!res.ok || data.error) {
+        setMintResult({ success: false, message: data.error ?? 'Mint failed — check the Mints page.' });
+      } else {
+        setMintResult({
+          success: true,
+          message: data.action === 'executed'
+            ? '✅ Mint executed! Check the Mints page for the result.'
+            : '✅ Mint queued! Monitoring for the live window.',
+        });
+        queryClient.invalidateQueries({ queryKey: ['mints'] });
+      }
+    } catch {
+      setMintResult({ success: false, message: 'Network error — please try again.' });
+    } finally {
+      setIsMinting(false);
+    }
+  };
+
   const openMints = () => {
     if (url.trim()) {
       window.location.href = `/mints?mintUrl=${encodeURIComponent(url.trim())}`;
@@ -551,19 +587,78 @@ export default function AnalyzerClient({ initialInput = '' }: { initialInput?: s
             <Reveal>
             <Card tone="elevated" className="p-5">
               <div className="mb-4 flex items-center gap-3">
-                <Save className="h-5 w-5 text-primary" aria-hidden="true" />
-                <h2 className="font-semibold text-text">Actions</h2>
+                {result?.mintState.status === 'LIVE'
+                  ? <Zap className="h-5 w-5 text-success" aria-hidden="true" />
+                  : <Save className="h-5 w-5 text-primary" aria-hidden="true" />
+                }
+                <h2 className="font-semibold text-text">
+                  {result?.mintState.status === 'LIVE' ? 'Live Mint' : 'Actions'}
+                </h2>
+                {result?.mintState.status === 'LIVE' && (
+                  <span className="ml-auto flex items-center gap-1.5 rounded-full border border-success/30 bg-emerald-50 dark:bg-emerald-950/30 px-2.5 py-0.5 text-xs font-semibold text-success">
+                    <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+                    LIVE NOW
+                  </span>
+                )}
               </div>
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="secondary" disabled={!saved}>
-                  <Save className="h-4 w-4" aria-hidden="true" />
-                  {saved ? 'Analysis Saved' : 'Save Analysis'}
-                </Button>
-                <Button type="button" onClick={openMints}>
-                  <Gauge className="h-4 w-4" aria-hidden="true" />
-                  Create Scheduled Mint
-                </Button>
-              </div>
+
+              {/* ── LIVE: Instant mint banner ─────────────────────────────── */}
+              {result?.mintState.status === 'LIVE' ? (
+                <div className="space-y-3">
+                  <div className="rounded-xl border border-success/20 bg-emerald-50 dark:bg-emerald-950/20 p-4">
+                    <p className="text-sm font-medium text-success mb-1">
+                      This collection is minting right now.
+                    </p>
+                    <p className="text-xs text-muted">
+                      Clicking Mint Now calls <code className="font-mono">/api/mints</code> directly
+                      — no AI, no queue, instant execution.
+                    </p>
+                  </div>
+
+                  <Button
+                    type="button"
+                    className="w-full"
+                    disabled={isMinting}
+                    onClick={() => void handleInstantMint()}
+                  >
+                    {isMinting
+                      ? <><Loader2 className="h-4 w-4 animate-spin" /> Minting…</>
+                      : <><Zap className="h-4 w-4" /> Mint Now</>
+                    }
+                  </Button>
+
+                  {mintResult && (
+                    <div className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-sm ${
+                      mintResult.success
+                        ? 'border-success/20 bg-emerald-50 dark:bg-emerald-950/20 text-success'
+                        : 'border-danger/20 bg-red-50 dark:bg-red-950/20 text-danger'
+                    }`}>
+                      {mintResult.success
+                        ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                        : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                      }
+                      <span>{mintResult.message}</span>
+                    </div>
+                  )}
+
+                  <Button type="button" variant="secondary" className="w-full" onClick={openMints}>
+                    <Gauge className="h-4 w-4" aria-hidden="true" />
+                    Advanced Mint Options
+                  </Button>
+                </div>
+              ) : (
+                /* ── NOT LIVE: Standard actions ──────────────────────────── */
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="secondary" disabled={!saved}>
+                    <Save className="h-4 w-4" aria-hidden="true" />
+                    {saved ? 'Analysis Saved' : 'Save Analysis'}
+                  </Button>
+                  <Button type="button" onClick={openMints}>
+                    <Gauge className="h-4 w-4" aria-hidden="true" />
+                    Create Scheduled Mint
+                  </Button>
+                </div>
+              )}
             </Card>
             </Reveal>
           </div>
