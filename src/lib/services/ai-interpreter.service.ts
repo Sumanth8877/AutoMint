@@ -191,7 +191,7 @@ export async function setUserModel(userId: string, modelId: string): Promise<voi
 
 // ── Config ─────────────────────────────────────────────────────────────────
 
-const MAX_TOOL_ROUNDS = 8;
+const MAX_TOOL_ROUNDS = 3;
 
 // ── System Prompt ────────────────────────────────────────────────────────────
 
@@ -258,17 +258,46 @@ Analyzer history: get_analyzer_history
 
 
 
-function buildSystemPrompt(): string {
-  const guide = getKnowledgeBase();
-  if (!guide) return BASE_SYSTEM_PROMPT;
-  return (
-    BASE_SYSTEM_PROMPT +
-    '\n\n---\n\n' +
-    '# AutoMint Knowledge Base\n\n' +
-    'The following is your reference guide for AutoMint. Use it to answer ' +
-    'feature questions, explain workflows, and guide users step by step.\n\n' +
-    guide
-  );
+// ── Action command detector ───────────────────────────────────────────────────
+// These messages clearly map to tool calls and don't need the full knowledge
+// base. Skipping it saves ~3000 tokens and ~4-6 seconds of latency per call.
+const ACTION_PATTERNS = [
+  /^(list|show|get|check|what(?:'s| is| are) (?:my|the))/i,
+  /^(mint|cancel|retry|watch|remove|add|update|refresh|set|enable|disable)/i,
+  /^(how much|how many|what'?s? my|my wallets?|my mints?|my balance)/i,
+  /^\/(mint|watch|status|cancel|settings?|model|schedule|start|help)/i,
+  /^https?:\/\//i,         // URLs → direct mint shortcut
+  /^0x[0-9a-fA-F]{40}/i,  // addresses → direct action
+];
+
+function isActionCommand(message: string): boolean {
+  const m = message.trim();
+  return ACTION_PATTERNS.some(p => p.test(m));
+}
+
+// Compact summary injected for conversational messages (much smaller than full guide)
+const COMPACT_KNOWLEDGE = `
+## Quick Reference
+- Wallets: Ethereum/Base/Polygon/Arbitrum EVM wallets, check balances, set default
+- Minting: paste URL → analyze → mint. Statuses: pending/monitoring/running/completed/failed
+- Analyzer: paste URL or contract → risk score (0-100), ABI, mint function, price
+- Whale Tracker: watch wallets, copy-mint rules (auto-mirror whale mints)
+- Copy-mint fields: walletAddress, maxPrice (ETH), quantity, minMintCount, autoMint, riskThreshold
+- Gas strategies: slow/normal/fast/aggressive. Risk threshold: 0-100 (default 75 blocks high-risk)
+- Settings: execution (gas/risk), notifications (Telegram/email), AI keys (Gemini/Nara/OpenRouter)
+- Telegram link: Settings → Notifications → Telegram → Generate Token → /start <token>
+- Free fast models: google/gemini-2.0-flash-exp:free via OpenRouter (~1-2s)
+- USD→ETH: 1 ETH ≈ $2500 (e.g. $10 = 0.004 ETH)
+`;
+
+function buildSystemPrompt(message: string): string {
+  // For action commands: lean prompt, no knowledge base = fastest response
+  if (isActionCommand(message)) {
+    return BASE_SYSTEM_PROMPT;
+  }
+  // For conversational/question messages: add compact knowledge summary
+  // (not the full guide — that adds 4+ seconds for zero benefit on most queries)
+  return BASE_SYSTEM_PROMPT + COMPACT_KNOWLEDGE;
 }
 
 // ── Tool Declarations (OpenAI format) ────────────────────────────────────────
@@ -1084,7 +1113,7 @@ async function runWithProvider(
 
   // Build messages: system prompt + full conversation history
   const messages: ChatCompletionMessageParam[] = [
-    { role: 'system', content: buildSystemPrompt() },
+    { role: 'system', content: buildSystemPrompt(message) },
     // Include prior turns so the AI remembers context (multi-turn web chat)
     ...history.slice(0, -1).map(m => ({
       role: m.role as 'user' | 'assistant',
