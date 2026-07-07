@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable @typescript-eslint/no-require-imports */
 // scripts/update-knowledge-base.js
 //
 // Auto-generates the "Current Capabilities" section of AUTOMINT_GUIDE.md
@@ -6,7 +7,11 @@
 //
 //   node scripts/update-knowledge-base.js
 //
-// This is also run automatically by the GitHub Action on every push to main.
+// NOTE: the comment below claiming this runs "automatically by the GitHub
+// Action on every push to main" is stale -- this repository currently has
+// no .github/workflows directory at all, so nothing runs it, or any of
+// `npm run lint` / `npm run typecheck` / `npm test`, automatically. Run
+// this script manually after adding new features until CI is added.
 // Human-written sections (marked with <!-- MANUAL -->) are never touched.
 
 'use strict';

@@ -4,8 +4,6 @@ import {
   addTrackedProject,
   archiveTrackedProject,
   listTrackedProjects,
-  getTrackedProject,
-  updateTrackedProject,
 } from '@/lib/services/wl-tracker.service';
 import {
   enableDailyCheckin,

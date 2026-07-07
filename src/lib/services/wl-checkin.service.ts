@@ -4,7 +4,7 @@ import { and, desc, eq, isNotNull, sql } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
 import { trackedProjects, wlCheckinLog } from '@/drizzle/schema/wl-tracker';
 import { getTrackedProject } from '@/lib/services/wl-tracker.service';
-import { NotFoundError, ValidationError } from '@/lib/api/errors';
+import { ValidationError } from '@/lib/api/errors';
 
 // ─── WL Daily Check-in service ───────────────────────────────────────────
 // Many NFT projects require a daily "check-in" — visit the site, click a

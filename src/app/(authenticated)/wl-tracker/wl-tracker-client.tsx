@@ -385,7 +385,7 @@ function TodaysCheckins({
         <div className="flex items-center gap-2">
           <CheckCircle2 className="h-4 w-4 text-amber-600" />
           <h3 className="text-sm font-semibold">
-            Today's check-ins — {pending.length} pending
+            Today&apos;s check-ins — {pending.length} pending
           </h3>
         </div>
       </div>
@@ -516,7 +516,7 @@ function AddProjectModal({
             Daily check-in required
           </label>
           <p className="mt-1 text-xs text-muted">
-            Turn on if this project asks you to visit / click / retweet daily to keep your WL. You'll get a morning digest of every project pending today.
+            Turn on if this project asks you to visit / click / retweet daily to keep your WL. You&apos;ll get a morning digest of every project pending today.
           </p>
           {hasDailyCheckin && (
             <div className="mt-3">

@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, eq, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
 import { trackedProjects, trackedTweets, wallets } from '@/drizzle/schema';
 // NOTE: `wallets` is re-exported from '@/drizzle/schema' (index.ts) — used

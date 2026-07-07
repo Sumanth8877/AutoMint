@@ -1143,33 +1143,46 @@ async function handleStatusCommand(message: TelegramMessage, userId: string) {
 
 async function handleCancelCommand(message: TelegramMessage, userId: string) {
   try {
-  const [target] = await getDb()
-    .select({ id: mintTasks.id })
-    .from(mintTasks)
-    .where(and(
-      eq(mintTasks.userId, userId),
-      inArray(mintTasks.status, ['pending', 'monitoring', 'ready', 'running']),
-    ))
-    .orderBy(desc(mintTasks.createdAt))
-    .limit(1);
+    const [target] = await getDb()
+      .select({ id: mintTasks.id })
+      .from(mintTasks)
+      .where(and(
+        eq(mintTasks.userId, userId),
+        inArray(mintTasks.status, ['pending', 'monitoring', 'ready', 'running']),
+      ))
+      .orderBy(desc(mintTasks.createdAt))
+      .limit(1);
 
-  if (!target) {
+    if (!target) {
+      await replyHtml(message, [
+        `🛑 <b>Cancel Mint</b>`,
+        `${SEP}`,
+        `<i>No cancellable mint task found.</i>`,
+      ].join('\n'));
+      return;
+    }
+
+    const task = await cancelScheduledMint(target.id, userId);
+
+    void publishEvent(userId, 'mint:cancelled', { taskId: task.id });
     await replyHtml(message, [
-      `🛑 <b>Cancel Mint</b>`,
+      `🛑 <b>Mint Task Cancelled</b>`,
       `${SEP}`,
-      `<i>No cancellable mint task found.</i>`,
+      `🧾 Task: ${shortId(task.id)}`,
     ].join('\n'));
-    return;
+  } catch (error) {
+    // Bug fix: this try block previously had no matching catch/finally --
+    // a syntax error that made the entire file fail to parse under
+    // tsc/eslint/vitest (Next.js's own dev/build pipeline tolerated it, so
+    // it went unnoticed -- there is no CI running these checks on push).
+    // Restored the same error-handling pattern used by the other command
+    // handlers (e.g. handleStatusCommand) so a failure here reports back to
+    // the user instead of surfacing only as an unhandled 500 on the webhook
+    // route.
+    const errMsg = error instanceof Error ? error.message : 'Failed to cancel mint';
+    logger.error('handleCancelCommand error', { area: 'telegram', userId, error: errMsg });
+    await replyHtml(message, `❌ <b>Error</b>\n${escapeHtml(errMsg)}`);
   }
-
-  const task = await cancelScheduledMint(target.id, userId);
-
-  void publishEvent(userId, 'mint:cancelled', { taskId: task.id });
-  await replyHtml(message, [
-    `🛑 <b>Mint Task Cancelled</b>`,
-    `${SEP}`,
-    `🧱 Task: ${shortId(task.id)}`,
-  ].join('\n'));
 }
 
 async function handleSettingsCommand(message: TelegramMessage, account: { username: string | null; chatId: string }) {

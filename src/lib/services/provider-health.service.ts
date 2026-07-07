@@ -2,7 +2,6 @@ import 'server-only';
 
 import { getRedisClient } from '@/lib/redis';
 import { logger } from '@/lib/logger';
-import { publishEvent } from '@/lib/services/event-bus.service';
 
 // ── Circuit Breaker for AI Providers ─────────────────────────────────────
 //

@@ -1,5 +1,5 @@
 import { requireApiUser } from '@/lib/auth/require-auth';
-import { pollEvents, type BusEvent, EVENT_TO_QUERY_KEYS } from '@/lib/services/event-bus.service';
+import { pollEvents, EVENT_TO_QUERY_KEYS } from '@/lib/services/event-bus.service';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
