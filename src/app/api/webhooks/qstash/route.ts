@@ -57,6 +57,15 @@ export async function POST(request: Request) {
       publicError = 'QStash webhook failed';
     }
     if (status >= 500) {
+      // M-03 fix: unexpected errors (e.g. a downstream DB failure inside
+      // executeScheduledMint) were previously swallowed with no logging at
+      // all, making the exact failure mode we most need visibility into --
+      // a mint silently failing to execute -- invisible in production logs.
+      logger.error('[qstash] webhook failed', {
+        status,
+        message,
+        stack: error instanceof Error ? error.stack?.slice(0, 2000) : undefined,
+      });
     } else {
       logger.warn('[qstash] webhook rejected', { status, message });
     }

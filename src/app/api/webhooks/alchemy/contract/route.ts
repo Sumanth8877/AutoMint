@@ -137,12 +137,24 @@ export async function POST(request: Request) {
           taskId: task.id,
           contractAddress: task.contractAddress,
         });
-      } catch (_err) {
+      } catch (err) {
+        logger.warn('[webhooks/alchemy/contract] failed to schedule mint', {
+          taskId: task.id,
+          contractAddress: task.contractAddress,
+          message: err instanceof Error ? err.message : String(err),
+        });
       }
     }
 
     return NextResponse.json({ ok: true, handled: triggered, contracts: [...mintContracts] });
-  } catch (_error) {
+  } catch (error) {
+    // M-03 fix: same silent-500 pattern as the other webhook routes -- log
+    // unexpected failures so they are visible in production instead of
+    // disappearing entirely.
+    logger.error('[webhooks/alchemy/contract] webhook failed', {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack?.slice(0, 2000) : undefined,
+    });
     return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 });
   }
 }

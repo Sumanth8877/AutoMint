@@ -11,6 +11,19 @@ import type { ChainKey } from '@/lib/blockchain/chains';
 
 const DEFAULT_EVM_CHAIN = 'ethereum' as const;
 
+// L-03 fix: detects a Postgres unique-violation (23505) specifically on the
+// idx_wallets_default_per_user partial unique index, so we only swallow-and-
+// retry the exact race we intend to handle and rethrow anything else
+// (e.g. a genuine DB outage) unchanged.
+function isUniqueDefaultWalletViolation(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const code = (error as { code?: unknown }).code;
+  const message = error instanceof Error ? error.message : String((error as { message?: unknown }).message ?? '');
+  const mentionsIndex = message.includes('idx_wallets_default_per_user');
+  const isUniqueViolation = code === '23505' || /duplicate key value violates unique constraint/i.test(message);
+  return isUniqueViolation && mentionsIndex;
+}
+
 type WalletRow = typeof wallets.$inferSelect;
 type PublicWalletRow = Omit<WalletRow, 'encryptedPrivateKey' | 'encryptionVersion'> & {
   pendingScheduledTasks?: number;
@@ -222,12 +235,34 @@ export async function importWallet(userId: string, data: { walletType: ImportWal
 
   const balance = await fetchWalletBalanceSnapshot(initialWallet);
 
-  const [wallet] = await getDb().insert(wallets).values({
-    ...initialWallet,
-    balance: balance.balance,
-    balanceSymbol: balance.symbol,
-    balanceUpdatedAt: balance.updatedAt,
-  }).returning();
+  // L-03 fix: two near-simultaneous imports for a user with no existing
+  // wallet could both compute isDefault: true above. The DB's partial
+  // unique index (idx_wallets_default_per_user) correctly prevents two rows
+  // being marked default, but the loser previously got a raw, unhandled
+  // unique-constraint-violation error surfaced as a generic 500. Detect that
+  // specific race and retry once as a non-default wallet instead of failing
+  // the import outright -- the wallet still gets created, it just isn't the
+  // default (which is the correct outcome: something else already claimed
+  // "default" in the meantime).
+  const insertWallet = (isDefault: boolean) =>
+    getDb().insert(wallets).values({
+      ...initialWallet,
+      isDefault,
+      balance: balance.balance,
+      balanceSymbol: balance.symbol,
+      balanceUpdatedAt: balance.updatedAt,
+    }).returning();
+
+  let wallet: Awaited<ReturnType<typeof insertWallet>>[number];
+  try {
+    [wallet] = await insertWallet(initialWallet.isDefault);
+  } catch (error) {
+    if (initialWallet.isDefault && isUniqueDefaultWalletViolation(error)) {
+      [wallet] = await insertWallet(false);
+    } else {
+      throw error;
+    }
+  }
 
   if (wallet.isDefault) {
     await getDb()

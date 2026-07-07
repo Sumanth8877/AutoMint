@@ -22,7 +22,6 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^7.5.8",
-    "openai": "^4.85.0",
     "@neondatabase/serverless": "^1.1.0",
     "@tanstack/react-query": "^5.101.1",
     "@upstash/qstash": "^2.7.18",
@@ -31,9 +30,11 @@
     "framer-motion": "^12.23.12",
     "lucide-react": "^1.21.0",
     "next": "^16.2.9",
+    "openai": "^4.85.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "server-only": "^0.0.1",
+    "undici": "^7.28.0",
     "viem": "^2.53.1",
     "zod": "^3.25.76"
   },

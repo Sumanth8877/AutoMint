@@ -23,12 +23,45 @@ type LogEntry = {
 //      Breadcrumbs do NOT appear in Vercel logs on their own — that's the gap
 //      this function closes.
 //
+// L-02 fix: defense-in-depth redaction. No call site in this codebase
+// currently logs a secret (verified by audit), but the logger itself had no
+// safety net -- any future accidental `logger.info('...', { privateKey })`
+// would leak verbatim into Vercel's log dashboard. This redacts any context
+// key whose name looks sensitive, recursively, before serializing.
+const SENSITIVE_KEY_PATTERN = /(private[_-]?key|secret|password|token|api[_-]?key|encrypted|authorization|signature)/i;
+const REDACTED = '[REDACTED]';
+const MAX_REDACTION_DEPTH = 5;
+
+function redactSensitive(value: unknown, depth = 0): unknown {
+  if (depth >= MAX_REDACTION_DEPTH || value === null || typeof value !== 'object') {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => redactSensitive(item, depth + 1));
+  }
+
+  const result: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+    if (SENSITIVE_KEY_PATTERN.test(key)) {
+      result[key] = REDACTED;
+    } else {
+      result[key] = redactSensitive(val, depth + 1);
+    }
+  }
+  return result;
+}
+
 function emit(level: LogLevel, message: string, context?: Record<string, unknown>) {
+  const safeContext = context && Object.keys(context).length > 0
+    ? (redactSensitive(context) as Record<string, unknown>)
+    : undefined;
+
   const entry: LogEntry = {
     level,
     message,
     timestamp: new Date().toISOString(),
-    ...(context && Object.keys(context).length > 0 ? { context } : {}),
+    ...(safeContext ? { context: safeContext } : {}),
   };
 
   // ── Stdout / stderr (Vercel log dashboard) ───────────────────────────────

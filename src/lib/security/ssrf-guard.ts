@@ -2,24 +2,26 @@ import 'server-only';
 
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
+import { Agent, fetch as undiciFetch, type Dispatcher } from 'undici';
 
-// ── SSRF guard for server-side fetches of user-supplied URLs ──────────────
+// ── SSRF guard for server-side fetches of user-supplied URLs ─────────────
 //
 // Used by any code path that fetches a URL supplied (directly or indirectly)
 // by an authenticated user — e.g. the Analyzer's website-metadata lookup.
 // Blocks requests to localhost, RFC1918 private ranges, link-local/cloud
 // metadata addresses, and other non-public IP space.
 //
-// NOTE: This validates the hostname's DNS resolution at call time. It does
-// NOT pin the resolved IP for the subsequent fetch(), so a sufficiently
-// motivated attacker using DNS-rebinding (resolve to a public IP for this
-// check, then to a private IP a moment later for the real request) could
-// still bypass it in theory. That level of protection would require routing
-// the fetch through a custom dispatcher that connects to the pinned IP
-// directly. This guard blocks the overwhelming majority of real-world SSRF
-// payloads (literal private IPs, localhost, cloud metadata endpoints) with
-// minimal complexity.
-// ────────────────────────────────────────────────────────────────────────
+// M-04 fix: this guard previously only validated the hostname's DNS
+// resolution at call time without pinning the resolved IP for the
+// subsequent fetch() — a DNS-rebinding attacker (resolve to a public IP for
+// this check, then to a private IP moments later for the real request)
+// could bypass it. `fetchPublicUrl()` below closes that gap: it validates
+// the resolved address AND performs the actual HTTP request against that
+// exact pinned IP (via a per-request undici Agent with a custom `lookup`),
+// while still sending the correct Host header / TLS SNI for the original
+// hostname. `assertPublicHttpUrl()` remains available as a validate-only
+// helper for callers that build their own request pipeline.
+// ───────────────────────────────────────────────────────────────────────
 
 const BLOCKED_HOSTNAMES = new Set(['localhost', 'localhost.localdomain', '0.0.0.0', '::1', '::']);
 
@@ -63,14 +65,27 @@ function isPrivateIp(ip: string): boolean {
   return true; // not a recognizable IP literal -> fail closed
 }
 
+type ResolvedPublicUrl = {
+  url: URL;
+  /** The exact address that was validated as public and must be pinned for the real request. */
+  address: string;
+  family: 4 | 6;
+};
+
 /**
- * Throws if `rawUrl` is not safe to fetch server-side on behalf of a user:
+ * Validates `rawUrl` is safe to fetch server-side on behalf of a user and
+ * returns the specific public address that was validated:
  *  - must be http:// or https://
  *  - hostname must not be a blocked literal (localhost, 0.0.0.0, ::1, ...)
- *  - all resolved addresses (or the literal IP, if one was given) must be
- *    public (not private/loopback/link-local/multicast/reserved)
+ *  - the resolved/literal address must be public (not private/loopback/
+ *    link-local/multicast/reserved)
+ *
+ * When the hostname resolves to multiple addresses, ALL of them are checked
+ * (so a hostname that round-robins between a public and a private IP is
+ * still rejected), but the FIRST address is the one returned/pinned, since
+ * that's deterministically what Node's own resolver would connect to first.
  */
-export async function assertPublicHttpUrl(rawUrl: string): Promise<void> {
+async function resolvePublicHttpUrl(rawUrl: string): Promise<ResolvedPublicUrl> {
   let url: URL;
   try {
     url = new URL(rawUrl);
@@ -91,10 +106,11 @@ export async function assertPublicHttpUrl(rawUrl: string): Promise<void> {
     if (isPrivateIp(hostname)) {
       throw new Error('Requests to private/internal IP addresses are not allowed');
     }
-    return;
+    const family = isIP(hostname) as 4 | 6;
+    return { url, address: hostname, family };
   }
 
-  let addresses: Array<{ address: string }>;
+  let addresses: Array<{ address: string; family: number }>;
   try {
     addresses = await lookup(hostname, { all: true, verbatim: true });
   } catch {
@@ -109,5 +125,49 @@ export async function assertPublicHttpUrl(rawUrl: string): Promise<void> {
     if (isPrivateIp(address)) {
       throw new Error('Requests to private/internal IP addresses are not allowed');
     }
+  }
+
+  const [first] = addresses;
+  return { url, address: first.address, family: first.family === 6 ? 6 : 4 };
+}
+
+/**
+ * Throws if `rawUrl` is not safe to fetch server-side on behalf of a user.
+ * Validate-only helper -- prefer `fetchPublicUrl()` below when you control
+ * the actual request, since it also pins the validated IP and closes the
+ * DNS-rebinding gap this function alone cannot.
+ */
+export async function assertPublicHttpUrl(rawUrl: string): Promise<void> {
+  await resolvePublicHttpUrl(rawUrl);
+}
+
+/**
+ * SSRF-safe fetch: validates `rawUrl` resolves to a public address AND pins
+ * the actual HTTP(S) connection to that exact validated address, so a
+ * DNS-rebinding attacker cannot swap in a private IP between the check and
+ * the request. The Host header and TLS SNI still use the original hostname
+ * (undici's connector derives those from the request URL, not from the
+ * pinned `lookup` result), so this is transparent to the origin server.
+ */
+export async function fetchPublicUrl(rawUrl: string, init?: RequestInit): Promise<Response> {
+  const { address, family } = await resolvePublicHttpUrl(rawUrl);
+
+  const agent = new Agent({
+    connect: {
+      lookup: (_hostname, _options, callback) => {
+        callback(null, address, family);
+      },
+    },
+  });
+
+  try {
+    // undici's fetch accepts a `dispatcher` option (not part of the
+    // standard fetch() signature) to control connection routing per-request.
+    return await (undiciFetch as unknown as (
+      input: string,
+      requestInit?: RequestInit & { dispatcher?: Dispatcher },
+    ) => Promise<Response>)(rawUrl, { ...init, dispatcher: agent });
+  } finally {
+    void agent.close().catch(() => undefined);
   }
 }

@@ -95,11 +95,48 @@ async function deleteAutoMintUserData(userId: string, clerkId: string) {
   });
 }
 
+// H-01 fix: account deletion spans two independent systems (Postgres +
+// Clerk) that cannot be committed atomically together. The original code
+// deleted the local DB data (wallets, private keys, mint history) inside a
+// transaction FIRST, then called Clerk's deleteUser() API. If that external
+// call failed (network blip, Clerk outage, rate limit), the route caught the
+// error and returned a generic 500 -- but the user's data was already
+// permanently gone, while their Clerk identity remained active and would be
+// silently re-materialized as a blank account on next login (syncUser()'s
+// onConflictDoUpdate creates a fresh `users` row for any valid Clerk session).
+//
+// Fix: reverse the order. Delete the Clerk identity FIRST:
+//   - If Clerk deletion fails, we throw immediately and NOTHING has been
+//     touched in the DB yet -- no data loss, the user can safely retry.
+//   - If Clerk deletion succeeds but the subsequent DB transaction fails,
+//     the Clerk identity is gone but the app data survives. This is the
+//     safer failure direction: it is recoverable (a cleanup job or support
+//     action can find "Clerk user missing but DB rows exist" and finish the
+//     deletion), whereas losing encrypted wallet private keys is not.
 export async function deleteAccount(input: DeleteAccountInput) {
-  await deleteAutoMintUserData(input.userId, input.clerkId);
-
   const client = await clerkClient();
-  await client.users.deleteUser(input.clerkId);
+
+  try {
+    await client.users.deleteUser(input.clerkId);
+  } catch (error) {
+    throw new Error(
+      'Could not delete your account identity. No data was removed -- please try again. ' +
+      `(${error instanceof Error ? error.message : 'unknown error'})`,
+    );
+  }
+
+  try {
+    await deleteAutoMintUserData(input.userId, input.clerkId);
+  } catch (error) {
+    // Clerk identity is already gone at this point -- the user can no longer
+    // log back in, so there is no risk of them seeing stale data. Surface a
+    // clear error so this can be reconciled manually (a "Clerk user missing,
+    // DB rows exist" cleanup job) rather than silently losing the failure.
+    throw new Error(
+      'Your account identity was deleted, but some app data could not be removed automatically. ' +
+      `Contact support to finish cleanup. (${error instanceof Error ? error.message : 'unknown error'})`,
+    );
+  }
 
   return { success: true };
 }

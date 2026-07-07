@@ -1,13 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/require-auth';
-import { getDb } from '@/lib/db';
-import { eq } from 'drizzle-orm';
-import {
-  collections,
-  mintHistory,
-  analyzerHistory,
-} from '@/drizzle/schema';
-import { invalidateCache } from '@/lib/redis';
+import { resetUserActivityData } from '@/lib/services/reset-data.service';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,41 +10,21 @@ export const dynamic = 'force-dynamic';
  * Clears history data for the authenticated user:
  *   • Blockchain mint history
  *   • Analyzer history
+ *   • Collections
  *
- * KEEPS: mint queue, collections, wallets, watched wallets, account,
+ * KEEPS: mint queue, wallets, watched wallets, account,
  *        settings, notifications. This action is IRREVERSIBLE.
+ *
+ * M-02 fix: delegates to the single shared resetUserActivityData()
+ * implementation also used by /api/settings/reset-data, so both endpoints
+ * are guaranteed to behave identically.
  */
 export async function POST() {
   const auth = await requireApiUser();
   if ('error' in auth) return auth.error;
 
-  const { userId } = auth;
-  const db = getDb();
-
-  const results: Record<string, number> = {};
-
   try {
-    // Delete in dependency order (children before parents)
-
-    // 1. Analyzer history
-    const ah = await db.delete(analyzerHistory).where(eq(analyzerHistory.userId, userId)).returning({ id: analyzerHistory.id });
-    results.analyzerHistory = ah.length;
-
-    // 2. Mint history (blockchain receipts)
-    const mh = await db.delete(mintHistory).where(eq(mintHistory.userId, userId)).returning({ id: mintHistory.id });
-    results.mintHistory = mh.length;
-
-    // 3. Collections (minted NFTs)
-    const cl = await db.delete(collections).where(eq(collections.userId, userId)).returning({ id: collections.id });
-    results.collections = cl.length;
-
-    // Invalidate all Redis caches for this user
-    await Promise.allSettled([
-      invalidateCache(`dep-report:all`),
-      invalidateCache(`dep-report:prod`),
-    ]);
-
-    const total = Object.values(results).reduce((s, n) => s + n, 0);
+    const { results, total } = await resetUserActivityData(auth.userId);
 
     return NextResponse.json({
       ok: true,

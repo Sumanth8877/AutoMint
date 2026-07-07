@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { Redis } from '@upstash/redis';
+import { randomBytes } from 'node:crypto';
 
 let _redis: Redis | null = null;
 
@@ -126,7 +127,13 @@ export async function cacheWithTTL<T>(
 
   const client = getRedisClient();
   const lockKey = `stampede-lock:${key}`;
-  const lockToken = Math.random().toString(36).slice(2);
+  // L-01 fix: use crypto.randomBytes() instead of Math.random() for the lock
+  // token, consistent with every other Redis lock in this codebase
+  // (mint-lock.service.ts, nonce-allocator.service.ts). Math.random() is not
+  // cryptographically secure; crypto.randomBytes() is the correct primitive
+  // for a CAS token even though this particular lock's blast radius is low
+  // (worst case: one duplicate upstream fetch, not a security bypass).
+  const lockToken = randomBytes(16).toString('hex');
 
   let lockAcquired = false;
   try {

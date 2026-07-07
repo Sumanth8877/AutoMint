@@ -86,6 +86,17 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Unknown mint error';
 }
 
+// M-01 fix: recognizes the RPC error shapes that indicate a nonce collision
+// (two workers allocated/used the same nonce) rather than a genuine
+// broadcast failure. Matches the common wording used by Ethereum/Base/
+// Polygon nodes and providers (go-ethereum, Erigon, Alchemy, Infura).
+const NONCE_COLLISION_PATTERN = /nonce too low|already known|nonce has already been used|replacement transaction underpriced|invalid nonce/i;
+
+function isNonceCollisionError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return NONCE_COLLISION_PATTERN.test(message);
+}
+
 function buildMintData(params: MintParams): Hex {
   const abi =
     params.mintFunction === 'mint' || !params.mintFunction
@@ -601,7 +612,17 @@ export async function executeMint(
     // C-04: hoist hash before the broadcast try so the catch block can always return it.
     let hash: Hex | undefined;
 
-    try {
+    // M-01 fix: sign + broadcast for a given nonce, factored out so the
+    // broadcast can be retried once with a freshly-reallocated nonce if the
+    // first attempt fails with a nonce-collision error (see the retry logic
+    // below). The nonce allocator's own comments document a residual
+    // collision window when its Redis slot lock is exhausted under heavy
+    // concurrent load -- two workers can fall back to the same
+    // eth_getTransactionCount('pending') value. Previously a resulting
+    // "nonce too low" / "already known" broadcast rejection was a terminal
+    // failure with no recovery attempt, even though the fix is simple:
+    // allocate a fresh nonce and retry the signed broadcast once.
+    const signAndBroadcast = async (nonceForTx: number | undefined): Promise<Hex> => {
       // Speed fix (multi-RPC broadcast racing):
       // 1. Sign the transaction locally — pure crypto, no network call
       // 2. Send the signed bytes to ALL configured RPC providers simultaneously
@@ -623,7 +644,7 @@ export async function executeMint(
         data: mintData,
         value,
         gas: resolvedGasLimit, // H1: estimated + 20% buffer, capped at MAX_GAS_LIMIT
-        ...(allocatedNonce !== undefined && { nonce: allocatedNonce }),
+        ...(nonceForTx !== undefined && { nonce: nonceForTx }),
       };
 
       let signedTx: `0x${string}`;
@@ -651,17 +672,45 @@ export async function executeMint(
       if (options.privateMempool) {
         const { broadcastViaPrivateMempool } = await import('@/lib/services/private-mempool.service');
         const result = await broadcastViaPrivateMempool(chain, signedTx);
-        hash = result.txHash;
-      } else {
-        hash = await broadcastRawTransaction(chain, signedTx, { userId });
+        return result.txHash;
       }
+      return broadcastRawTransaction(chain, signedTx, { userId });
+    };
+
+    let nonceForBroadcast = allocatedNonce;
+    let hasRetriedNonce = false;
+
+    try {
+      hash = await signAndBroadcast(nonceForBroadcast);
     } catch (broadcastError) {
-      // sendTransaction itself failed — transaction was never broadcast.
-      // Safe to retry; no hash to preserve.
-      return {
-        success: false,
-        error: getErrorMessage(broadcastError) || 'Transaction broadcast failed',
-      };
+      if (!hasRetriedNonce && isNonceCollisionError(broadcastError)) {
+        hasRetriedNonce = true;
+        try {
+          // Release the stale inflight entry for the nonce that just
+          // collided, then allocate a fresh one and retry exactly once.
+          if (nonceForBroadcast !== undefined) {
+            await releaseInflightNonce(address, chain, nonceForBroadcast).catch(() => undefined);
+          }
+          const retryAllocation = await allocateNonce(address, chain);
+          nonceForBroadcast = retryAllocation.nonce;
+          hash = await signAndBroadcast(nonceForBroadcast);
+        } catch (retryError) {
+          if (nonceForBroadcast !== undefined) {
+            void releaseInflightNonce(address, chain, nonceForBroadcast).catch(() => undefined);
+          }
+          return {
+            success: false,
+            error: getErrorMessage(retryError) || 'Transaction broadcast failed after nonce retry',
+          };
+        }
+      } else {
+        // sendTransaction itself failed — transaction was never broadcast.
+        // Safe to retry; no hash to preserve.
+        return {
+          success: false,
+          error: getErrorMessage(broadcastError) || 'Transaction broadcast failed',
+        };
+      }
     }
 
     // C1 fix: durably persist the txHash NOW, before the receipt wait.
@@ -677,8 +726,11 @@ export async function executeMint(
 
     // Post-broadcast: release inflight tracking and scan for gaps.
     // hash is guaranteed to be defined here.
-    if (allocatedNonce !== undefined) {
-      void releaseInflightNonce(account.address, chain, allocatedNonce).catch(() => undefined);
+    // M-01 fix: use nonceForBroadcast (the nonce that actually succeeded --
+    // may differ from the original allocatedNonce if a nonce-collision retry
+    // occurred above), not the stale original allocation.
+    if (nonceForBroadcast !== undefined) {
+      void releaseInflightNonce(account.address, chain, nonceForBroadcast).catch(() => undefined);
       void scanAndFillGaps(account.address, chain).catch(() => undefined);
     }
 

@@ -38,6 +38,14 @@ export async function POST(request: Request) {
       publicError = 'Alchemy wallet webhook failed';
     }
     if (status >= 500) {
+      // M-03 fix: unexpected errors were previously swallowed with no
+      // logging at all. Log them so production failures in wallet-webhook
+      // processing are actually visible.
+      logger.error('[alchemy/wallet] webhook failed', {
+        status,
+        message,
+        stack: error instanceof Error ? error.stack?.slice(0, 2000) : undefined,
+      });
     } else {
       logger.warn('[alchemy/wallet] webhook rejected', { status, message });
     }

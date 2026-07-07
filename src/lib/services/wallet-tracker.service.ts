@@ -7,6 +7,7 @@ import { watchedWallets } from '@/drizzle/schema';
 import { getDb } from '@/lib/db';
 import { logActivity } from '@/lib/monitoring';
 import { ConflictError } from '@/lib/api/errors';
+import { secureCompare } from '@/lib/security/timing-safe-compare';
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
@@ -159,10 +160,13 @@ export function verifyAlchemyWebhookSignature(headers: Headers, rawBody: string)
   if (!signature) throw new Error('Missing Alchemy webhook signature');
 
   const expected = crypto.createHmac('sha256', signingKey).update(rawBody).digest('hex');
-  const signatureBuffer = Buffer.from(signature);
-  const expectedBuffer = Buffer.from(expected);
 
-  if (signatureBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(signatureBuffer, expectedBuffer)) {
+  // M-05 fix: use the codebase's own secureCompare() helper instead of a raw
+  // length-check + timingSafeEqual. secureCompare() hashes both sides to a
+  // fixed-length digest first, so it never needs an early length-mismatch
+  // branch -- consistent with every other signature/secret comparison in
+  // this codebase (QStash bearer auth, Telegram webhook secret).
+  if (!secureCompare(signature, expected)) {
     throw new Error('Invalid Alchemy webhook signature');
   }
 
