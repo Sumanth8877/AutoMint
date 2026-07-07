@@ -131,13 +131,14 @@ export function AIChat() {
         body: JSON.stringify({ messages: history }),
       });
 
-      const data = await res.json() as { reply?: string; error?: string };
+      const data = await res.json() as { reply?: string; error?: string; shortcut?: boolean };
 
       const aid = ++msgCounter.current;
+      const replyText = data.reply ?? data.error ?? 'Something went wrong.';
       const aiMsg: Message = {
         id: `a-${aid}`,
         role: 'assistant',
-        text: data.reply ?? data.error ?? 'Something went wrong.',
+        text: data.shortcut ? `⚡ Direct mint (no AI)\n\n${replyText}` : replyText,
         ts: aid,
         error: !!data.error || !res.ok,
       };

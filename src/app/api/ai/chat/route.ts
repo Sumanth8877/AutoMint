@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { parseJsonBody, getErrorMessage } from '@/lib/api/errors';
 import { interpretWebMessage, type WebChatMessage } from '@/lib/services/ai-interpreter.service';
+import { parseMintShortcut, executeMintShortcut } from '@/lib/services/mint-shortcut.service';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,12 +18,27 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  // Validate: must have at least one user message
   const lastMsg = messages[messages.length - 1];
   if (!lastMsg || lastMsg.role !== 'user' || !lastMsg.content.trim()) {
     return NextResponse.json({ error: 'At least one user message is required' }, { status: 400 });
   }
 
+  // ── Fast path: direct mint shortcut — zero AI overhead ───────────────────
+  // Patterns: <url>, <url> <qty>, /mint <url>, /mint <url> <qty>
+  const shortcut = parseMintShortcut(lastMsg.content);
+  if (shortcut) {
+    try {
+      const reply = await executeMintShortcut(shortcut, authResult.userId);
+      return NextResponse.json({ reply, shortcut: true });
+    } catch (err) {
+      return NextResponse.json(
+        { error: getErrorMessage(err, 'Mint failed') },
+        { status: 500 },
+      );
+    }
+  }
+
+  // ── Slow path: natural language → AI interpreter ─────────────────────────
   try {
     const reply = await interpretWebMessage(messages, authResult.userId);
     return NextResponse.json({ reply });

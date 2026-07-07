@@ -3,6 +3,7 @@ import 'server-only';
 import crypto from 'crypto';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { logger } from '@/lib/logger';
+import { parseMintShortcut, executeMintShortcut } from '@/lib/services/mint-shortcut.service';
 import { getDb } from '@/lib/db';
 import { getWalletBalance, isValidEthereumAddress } from '@/lib/blockchain/wallet';
 import { mintTasks, telegramAccounts, wallets } from '@/drizzle/schema';
@@ -1088,6 +1089,13 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
         return { handled: true };
       }
       try {
+        // Check if it's a direct mint shortcut first — skip AI entirely
+        const urlShortcut = parseMintShortcut(text);
+        if (urlShortcut) {
+          const shortcutReply = await executeMintShortcut(urlShortcut, urlAccount.userId);
+          await sendTelegramMessage(chatId, shortcutReply);
+          return;
+        }
         const { interpretTelegramMessage } = await import('@/lib/services/ai-interpreter.service');
         const aiReply = await interpretTelegramMessage(`mint ${text}`, urlAccount.userId);
         await reply(message, aiReply);
@@ -1110,6 +1118,13 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
         return { handled: true };
       }
       try {
+        // Check for direct mint shortcut first — bypass AI entirely
+        const aiShortcut = parseMintShortcut(text);
+        if (aiShortcut) {
+          const shortcutReply = await executeMintShortcut(aiShortcut, aiAccount.userId);
+          await sendTelegramMessage(chatId, shortcutReply);
+          return;
+        }
         const { interpretTelegramMessage } = await import('@/lib/services/ai-interpreter.service');
         const aiReply = await interpretTelegramMessage(text, aiAccount.userId);
         await reply(message, aiReply);
@@ -1152,6 +1167,13 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
   // publishing to sync the web UI. Slash command text is passed as-is
   // so the AI sees the user's original intent.
   try {
+    // Check for direct mint shortcut — bypass AI interpreter entirely
+    const shortcut = parseMintShortcut(message.text ?? '');
+    if (shortcut) {
+      const shortcutReply = await executeMintShortcut(shortcut, account.userId);
+      await sendTelegramMessage(chatId, shortcutReply);
+      return;
+    }
     const { interpretTelegramMessage } = await import('@/lib/services/ai-interpreter.service');
     const aiReply = await interpretTelegramMessage(message.text ?? '', account.userId);
     await reply(message, aiReply);
