@@ -881,9 +881,43 @@ async function executeTool(
 
 // ── Main Interpreter ─────────────────────────────────────────────────────────
 
+// ── Web chat history type ─────────────────────────────────────────────────────
+export interface WebChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+/**
+ * Multi-turn web chat variant of the AI interpreter.
+ * Accepts the full conversation history so the AI maintains context across
+ * follow-up messages (e.g. "remove defi1" → "defi1" reply).
+ * Internally shares the same providers, tools, circuit breaker, and events.
+ */
+export async function interpretWebMessage(
+  history: WebChatMessage[],
+  userId: string,
+): Promise<string> {
+  if (history.length === 0) return 'Please send a message.';
+  // Flatten to a single user message + prior context for the routing logic
+  const lastMsg = history[history.length - 1];
+  const message = lastMsg?.content ?? '';
+  return _interpret(message, history, userId, 'web');
+}
+
 export async function interpretTelegramMessage(
   message: string,
   userId: string,
+): Promise<string> {
+  return _interpret(message, [{ role: 'user', content: message }], userId, 'telegram');
+}
+
+// ── Shared core ──────────────────────────────────────────────────────────────
+
+async function _interpret(
+  message: string,
+  history: WebChatMessage[],
+  userId: string,
+  source: 'telegram' | 'web',
 ): Promise<string> {
   const providers = await getAllProviders();
   if (providers.length === 0) {
@@ -925,7 +959,7 @@ export async function interpretTelegramMessage(
   }
 
   // Publish ai:command so the web UI shows a live Telegram activity overlay
-  void publishEvent(userId, 'ai:command', { message, source: 'telegram' });
+  void publishEvent(userId, 'ai:command', { message, source });
 
   let lastError = '';
 
@@ -933,7 +967,7 @@ export async function interpretTelegramMessage(
     try {
       logger.info('AI attempt', { area: 'ai-interpreter', provider: provider.name, model, userId });
 
-      const result = await runWithProvider(provider, model, message, userId);
+      const result = await runWithProvider(provider, model, message, userId, history, source);
 
       // ✅ Success — record it in the circuit breaker
       void recordSuccess(provider.name);
@@ -948,7 +982,7 @@ export async function interpretTelegramMessage(
       }
 
       // Notify web UI that the Telegram command finished
-      void publishEvent(userId, 'ai:command:done', { message, reply: result, source: 'telegram' });
+      void publishEvent(userId, 'ai:command:done', { message, reply: result, source });
 
       return result;
     } catch (_error) {
@@ -980,14 +1014,23 @@ async function runWithProvider(
   model: string,
   message: string,
   userId: string,
+  history: WebChatMessage[],
+  source: 'telegram' | 'web',
 ): Promise<string> {
   const client = new OpenAI({
     baseURL: provider.baseURL,
     apiKey: provider.apiKey,
   });
 
+  // Build messages: system prompt + full conversation history
   const messages: ChatCompletionMessageParam[] = [
     { role: 'system', content: SYSTEM_PROMPT },
+    // Include prior turns so the AI remembers context (multi-turn web chat)
+    ...history.slice(0, -1).map(m => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    })),
+    // Always end with the latest user message
     { role: 'user', content: message },
   ];
 
@@ -1016,7 +1059,7 @@ async function runWithProvider(
       logger.info('AI tool call', { area: 'ai-interpreter', tool: toolName, input: args, userId, provider: provider.name });
 
       // Publish live tool activity so the web overlay tracks each running tool
-      void publishEvent(userId, 'ai:command', { tool: toolName, source: 'telegram' });
+      void publishEvent(userId, 'ai:command', { tool: toolName, source });
 
       try {
         const toolResult = await executeTool(userId, toolName, args);

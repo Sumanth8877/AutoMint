@@ -119,10 +119,16 @@ export function AIChat() {
     setLoading(true);
 
     try {
+      // Build history including the new user message we just added
+      const history = [...messages].map(m => ({
+        role: m.role,
+        content: m.text,
+      }));
+
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: trimmed }),
+        body: JSON.stringify({ messages: history }),
       });
 
       const data = await res.json() as { reply?: string; error?: string };
