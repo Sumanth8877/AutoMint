@@ -73,6 +73,99 @@ export function parseWlShortcut(input: string): WlShortcut | null {
   return null;
 }
 
+// ─── Natural-language parser ─────────────────────────────────────────────
+// The user asked for the shortest possible Telegram UX: just mention a
+// Twitter handle and the bot starts tracking. This parser accepts anything
+// that looks like a track/untrack intent WITHOUT requiring a slash command.
+//
+// Examples that all trigger tracking:
+//   @pudgypenguins
+//   @pudgypenguins track it
+//   track @pudgypenguins
+//   watch @pudgypenguins wallet 0xABC…
+//   monitor @pudgypenguins mint 2026-08-15
+//   add @pudgypenguins to tracker
+//
+// Examples that trigger untracking:
+//   untrack @pudgypenguins
+//   stop watching @pudgypenguins
+//   remove @pudgypenguins
+//
+// Returns null if the message doesn't clearly reference a Twitter handle
+// with a track/untrack intent — caller then falls back to the AI interpreter.
+
+const HANDLE_RE = /(?:^|[^A-Za-z0-9_])@([A-Za-z0-9_]{1,20})\b/;
+const TWITTER_URL_RE = /(?:twitter\.com|x\.com)\/([A-Za-z0-9_]{1,20})\b/;
+const WALLET_RE = /\b(0x[a-fA-F0-9]{40})\b/;
+// ISO 8601 date (YYYY-MM-DD, optionally with THH:MM:SSZ).
+const ISO_DATE_RE = /\b(\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:?\d{2})?)?)\b/;
+
+const TRACK_VERBS = [
+  'track', 'watch', 'add', 'monitor', 'follow it', 'follow this',
+  'observe', 'keep an eye', 'notify', 'alert me', 'listen to',
+];
+const UNTRACK_VERBS = [
+  'untrack', 'stop watching', 'stop tracking', 'remove', 'unwatch',
+  'disable', 'delete', 'forget',
+];
+
+export function parseWlNaturalMessage(input: string): WlShortcut | null {
+  const raw = input.trim();
+  if (!raw || raw.startsWith('/')) return null;   // slash commands handled elsewhere
+
+  // Extract handle from an @mention or a twitter.com/x.com URL.
+  let handle: string | null = null;
+  const atMatch = raw.match(HANDLE_RE);
+  if (atMatch) handle = atMatch[1];
+  else {
+    const urlMatch = raw.match(TWITTER_URL_RE);
+    if (urlMatch) handle = urlMatch[1];
+  }
+  if (!handle) return null;
+
+  const lower = raw.toLowerCase();
+
+  // Untrack intent takes precedence — "stop tracking @foo" should never be
+  // interpreted as "start tracking @foo".
+  if (UNTRACK_VERBS.some((v) => lower.includes(v))) {
+    return { type: 'untrack', handle };
+  }
+
+  // Accept as a track intent if:
+  //   (a) the message is JUST the @handle (with maybe whitespace/emoji), or
+  //   (b) it contains a recognized track verb.
+  const bareHandle = raw.replace(/[^\w]/g, '').toLowerCase() === handle.toLowerCase();
+  const hasTrackVerb = TRACK_VERBS.some((v) => lower.includes(v));
+  if (!bareHandle && !hasTrackVerb) return null;
+
+  const shortcut: WlShortcut = { type: 'track', handle };
+
+  // Optional inline wallet address (unlabeled: "track @foo 0xABC…").
+  const walletMatch = raw.match(WALLET_RE);
+  if (walletMatch) shortcut.walletUsed = walletMatch[1];
+
+  // Optional mint date (unlabeled: "watch @foo mint 2026-08-15").
+  const dateMatch = raw.match(ISO_DATE_RE);
+  if (dateMatch) {
+    const d = new Date(dateMatch[1]);
+    if (!isNaN(d.getTime())) shortcut.expectedMintDate = d;
+  }
+
+  // Optional labeled options (form:premint etc.) — reuse the slash parser.
+  const kv = parseKeyValueOptions(raw);
+  if (kv.wallet) shortcut.walletUsed = kv.wallet;
+  if (kv.form) {
+    const f = kv.form.toLowerCase() as WlFormType;
+    if (FORM_TYPES.includes(f)) shortcut.formType = f;
+  }
+  if (kv.mint) {
+    const d = new Date(kv.mint);
+    if (!isNaN(d.getTime())) shortcut.expectedMintDate = d;
+  }
+
+  return shortcut;
+}
+
 function parseKeyValueOptions(input: string): Record<string, string> {
   const result: Record<string, string> = {};
   const re = /(\w+):(\S+)/g;

@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { logger } from '@/lib/logger';
 import { parseMintShortcut, executeMintShortcut } from '@/lib/services/mint-shortcut.service';
-import { parseWlShortcut, executeWlShortcut } from '@/lib/services/wl-shortcut.service';
+import { parseWlShortcut, parseWlNaturalMessage, executeWlShortcut } from '@/lib/services/wl-shortcut.service';
 import { getDb } from '@/lib/db';
 import { getWalletBalance, isValidEthereumAddress } from '@/lib/blockchain/wallet';
 import { mintTasks, telegramAccounts, wallets } from '@/drizzle/schema';
@@ -1136,6 +1136,20 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
         return { handled: true };
       }
       try {
+        // WL natural-language fast-path: bare "@handle", "track @handle",
+        // "watch @handle wallet 0x…" and friends bypass the AI entirely.
+        // Runs BEFORE the mint shortcut so a mention like "@foo track it"
+        // never gets misclassified as a mint intent.
+        const wlNat = parseWlNaturalMessage(text);
+        if (wlNat) {
+          const wlReply = await executeWlShortcut(wlNat, aiAccount.userId);
+          await sendTelegramMessage(String(message.chat.id), wlReply, {
+            parseMode: 'HTML',
+            disableWebPagePreview: true,
+          });
+          return { handled: true };
+        }
+
         // Check for direct mint shortcut first — bypass AI entirely
         const aiShortcut = parseMintShortcut(text);
         if (aiShortcut) {
