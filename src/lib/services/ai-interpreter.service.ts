@@ -285,7 +285,7 @@ const COMPACT_KNOWLEDGE = `
 - Gas strategies: slow/normal/fast/aggressive. Risk threshold: 0-100 (default 75 blocks high-risk)
 - Settings: execution (gas/risk), notifications (Telegram/email), AI keys (Gemini/Nara/OpenRouter)
 - Telegram link: Settings → Notifications → Telegram → Generate Token → /start <token>
-- Free fast models: google/gemini-2.0-flash-exp:free via OpenRouter (~1-2s)
+- Free fast models: meta-llama/llama-3.1-8b-instruct:free via OpenRouter (~1-3s)
 - USD→ETH: 1 ETH ≈ $2500 (e.g. $10 = 0.004 ETH)
 `;
 
