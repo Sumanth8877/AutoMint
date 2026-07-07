@@ -10,7 +10,7 @@ import { AIProviderBanner } from '@/components/dashboard/ai-provider-banner';
 import { AIProviderStatus } from '@/components/dashboard/ai-provider-banner';
 import { apiRequest } from '@/lib/api/client';
 import {
-  BarChart3, ChevronRight, FolderKanban, Gauge, History,
+  BarChart3, Bell, ChevronRight, FolderKanban, Gauge, History,
   LayoutDashboard, Menu, Search, Settings,
   Telescope, Wallet, X, Zap, Activity,
 } from 'lucide-react';
@@ -35,6 +35,7 @@ const navGroups = [
     label: 'Intelligence',
     items: [
       { href: '/whale-tracker', label: 'Whale Tracker', icon: Telescope },
+      { href: '/wl-tracker', label: 'WL Tracker', icon: Bell },
       { href: '/history', label: 'History', icon: History },
     ],
   },

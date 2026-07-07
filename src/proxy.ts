@@ -12,11 +12,12 @@ import type { NextRequest } from 'next/server';
 const isProtectedRoute = createRouteMatcher([
   '/dashboard(.*)', '/mints(.*)', '/wallets(.*)', '/analytics(.*)',
   '/settings(.*)', '/history(.*)', '/collections(.*)', '/analyzer(.*)',
-  '/whale-tracker(.*)',
+  '/whale-tracker(.*)', '/wl-tracker(.*)',
   '/api/mints(.*)', '/api/wallets(.*)', '/api/analytics(.*)',
   '/api/analyzer(.*)', '/api/copy-mint(.*)', '/api/discovery(.*)',
   '/api/history(.*)', '/api/monitoring(.*)', '/api/search(.*)',
   '/api/settings(.*)', '/api/whale-tracker(.*)', '/api/watched-wallets(.*)',
+  '/api/wl-tracker(.*)',
   '/api/collections(.*)', '/api/activities(.*)', '/api/blockchain(.*)',
   '/api/telegram/link-token(.*)',
 ]);

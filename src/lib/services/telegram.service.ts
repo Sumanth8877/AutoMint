@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { logger } from '@/lib/logger';
 import { parseMintShortcut, executeMintShortcut } from '@/lib/services/mint-shortcut.service';
+import { parseWlShortcut, parseWlNaturalMessage, executeWlShortcut } from '@/lib/services/wl-shortcut.service';
 import { getDb } from '@/lib/db';
 import { getWalletBalance, isValidEthereumAddress } from '@/lib/blockchain/wallet';
 import { mintTasks, telegramAccounts, wallets } from '@/drizzle/schema';
@@ -83,6 +84,9 @@ type InlineKeyboardMarkup = {
 type SendMessageOptions = {
   disableWebPagePreview?: boolean;
   replyMarkup?: InlineKeyboardMarkup;
+  // Telegram supports 'HTML', 'Markdown', 'MarkdownV2'. When set, `text`
+  // must contain valid entities for the chosen mode or the API returns 400.
+  parseMode?: 'HTML' | 'Markdown' | 'MarkdownV2';
 };
 
 type NotificationPayload = {
@@ -233,6 +237,7 @@ export async function sendTelegramMessage(
     text,
     disable_web_page_preview: options.disableWebPagePreview ?? true,
     reply_markup: options.replyMarkup,
+    parse_mode: options.parseMode,
   });
 }
 
@@ -1131,6 +1136,20 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
         return { handled: true };
       }
       try {
+        // WL natural-language fast-path: bare "@handle", "track @handle",
+        // "watch @handle wallet 0x…" and friends bypass the AI entirely.
+        // Runs BEFORE the mint shortcut so a mention like "@foo track it"
+        // never gets misclassified as a mint intent.
+        const wlNat = parseWlNaturalMessage(text);
+        if (wlNat) {
+          const wlReply = await executeWlShortcut(wlNat, aiAccount.userId);
+          await sendTelegramMessage(String(message.chat.id), wlReply, {
+            parseMode: 'HTML',
+            disableWebPagePreview: true,
+          });
+          return { handled: true };
+        }
+
         // Check for direct mint shortcut first — bypass AI entirely
         const aiShortcut = parseMintShortcut(text);
         if (aiShortcut) {
@@ -1180,6 +1199,20 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
   // publishing to sync the web UI. Slash command text is passed as-is
   // so the AI sees the user's original intent.
   try {
+    // WL tracker shortcut fast-path: /track /untrack /projects.
+    // These bypass the AI entirely so they still work if the user has no
+    // AI provider configured yet.
+    const wlShortcut = parseWlShortcut(message.text ?? '');
+    if (wlShortcut) {
+      const wlReply = await executeWlShortcut(wlShortcut, account.userId);
+      // WL replies use HTML formatting (project name in <b>, wallet in <code>).
+      await sendTelegramMessage(String(message.chat.id), wlReply, {
+        parseMode: 'HTML',
+        disableWebPagePreview: true,
+      });
+      return { handled: true };
+    }
+
     // Check for direct mint shortcut — bypass AI interpreter entirely
     const shortcut = parseMintShortcut(message.text ?? '');
     if (shortcut) {

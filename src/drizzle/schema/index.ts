@@ -474,3 +474,10 @@ export const collectionSyncsRelations = relations(collectionSyncs, ({ one }) => 
   collection: one(collections, { fields: [collectionSyncs.collectionId], references: [collections.id] }),
 }));
 
+
+// ─── WL Tracker ───────────────────────────────────────────────────────────
+// Re-export the WL tracker tables + enums so callers can do
+// `import { trackedProjects } from '@/drizzle/schema'` without touching
+// the sub-file path. `drizzle-orm/serverless` also picks these up so
+// `db.query.trackedProjects` works out of the box.
+export * from './wl-tracker';
