@@ -1093,8 +1093,8 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
         const urlShortcut = parseMintShortcut(text);
         if (urlShortcut) {
           const shortcutReply = await executeMintShortcut(urlShortcut, urlAccount.userId);
-          await sendTelegramMessage(chatId, shortcutReply);
-          return;
+          await reply(message, shortcutReply);
+          return { handled: true };
         }
         const { interpretTelegramMessage } = await import('@/lib/services/ai-interpreter.service');
         const aiReply = await interpretTelegramMessage(`mint ${text}`, urlAccount.userId);
@@ -1122,8 +1122,8 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
         const aiShortcut = parseMintShortcut(text);
         if (aiShortcut) {
           const shortcutReply = await executeMintShortcut(aiShortcut, aiAccount.userId);
-          await sendTelegramMessage(chatId, shortcutReply);
-          return;
+          await reply(message, shortcutReply);
+          return { handled: true };
         }
         const { interpretTelegramMessage } = await import('@/lib/services/ai-interpreter.service');
         const aiReply = await interpretTelegramMessage(text, aiAccount.userId);
@@ -1171,8 +1171,8 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
     const shortcut = parseMintShortcut(message.text ?? '');
     if (shortcut) {
       const shortcutReply = await executeMintShortcut(shortcut, account.userId);
-      await sendTelegramMessage(chatId, shortcutReply);
-      return;
+      await reply(message, shortcutReply);
+      return { handled: true };
     }
     const { interpretTelegramMessage } = await import('@/lib/services/ai-interpreter.service');
     const aiReply = await interpretTelegramMessage(message.text ?? '', account.userId);

@@ -104,7 +104,7 @@ export async function executeMintShortcut(
 
   const qtyLabel = shortcut.quantity > 1 ? ` ×${shortcut.quantity}` : '';
 
-  if (result.action === 'executed') {
+  if ((result.action as string) === 'executed') {
     return (
       `⚡ Mint executed${qtyLabel}!\n` +
       `Task ID: \`${result.taskId}\`\n` +
@@ -112,7 +112,7 @@ export async function executeMintShortcut(
     );
   }
 
-  if (result.action === 'scheduled') {
+  if ((result.action as string) === 'scheduled') {
     return (
       `✅ Mint queued${qtyLabel}.\n` +
       `Task ID: \`${result.taskId}\`\n` +
