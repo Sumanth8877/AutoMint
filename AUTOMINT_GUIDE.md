@@ -381,3 +381,141 @@ In addition to natural language, these slash commands work:
 ---
 
 *Last updated: AutoMint v1 — edit this file to keep the AI's knowledge current.*
+
+---
+
+<!-- AUTO-GENERATED: Do not edit this section manually. -->
+<!-- Run `node scripts/update-knowledge-base.js` to regenerate. -->
+<!-- Last generated: 2026-07-07 -->
+
+## AUTO-GENERATED: Current AI Tools (4 total)
+
+> This section is auto-generated from `src/lib/services/ai-interpreter.service.ts`.
+> Every tool listed here is available via natural language in the web chat and Telegram.
+
+### 💳 Wallets & Balances
+
+| Tool | Description | Required params |
+|------|-------------|-----------------|
+| `get_wallets` | List all of the user's wallets with addresses, chains, and balances. | — |
+| `get_wallet_balance` | Check the ETH balance of the user's wallet on a specific chain. | — |
+
+### ⚙️ Settings
+
+| Tool | Description | Required params |
+|------|-------------|-----------------|
+| `get_execution_settings` | Get the user's current execution settings: gas strategy, risk analysis toggle, safe mode, price limits. | — |
+| `get_notification_settings` | Get user's notification settings for email and Telegram alerts. | — |
+
+## AUTO-GENERATED: API Routes (53 endpoints)
+
+> All routes require authentication. Dynamic segments shown as [param].
+
+| Route | Methods |
+|-------|---------|
+| `/api/activities` | GET |
+| `/api/ai/chat` | POST |
+| `/api/ai/knowledge` | GET, POST |
+| `/api/ai/status` | GET |
+| `/api/analytics` | GET |
+| `/api/analyzer` | POST |
+| `/api/analyzer/history` | GET |
+| `/api/analyzer/stream` | POST |
+| `/api/blockchain/balance` | GET |
+| `/api/blockchain/collection` | GET |
+| `/api/blockchain/gas` | GET |
+| `/api/blockchain/mint-status` | GET |
+| `/api/collections` | GET, POST, DELETE |
+| `/api/collections/[id]/refresh-floor` | POST |
+| `/api/copy-mint/rules` | GET, POST |
+| `/api/copy-mint/rules/[id]` | PATCH, DELETE |
+| `/api/discovery` | POST |
+| `/api/events/stream` | GET |
+| `/api/health` | GET |
+| `/api/history` | GET, PATCH |
+| `/api/mints` | GET, POST, PATCH, DELETE |
+| `/api/mints/[id]/logs` | GET |
+| `/api/mints/fanout` | POST |
+| `/api/monitoring/events` | GET |
+| `/api/monitoring/websites` | GET, POST |
+| `/api/monitoring/websites/[id]` | DELETE |
+| `/api/onboarding/complete` | GET, POST |
+| `/api/recovery/mint` | GET, POST |
+| `/api/search` | GET |
+| `/api/settings/ai-keys` | GET, POST |
+| `/api/settings/email-notifications` | GET, PATCH |
+| `/api/settings/integrations` | GET, POST |
+| `/api/settings/profile` | DELETE |
+| `/api/settings/reset-data` | DELETE |
+| `/api/settings/usage` | GET |
+| `/api/system/alchemy-webhook` | GET, POST, DELETE |
+| `/api/system/apply-analyzer-migration` | GET, POST |
+| `/api/system/apply-collections-migration` | GET, POST |
+| `/api/system/email-preview` | GET |
+| `/api/system/keepalive` | GET, POST |
+| `/api/system/status` | GET |
+| `/api/telegram/link-token` | GET |
+| `/api/telegram/webhook` | GET, POST |
+| `/api/user/reset-data` | POST |
+| `/api/wallets` | GET, POST, DELETE |
+| `/api/wallets/[id]` | PATCH, DELETE |
+| `/api/wallets/[id]/default` | PATCH |
+| `/api/watched-wallets` | GET, POST |
+| `/api/watched-wallets/[id]` | PATCH, DELETE |
+| `/api/webhooks/alchemy/contract` | POST |
+| `/api/webhooks/alchemy/wallet` | POST |
+| `/api/webhooks/qstash` | POST |
+| `/api/whale-tracker/activity` | GET |
+
+## AUTO-GENERATED: Backend Services (46 services)
+
+> These services power the platform. Each maps to one or more AI tools.
+
+- `account-deletion.service.ts`
+- `ai-interpreter.service.ts`
+- `alchemy-webhook.service.ts`
+- `analytics.service.ts`
+- `analyzer.service.ts`
+- `analyzer-cache.service.ts`
+- `analyzer-data.service.ts`
+- `analyzer-market-intelligence.service.ts`
+- `analyzer-resolver.service.ts`
+- `collection.service.ts`
+- `copy-mint.service.ts`
+- `discovery.service.ts`
+- `email-notification.service.ts`
+- `event-bus.service.ts`
+- `execution-settings.service.ts`
+- `goplus-security.service.ts`
+- `honeypot.service.ts`
+- `integration-settings.service.ts`
+- `knowledge-base.service.ts`
+- `mint.service.ts`
+- `mint-abi-discovery.service.ts`
+- `mint-calldata.service.ts`
+- `mint-discovery.service.ts`
+- `mint-fanout.service.ts`
+- `mint-lock.service.ts`
+- `mint-monitor.service.ts`
+- `mint-orchestrator.service.ts`
+- `mint-recovery.service.ts`
+- `mint-requirements.service.ts`
+- `mint-state.service.ts`
+- `moralis.service.ts`
+- `native-price.service.ts`
+- `nonce-allocator.service.ts`
+- `private-mempool.service.ts`
+- `provider-health.service.ts`
+- `qstash.service.ts`
+- `risk.service.ts`
+- `rpc-manager.service.ts`
+- `rpc-provider-settings.service.ts`
+- `scheduled-risk-check.service.ts`
+- `seadrop.service.ts`
+- `system-status.service.ts`
+- `task-log.service.ts`
+- `telegram.service.ts`
+- `wallet.service.ts`
+- `wallet-tracker.service.ts`
+
+<!-- END AUTO-GENERATED -->

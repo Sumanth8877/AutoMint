@@ -9,7 +9,10 @@ import { logger } from '@/lib/logger';
 // The guide is cached in memory after the first read so subsequent calls are
 // near-instant. Call invalidateGuideCache() to force a reload (useful in dev).
 //
-// The guide is injected into the AI system prompt so the AI can answer
+// The guide has two parts:
+//   1. Human-written sections  — narrative, workflows, troubleshooting (edit manually)
+//   2. Auto-generated sections — tool list, routes, services (run `npm run update-kb`)
+// The entire file is injected into the AI system prompt so the AI can answer
 // feature questions, explain workflows, and guide users through any task.
 
 let cachedGuide: string | null = null;
