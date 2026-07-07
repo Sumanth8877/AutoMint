@@ -78,16 +78,63 @@ type SendMessageResult = {
 };
 
 type InlineKeyboardMarkup = {
-  inline_keyboard: Array<Array<{ text: string; callback_data: string }>>;
+  inline_keyboard: Array<Array<{ text: string; callback_data?: string; url?: string }>>;
+};
+
+type ReplyKeyboardMarkup = {
+  keyboard: Array<Array<{ text: string }>>;
+  resize_keyboard?: boolean;
+  one_time_keyboard?: boolean;
+  selective?: boolean;
 };
 
 type SendMessageOptions = {
   disableWebPagePreview?: boolean;
-  replyMarkup?: InlineKeyboardMarkup;
+  replyMarkup?: InlineKeyboardMarkup | ReplyKeyboardMarkup;
   // Telegram supports 'HTML', 'Markdown', 'MarkdownV2'. When set, `text`
   // must contain valid entities for the chosen mode or the API returns 400.
   parseMode?: 'HTML' | 'Markdown' | 'MarkdownV2';
 };
+
+// ── Persistent quick-action keyboard shown below the chat input ──────────────
+const QUICK_KEYBOARD: ReplyKeyboardMarkup = {
+  keyboard: [
+    [{ text: '⚡ Quick Mint' }, { text: '📊 Status' }],
+    [{ text: '👁 Watch Whale' }, { text: '🛑 Cancel' }],
+    [{ text: '⚙️ Settings' }, { text: '❓ Help' }],
+  ],
+  resize_keyboard: true,
+};
+
+// ── HTML helpers ─────────────────────────────────────────────────────────────
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function shortAddr(addr: string, head = 6, tail = 4): string {
+  if (addr.length <= head + tail + 2) return escapeHtml(addr);
+  return `<code>${escapeHtml(addr.slice(0, head))}…${escapeHtml(addr.slice(-tail))}</code>`;
+}
+
+function shortId(id: string): string {
+  return `<code>${escapeHtml(id.slice(0, 8))}</code>`;
+}
+
+function explorerTxLink(txHash: string, chain = 'ethereum'): string {
+  const bases: Record<string, string> = {
+    ethereum: 'https://etherscan.io/tx/',
+    base: 'https://basescan.org/tx/',
+    polygon: 'https://polygonscan.com/tx/',
+    arbitrum: 'https://arbiscan.io/tx/',
+  };
+  const base = bases[chain] ?? bases.ethereum;
+  return `${base}${txHash}`;
+}
+
+const SEP = '━━━━━━━━━━━━━━━━━━';
 
 type NotificationPayload = {
   url?: string;
@@ -241,6 +288,18 @@ export async function sendTelegramMessage(
   });
 }
 
+// ── Send an HTML-formatted message with the persistent quick keyboard ────────
+async function sendRichMessage(
+  chatId: string,
+  text: string,
+  options: Omit<SendMessageOptions, 'parseMode'> = {},
+) {
+  return sendTelegramMessage(chatId, text, {
+    ...options,
+    parseMode: 'HTML',
+  });
+}
+
 async function answerCallbackQuery(callbackQueryId: string, text?: string) {
   if (!isTelegramEnabled()) return true;
 
@@ -362,81 +421,145 @@ function truncate(value: string, length = 42) {
 
 function formatNotification(type: TelegramNotificationType, payload: NotificationPayload) {
   const subject = payload.collectionName || payload.contractAddress || payload.url || payload.wallet || 'AutoMint';
-  const lines: string[] = [];
+  const subjectHtml = escapeHtml(truncate(subject, 40));
 
   switch (type) {
-    case 'mint_scheduled':
-      lines.push('🕐 Mint Scheduled', truncate(subject));
-      if (payload.taskId) lines.push(`Task: ${payload.taskId.slice(0, 8)}`);
-      break;
+    case 'mint_scheduled': {
+      const lines = [
+        `🕐 <b>Mint Scheduled</b>`,
+        `${SEP}`,
+        `📦 ${subjectHtml}`,
+      ];
+      if (payload.taskId) lines.push(`🆔 Task: ${shortId(payload.taskId)}`);
+      return lines.join('\n');
+    }
     case 'mint_started':
-    case 'mint_executing':
-      lines.push('⚡ Mint Executing', truncate(subject));
-      if (payload.mintPrice) lines.push(`Price: ${payload.mintPrice} ETH`);
-      if (payload.taskId) lines.push(`Task: ${payload.taskId.slice(0, 8)}`);
-      break;
-    case 'mint_success':
-      lines.push('✅ Mint Success', truncate(subject));
-      if (payload.mintPrice) lines.push(`Price: ${payload.mintPrice} ETH`);
-      if (payload.txHash) lines.push(`Tx: ${payload.txHash.slice(0, 18)}...`);
-      break;
-    case 'mint_live_detected':
-      lines.push('🚀 Mint Is Live — Executing Now', truncate(subject));
-      if (payload.contractAddress) lines.push(`Contract: ${String(payload.contractAddress).slice(0, 10)}...`);
-      break;
+    case 'mint_executing': {
+      const lines = [
+        `⚡ <b>Mint Executing</b>`,
+        `${SEP}`,
+        `📦 ${subjectHtml}`,
+      ];
+      if (payload.mintPrice) lines.push(`💰 Price: <b>${escapeHtml(payload.mintPrice)} ETH</b>`);
+      if (payload.taskId) lines.push(`🆔 Task: ${shortId(payload.taskId)}`);
+      return lines.join('\n');
+    }
+    case 'mint_success': {
+      const lines = [
+        `✅ <b>Mint Successful!</b>`,
+        `${SEP}`,
+        `📦 ${subjectHtml}`,
+      ];
+      if (payload.mintPrice) lines.push(`💰 Price: <b>${escapeHtml(payload.mintPrice)} ETH</b>`);
+      if (payload.txHash) {
+        const link = explorerTxLink(payload.txHash);
+        lines.push(`🔗 Tx: <a href="${link}">${escapeHtml(payload.txHash.slice(0, 18))}…</a>`);
+      }
+      return lines.join('\n');
+    }
+    case 'mint_live_detected': {
+      const lines = [
+        `🚀 <b>Mint Is Live — Executing Now</b>`,
+        `${SEP}`,
+        `📦 ${subjectHtml}`,
+      ];
+      if (payload.contractAddress) lines.push(`📜 Contract: ${shortAddr(payload.contractAddress)}`);
+      return lines.join('\n');
+    }
     case 'mint_failed': {
       const errMsg = payload.error ?? '';
       const errLow = errMsg.toLowerCase();
       let errLabel: string;
+      let errIcon: string;
       if (errLow.includes('insufficient funds') || errLow.includes('insufficient balance')) {
-        errLabel = '💸 Insufficient funds';
+        errIcon = '💸'; errLabel = 'Insufficient funds';
       } else if (errLow.includes('balance') || errLow.includes('too low')) {
-        errLabel = '💸 Balance too low';
+        errIcon = '💸'; errLabel = 'Balance too low';
       } else if (errLow.includes('reverted') || errLow.includes('execution reverted')) {
-        errLabel = '🔁 Contract reverted';
+        errIcon = '🔁'; errLabel = 'Contract reverted';
       } else if (errLow.includes('nonce') || errLow.includes('replacement transaction')) {
-        errLabel = '🔄 Nonce conflict';
+        errIcon = '🔄'; errLabel = 'Nonce conflict';
       } else if (errLow.includes('gas') || errLow.includes('intrinsic')) {
-        errLabel = '⛽ Gas estimation failed';
+        errIcon = '⛽'; errLabel = 'Gas estimation failed';
       } else if (errLow.includes('timeout') || errLow.includes('timed out')) {
-        errLabel = '⏱ Execution timed out';
+        errIcon = '⏱'; errLabel = 'Execution timed out';
       } else if (errMsg) {
-        errLabel = errMsg.slice(0, 60);
+        errIcon = '⚠️'; errLabel = truncate(errMsg, 60);
       } else {
-        errLabel = 'Unknown error';
+        errIcon = '⚠️'; errLabel = 'Unknown error';
       }
-      lines.push('❌ Mint Failed', truncate(subject));
-      lines.push(`Reason: ${errLabel}`);
-      if (payload.mintPrice) lines.push(`Price: ${payload.mintPrice} ETH`);
-      if (payload.detail) lines.push(payload.detail);
-      break;
+      const lines = [
+        `❌ <b>Mint Failed</b>`,
+        `${SEP}`,
+        `📦 ${subjectHtml}`,
+        `${errIcon} <i>${escapeHtml(errLabel)}</i>`,
+      ];
+      if (payload.mintPrice) lines.push(`💰 Price: ${escapeHtml(payload.mintPrice)} ETH`);
+      if (payload.taskId) lines.push(`🆔 Task: ${shortId(payload.taskId)}`);
+      return lines.join('\n');
     }
-    case 'high_risk_collection':
-      lines.push('High Risk Collection', truncate(subject));
-      if (payload.riskReason) lines.push(`Reason: ${payload.riskReason}`);
-      break;
-    case 'risk_analysis_complete':
-      lines.push('Risk Analysis Complete', truncate(subject));
-      if (payload.confidence !== undefined) lines.push(`Confidence: ${Math.round(payload.confidence * 100)}%`);
-      break;
-    case 'wallet_balance_low':
-      lines.push('Wallet Balance Low', truncate(subject));
-      if (payload.balance && payload.symbol) lines.push(`Balance: ${payload.balance} ${payload.symbol}`);
-      break;
-    case 'wallet_minted_nft':
-      lines.push('Wallet Minted NFT', truncate(subject));
-      if (payload.txHash) lines.push(`Tx: ${payload.txHash}`);
-      break;
-    case 'wallet_purchased_nft':
-      lines.push('Wallet Purchased NFT', truncate(subject));
-      if (payload.txHash) lines.push(`Tx: ${payload.txHash}`);
-      break;
-    case 'copy_mint_triggered':
-      lines.push('Copy Mint Triggered', truncate(subject));
-      break;
+    case 'high_risk_collection': {
+      const lines = [
+        `🚨 <b>High Risk Collection</b>`,
+        `${SEP}`,
+        `📦 ${subjectHtml}`,
+      ];
+      if (payload.riskReason) lines.push(`⚠️ ${escapeHtml(payload.riskReason)}`);
+      return lines.join('\n');
+    }
+    case 'risk_analysis_complete': {
+      const lines = [
+        `🛡 <b>Risk Analysis Complete</b>`,
+        `${SEP}`,
+        `📦 ${subjectHtml}`,
+      ];
+      if (payload.confidence !== undefined) lines.push(`📊 Confidence: <b>${Math.round(payload.confidence * 100)}%</b>`);
+      return lines.join('\n');
+    }
+    case 'wallet_balance_low': {
+      const lines = [
+        `📉 <b>Wallet Balance Low</b>`,
+        `${SEP}`,
+        `📦 ${subjectHtml}`,
+      ];
+      if (payload.balance && payload.symbol) lines.push(`💰 Balance: <b>${escapeHtml(payload.balance)} ${escapeHtml(payload.symbol)}</b>`);
+      return lines.join('\n');
+    }
+    case 'wallet_minted_nft': {
+      const lines = [
+        `🐋 <b>Tracked Wallet Minted NFT</b>`,
+        `${SEP}`,
+        `📦 ${subjectHtml}`,
+      ];
+      if (payload.txHash) {
+        const link = explorerTxLink(payload.txHash);
+        lines.push(`🔗 Tx: <a href="${link}">${escapeHtml(payload.txHash.slice(0, 18))}…</a>`);
+      }
+      return lines.join('\n');
+    }
+    case 'wallet_purchased_nft': {
+      const lines = [
+        `🐋 <b>Tracked Wallet Purchased NFT</b>`,
+        `${SEP}`,
+        `📦 ${subjectHtml}`,
+      ];
+      if (payload.txHash) {
+        const link = explorerTxLink(payload.txHash);
+        lines.push(`🔗 Tx: <a href="${link}">${escapeHtml(payload.txHash.slice(0, 18))}…</a>`);
+      }
+      return lines.join('\n');
+    }
+    case 'copy_mint_triggered': {
+      const lines = [
+        `📋 <b>Copy Mint Triggered</b>`,
+        `${SEP}`,
+        `📦 ${subjectHtml}`,
+      ];
+      return lines.join('\n');
+    }
+    default:
+      return escapeHtml(subject);
   }
-
-  return lines.join('\n');
 }
 
 // Issue 2 Fix: Only send Telegram notifications for mint lifecycle events.
@@ -467,20 +590,33 @@ export async function sendTelegramNotification(
     const account = await getTelegramAccountByUserId(userId);
     if (!account) return { sent: false, reason: 'telegram_not_linked' };
 
-    // For scheduled mints, attach an inline keyboard so the user can cancel
-    // directly from their phone without opening the web app.
-    const replyMarkup: InlineKeyboardMarkup | undefined =
-      type === 'mint_scheduled' && payload.taskId
-        ? {
-            inline_keyboard: [[
-              { text: '❌ Cancel Task', callback_data: `schedule:cancel:${payload.taskId}` },
-            ]],
-          }
-        : undefined;
+    const text = formatNotification(type, payload);
 
-    await sendTelegramMessage(account.chatId, formatNotification(type, payload), {
-      replyMarkup,
-    });
+    // Build contextual inline buttons per notification type
+    let replyMarkup: InlineKeyboardMarkup | undefined;
+
+    if (type === 'mint_scheduled' && payload.taskId) {
+      replyMarkup = {
+        inline_keyboard: [[
+          { text: '\u{1F6D1} Cancel Task', callback_data: `schedule:cancel:${payload.taskId}` },
+        ]],
+      };
+    } else if (type === 'mint_success' && payload.txHash) {
+      const link = explorerTxLink(payload.txHash);
+      replyMarkup = {
+        inline_keyboard: [[
+          { text: '\u{1F517} View on Etherscan', url: link },
+        ]],
+      };
+    } else if (type === 'mint_failed' && payload.taskId) {
+      replyMarkup = {
+        inline_keyboard: [[
+          { text: '\u{1F504} Retry Mint', callback_data: `retry:mint:${payload.taskId}` },
+        ]],
+      };
+    }
+
+    await sendRichMessage(account.chatId, text, { replyMarkup });
     return { sent: true };
   } catch (error) {
     return {
@@ -497,19 +633,23 @@ export async function sendTelegramSafeModePrompt(params: SafeModePromptParams) {
     const account = await getTelegramAccountByUserId(params.userId);
     if (!account) return { sent: false, reason: 'telegram_not_linked' };
 
-    const primaryLabel = params.action === 'schedule' ? 'Schedule Anyway' : 'Mint Anyway';
+    const primaryLabel = params.action === 'schedule' ? '\u{27A14}\u{FE0F} Schedule Anyway' : '\u{26A1} Mint Anyway';
     const primaryAction = params.action === 'schedule' ? 'schedule_anyway' : 'mint_anyway';
-    const reasons = params.riskReasons.slice(0, 5).map((reason) => `- ${reason}`).join('\n');
+    const reasons = params.riskReasons.slice(0, 5).map((r) => `\u{2022} ${escapeHtml(r)}`).join('\n');
 
-    await sendTelegramMessage(account.chatId, [
-      params.action === 'schedule' ? 'High Risk Scheduled Mint' : 'High Risk Live Mint',
-      `Risk Score: ${params.riskScore}/100`,
-      reasons || 'No specific risk reasons available.',
-    ].join('\n'), {
+    const text = [
+      `\u{1F6A8} <b>High Risk ${params.action === 'schedule' ? 'Scheduled Mint' : 'Live Mint'}</b>`,
+      `${SEP}`,
+      `\u{1F6E1}\u{FE0F} Risk Score: <b>${params.riskScore}/100</b>`,
+      '',
+      reasons || '<i>No specific risk reasons available.</i>',
+    ].join('\n');
+
+    await sendRichMessage(account.chatId, text, {
       replyMarkup: {
         inline_keyboard: [[
           { text: primaryLabel, callback_data: `risk:${primaryAction}:${params.taskId}` },
-          { text: 'Cancel', callback_data: `risk:cancel:${params.taskId}` },
+          { text: '\u{1F6D1} Cancel', callback_data: `risk:cancel:${params.taskId}` },
         ]],
       },
     });
@@ -530,15 +670,19 @@ export async function sendTelegramRiskChangePrompt(params: RiskChangePromptParam
     const account = await getTelegramAccountByUserId(params.userId);
     if (!account) return { sent: false, reason: 'telegram_not_linked' };
 
-    await sendTelegramMessage(account.chatId, [
-      'Risk Score Changed',
-      `Previous: ${params.previousScore}`,
-      `Current: ${params.currentScore}`,
-    ].join('\n'), {
+    const arrow = params.currentScore > params.previousScore ? '\u{2B06}\u{FE0F}' : '\u{2B07}\u{FE0F}';
+    const text = [
+      `\u{1F6E1}\u{FE0F} <b>Risk Score Changed</b>`,
+      `${SEP}`,
+      `Previous: <b>${params.previousScore}/100</b>`,
+      `${arrow} Current: <b>${params.currentScore}/100</b>`,
+    ].join('\n');
+
+    await sendRichMessage(account.chatId, text, {
       replyMarkup: {
         inline_keyboard: [[
-          { text: 'Mint Anyway', callback_data: `risk:approve_mint:${params.taskId}` },
-          { text: 'Cancel', callback_data: `risk:cancel:${params.taskId}` },
+          { text: '\u{26A1} Mint Anyway', callback_data: `risk:approve_mint:${params.taskId}` },
+          { text: '\u{1F6D1} Cancel', callback_data: `risk:cancel:${params.taskId}` },
         ]],
       },
     });
@@ -568,11 +712,27 @@ export async function notifyWalletBalanceIfLow(params: {
     return { sent: false, reason: 'balance_above_threshold' };
   }
 
-  return sendTelegramNotification(params.userId, 'wallet_balance_low', {
-    wallet: `${params.address} on ${params.chain}`,
-    balance: params.balance,
-    symbol: params.symbol,
-  });
+  // Send directly — wallet_balance_low is not in MINT_NOTIFICATION_TYPES
+  try {
+    const account = await getTelegramAccountByUserId(params.userId);
+    if (!account) return { sent: false, reason: 'telegram_not_linked' };
+
+    const text = [
+      `\u{1F4C9} <b>Wallet Balance Low</b>`,
+      `${SEP}`,
+      `\u{1F4CD} Address: ${shortAddr(params.address)}`,
+      `\u{1F310} Chain: <b>${escapeHtml(params.chain)}</b>`,
+      `\u{1F4B0} Balance: <b>${escapeHtml(params.balance)} ${escapeHtml(params.symbol)}</b>`,
+    ].join('\n');
+
+    await sendRichMessage(account.chatId, text);
+    return { sent: true };
+  } catch (error) {
+    return {
+      sent: false,
+      reason: error instanceof Error ? error.message : 'telegram_notification_failed',
+    };
+  }
 }
 
 function parseCommand(text: string) {
@@ -598,16 +758,25 @@ async function loadDefaultWallet(userId: string) {
 }
 
 async function reply(message: TelegramMessage, text: string) {
-  await sendTelegramMessage(String(message.chat.id), text);
+  await sendRichMessage(String(message.chat.id), text, { replyMarkup: QUICK_KEYBOARD });
+}
+
+// Reply with inline buttons (HTML formatted)
+async function replyWithButtons(
+  message: TelegramMessage,
+  text: string,
+  inlineKeyboard: InlineKeyboardMarkup,
+) {
+  await sendRichMessage(String(message.chat.id), text, { replyMarkup: inlineKeyboard });
 }
 
 function accountRequiredText() {
-  return 'Telegram is not linked yet. Open AutoMint settings, generate a Telegram link token, then send /start <token> here.';
+  return '\\u{26A0}\\u{FE0F} <b>Telegram Not Linked</b>\\n' + SEP + '\\nOpen <a href="https://app.automint.xyz/settings/notifications">AutoMint Settings</a>, generate a Telegram link token, then send:\\n<code>/start &lt;token&gt;</code> here.';
 }
 
 async function handleStart(message: TelegramMessage, token: string) {
   if (!message.from) {
-    await reply(message, 'Unable to link Telegram without a Telegram user ID.');
+    await reply(message, '\u{26A0}\u{FE0F} Unable to link Telegram without a Telegram user ID.');
     return;
   }
 
@@ -623,20 +792,29 @@ async function handleStart(message: TelegramMessage, token: string) {
     chatId: String(message.chat.id),
   });
 
-  await sendTelegramMessage(
-    account.chatId,
-    '✅ *Telegram linked to your AutoMint account!*\n\n' +
-    'You can now control your full AutoMint platform from here.\n\n' +
-    '*Quick commands:*\n' +
-    '⚡ Just paste a URL to mint instantly\n' +
-    '/mint <url> [qty] — queue a mint\n' +
-    '/watch <wallet> — track a whale\n' +
-    '/status — active mints\n' +
-    '/cancel — cancel latest mint\n' +
-    '/settings — view settings\n' +
-    '/model — change AI model\n\n' +
-    'Or just type anything in plain English — the AI handles it 🤖',
-  );
+  const welcomeText = [
+    `\u{2705} <b>Telegram linked to your AutoMint account!</b>`,
+    ``,
+    `You can now control your full AutoMint platform from here.`,
+    ``,
+    `${SEP}`,
+    `<b>\u{26A1} Quick Actions</b>`,
+    `\u{2022} Just paste a URL to mint instantly`,
+    `\u{2022} Tap a button below for common actions`,
+    ``,
+    `<b>\u{1F4E3} Commands</b>`,
+    `\u{2022} <code>/mint &lt;url&gt; [qty]</code> \u{2014} queue a mint`,
+    `\u{2022} <code>/watch &lt;wallet&gt;</code> \u{2014} track a whale`,
+    `\u{2022} <code>/status</code> \u{2014} active mints`,
+    `\u{2022} <code>/cancel</code> \u{2014} cancel latest mint`,
+    `\u{2022} <code>/settings</code> \u{2014} view settings`,
+    `\u{2022} <code>/model</code> \u{2014} change AI model`,
+    `\u{2022} <code>/help</code> \u{2014} full command guide`,
+    ``,
+    `Or just type anything in plain English \u{2014} the AI handles it \u{1F916}`,
+  ].join('\n');
+
+  await sendRichMessage(account.chatId, welcomeText, { replyMarkup: QUICK_KEYBOARD });
 }
 
 const MAX_MINT_QUANTITY = 50;
@@ -660,30 +838,37 @@ function parseMintInput(rawInput: string): { url: string; quantity: number } | {
 
 async function handleMintCommand(message: TelegramMessage, userId: string, rawInput: string) {
   if (!rawInput) {
-    await reply(message, `Usage: /mint <url> [quantity]\n\nExamples:\n  /mint https://... 1 (default)\n  /mint https://... 5\n  https://... 3 (bare URL)\n\nMax: ${MAX_MINT_QUANTITY} NFTs per mint`);
+    await reply(message, [
+      `\u{1F4E6} <b>Mint Command Usage</b>`,
+      `${SEP}`,
+      `<code>/mint &lt;url&gt; [qty]</code>`,
+      ``,
+      `<b>Examples:</b>`,
+      `\u{2022} <code>/mint https://... 1</code> (default)`,
+      `\u{2022} <code>/mint https://... 5</code>`,
+      `\u{2022} <code>https://... 3</code> (bare URL)`,
+      ``,
+      `<i>Max: ${MAX_MINT_QUANTITY} NFTs per mint</i>`,
+    ].join('\n'));
     return;
   }
 
   const wallet = await loadDefaultWallet(userId);
   if (!wallet) {
-    await reply(message, 'Add a wallet in AutoMint before triggering a mint from Telegram.');
+    await reply(message, `\u{26A0}\u{FE0F} Add a wallet in <a href="https://app.automint.xyz/wallets">AutoMint</a> before triggering a mint from Telegram.`);
     return;
   }
 
-  // C-04 Fix: create a task and schedule via QStash — never execute inline.
-  // The webhook returns immediately. All blockchain execution happens in the
-  // QStash → /api/webhooks/qstash → executeScheduledMint pipeline.
   const parsed = parseMintInput(rawInput);
   if ('error' in parsed) { await reply(message, parsed.error); return; }
   const { url, quantity } = parsed;
 
-  // C-04 Fix: create a task and schedule via QStash — never execute inline.
   const result = await createMintTaskFromUrl(url, wallet.id, userId, quantity);
   const qtyLabel = `${quantity} NFT${quantity > 1 ? 's' : ''}`;
 
   if (result.action === 'FAILED') {
     await sendTelegramNotification(userId, 'mint_failed', { url, error: result.error });
-    await reply(message, `❌ Mint failed: ${result.error || 'Unknown error'}`);
+    await reply(message, `\u{274C} <b>Mint Failed</b>\n${escapeHtml(result.error || 'Unknown error')}`);
     return;
   }
 
@@ -692,7 +877,14 @@ async function handleMintCommand(message: TelegramMessage, userId: string, rawIn
     void publishEvent(userId, 'mint:created', { taskId: result.taskId, url });
     await reply(
       message,
-      `⏳ Monitoring started.\nTask: ${result.taskId}\nQty: ${qtyLabel}\nYou'll be notified when the mint goes live.`,
+      [
+        `\u{23F3} <b>Monitoring Started</b>`,
+        `${SEP}`,
+        `\u{1F9F1} Task: ${shortId(result.taskId ?? '')}`,
+        `\u{1F4E6} Qty: <b>${escapeHtml(qtyLabel)}</b>`,
+        ``,
+        `<i>You'll be notified when the mint goes live.</i>`,
+      ].join('\n'),
     );
     return;
   }
@@ -702,26 +894,33 @@ async function handleMintCommand(message: TelegramMessage, userId: string, rawIn
   void publishEvent(userId, 'mint:created', { taskId: result.taskId, url });
   await reply(
     message,
-    `✅ Mint task created.\nTask: ${result.taskId}\nQty: ${qtyLabel}\nExecution starting shortly — you'll be notified on completion.`,
+    [
+      `\u{2705} <b>Mint Task Created</b>`,
+      `${SEP}`,
+      `\u{1F9F1} Task: ${shortId(result.taskId ?? '')}`,
+      `\u{1F4E6} Qty: <b>${escapeHtml(qtyLabel)}</b>`,
+      ``,
+      `<i>Execution starting shortly \u{2014} you'll be notified on completion.</i>`,
+    ].join('\n'),
   );
 }
 
 async function handleScheduleCommand(message: TelegramMessage, userId: string, url: string) {
   if (!url) {
-    await reply(message, 'Usage: /schedule <url>');
+    await reply(message, `\u{1F4E6} <b>Schedule Command Usage</b>\n${SEP}\n<code>/schedule &lt;url&gt;</code>`);
     return;
   }
 
   const wallet = await loadDefaultWallet(userId);
   if (!wallet) {
-    await reply(message, 'Add a wallet in AutoMint before scheduling a mint from Telegram.');
+    await reply(message, `\u{26A0}\u{FE0F} Add a wallet in <a href="https://app.automint.xyz/wallets">AutoMint</a> before scheduling a mint.`);
     return;
   }
 
   const normalizedInput = url.startsWith('0x') ? `https://etherscan.io/address/${url}` : url;
   const intent = await resolveMintIntent(normalizedInput);
   if (!intent.contractAddress) {
-    await reply(message, 'Could not resolve a contract address from that URL.');
+    await reply(message, '\u{274C} Could not resolve a contract address from that URL.');
     return;
   }
 
@@ -732,14 +931,10 @@ async function handleScheduleCommand(message: TelegramMessage, userId: string, u
 
   if (mintState.status === 'ENDED') {
     await sendTelegramNotification(userId, 'mint_failed', { url, error: 'Mint has already ended' });
-    await reply(message, 'This mint has already ended.');
+    await reply(message, '\u{1F6AB} <b>This mint has already ended.</b>');
     return;
   }
 
-  // C3 fix: the /schedule command previously inserted with no dedup at all —
-  // two quick /schedule commands for the same URL created two tasks and minted
-  // twice. Serialize the check-then-insert per (user, contract) and return the
-  // existing active task if one already exists for this wallet.
   const contractAddress = intent.contractAddress;
   const task = await withMintTaskCreationLock(userId, contractAddress, async () => {
     const [existing] = await getDb()
@@ -772,17 +967,21 @@ async function handleScheduleCommand(message: TelegramMessage, userId: string, u
       : undefined;
     const scheduledTask = await scheduleMint({ taskId: task.id, userId, scheduledTime });
     if (!scheduledTask.qstashMessageId) {
-      await reply(message, `Risk approval requested.\nTask: ${scheduledTask.id}`);
+      await reply(message, `\u{1F6E1}\u{FE0F} <b>Risk Approval Requested</b>\n${SEP}\n\u{1F9F1} Task: ${shortId(scheduledTask.id)}`);
       return;
     }
-    await reply(message, `Mint scheduled.\nTask: ${scheduledTask.id}`);
+    await reply(message, [
+      `\u{1F552} <b>Mint Scheduled</b>`,
+      `${SEP}`,
+      `\u{1F9F1} Task: ${shortId(scheduledTask.id)}`,
+    ].join('\n'));
     return;
   }
 
   const { requireRiskApproval } = await import('@/lib/services/risk.service');
   const riskGate = await requireRiskApproval({ taskId: task.id, action: 'mint', userId });
   if (!riskGate.approved) {
-    await reply(message, `Risk approval requested.\nTask: ${task.id}`);
+    await reply(message, `\u{1F6E1}\u{FE0F} <b>Risk Approval Requested</b>\n${SEP}\n\u{1F9F1} Task: ${shortId(task.id)}`);
     return;
   }
 
@@ -791,12 +990,16 @@ async function handleScheduleCommand(message: TelegramMessage, userId: string, u
     taskId: task.id,
     contractAddress: intent.contractAddress,
   });
-  await reply(message, `Mint is live and ready.\nTask: ${task.id}`);
+  await reply(message, [
+    `\u{1F680} <b>Mint Is Live and Ready</b>`,
+    `${SEP}`,
+    `\u{1F9F1} Task: ${shortId(task.id)}`,
+  ].join('\n'));
 }
 
 async function handleWatchCommand(message: TelegramMessage, userId: string, address: string) {
   if (!address || !isValidEthereumAddress(address)) {
-    await reply(message, 'Usage: /watch <wallet>');
+    await reply(message, `\u{1F4E6} <b>Watch Command Usage</b>\n${SEP}\n<code>/watch &lt;wallet&gt;</code>\n\n<i>Example: <code>/watch 0x1234...</code></i>`);
     return;
   }
 
@@ -816,9 +1019,18 @@ async function handleWatchCommand(message: TelegramMessage, userId: string, addr
     });
 
     void publishEvent(userId, 'watched-wallet:created', { address: wallet.walletAddress });
-    await reply(message, `Wallet tracker enabled.\n${wallet.walletAddress}\nChain: ${wallet.chain}\nStatus: ${wallet.active ? 'active' : 'inactive'}\nBalance: ${balance.balance} ${balance.symbol}`);
+
+    const statusIcon = wallet.active ? '\u{2705}' : '\u{23F8}';
+    await reply(message, [
+      `\u{1F441} <b>Whale Wallet Tracker Enabled</b>`,
+      `${SEP}`,
+      `\u{1F4CD} Address: ${shortAddr(wallet.walletAddress)}`,
+      `\u{1F310} Chain: <b>${escapeHtml(wallet.chain)}</b>`,
+      `${statusIcon} Status: <b>${wallet.active ? 'Active' : 'Inactive'}</b>`,
+      `\u{1F4B0} Balance: <b>${escapeHtml(balance.balance)} ${escapeHtml(balance.symbol)}</b>`,
+    ].join('\n'));
   } catch (error) {
-    await reply(message, error instanceof Error ? error.message : 'Failed to watch wallet.');
+    await reply(message, `\u{274C} ${escapeHtml(error instanceof Error ? error.message : 'Failed to watch wallet.')}`);
   }
 }
 
@@ -831,7 +1043,11 @@ async function handleStatusCommand(message: TelegramMessage, userId: string) {
     .limit(10);
 
   if (rows.length === 0) {
-    await reply(message, 'No mint tasks yet.');
+    await reply(message, [
+      `\u{1F4CB} <b>Mint Status</b>`,
+      `${SEP}`,
+      `<i>No mint tasks yet. Paste a URL or use /mint to get started!</i>`,
+    ].join('\n'));
     return;
   }
 
@@ -840,14 +1056,56 @@ async function handleStatusCommand(message: TelegramMessage, userId: string) {
     return acc;
   }, {});
 
-  const latest = rows[0];
+  const statusIcons: Record<string, string> = {
+    pending: '\u{23F3}',
+    monitoring: '\u{1F441}',
+    ready: '\u{2705}',
+    running: '\u{26A1}',
+    completed: '\u{1F3C6}',
+    failed: '\u{274C}',
+    cancelled: '\u{1F6AB}',
+    unconfirmed: '\u{2754}',
+  };
+
+  const statusLines = Object.entries(counts).map(([status, count]) =>
+    `${statusIcons[status] ?? '\u{2754}'} ${escapeHtml(status)}: <b>${count}</b>`
+  );
+
   const lines = [
-    'AutoMint Status',
-    ...Object.entries(counts).map(([status, count]) => `${status}: ${count}`),
-    `Latest: ${latest.status} ${latest.contractAddress ? truncate(latest.contractAddress, 18) : latest.id}`,
+    `\u{1F4CB} <b>Mint Status</b>`,
+    `${SEP}`,
+    ...statusLines,
+    ``,
+    `<b>Recent Tasks:</b>`,
   ];
 
-  await reply(message, lines.join('\n'));
+  // Show up to 5 recent tasks with status icons
+  for (const task of rows.slice(0, 5)) {
+    const icon = statusIcons[task.status] ?? '\u{2754}';
+    const addr = task.contractAddress ? shortAddr(task.contractAddress) : shortId(task.id);
+    lines.push(`${icon} ${addr} \u{2014} <i>${escapeHtml(task.status)}</i>`);
+  }
+
+  // Build inline buttons for cancellable tasks
+  const cancellable = rows.filter(t =>
+    ['pending', 'monitoring', 'ready', 'running'].includes(t.status)
+  );
+
+  const inlineKeyboard: InlineKeyboardMarkup | undefined =
+    cancellable.length > 0
+      ? {
+          inline_keyboard: cancellable.slice(0, 4).map(t => [{
+            text: `\u{1F6D1} Cancel ${t.id.slice(0, 8)}`,
+            callback_data: `schedule:cancel:${t.id}`,
+          }]),
+        }
+      : undefined;
+
+  if (inlineKeyboard) {
+    await replyWithButtons(message, lines.join('\n'), inlineKeyboard);
+  } else {
+    await reply(message, lines.join('\n'));
+  }
 }
 
 async function handleCancelCommand(message: TelegramMessage, userId: string) {
@@ -862,24 +1120,41 @@ async function handleCancelCommand(message: TelegramMessage, userId: string) {
     .limit(1);
 
   if (!target) {
-    await reply(message, 'No cancellable mint task found.');
+    await reply(message, [
+      `\u{1F6D1} <b>Cancel Mint</b>`,
+      `${SEP}`,
+      `<i>No cancellable mint task found.</i>`,
+    ].join('\n'));
     return;
   }
 
   const task = await cancelScheduledMint(target.id, userId);
 
   void publishEvent(userId, 'mint:cancelled', { taskId: task.id });
-  await reply(message, `Cancelled mint task.\nTask: ${task.id}`);
+  await reply(message, [
+    `\u{1F6D1} <b>Mint Task Cancelled</b>`,
+    `${SEP}`,
+    `\u{1F9F1} Task: ${shortId(task.id)}`,
+  ].join('\n'));
 }
 
 async function handleSettingsCommand(message: TelegramMessage, account: { username: string | null; chatId: string }) {
-  const username = account.username ? `@${account.username}` : 'not set';
+  const username = account.username ? `@${escapeHtml(account.username)}` : '<i>not set</i>';
   await reply(message, [
-    'AutoMint Telegram Settings',
-    `Username: ${username}`,
-    `Chat ID: ${account.chatId}`,
-    'Notifications: enabled',
-    'Commands: /mint <url>, /schedule <url>, /watch <wallet>, /status, /cancel, /settings, /model',
+    `\u{2699}\u{FE0F} <b>AutoMint Telegram Settings</b>`,
+    `${SEP}`,
+    `\u{1F464} Username: ${username}`,
+    `\u{1F4AC} Chat ID: <code>${escapeHtml(account.chatId)}</code>`,
+    `\u{1F514} Notifications: <b>Enabled</b>`,
+    ``,
+    `<b>Commands:</b>`,
+    `\u{2022} <code>/mint</code> &lt;url&gt; [qty]`,
+    `\u{2022} <code>/schedule</code> &lt;url&gt;`,
+    `\u{2022} <code>/watch</code> &lt;wallet&gt;`,
+    `\u{2022} <code>/status</code> \u{2014} active mints`,
+    `\u{2022} <code>/cancel</code> \u{2014} cancel latest mint`,
+    `\u{2022} <code>/model</code> \u{2014} change AI model`,
+    `\u{2022} <code>/help</code> \u{2014} full guide`,
   ].join('\n'));
 }
 
@@ -890,24 +1165,135 @@ async function handleModelCommand(message: TelegramMessage, userId: string) {
 
   const keyboard: InlineKeyboardMarkup = {
     inline_keyboard: AVAILABLE_MODELS.map(m => [{
-      text: m.id === current ? `✅ ${m.label}` : m.label,
+      text: m.id === current ? `\u{2705} ${m.label}` : m.label,
       callback_data: `model:select:${m.id}`,
     }]),
   };
 
   if (!message.chat?.id) return;
-  await sendTelegramMessage(
+  await sendRichMessage(
     String(message.chat.id),
     [
-      '🤖 *AI Model Selection*',
-      '',
-      `Current: *${currentInfo?.label ?? current}*`,
-      `${currentInfo?.description ?? ''}`,
-      '',
-      'Tap a model to switch:',
+      `\u{1F916} <b>AI Model Selection</b>`,
+      `${SEP}`,
+      `Current: <b>${escapeHtml(currentInfo?.label ?? current)}</b>`,
+      `<i>${escapeHtml(currentInfo?.description ?? '')}</i>`,
+      ``,
+      `<i>Tap a model to switch:</i>`,
     ].join('\n'),
     { replyMarkup: keyboard },
   );
+}
+
+// ── /help command — full command guide with inline buttons ─────────────────
+async function handleHelpCommand(message: TelegramMessage) {
+  const helpText = [
+    `\u{2753} <b>AutoMint Help</b>`,
+    `${SEP}`,
+    `<b>\u{26A1} Minting</b>`,
+    `\u{2022} <code>/mint &lt;url&gt; [qty]</code> \u{2014} Queue a mint`,
+    `\u{2022} <code>/schedule &lt;url&gt;</code> \u{2014} Schedule a future mint`,
+    `\u{2022} Paste any URL directly to mint instantly`,
+    ``,
+    `<b>\u{1F441} Tracking</b>`,
+    `\u{2022} <code>/watch &lt;wallet&gt;</code> \u{2014} Track a whale wallet`,
+    ``,
+    `<b>\u{1F4CB} Status & Control</b>`,
+    `\u{2022} <code>/status</code> \u{2014} View active mints`,
+    `\u{2022} <code>/cancel</code> \u{2014} Cancel latest mint`,
+    ``,
+    `<b>\u{2699}\u{FE0F} Settings</b>`,
+    `\u{2022} <code>/settings</code> \u{2014} View Telegram settings`,
+    `\u{2022} <code>/model</code> \u{2014} Switch AI model`,
+    ``,
+    `<b>\u{1F916} AI</b>`,
+    `\u{2022} Type anything in plain English`,
+    `\u{2022} The AI handles it automatically`,
+    ``,
+    `<i>Or use the quick buttons below the chat input!</i>`,
+  ].join('\n');
+
+  const keyboard: InlineKeyboardMarkup = {
+    inline_keyboard: [[
+      { text: '\u{1F4CB} Status', callback_data: 'nav:status' },
+      { text: '\u{2699}\u{FE0F} Settings', callback_data: 'nav:settings' },
+      { text: '\u{1F916} Model', callback_data: 'nav:model' },
+    ]],
+  };
+
+  await replyWithButtons(message, helpText, keyboard);
+}
+
+// ── /menu command — compact menu with inline action buttons ──────────────────
+async function handleMenuCommand(message: TelegramMessage) {
+  const menuText = [
+    `\u{1F5BC} <b>AutoMint Menu</b>`,
+    `${SEP}`,
+    `<i>Tap an action below to get started:</i>`,
+  ].join('\n');
+
+  const keyboard: InlineKeyboardMarkup = {
+    inline_keyboard: [
+      [
+        { text: '\u{1F4CB} My Mints', callback_data: 'nav:status' },
+        { text: '\u{1F441} Watch Whale', callback_data: 'nav:watch' },
+      ],
+      [
+        { text: '\u{2699}\u{FE0F} Settings', callback_data: 'nav:settings' },
+        { text: '\u{1F916} AI Model', callback_data: 'nav:model' },
+      ],
+      [
+        { text: '\u{2753} Help', callback_data: 'nav:help' },
+      ],
+    ],
+  };
+
+  await replyWithButtons(message, menuText, keyboard);
+}
+
+// ── Handle nav: callback queries from help/menu inline buttons ───────────────
+async function handleNavCallback(callback: TelegramCallbackQuery) {
+  const navAction = (callback.data || '').split(':')[1];
+  if (!navAction) return { handled: false };
+
+  const account = await getTelegramAccountByTelegramId(String(callback.from.id));
+  if (!account) {
+    await answerCallbackQuery(callback.id, 'Telegram is not linked.');
+    return { handled: true };
+  }
+
+  // For nav callbacks we need a synthetic message-like object
+  const fakeMessage: TelegramMessage = {
+    message_id: callback.message?.message_id ?? 0,
+    from: callback.from,
+    chat: callback.message?.chat ?? { id: Number(account.chatId), type: 'private' },
+    text: '',
+  };
+
+  switch (navAction) {
+    case 'status':
+      await answerCallbackQuery(callback.id, 'Loading status...');
+      await handleStatusCommand(fakeMessage, account.userId);
+      return { handled: true };
+    case 'settings':
+      await answerCallbackQuery(callback.id, 'Loading settings...');
+      await handleSettingsCommand(fakeMessage, { username: account.username, chatId: account.chatId });
+      return { handled: true };
+    case 'model':
+      await answerCallbackQuery(callback.id, 'Loading models...');
+      await handleModelCommand(fakeMessage, account.userId);
+      return { handled: true };
+    case 'help':
+      await answerCallbackQuery(callback.id, 'Loading help...');
+      await handleHelpCommand(fakeMessage);
+      return { handled: true };
+    case 'watch':
+      await answerCallbackQuery(callback.id, 'Use /watch <address>');
+      await sendRichMessage(account.chatId, `\u{1F441} <b>Watch a Whale Wallet</b>\n${SEP}\nUse: <code>/watch &lt;0xaddress&gt;</code>\n\n<i>Example:</i> <code>/watch 0x1234...</code>`);
+      return { handled: true };
+    default:
+      return { handled: false };
+  }
 }
 
 async function handleModelCallback(callback: TelegramCallbackQuery) {
@@ -971,7 +1357,7 @@ async function handleRiskCallback(callback: TelegramCallbackQuery) {
     const { cancelScheduledMint } = await import('@/lib/services/qstash.service');
     await cancelScheduledMint(taskId, account.userId);
     await answerCallbackQuery(callback.id, 'Cancelled.');
-    await sendTelegramMessage(account.chatId, `Cancelled mint task.\nTask: ${taskId}`);
+    await sendRichMessage(account.chatId, [`\u{1F6D1} <b>Mint Task Cancelled</b>`, `${SEP}`, `\u{1F9F1} Task: ${shortId(taskId)}`].join('\n'));
     return { handled: true };
   }
 
@@ -979,7 +1365,7 @@ async function handleRiskCallback(callback: TelegramCallbackQuery) {
     const { scheduleMint } = await import('@/lib/services/qstash.service');
     await scheduleMint({ taskId, userId: account.userId, overrideRiskFlag: true });
     await answerCallbackQuery(callback.id, 'Scheduled.');
-    await sendTelegramMessage(account.chatId, `Scheduled mint task.\nTask: ${taskId}`);
+    await sendRichMessage(account.chatId, [`\u{1F552} <b>Mint Scheduled</b>`, `${SEP}`, `\u{1F9F1} Task: ${shortId(taskId)}`].join('\n'));
     return { handled: true };
   }
 
@@ -996,11 +1382,11 @@ async function handleRiskCallback(callback: TelegramCallbackQuery) {
 
     const result = await executeMintTask(taskId, account.userId);
     await answerCallbackQuery(callback.id, result.success ? 'Mint started.' : 'Mint failed.');
-    await sendTelegramMessage(
+    await sendRichMessage(
       account.chatId,
       result.success
-        ? `Mint approved.\nTask: ${taskId}${result.txHash ? `\nTx: ${result.txHash}` : ''}`
-        : `Mint failed.\nTask: ${taskId}\nReason: ${result.error || 'Unknown error'}`,
+        ? [`\u{2705} <b>Mint Approved</b>`, `${SEP}`, `\u{1F9F1} Task: ${shortId(taskId)}` + (result.txHash ? `\n\u{1F517} Tx: <code>${escapeHtml(result.txHash.slice(0, 18))}...</code>` : '')].join('\n')
+        : [`\u{274C} <b>Mint Failed</b>`, `${SEP}`, `\u{1F9F1} Task: ${shortId(taskId)}`, `\u{26A0}\u{FE0F} ${escapeHtml(result.error || 'Unknown error')}`].join('\n'),
     );
     return { handled: true };
   }
@@ -1016,7 +1402,7 @@ async function handleRiskCallback(callback: TelegramCallbackQuery) {
       .where(and(eq(mintTasks.id, taskId), eq(mintTasks.userId, account.userId)));
 
     await answerCallbackQuery(callback.id, 'Approved.');
-    await sendTelegramMessage(account.chatId, `Scheduled mint approved.\nTask: ${taskId}`);
+    await sendRichMessage(account.chatId, [`\u{2705} <b>Mint Approved</b>`, `${SEP}`, `\u{1F9F1} Task: ${shortId(taskId)}`].join('\n'));
     return { handled: true };
   }
 
@@ -1044,17 +1430,21 @@ async function handleScheduledMintCallback(callback: TelegramCallbackQuery) {
       try {
         const { cancelScheduledMint } = await import('@/lib/services/qstash.service');
         const task = await cancelScheduledMint(taskId, account.userId);
-        await answerCallbackQuery(callback.id, '✅ Task cancelled');
-        await sendTelegramMessage(
+        await answerCallbackQuery(callback.id, '\u{2705} Task cancelled');
+        await sendRichMessage(
           account.chatId,
-          `❌ Mint task cancelled from Telegram.\nTask: ${task.id.slice(0, 8)}`,
+          [
+            `\u{1F6D1} <b>Mint Task Cancelled</b>`,
+            `${SEP}`,
+            `\u{1F9F1} Task: ${shortId(task.id)}`,
+          ].join('\n'),
         );
       } catch (cancelError) {
         const msg = cancelError instanceof Error ? cancelError.message : 'Cancel failed';
         await answerCallbackQuery(callback.id, `Failed: ${msg.slice(0, 50)}`);
-        await sendTelegramMessage(
+        await sendRichMessage(
           account.chatId,
-          `Could not cancel task ${taskId.slice(0, 8)}: ${msg.slice(0, 120)}`,
+          `\u{274C} Could not cancel task ${shortId(taskId)}: ${escapeHtml(msg.slice(0, 120))}`,
         );
       }
       return { handled: true };
@@ -1067,10 +1457,54 @@ async function handleScheduledMintCallback(callback: TelegramCallbackQuery) {
   }
 }
 
+// ── Handle retry:mint callback from failed mint notifications ────────────────
+async function handleRetryCallback(callback: TelegramCallbackQuery) {
+  try {
+    const [scope, , taskId] = (callback.data || '').split(':');
+    if (scope !== 'retry' || !taskId) {
+      return { handled: false };
+    }
+
+    const account = await getTelegramAccountByTelegramId(String(callback.from.id));
+    if (!account) {
+      await answerCallbackQuery(callback.id, 'Telegram is not linked to AutoMint.');
+      return { handled: true };
+    }
+
+    const { scheduleMint } = await import('@/lib/services/qstash.service');
+    const task = await scheduleMint({ taskId, userId: account.userId });
+    await answerCallbackQuery(callback.id, '\u{2705} Mint retried');
+    await sendRichMessage(
+      account.chatId,
+      [
+        `\u{1F504} <b>Mint Retry Started</b>`,
+        `${SEP}`,
+        `\u{1F9F1} Task: ${shortId(task.id)}`,
+        `<i>You'll be notified when it completes.</i>`,
+      ].join('\n'),
+    );
+    return { handled: true };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Retry failed';
+    await answerCallbackQuery(callback.id, `Failed: ${msg.slice(0, 50)}`);
+    return { handled: true };
+  }
+}
+
 export async function handleTelegramUpdate(update: TelegramUpdate) {
   if (!isTelegramEnabled()) return { handled: false, disabled: true };
 
   if (update.callback_query?.data) {
+    // Nav callbacks from help/menu buttons
+    if (update.callback_query.data.startsWith('nav:')) {
+      const navResult = await handleNavCallback(update.callback_query);
+      if (navResult.handled) return navResult;
+    }
+    // Retry callbacks from failed mint notifications
+    if (update.callback_query.data.startsWith('retry:')) {
+      const retryResult = await handleRetryCallback(update.callback_query);
+      if (retryResult.handled) return retryResult;
+    }
     // Model selection callback
     const modelResult = await handleModelCallback(update.callback_query);
     if (modelResult.handled) return modelResult;
@@ -1087,6 +1521,62 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
   if (!message?.text) return { handled: false };
 
   const { command, rawArgs } = parseCommand(message.text);
+
+  // ── Map quick-keyboard button labels to commands ─────────────────────────
+  const quickButtonMap: Record<string, string> = {
+    '⚡ Quick Mint': '/mint',
+    '📊 Status': '/status',
+    '👁 Watch Whale': '/watch',
+    '🛑 Cancel': '/cancel',
+    '⚙️ Settings': '/settings',
+    '❓ Help': '/help',
+  };
+  const mappedCommand = quickButtonMap[message.text.trim()];
+  if (mappedCommand) {
+    // Re-parse as the mapped command
+    const effectiveCommand = mappedCommand;
+
+    if (effectiveCommand === '/help') {
+      await handleHelpCommand(message);
+      return { handled: true };
+    }
+
+    if (!message.from) {
+      await reply(message, 'Unable to process command without a Telegram user ID.');
+      return { handled: true };
+    }
+    const account = await getTelegramAccountByTelegramId(String(message.from.id));
+    if (!account) {
+      await reply(message, accountRequiredText());
+      return { handled: true };
+    }
+
+    switch (effectiveCommand) {
+      case '/mint':
+        // For "Quick Mint" button, show usage hint
+        await reply(message, [
+          `\u{26A1} <b>Quick Mint</b>`,
+          `${SEP}`,
+          `Paste a URL or use:`,
+          `<code>/mint &lt;url&gt; [qty]</code>`,
+          ``,
+          `<i>Example: <code>/mint https://... 2</code></i>`,
+        ].join('\n'));
+        return { handled: true };
+      case '/status':
+        await handleStatusCommand(message, account.userId);
+        return { handled: true };
+      case '/watch':
+        await reply(message, `\u{1F441} <b>Watch a Whale Wallet</b>\n${SEP}\nUse: <code>/watch &lt;0xaddress&gt;</code>`);
+        return { handled: true };
+      case '/cancel':
+        await handleCancelCommand(message, account.userId);
+        return { handled: true };
+      case '/settings':
+        await handleSettingsCommand(message, account);
+        return { handled: true };
+    }
+  }
 
   // Bug #1 Fix: Plain text message (no '/' prefix).
   // If the user pasted a raw URL, treat it as /mint <url> so they don't
@@ -1163,7 +1653,12 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
       } catch (_aiError) {
         await reply(
           message,
-          'AI processing failed. Try a slash command:\n/mint <url> • /watch <address> • /status • /cancel • /settings',
+          [
+            `\u{274C} <b>AI Processing Failed</b>`,
+            `${SEP}`,
+            `<i>Try a slash command:</i>`,
+            `<code>/mint</code> \u{2022} <code>/watch</code> \u{2022} <code>/status</code> \u{2022} <code>/cancel</code> \u{2022} <code>/help</code>`,
+          ].join('\n'),
         );
       }
     }
@@ -1172,6 +1667,26 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
 
   if (command === '/start') {
     await handleStart(message, rawArgs);
+    return { handled: true };
+  }
+
+  // /help and /menu — Telegram-UI-only commands
+  if (command === '/help') {
+    await handleHelpCommand(message);
+    return { handled: true };
+  }
+
+  if (command === '/menu') {
+    if (!message.from) {
+      await reply(message, 'Unable to process command without a Telegram user ID.');
+      return { handled: true };
+    }
+    const account = await getTelegramAccountByTelegramId(String(message.from.id));
+    if (!account) {
+      await reply(message, accountRequiredText());
+      return { handled: true };
+    }
+    await handleMenuCommand(message);
     return { handled: true };
   }
 
@@ -1192,7 +1707,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
     return { handled: true };
   }
 
-  // ── Route ALL other commands through the AI interpreter ──────────────
+  // ── Route ALL other commands through the AI interpreter ──────────────────
   // The AI has equivalent tools for every slash command (/mint, /watch,
   // /status, /cancel, /settings, /schedule, etc.) and can handle them
   // with richer context, multi-step reasoning, and real-time event
@@ -1245,8 +1760,15 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
       case '/settings':
         await handleSettingsCommand(message, account);
         break;
+      case '/help':
+        await handleHelpCommand(message);
+        break;
       default:
-        await reply(message, 'AI processing failed. Try again or use /settings for help.');
+        await reply(message, [
+          `\u{274C} <b>AI Processing Failed</b>`,
+          `${SEP}`,
+          `<i>Try again or use </i><code>/help</code><i> for the command guide.</i>`,
+        ].join('\n'));
         break;
     }
   }
