@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, ExternalLink, Plus, Trash2 } from 'lucide-react';
+import { Bell, CheckCircle2, ExternalLink, Flame, Plus, Trash2 } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -25,11 +25,24 @@ type TrackedProject = {
   formUrl: string | null;
   notes: string | null;
   expectedMintDate: string | null;
+  hasDailyCheckin: boolean;
+  dailyCheckinUrl: string | null;
   isActive: boolean;
   lastCheckedAt: string | null;
   pollFrequencyMinutes: number;
   consecutiveErrors: number;
   createdAt: string;
+};
+
+type PendingCheckin = {
+  projectId: string;
+  projectName: string;
+  twitterHandle: string;
+  projectAvatarUrl: string | null;
+  dailyCheckinUrl: string | null;
+  dailyCheckinTimeHint: string | null;
+  lastDoneAt: string | null;
+  streakDays: number;
 };
 
 type TrackedTweet = {
@@ -86,6 +99,21 @@ export default function WlTrackerClient() {
     queryFn: () => apiRequest<{ projects: TrackedProject[] }>('/api/wl-tracker'),
   });
 
+  // Detect user's browser timezone once — used for the pending check-ins query
+  // so "today" is calculated in their local wall clock, not UTC.
+  const userTz = useMemo(() => {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; }
+    catch { return 'UTC'; }
+  }, []);
+
+  const checkinsQuery = useQuery({
+    queryKey: ['wl-tracker', 'checkins', 'pending', userTz],
+    queryFn: () => apiRequest<{ pending: PendingCheckin[] }>(
+      `/api/wl-tracker/checkin?mode=pending&tz=${encodeURIComponent(userTz)}`,
+    ),
+    refetchInterval: 60_000, // freshen every minute so streaks update
+  });
+
   const tweetsQuery = useQuery({
     queryKey: ['wl-tracker', 'tweets', selectedProjectId ?? 'all'],
     queryFn: () => {
@@ -117,6 +145,17 @@ export default function WlTrackerClient() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['wl-tracker', 'tweets'] }),
   });
 
+  const checkinDoneMutation = useMutation({
+    mutationFn: (projectId: string) =>
+      apiRequest('/api/wl-tracker/checkin', {
+        method: 'POST',
+        body: { projectId, source: 'web' },
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['wl-tracker', 'checkins'] });
+    },
+  });
+
   const sortedTweets = useMemo(() => {
     const list = tweetsQuery.data?.tweets ?? [];
     // Sort by (urgency asc, postedAt desc) — critical first, newest first.
@@ -141,6 +180,16 @@ export default function WlTrackerClient() {
             <Plus className="mr-2 h-4 w-4" /> Track project
           </Button>
         }
+      />
+
+      {/* ── Today's check-ins ─────────────────────────────────────────
+          The personal-assistant surface. Shows only projects with a
+          daily-check-in obligation that hasn't been completed today. */}
+      <TodaysCheckins
+        pending={checkinsQuery.data?.pending ?? []}
+        loading={checkinsQuery.isLoading}
+        onDone={(projectId) => checkinDoneMutation.mutate(projectId)}
+        doneInFlight={checkinDoneMutation.isPending}
       />
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-[280px_1fr]">
@@ -311,6 +360,85 @@ export default function WlTrackerClient() {
   );
 }
 
+// ─── Today's check-ins section ───────────────────────────────────────────
+// Compact row of "still-to-do" cards. Empty state hides the section entirely
+// (no "you're all caught up" noise), except when loading.
+function TodaysCheckins({
+  pending,
+  loading,
+  onDone,
+  doneInFlight,
+}: {
+  pending: PendingCheckin[];
+  loading: boolean;
+  onDone: (projectId: string) => void;
+  doneInFlight: boolean;
+}) {
+  if (loading) {
+    return <SkeletonCard />;
+  }
+  if (pending.length === 0) return null;
+
+  return (
+    <Card className="p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <CheckCircle2 className="h-4 w-4 text-amber-600" />
+          <h3 className="text-sm font-semibold">
+            Today's check-ins — {pending.length} pending
+          </h3>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3">
+        {pending.map((p) => (
+          <div
+            key={p.projectId}
+            className="flex items-center gap-3 rounded-md border border-border p-3"
+          >
+            {p.projectAvatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={p.projectAvatarUrl} alt="" className="h-8 w-8 flex-shrink-0 rounded-full" />
+            ) : (
+              <div className="h-8 w-8 flex-shrink-0 rounded-full bg-slate-200" />
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1 truncate text-sm font-medium">
+                {p.projectName}
+                {p.streakDays > 0 && (
+                  <span className="ml-1 inline-flex items-center gap-0.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                    <Flame className="h-3 w-3" /> {p.streakDays}
+                  </span>
+                )}
+              </div>
+              <div className="truncate text-xs text-muted">{p.twitterHandle}</div>
+            </div>
+            <div className="flex flex-col items-end gap-1">
+              {p.dailyCheckinUrl && (
+                <a
+                  href={p.dailyCheckinUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-primary hover:underline"
+                >
+                  Open ↗
+                </a>
+              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={doneInFlight}
+                onClick={() => onDone(p.projectId)}
+              >
+                Done
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 // ─── Add project modal ───────────────────────────────────────────────────
 
 function AddProjectModal({
@@ -328,10 +456,9 @@ function AddProjectModal({
 }) {
   const [handle, setHandle] = useState('');
   const [walletUsed, setWalletUsed] = useState('');
-  const [expectedMintDate, setExpectedMintDate] = useState('');
   const [notes, setNotes] = useState('');
-  const [formType, setFormType] = useState('other');
-  const [formUrl, setFormUrl] = useState('');
+  const [hasDailyCheckin, setHasDailyCheckin] = useState(false);
+  const [dailyCheckinUrl, setDailyCheckinUrl] = useState('');
 
   return (
     <Modal open={open} onClose={onClose} title="Track a project">
@@ -342,10 +469,9 @@ function AddProjectModal({
           onSubmit({
             handle: handle.trim(),
             walletUsed: walletUsed.trim() || null,
-            expectedMintDate: expectedMintDate ? new Date(expectedMintDate).toISOString() : null,
             notes: notes.trim() || null,
-            formType,
-            formUrl: formUrl.trim() || null,
+            hasDailyCheckin,
+            dailyCheckinUrl: hasDailyCheckin && dailyCheckinUrl.trim() ? dailyCheckinUrl.trim() : null,
           });
         }}
       >
@@ -363,53 +489,45 @@ function AddProjectModal({
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-sm font-medium">Wallet you applied with</label>
-            <Input
-              value={walletUsed}
-              onChange={(e) => setWalletUsed(e.target.value)}
-              placeholder="0x…"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium">Expected mint date</label>
-            <Input
-              type="datetime-local"
-              value={expectedMintDate}
-              onChange={(e) => setExpectedMintDate(e.target.value)}
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-sm font-medium">Form platform</label>
-            <select
-              value={formType}
-              onChange={(e) => setFormType(e.target.value)}
-              className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
-            >
-              <option value="other">Other</option>
-              <option value="premint">Premint</option>
-              <option value="alphabot">Alphabot</option>
-              <option value="atlas3">Atlas3</option>
-              <option value="superful">Superful</option>
-              <option value="gleam">Gleam</option>
-              <option value="google_form">Google Form</option>
-              <option value="twitter_form">Twitter Form</option>
-              <option value="discord">Discord</option>
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium">Form URL (optional)</label>
-            <Input value={formUrl} onChange={(e) => setFormUrl(e.target.value)} placeholder="https://premint.xyz/..." />
-          </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium">Wallet you applied with</label>
+          <Input
+            value={walletUsed}
+            onChange={(e) => setWalletUsed(e.target.value)}
+            placeholder="0x…"
+          />
         </div>
 
         <div>
           <label className="mb-1 block text-sm font-medium">Notes</label>
           <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Did RT + follow + comment" />
+        </div>
+
+        {/* Daily check-in toggle — the AI assistant will remind you every
+            morning about projects with this flag on. */}
+        <div className="rounded-md border border-border p-3">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={hasDailyCheckin}
+              onChange={(e) => setHasDailyCheckin(e.target.checked)}
+              className="h-4 w-4"
+            />
+            Daily check-in required
+          </label>
+          <p className="mt-1 text-xs text-muted">
+            Turn on if this project asks you to visit / click / retweet daily to keep your WL. You'll get a morning digest of every project pending today.
+          </p>
+          {hasDailyCheckin && (
+            <div className="mt-3">
+              <label className="mb-1 block text-xs font-medium">Check-in URL (optional)</label>
+              <Input
+                value={dailyCheckinUrl}
+                onChange={(e) => setDailyCheckinUrl(e.target.value)}
+                placeholder="https://project.xyz/checkin"
+              />
+            </div>
+          )}
         </div>
 
         {errorMessage && (

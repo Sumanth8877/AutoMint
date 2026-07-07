@@ -1199,7 +1199,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
   // publishing to sync the web UI. Slash command text is passed as-is
   // so the AI sees the user's original intent.
   try {
-    // WL tracker shortcut fast-path: /track /untrack /projects.
+    // WL tracker shortcut fast-path: /track /untrack /projects /checkins /done.
     // These bypass the AI entirely so they still work if the user has no
     // AI provider configured yet.
     const wlShortcut = parseWlShortcut(message.text ?? '');

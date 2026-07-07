@@ -5,7 +5,15 @@ import {
   archiveTrackedProject,
   listTrackedProjects,
   getTrackedProject,
+  updateTrackedProject,
 } from '@/lib/services/wl-tracker.service';
+import {
+  enableDailyCheckin,
+  disableDailyCheckin,
+  findProjectByFuzzyHandle,
+  listPendingCheckins,
+  markCheckinDone,
+} from '@/lib/services/wl-checkin.service';
 import { AppError } from '@/lib/api/errors';
 import { and, eq } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
@@ -25,9 +33,13 @@ import { trackedProjects } from '@/drizzle/schema/wl-tracker';
 //   /projects                               → list active tracked projects
 
 export type WlShortcut =
-  | { type: 'track'; handle: string; walletUsed?: string; expectedMintDate?: Date; formType?: WlFormType }
+  | { type: 'track'; handle: string; walletUsed?: string; expectedMintDate?: Date; formType?: WlFormType; notes?: string; dailyCheckin?: boolean; dailyCheckinUrl?: string }
   | { type: 'untrack'; handle: string }
-  | { type: 'projects' };
+  | { type: 'projects' }
+  | { type: 'checkin_done'; handle: string; notes?: string }
+  | { type: 'checkins_today' }
+  | { type: 'checkin_enable'; handle: string; url?: string; timeHint?: string }
+  | { type: 'checkin_disable'; handle: string };
 
 type WlFormType = 'premint' | 'alphabot' | 'atlas3' | 'superful' | 'gleam' | 'google_form' | 'twitter_form' | 'discord' | 'other';
 const FORM_TYPES: WlFormType[] = ['premint', 'alphabot', 'atlas3', 'superful', 'gleam', 'google_form', 'twitter_form', 'discord', 'other'];
@@ -43,6 +55,32 @@ export function parseWlShortcut(input: string): WlShortcut | null {
   // /projects
   if (lower === '/projects' || lower === '/tracking' || lower === '/wl') {
     return { type: 'projects' };
+  }
+
+  // /checkins  → today's pending check-ins
+  if (lower === '/checkins' || lower === '/checkin' || lower === '/todo') {
+    return { type: 'checkins_today' };
+  }
+
+  // /checkin done @handle [note …]        → mark check-in complete
+  // /done @handle [note …]                → alias
+  const doneMatch = text.match(/^\/(?:checkin\s+done|done|didcheckin)\s+(\S+)(.*)$/i);
+  if (doneMatch) {
+    const notes = doneMatch[2]?.trim() || undefined;
+    return { type: 'checkin_done', handle: doneMatch[1], notes };
+  }
+
+  // /checkin add @handle [url:…]         → enable daily check-in on a project
+  const enableMatch = text.match(/^\/(?:checkin\s+add|addcheckin|enablecheckin)\s+(\S+)(.*)$/i);
+  if (enableMatch) {
+    const opts = parseKeyValueOptions(enableMatch[2] ?? '');
+    return { type: 'checkin_enable', handle: enableMatch[1], url: opts.url, timeHint: opts.time };
+  }
+
+  // /checkin remove @handle              → disable daily check-in
+  const disableMatch = text.match(/^\/(?:checkin\s+remove|removecheckin|disablecheckin)\s+(\S+)/i);
+  if (disableMatch) {
+    return { type: 'checkin_disable', handle: disableMatch[1] };
   }
 
   // /track <handle> [key:value ...]
@@ -109,9 +147,33 @@ const UNTRACK_VERBS = [
   'disable', 'delete', 'forget',
 ];
 
+// Natural-language phrases that mean "I completed the daily check-in".
+// Runs BEFORE track detection so "done @pudgy" logs a check-in rather than
+// trying to (re-)track the project.
+const CHECKIN_DONE_PHRASES = [
+  'checkin done', 'check-in done', 'checked in', 'check in done',
+  'did checkin', 'did check-in', 'did the checkin', 'completed checkin',
+  'checkin complete', 'check-in complete', 'done checkin', 'done check-in',
+];
+
+// Natural-language phrases meaning "show me today's pending check-ins".
+const CHECKINS_TODAY_PHRASES = [
+  'what checkins', 'which checkins', 'todays checkins', "today's checkins",
+  'checkins today', 'checkins pending', 'pending checkins', 'my checkins',
+  'what to check in', 'daily checkins', 'daily check-ins',
+];
+
 export function parseWlNaturalMessage(input: string): WlShortcut | null {
   const raw = input.trim();
   if (!raw || raw.startsWith('/')) return null;   // slash commands handled elsewhere
+
+  const lower = raw.toLowerCase();
+
+  // ── Check-in intents (evaluated FIRST so "done @pudgy" doesn't get
+  //    misread as a fresh track attempt for @pudgy). ────────────────────
+  if (CHECKINS_TODAY_PHRASES.some((p) => lower.includes(p))) {
+    return { type: 'checkins_today' };
+  }
 
   // Extract handle from an @mention or a twitter.com/x.com URL.
   let handle: string | null = null;
@@ -121,9 +183,17 @@ export function parseWlNaturalMessage(input: string): WlShortcut | null {
     const urlMatch = raw.match(TWITTER_URL_RE);
     if (urlMatch) handle = urlMatch[1];
   }
-  if (!handle) return null;
 
-  const lower = raw.toLowerCase();
+  // "checkin done @pudgy [notes]" / "checked in @pudgy" — require a handle.
+  if (handle && CHECKIN_DONE_PHRASES.some((p) => lower.includes(p))) {
+    // Strip out the check-in phrase itself so anything left becomes notes.
+    let notes = raw;
+    for (const p of CHECKIN_DONE_PHRASES) notes = notes.replace(new RegExp(p, 'ig'), '');
+    notes = notes.replace(/@\w+/g, '').replace(/\s+/g, ' ').trim();
+    return { type: 'checkin_done', handle, notes: notes || undefined };
+  }
+
+  if (!handle) return null;
 
   // Untrack intent takes precedence — "stop tracking @foo" should never be
   // interpreted as "start tracking @foo".
@@ -139,6 +209,11 @@ export function parseWlNaturalMessage(input: string): WlShortcut | null {
   if (!bareHandle && !hasTrackVerb) return null;
 
   const shortcut: WlShortcut = { type: 'track', handle };
+
+  // Daily check-in on/off inline: "track @foo daily checkin" enables it.
+  if (/daily\s*check[- ]?in/i.test(raw)) {
+    shortcut.dailyCheckin = true;
+  }
 
   // Optional inline wallet address (unlabeled: "track @foo 0xABC…").
   const walletMatch = raw.match(WALLET_RE);
@@ -162,6 +237,13 @@ export function parseWlNaturalMessage(input: string): WlShortcut | null {
     const d = new Date(kv.mint);
     if (!isNaN(d.getTime())) shortcut.expectedMintDate = d;
   }
+  if (kv.checkin === 'true' || kv.checkin === 'yes' || kv.checkin === '1') {
+    shortcut.dailyCheckin = true;
+  }
+  if (kv.checkinurl || kv.url) {
+    shortcut.dailyCheckinUrl = kv.checkinurl || kv.url;
+    shortcut.dailyCheckin = true;
+  }
 
   return shortcut;
 }
@@ -179,6 +261,58 @@ function parseKeyValueOptions(input: string): Record<string, string> {
 // ─── Execute ─────────────────────────────────────────────────────────────
 
 export async function executeWlShortcut(shortcut: WlShortcut, userId: string): Promise<string> {
+  if (shortcut.type === 'checkins_today') {
+    // v1 uses UTC. When per-user timezone is stored, pass it here.
+    const pending = await listPendingCheckins(userId, 'UTC');
+    if (pending.length === 0) {
+      return '✅ You\'re all caught up — no daily check-ins pending today.';
+    }
+    const lines = [`☀️ <b>${pending.length} daily check-in${pending.length === 1 ? '' : 's'} pending today:</b>`, ''];
+    for (const p of pending.slice(0, 25)) {
+      const streak = p.streakDays > 0 ? ` 🔥 ${p.streakDays}` : '';
+      const url = p.dailyCheckinUrl ? `\n   🔗 ${escapeHtml(p.dailyCheckinUrl)}` : '';
+      const time = p.dailyCheckinTimeHint ? `  ⏰ ${escapeHtml(p.dailyCheckinTimeHint)}` : '';
+      lines.push(`• <b>${escapeHtml(p.projectName)}</b> ${escapeHtml(p.twitterHandle)}${streak}${time}${url}`);
+    }
+    if (pending.length > 25) lines.push('', `…and ${pending.length - 25} more.`);
+    lines.push('', 'Say <code>done @handle</code> after each one.');
+    return lines.join('\n');
+  }
+
+  if (shortcut.type === 'checkin_done') {
+    const project = await findProjectByFuzzyHandle(userId, shortcut.handle);
+    if (!project) return `⚠️ I don't see a tracked project matching "${shortcut.handle}".`;
+    try {
+      const { streakDays } = await markCheckinDone(userId, project.id, {
+        notes: shortcut.notes ?? null,
+        source: 'telegram',
+      });
+      const streakLine = streakDays > 1 ? `\n🔥 <b>${streakDays}-day streak</b> — keep it going.` : '';
+      return `✅ Check-in logged for <b>${escapeHtml(project.projectName)}</b> ${escapeHtml(project.twitterHandle)}.${streakLine}`;
+    } catch (error) {
+      if (error instanceof AppError) return `⚠️ ${error.message}`;
+      throw error;
+    }
+  }
+
+  if (shortcut.type === 'checkin_enable') {
+    const project = await findProjectByFuzzyHandle(userId, shortcut.handle);
+    if (!project) return `⚠️ Track the project first, then enable check-in. Not found: "${shortcut.handle}".`;
+    await enableDailyCheckin(userId, project.id, {
+      url: shortcut.url ?? null,
+      timeHint: shortcut.timeHint ?? null,
+    });
+    const urlLine = shortcut.url ? `\n🔗 ${escapeHtml(shortcut.url)}` : '';
+    return `📅 Daily check-in enabled for <b>${escapeHtml(project.projectName)}</b>.${urlLine}\n\nYou'll see it in the morning digest until you mark it done each day.`;
+  }
+
+  if (shortcut.type === 'checkin_disable') {
+    const project = await findProjectByFuzzyHandle(userId, shortcut.handle);
+    if (!project) return `⚠️ No tracked project matches "${shortcut.handle}".`;
+    await disableDailyCheckin(userId, project.id);
+    return `🔕 Daily check-in disabled for <b>${escapeHtml(project.projectName)}</b>.`;
+  }
+
   if (shortcut.type === 'projects') {
     const projects = await listTrackedProjects(userId);
     if (projects.length === 0) {
@@ -221,7 +355,18 @@ export async function executeWlShortcut(shortcut: WlShortcut, userId: string): P
       walletUsed: shortcut.walletUsed,
       expectedMintDate: shortcut.expectedMintDate,
       formType: shortcut.formType,
+      notes: shortcut.notes,
     });
+
+    // Optional inline check-in enablement — the natural-language parser sets
+    // `dailyCheckin` if the message contains "daily checkin" / `checkin:true`.
+    if (shortcut.dailyCheckin) {
+      await enableDailyCheckin(userId, project.id, {
+        url: shortcut.dailyCheckinUrl ?? null,
+        timeHint: null,
+      });
+    }
+
     const lines = [
       `✅ Now watching <b>${project.projectName}</b> (${project.twitterHandle})`,
       '',
@@ -233,13 +378,10 @@ export async function executeWlShortcut(shortcut: WlShortcut, userId: string): P
     if (project.walletUsed) {
       lines.push('', `💼 Applied with wallet: <code>${project.walletUsed}</code>`);
     }
-    if (project.expectedMintDate) {
-      lines.push(
-        '',
-        `📅 Mint date noted — I'll poll every 5 minutes as it approaches.`,
-      );
+    if (shortcut.dailyCheckin) {
+      lines.push('', '📅 Daily check-in reminder is ON — you\'ll see it in the morning digest.');
     }
-    lines.push('', 'Use <code>/projects</code> to see everything you\'re watching.');
+    lines.push('', 'Use <code>/projects</code> to see everything you\'re watching or <code>/checkins</code> for today\'s to-do list.');
     return lines.join('\n');
   } catch (error) {
     if (error instanceof AppError) {
@@ -247,6 +389,10 @@ export async function executeWlShortcut(shortcut: WlShortcut, userId: string): P
     }
     throw error;
   }
+}
+
+function escapeHtml(input: string): string {
+  return input.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function normalizeForLookup(handle: string): string {

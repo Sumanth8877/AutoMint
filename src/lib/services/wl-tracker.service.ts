@@ -26,6 +26,9 @@ export type AddTrackedProjectInput = {
   expectedMintDate?: Date | null;
   wlAnnouncementHint?: Date | null;
   pollFrequencyMinutes?: number;
+  hasDailyCheckin?: boolean;
+  dailyCheckinUrl?: string | null;
+  dailyCheckinTimeHint?: string | null;
 };
 
 // ─── Add ─────────────────────────────────────────────────────────────────
@@ -100,6 +103,9 @@ export async function addTrackedProject(
       expectedMintDate: input.expectedMintDate ?? null,
       wlAnnouncementHint: input.wlAnnouncementHint ?? null,
       pollFrequencyMinutes: input.pollFrequencyMinutes ?? 15,
+      hasDailyCheckin: input.hasDailyCheckin ?? false,
+      dailyCheckinUrl: input.dailyCheckinUrl ?? null,
+      dailyCheckinTimeHint: input.dailyCheckinTimeHint ?? null,
       lastTweetIdSeen: baselineLastTweetId,
       isActive: true,
     })

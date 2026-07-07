@@ -355,6 +355,19 @@ const TOOLS: ChatCompletionTool[] = [
   // ─── Account ───
   { type: 'function', function: { name: 'reset_all_data', description: 'DESTRUCTIVE: Delete ALL user data — wallets, mints, collections, settings. Cannot be undone. Use with extreme caution.', parameters: { type: 'object', properties: { confirm: { type: 'boolean', description: 'Must be true to proceed. Always ask the user to confirm first.' } }, required: ['confirm'] } } },
 
+  // ─── WL Tracker ───
+  { type: 'function', function: { name: 'wl_list_projects', description: "List all of the user's tracked whitelist / allowlist projects (Twitter accounts we're watching for winner announcements, mint links, or delays).", parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'wl_track_project', description: 'Start tracking a Twitter account for WL-related announcements. Resolves the profile once and only surfaces tweets posted AFTER tracking starts.', parameters: { type: 'object', properties: { handle: { type: 'string', description: 'Twitter handle: @foo, foo, twitter.com/foo, or full URL — any format works.' }, walletUsed: { type: 'string', description: "Optional: the EVM wallet the user applied to the WL with (0x…)." }, notes: { type: 'string', description: 'Optional free-form note ("did RT + follow + comment").' }, formType: { type: 'string', description: 'Optional platform: premint | alphabot | atlas3 | superful | gleam | google_form | twitter_form | discord | other.' }, hasDailyCheckin: { type: 'boolean', description: 'True if this project requires a daily check-in.' }, dailyCheckinUrl: { type: 'string', description: 'Optional URL the user visits daily to complete the check-in.' } }, required: ['handle'] } } },
+  { type: 'function', function: { name: 'wl_untrack_project', description: 'Stop tracking a project. Accepts a fuzzy handle ("pudgy") or the exact @handle.', parameters: { type: 'object', properties: { handle: { type: 'string', description: 'Twitter handle or fuzzy project name.' } }, required: ['handle'] } } },
+  { type: 'function', function: { name: 'wl_list_recent_tweets', description: 'List the most recent classified tweets across tracked projects (winners announcements, mint links, delays). Filter by projectId or urgency.', parameters: { type: 'object', properties: { projectId: { type: 'string', description: 'Optional project UUID to filter to one project.' }, urgencyMin: { type: 'string', description: "Optional minimum urgency: 'critical' | 'high' | 'medium' | 'low'. Defaults to 'low' (all)." }, limit: { type: 'number', description: 'Max rows to return (default 20, max 100).' } } } } },
+
+  // ─── WL Daily Check-in ───
+  { type: 'function', function: { name: 'wl_todays_checkins', description: "List projects that still have a pending daily check-in for today (in the user's local timezone). Use this whenever the user asks 'what are my check-ins today?'.", parameters: { type: 'object', properties: { timezone: { type: 'string', description: "IANA timezone name (e.g. 'Asia/Calcutta'). Defaults to UTC." } } } } },
+  { type: 'function', function: { name: 'wl_mark_checkin_done', description: 'Log a daily check-in as completed for one project. Advances the streak.', parameters: { type: 'object', properties: { handle: { type: 'string', description: 'Twitter handle or fuzzy project name.' }, notes: { type: 'string', description: 'Optional free-form note.' } }, required: ['handle'] } } },
+  { type: 'function', function: { name: 'wl_enable_checkin', description: 'Turn on daily-check-in reminders for an already-tracked project.', parameters: { type: 'object', properties: { handle: { type: 'string' }, url: { type: 'string', description: 'Optional check-in URL.' }, timeHint: { type: 'string', description: 'Optional time hint ("morning", "18:00 UTC").' } }, required: ['handle'] } } },
+  { type: 'function', function: { name: 'wl_disable_checkin', description: 'Turn off daily-check-in reminders for a project.', parameters: { type: 'object', properties: { handle: { type: 'string' } }, required: ['handle'] } } },
+  { type: 'function', function: { name: 'wl_get_checkin_streak', description: 'Get the current consecutive-days streak for one project.', parameters: { type: 'object', properties: { handle: { type: 'string' } }, required: ['handle'] } } },
+
 ];
 
 // ── Tool Executor ────────────────────────────────────────────────────────────
@@ -929,6 +942,132 @@ async function executeTool(
       if (!user) return { error: 'User not found' };
       await deleteAccount({ userId, clerkId: user.clerkId });
       return { success: true, message: 'All data has been permanently deleted.' };
+    }
+
+    // ─── WL Tracker ─────────────────────────────────────────────────────
+    case 'wl_list_projects': {
+      const { listTrackedProjects } = await import('@/lib/services/wl-tracker.service');
+      const rows = await listTrackedProjects(userId);
+      return {
+        projects: rows.map((r) => ({
+          id: r.id,
+          projectName: r.projectName,
+          twitterHandle: r.twitterHandle,
+          walletUsed: r.walletUsed,
+          notes: r.notes,
+          hasDailyCheckin: r.hasDailyCheckin,
+          isActive: r.isActive,
+          lastCheckedAt: r.lastCheckedAt,
+        })),
+        count: rows.length,
+      };
+    }
+
+    case 'wl_track_project': {
+      const { addTrackedProject } = await import('@/lib/services/wl-tracker.service');
+      const { enableDailyCheckin } = await import('@/lib/services/wl-checkin.service');
+      try {
+        const project = await addTrackedProject(userId, {
+          handle: String(input.handle),
+          walletUsed: input.walletUsed ? String(input.walletUsed) : null,
+          notes: input.notes ? String(input.notes) : null,
+          formType: input.formType as never,
+        });
+        if (input.hasDailyCheckin === true) {
+          await enableDailyCheckin(userId, project.id, {
+            url: input.dailyCheckinUrl ? String(input.dailyCheckinUrl) : null,
+            timeHint: null,
+          });
+        }
+        return {
+          success: true,
+          project: {
+            id: project.id,
+            projectName: project.projectName,
+            twitterHandle: project.twitterHandle,
+          },
+        };
+      } catch (error) {
+        return { error: (error as Error).message };
+      }
+    }
+
+    case 'wl_untrack_project': {
+      const { findProjectByFuzzyHandle } = await import('@/lib/services/wl-checkin.service');
+      const { archiveTrackedProject } = await import('@/lib/services/wl-tracker.service');
+      const project = await findProjectByFuzzyHandle(userId, String(input.handle));
+      if (!project) return { error: `No tracked project matches "${input.handle}"` };
+      await archiveTrackedProject(userId, project.id);
+      return { success: true, projectName: project.projectName };
+    }
+
+    case 'wl_list_recent_tweets': {
+      const { listTweetsForUser, listTweetsForProject } = await import('@/lib/services/wl-tracker.service');
+      const limit = Math.min(Number(input.limit ?? 20), 100);
+      const rows = input.projectId
+        ? await listTweetsForProject(userId, String(input.projectId), limit)
+        : await listTweetsForUser(userId, { limit });
+      // Apply urgency floor client-side (list function doesn't filter urgency yet).
+      const order = { critical: 0, high: 1, medium: 2, low: 3 } as const;
+      const floor = order[input.urgencyMin as keyof typeof order] ?? order.low;
+      const filtered = rows.filter((t) => (order[t.urgency as keyof typeof order] ?? 3) <= floor);
+      return {
+        tweets: filtered.map((t) => ({
+          id: t.id, projectId: t.projectId, category: t.category, urgency: t.urgency,
+          summary: t.aiSummary, mintUrl: t.extractedMintUrl, tweetUrl: t.tweetUrl,
+          postedAt: t.postedAt, walletMatched: t.walletMatched,
+        })),
+      };
+    }
+
+    // ─── WL Daily Check-in ──────────────────────────────────────────────
+    case 'wl_todays_checkins': {
+      const { listPendingCheckins } = await import('@/lib/services/wl-checkin.service');
+      const tz = typeof input.timezone === 'string' && input.timezone ? input.timezone : 'UTC';
+      const pending = await listPendingCheckins(userId, tz);
+      return { pending, count: pending.length, timezone: tz };
+    }
+
+    case 'wl_mark_checkin_done': {
+      const { findProjectByFuzzyHandle, markCheckinDone } = await import('@/lib/services/wl-checkin.service');
+      const project = await findProjectByFuzzyHandle(userId, String(input.handle));
+      if (!project) return { error: `No tracked project matches "${input.handle}"` };
+      try {
+        const { streakDays } = await markCheckinDone(userId, project.id, {
+          notes: input.notes ? String(input.notes) : null,
+          source: 'ai',
+        });
+        return { success: true, projectName: project.projectName, streakDays };
+      } catch (error) {
+        return { error: (error as Error).message };
+      }
+    }
+
+    case 'wl_enable_checkin': {
+      const { findProjectByFuzzyHandle, enableDailyCheckin } = await import('@/lib/services/wl-checkin.service');
+      const project = await findProjectByFuzzyHandle(userId, String(input.handle));
+      if (!project) return { error: `No tracked project matches "${input.handle}"` };
+      await enableDailyCheckin(userId, project.id, {
+        url: input.url ? String(input.url) : null,
+        timeHint: input.timeHint ? String(input.timeHint) : null,
+      });
+      return { success: true, projectName: project.projectName };
+    }
+
+    case 'wl_disable_checkin': {
+      const { findProjectByFuzzyHandle, disableDailyCheckin } = await import('@/lib/services/wl-checkin.service');
+      const project = await findProjectByFuzzyHandle(userId, String(input.handle));
+      if (!project) return { error: `No tracked project matches "${input.handle}"` };
+      await disableDailyCheckin(userId, project.id);
+      return { success: true, projectName: project.projectName };
+    }
+
+    case 'wl_get_checkin_streak': {
+      const { findProjectByFuzzyHandle, getStreak } = await import('@/lib/services/wl-checkin.service');
+      const project = await findProjectByFuzzyHandle(userId, String(input.handle));
+      if (!project) return { error: `No tracked project matches "${input.handle}"` };
+      const streak = await getStreak(userId, project.id);
+      return { projectName: project.projectName, streakDays: streak };
     }
 
     default:
