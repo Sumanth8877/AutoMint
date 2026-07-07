@@ -80,21 +80,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, disabled: true, reason: 'Telegram disabled by configuration' });
   }
 
-  if (!isAuthorized(request)) {
-    logger.warn('Unauthorized webhook request', { area: 'telegram-webhook' });
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   try {
+    if (!isAuthorized(request)) {
+      logger.warn('Unauthorized webhook request', { area: 'telegram-webhook' });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const update = await parseJsonBody<TelegramUpdate>(request);
+    logger.info('Webhook update parsed', { area: 'telegram-webhook', hasMessage: !!update.message, hasCallback: !!update.callback_query });
     await handleTelegramUpdate(update);
     return NextResponse.json({ ok: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Telegram webhook failed';
+    const stack = error instanceof Error ? error.stack : undefined;
     const status = message === 'Invalid JSON request body' ? 400 : 500;
-    console.error('Telegram webhook error:', message);
-    if (status >= 500) {
-    }
+    // Log with BOTH console and structured logger to ensure visibility
+    console.error('[AutoMint] Telegram webhook error:', message);
+    if (stack) console.error('[AutoMint] Stack:', stack);
+    logger.info(JSON.stringify({ level: 'error', msg: 'Telegram webhook error', error: message, stack: stack?.slice(0, 500) }), { area: 'telegram-webhook' });
     return NextResponse.json({ error: message }, { status });
   }
 }
