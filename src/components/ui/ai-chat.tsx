@@ -114,16 +114,18 @@ export function AIChat() {
       ts: uid,
     };
 
+    // Build history BEFORE state update — avoids stale closure (React state is async)
+    // Include the new user message explicitly so the API always gets it
+    const history = [
+      ...messages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.text })),
+      { role: 'user' as const, content: trimmed },
+    ];
+
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setLoading(true);
 
     try {
-      // Build history including the new user message we just added
-      const history = [...messages].map(m => ({
-        role: m.role,
-        content: m.text,
-      }));
 
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
