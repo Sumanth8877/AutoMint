@@ -7,7 +7,6 @@ import { getRedisClient } from '@/lib/redis';
 import { publishEvent, type EventType } from '@/lib/services/event-bus.service';
 import { recordSuccess, recordFailure, isProviderHealthy } from '@/lib/services/provider-health.service';
 import { getSetting } from '@/lib/services/integration-settings.service';
-import { getKnowledgeBase } from '@/lib/services/knowledge-base.service';
 
 // ── Provider config ─────────────────────────────────────────────────────────
 
@@ -224,7 +223,40 @@ Powered by the user's configured provider: Gemini (Google), Nara (Mistral), or O
 • Diagnose failures: ALWAYS call diagnose_mint_failure first
 • Multi-step: break down and call ALL needed tools in sequence
 • Be conversational, warm, concise — like a knowledgeable friend
-• Use **bold** for key terms, bullet lists for steps`;`;
+• Use **bold** for key terms, bullet lists for steps`;
+
+
+// ── Action command detector ───────────────────────────────────────────────────
+// These messages clearly map to tool calls and don't need the full knowledge
+// base. Skipping it saves ~3000 tokens and ~4-6 seconds of latency per call.
+const ACTION_PATTERNS = [
+  /^(list|show|get|check|what(?:'s| is| are) (?:my|the))/i,
+  /^(mint|cancel|retry|watch|remove|add|update|refresh|set|enable|disable)/i,
+  /^(how much|how many|what'?s? my|my wallets?|my mints?|my balance)/i,
+  /^\/(mint|watch|status|cancel|settings?|model|schedule|start|help)/i,
+  /^https?:\/\//i,
+  /^0x[0-9a-fA-F]{40}/i,
+];
+
+function isActionCommand(message: string): boolean {
+  const m = message.trim();
+  return ACTION_PATTERNS.some(p => p.test(m));
+}
+
+// Compact summary injected for conversational messages (much smaller than full guide)
+const COMPACT_KNOWLEDGE = `
+## Quick Reference
+- Wallets: Ethereum/Base/Polygon/Arbitrum EVM wallets, check balances, set default
+- Minting: paste URL → analyze → mint. Statuses: pending/monitoring/running/completed/failed
+- Analyzer: paste URL or contract → risk score (0-100), ABI, mint function, price
+- Whale Tracker: watch wallets, copy-mint rules (auto-mirror whale mints)
+- Copy-mint fields: walletAddress, maxPrice (ETH), quantity, minMintCount, autoMint, riskThreshold
+- Gas strategies: slow/normal/fast/aggressive. Risk threshold: 0-100 (default 75 blocks high-risk)
+- Settings: execution (gas/risk), notifications (Telegram/email), AI keys (Gemini/Nara/OpenRouter)
+- Telegram link: Settings → Notifications → Telegram → Generate Token → /start <token>
+- Free fast models: meta-llama/llama-3.1-8b-instruct:free via OpenRouter (~1-3s)
+- USD→ETH: 1 ETH ≈ $2500 (e.g. $10 = 0.004 ETH)
+`;
 
 function buildSystemPrompt(message: string): string {
   // For action commands: lean prompt, no knowledge base = fastest response
