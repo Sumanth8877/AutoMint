@@ -32,17 +32,16 @@ const NARA_MODELS: AIModel[] = [
 ];
 
 const OPENROUTER_MODELS: AIModel[] = [
-  // ── Free tier (no cost) ──────────────────────────────────────────────────
-  { id: 'google/gemini-2.0-flash-exp:free',          label: 'Gemini 2.0 Flash ⚡ FREE',   description: 'Fastest free model — ~1-2s, strong tool use' },
-  { id: 'meta-llama/llama-3.1-8b-instruct:free',     label: 'Llama 3.1 8B FREE',          description: 'Fast & free — good for simple commands' },
-  { id: 'mistralai/mistral-7b-instruct:free',        label: 'Mistral 7B FREE',            description: 'Tiny, quick — basic commands only' },
-  { id: 'google/gemini-flash-1.5:free',              label: 'Gemini 1.5 Flash FREE',      description: 'Free Gemini — solid all-rounder' },
-  // ── Paid (fast) ──────────────────────────────────────────────────────────
-  { id: 'google/gemini-2.5-flash',                   label: 'Gemini 2.5 Flash',           description: 'Best paid speed/quality ratio' },
-  { id: 'anthropic/claude-3-5-haiku',                label: 'Claude 3.5 Haiku',           description: 'Lightweight & fast via OpenRouter' },
-  { id: 'mistralai/mistral-large-2411',              label: 'Mistral Large',              description: 'Reliable paid fallback' },
+  // ── Free tier (verified working 2025) ────────────────────────────────────
+  { id: 'meta-llama/llama-3.1-8b-instruct:free',   label: 'Llama 3.1 8B ⚡ FREE',    description: 'Default free — fast, reliable tool use' },
+  { id: 'meta-llama/llama-3.3-70b-instruct:free',  label: 'Llama 3.3 70B FREE',       description: 'Smarter free — better reasoning' },
+  { id: 'mistralai/mistral-7b-instruct:free',      label: 'Mistral 7B FREE',          description: 'Tiny & quick — simple commands' },
+  { id: 'google/gemma-3-9b-it:free',               label: 'Gemma 3 9B FREE',          description: 'Google free model' },
+  // ── Paid ───────────────────────────────────────────────────────────────────────
+  { id: 'google/gemini-2.5-flash',                 label: 'Gemini 2.5 Flash',         description: 'Best paid speed/quality ratio' },
+  { id: 'anthropic/claude-3-5-haiku',              label: 'Claude 3.5 Haiku',         description: 'Lightweight & fast via OpenRouter' },
+  { id: 'mistralai/mistral-large-2411',            label: 'Mistral Large',            description: 'Reliable paid fallback' },
 ];
-
 // ── Multi-provider support ────────────────────────────────────────────────────
 // Both Gemini AND Nara models are shown if their API keys are set.
 // If one provider fails, the other is used as automatic fallback.
@@ -94,7 +93,7 @@ async function getOpenRouterProvider(): Promise<ProviderConfig | null> {
     name: 'OpenRouter',
     baseURL: 'https://openrouter.ai/api/v1',
     apiKey: key,
-    defaultModel: 'google/gemini-2.0-flash-exp:free',
+    defaultModel: 'meta-llama/llama-3.1-8b-instruct:free',
     models: OPENROUTER_MODELS,
   };
 }
