@@ -10,7 +10,7 @@ import Card from '@/components/ui/Card';
 import { MetricCard } from '@/components/ui/metric-card';
 import { PageHeader } from '@/components/ui/page-header';
 import { Stagger, StaggerItem, Reveal } from '@/components/motion';
-import { MintActivityChart } from '@/components/dashboard/mint-activity-chart';
+import MintActivityChart from '@/components/dashboard/lazy-mint-activity-chart';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getDb } from '@/lib/db';
 import { wallets, collections, mintHistory } from '@/drizzle/schema';

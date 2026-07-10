@@ -1,9 +1,18 @@
 "use client";
 
 import { useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import dynamic from "next/dynamic";
 import { motion, useReducedMotion } from "framer-motion";
 import { springs } from "@/components/motion";
-import XiaoheiMascot, { type MascotPose, type MascotPosition } from "./XiaoheiMascot";
+import { type MascotPose, type MascotPosition } from "./XiaoheiMascot";
+
+// Audit fix: lazy-load the mascot component (562 lines) since it's only
+// conditionally rendered when a button has `mascot` prop set. This keeps
+// the mascot's SVG/animation code out of the initial bundle for buttons
+// that don't use it.
+const XiaoheiMascot = dynamic(() => import("./XiaoheiMascot"), {
+  ssr: true,
+});
 
 type NativeButtonProps = Omit<
   ButtonHTMLAttributes<HTMLButtonElement>,

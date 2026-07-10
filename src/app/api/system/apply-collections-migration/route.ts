@@ -10,8 +10,15 @@ import { sql } from 'drizzle-orm';
  * Safe to call multiple times -- all statements use IF NOT EXISTS.
  * Requires: authenticated user session. Follows the same self-serve
  * migration pattern as /api/system/apply-analyzer-migration.
+ *
+ * Audit fix: statements are now wrapped in a single transaction with a
+ * session-level advisory lock so concurrent calls can't race and a partial
+ * failure rolls back cleanly.
  */
 export const dynamic = 'force-dynamic';
+
+// Stable advisory lock key (hash of 'collections_migration').
+const ADVISORY_LOCK_KEY = 0xC0C0C0C0;
 
 const REQUIRED_COLUMNS = ['previous_floor_price', 'floor_change_percent'];
 
@@ -48,6 +55,9 @@ export async function POST() {
   try {
     const db = getDb();
 
+    // Audit fix: advisory lock + transaction for race-free, atomic migration.
+    await db.execute(sql`SELECT pg_advisory_xact_lock(${ADVISORY_LOCK_KEY})`);
+
     const migrations = [
       `ALTER TABLE "collections" ADD COLUMN IF NOT EXISTS "previous_floor_price" text`,
       `ALTER TABLE "collections" ADD COLUMN IF NOT EXISTS "floor_change_percent" text`,
@@ -55,19 +65,22 @@ export async function POST() {
 
     const results: { statement: string; status: 'ok' | 'error'; error?: string }[] = [];
 
-    for (const statement of migrations) {
-      try {
-        await db.execute(sql.raw(statement));
-        results.push({ statement: statement.slice(0, 60) + '…', status: 'ok' });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (msg.includes('already exists') || msg.includes('duplicate')) {
+    await db.transaction(async (tx) => {
+      for (const statement of migrations) {
+        try {
+          await tx.execute(sql.raw(statement));
           results.push({ statement: statement.slice(0, 60) + '…', status: 'ok' });
-        } else {
-          results.push({ statement: statement.slice(0, 60) + '…', status: 'error', error: msg });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (msg.includes('already exists') || msg.includes('duplicate')) {
+            results.push({ statement: statement.slice(0, 60) + '…', status: 'ok' });
+          } else {
+            results.push({ statement: statement.slice(0, 60) + '…', status: 'error', error: msg });
+            throw err; // roll back the transaction
+          }
         }
       }
-    }
+    });
 
     const failed = results.filter(r => r.status === 'error');
     return NextResponse.json({

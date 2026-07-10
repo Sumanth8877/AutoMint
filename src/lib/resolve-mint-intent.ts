@@ -740,6 +740,13 @@ export async function resolveMintIntent(
 
   // ─────────────────────────────────────────────
   // 4. Custom / generic site — we only know it's a mint site
+  //
+  // NOTE: This is a CLASSIFIER, not a security control. It returns
+  // isValid:false and never fetches the URL, so there is no SSRF risk.
+  // The incomplete private-range check (only localhost/127.* — not the
+  // full RFC1918 set) is intentional because no network request is made.
+  // For actual URL fetching, fetchPublicUrl() in ssrf-guard.ts is the
+  // security gate that blocks all private/loopback/metadata ranges.
   // ─────────────────────────────────────────────
   if (host === 'localhost' || host.startsWith('127.') || host.endsWith('.mint') || pathSegments.includes('mint')) {
     return {

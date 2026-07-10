@@ -51,6 +51,17 @@ export const analyzerSchema = z.object({
 });
 
 
+// ── POST /api/collections ──────────────────────────────────────────────
+export const collectionCreateSchema = z.object({
+  name:            z.string().min(1, 'Name is required'),
+  contractAddress: z.string().min(1, 'Contract address is required'),
+  chain:           z.string().min(1, 'Chain is required'),
+});
+
+export const collectionDeleteSchema = z.object({
+  id: z.string().min(1, 'Collection ID is required'),
+});
+
 // ── Helper ───────────────────────────────────────────────────────────────────
 export function formatZodError(error: z.ZodError): string {
   return error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');

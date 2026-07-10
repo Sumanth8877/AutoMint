@@ -9,8 +9,15 @@ import { sql } from 'drizzle-orm';
  * One-time migration: adds missing columns to analyzer_history.
  * Safe to call multiple times — all statements use IF NOT EXISTS.
  * Requires: authenticated user session.
+ *
+ * Audit fix: statements are now wrapped in a single transaction with a
+ * session-level advisory lock so concurrent calls can't race and a partial
+ * failure rolls back cleanly.
  */
 export const dynamic = 'force-dynamic';
+
+// Stable advisory lock key derived from a constant (hash of 'analyzer_migration').
+const ADVISORY_LOCK_KEY = 0xA1A1A1A1;
 
 // Columns the app expects to exist on analyzer_history. Keep in sync with the
 // ALTER TABLE statements below.
@@ -56,7 +63,11 @@ export async function POST() {
   try {
     const db = getDb();
 
-    // Add each missing column individually so one failure doesn't block others
+    // Audit fix: acquire a session-level advisory lock so concurrent calls
+    // can't race, then wrap all statements in a single transaction so a
+    // partial failure rolls back cleanly.
+    await db.execute(sql`SELECT pg_advisory_xact_lock(${ADVISORY_LOCK_KEY})`);
+
     const migrations = [
       `ALTER TABLE "analyzer_history" ADD COLUMN IF NOT EXISTS "source_url" text`,
       `ALTER TABLE "analyzer_history" ADD COLUMN IF NOT EXISTS "collection_name" text`,
@@ -86,20 +97,24 @@ export async function POST() {
 
     const results: { statement: string; status: 'ok' | 'error'; error?: string }[] = [];
 
-    for (const statement of migrations) {
-      try {
-        await db.execute(sql.raw(statement));
-        results.push({ statement: statement.slice(0, 60) + '…', status: 'ok' });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        // "already exists" errors are OK — column or index already present
-        if (msg.includes('already exists') || msg.includes('duplicate')) {
+    // Audit fix: run all statements inside a transaction — if any statement
+    // fails with a non-"already exists" error, the entire migration rolls back.
+    await db.transaction(async (tx) => {
+      for (const statement of migrations) {
+        try {
+          await tx.execute(sql.raw(statement));
           results.push({ statement: statement.slice(0, 60) + '…', status: 'ok' });
-        } else {
-          results.push({ statement: statement.slice(0, 60) + '…', status: 'error', error: msg });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (msg.includes('already exists') || msg.includes('duplicate')) {
+            results.push({ statement: statement.slice(0, 60) + '…', status: 'ok' });
+          } else {
+            results.push({ statement: statement.slice(0, 60) + '…', status: 'error', error: msg });
+            throw err; // roll back the transaction
+          }
         }
       }
-    }
+    });
 
     const failed = results.filter(r => r.status === 'error');
     return NextResponse.json({

@@ -1,6 +1,6 @@
 import { getDb } from '@/lib/db';
 import { mintTasks, wallets, collections, mintHistory, taskLogs } from '@/drizzle/schema';
-import { desc, eq, and, inArray } from 'drizzle-orm';
+import { desc, eq, and, inArray, sql } from 'drizzle-orm';
 import { executeMint, type MintParams } from '@/lib/blockchain/mint';
 import { logActivity } from '@/lib/monitoring';
 import { sendTelegramNotification } from '@/lib/services/telegram.service';
@@ -45,36 +45,47 @@ export async function getUserMintTasks(userId: string) {
   }
 
   // Fetch error logs for failed tasks (failure reason + failure time)
+  // Audit fix: use DISTINCT ON to return only one row per task at the DB
+  // layer instead of over-fetching all error logs and deduplicating in JS.
   const failedIds = result.filter((t) => t.status === 'failed').map((t) => t.id);
   const reasonByTask = new Map<string, string>();
   const failedAtByTask = new Map<string, string>();
 
   if (failedIds.length > 0) {
-    const errorLogs = await getDb()
-      .select({ taskId: taskLogs.taskId, message: taskLogs.message, createdAt: taskLogs.createdAt })
-      .from(taskLogs)
-      .where(and(inArray(taskLogs.taskId, failedIds), eq(taskLogs.status, 'error')))
-      .orderBy(desc(taskLogs.createdAt));
+    const errorLogs = await getDb().execute(sql`
+      SELECT DISTINCT ON (${taskLogs.taskId})
+        ${taskLogs.taskId} AS "taskId",
+        ${taskLogs.message} AS "message",
+        ${taskLogs.createdAt} AS "createdAt"
+      FROM ${taskLogs}
+      WHERE ${taskLogs.taskId} IN ${sql.raw(`(${failedIds.map(id => `'${id}'`).join(', ')})`)}
+        AND ${taskLogs.status} = 'error'
+      ORDER BY ${taskLogs.taskId}, ${taskLogs.createdAt} DESC
+    `);
 
-    for (const log of errorLogs) {
-      if (!reasonByTask.has(log.taskId)) {
-        if (log.message) reasonByTask.set(log.taskId, log.message);
-        if (log.createdAt) failedAtByTask.set(log.taskId, log.createdAt.toISOString());
-      }
+    const errorRows = (errorLogs as unknown as { rows: { taskId: string; message: string | null; createdAt: Date | null }[] }).rows ?? [];
+    for (const log of errorRows) {
+      if (log.message) reasonByTask.set(log.taskId, log.message);
+      if (log.createdAt) failedAtByTask.set(log.taskId, log.createdAt.toISOString());
     }
   }
 
   // Fetch the LAST log entry (any status) for ALL terminal tasks
-  // This gives us the precise end timestamp for duration calculation
-  const lastLogs = await getDb()
-    .select({ taskId: taskLogs.taskId, createdAt: taskLogs.createdAt })
-    .from(taskLogs)
-    .where(inArray(taskLogs.taskId, terminalIds))
-    .orderBy(desc(taskLogs.createdAt));
+  // Audit fix: use DISTINCT ON to return only one row per task at the DB
+  // layer instead of over-fetching all logs and deduplicating in JS.
+  const lastLogResult = await getDb().execute(sql`
+    SELECT DISTINCT ON (${taskLogs.taskId})
+      ${taskLogs.taskId} AS "taskId",
+      ${taskLogs.createdAt} AS "createdAt"
+    FROM ${taskLogs}
+    WHERE ${taskLogs.taskId} IN ${sql.raw(`(${terminalIds.map(id => `'${id}'`).join(', ')})`)}
+    ORDER BY ${taskLogs.taskId}, ${taskLogs.createdAt} DESC
+  `);
 
   const lastLogAtByTask = new Map<string, string>();
-  for (const log of lastLogs) {
-    if (!lastLogAtByTask.has(log.taskId) && log.createdAt) {
+  const lastLogRows = (lastLogResult as unknown as { rows: { taskId: string; createdAt: Date | null }[] }).rows ?? [];
+  for (const log of lastLogRows) {
+    if (log.createdAt) {
       lastLogAtByTask.set(log.taskId, log.createdAt.toISOString());
     }
   }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/require-auth';
 import { getErrorMessage, parseJsonBody, handleRouteError } from '@/lib/api/errors';
 import { addCollection, getUserCollections, removeCollection } from '@/lib/services/collection.service';
+import { collectionCreateSchema, collectionDeleteSchema, formatZodError } from '@/lib/api/schemas';
 
 // Collections change on add/remove — disable ISR so React Query always gets fresh data
 export const dynamic = 'force-dynamic';
@@ -26,13 +27,13 @@ export async function POST(req: Request) {
     const authResult = await requireApiUser();
     if ('error' in authResult) return authResult.error;
 
-    const body = await parseJsonBody<{ name?: string; contractAddress?: string; chain?: string }>(req);
-    const { name, contractAddress, chain } = body;
-
-    if (!name || !contractAddress || !chain) {
-      return NextResponse.json({ error: 'Name, contractAddress, and chain are required' }, { status: 400 });
+    const body = await parseJsonBody<unknown>(req);
+    const parsed = collectionCreateSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
     }
 
+    const { name, contractAddress, chain } = parsed.data;
     const collection = await addCollection(authResult.userId, { name, contractAddress, chain });
 
     return NextResponse.json({ collection }, { status: 201 });
@@ -47,16 +48,15 @@ export async function DELETE(req: Request) {
     const authResult = await requireApiUser();
     if ('error' in authResult) return authResult.error;
 
-    const body = await parseJsonBody<{ id?: string }>(req);
-    const { id } = body;
+    const body = await parseJsonBody<unknown>(req);
+    const parsed = collectionDeleteSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
+    }
 
-    if (!id) return NextResponse.json({ error: 'Collection ID is required' }, { status: 400 });
-
-    await removeCollection(id, authResult.userId);
+    await removeCollection(parsed.data.id, authResult.userId);
     return NextResponse.json({ success: true });
   } catch (error) {
-    const message = getErrorMessage(error, 'Failed to delete collection');
-    const status = message.includes('not found') ? 404 : message === 'Invalid JSON request body' ? 400 : 500;
-    return NextResponse.json({ error: message }, { status });
+    return handleRouteError(error, 'Failed to delete collection');
   }
 }
