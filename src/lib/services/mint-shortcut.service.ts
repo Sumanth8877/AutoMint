@@ -75,14 +75,32 @@ export async function executeMintShortcut(
   const { createMintTaskFromUrl } = await import('@/lib/services/mint-orchestrator.service');
   const { getDb } = await import('@/lib/db');
   const { wallets } = await import('@/drizzle/schema');
-  const { eq } = await import('drizzle-orm');
+  const { eq, and } = await import('drizzle-orm');
 
-  // Resolve default wallet
-  const [wallet] = await getDb()
+  // Resolve the wallet to mint from. Bug fix: this previously did
+  // `.where(eq(wallets.userId, userId)).limit(1)` with no ORDER BY and no
+  // isDefault filter, so Postgres could return ANY of the user's wallets
+  // (row order is undefined without ORDER BY) -- silently minting from the
+  // wrong wallet. Every other mint path (ai-interpreter.service.ts
+  // `mint_from_url`, execution-settings.service.ts) resolves the default
+  // wallet first; this fast path now matches that same convention:
+  // prefer isDefault = true, fall back to any wallet (oldest first) only if
+  // no wallet is explicitly marked default.
+  const db = getDb();
+  let [wallet] = await db
     .select({ id: wallets.id, address: wallets.address })
     .from(wallets)
-    .where(eq(wallets.userId, userId))
+    .where(and(eq(wallets.userId, userId), eq(wallets.isDefault, true)))
     .limit(1);
+
+  if (!wallet) {
+    [wallet] = await db
+      .select({ id: wallets.id, address: wallets.address })
+      .from(wallets)
+      .where(eq(wallets.userId, userId))
+      .orderBy(wallets.createdAt)
+      .limit(1);
+  }
 
   if (!wallet) {
     return (
